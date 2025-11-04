@@ -5,6 +5,7 @@ import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import { describe } from 'vitest';
 import { getResuableTests, StorageType } from './reusable-tests';
+import { randomUUID } from 'crypto';
 
 const files = ['upstash-test-vector.db', 'upstash-test-vector.db-shm', 'upstash-test-vector.db-wal'];
 
@@ -27,16 +28,19 @@ describe('Memory with UpstashStore Integration', () => {
   const storageConfig = {
     url: 'http://localhost:8079',
     token: 'test_token',
+    id: randomUUID(),
   };
 
   const memory = new Memory({
     storage: new UpstashStore({
+      id: 'upstash-storage',
       url: 'http://localhost:8079',
       token: 'test_token',
     }),
     vector: new LibSQLVector({
       // TODO: use upstash vector in tests
       connectionUrl: 'file:upstash-test-vector.db',
+      id: randomUUID(),
     }),
     embedder: fastembed,
     options: memoryOptions,

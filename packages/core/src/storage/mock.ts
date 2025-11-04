@@ -29,8 +29,8 @@ import type {
 export class InMemoryStore extends MastraStorage {
   stores: StorageDomains;
 
-  constructor() {
-    super({ name: 'InMemoryStorage' });
+  constructor({ id = 'in-memory' }: { id?: string } = {}) {
+    super({ id, name: 'InMemoryStorage' });
     // MockStore doesn't need async initialization
     this.hasInitialized = Promise.resolve(true);
 

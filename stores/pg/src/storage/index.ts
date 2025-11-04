@@ -43,10 +43,11 @@ export class PostgresStore extends MastraStorage {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
       validateConfig('PostgresStore', config);
-      super({ name: 'PostgresStore' });
+      super({ id: config.id, name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
       if (isConnectionStringConfig(config)) {
         this.#config = {
+          id: config.id,
           connectionString: config.connectionString,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
@@ -56,11 +57,13 @@ export class PostgresStore extends MastraStorage {
         // Cloud SQL connector config
         this.#config = {
           ...config,
+          id: config.id,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
         };
       } else if (isHostConfig(config)) {
         this.#config = {
+          id: config.id,
           host: config.host,
           port: config.port,
           database: config.database,

@@ -27,6 +27,7 @@ import { ScoresStorageDynamoDB } from './domains/score';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
 export interface DynamoDBStoreConfig {
+  id: string;
   region?: string;
   tableName: string;
   endpoint?: string;
@@ -49,7 +50,7 @@ export class DynamoDBStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor({ name, config }: { name: string; config: DynamoDBStoreConfig }) {
-    super({ name });
+    super({ id: config.id, name });
 
     // Validate required config
     try {

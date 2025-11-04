@@ -41,6 +41,7 @@ const parseConnectionString = (url: string) => {
     user: parsedUrl.username,
     password: parsedUrl.password,
     database: parsedUrl.pathname.slice(1),
+    id: randomUUID(),
   };
 };
 
@@ -48,7 +49,7 @@ describe('Memory with PostgresStore Integration', () => {
   const config = parseConnectionString(connectionString);
   const memory = new Memory({
     storage: new PostgresStore(config),
-    vector: new PgVector({ connectionString }),
+    vector: new PgVector({ connectionString, id: 'test-vector' }),
     embedder: fastembed,
     options: {
       lastMessages: 10,
@@ -230,7 +231,7 @@ describe('Memory with PostgresStore Integration', () => {
     it('should support HNSW index configuration', async () => {
       const hnswMemory = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           lastMessages: 5,
@@ -286,7 +287,7 @@ describe('Memory with PostgresStore Integration', () => {
     it('should support IVFFlat index configuration with custom lists', async () => {
       const ivfflatMemory = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           lastMessages: 5,
@@ -341,7 +342,7 @@ describe('Memory with PostgresStore Integration', () => {
     it('should support flat (no index) configuration', async () => {
       const flatMemory = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           lastMessages: 5,
@@ -394,7 +395,7 @@ describe('Memory with PostgresStore Integration', () => {
       // Start with IVFFlat
       const memory1 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {
@@ -428,7 +429,7 @@ describe('Memory with PostgresStore Integration', () => {
       // Now switch to HNSW - should trigger index recreation
       const memory2 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {
@@ -468,7 +469,7 @@ describe('Memory with PostgresStore Integration', () => {
       // First, create with HNSW
       const memory1 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {
@@ -503,7 +504,7 @@ describe('Memory with PostgresStore Integration', () => {
       // Create another memory instance without index config - should preserve HNSW
       const memory2 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {

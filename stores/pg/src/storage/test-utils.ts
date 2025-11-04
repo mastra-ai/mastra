@@ -6,14 +6,15 @@ import type { PostgresStoreConfig } from '../shared/config';
 import { PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
+  id: 'test-postgres-store',
   host: process.env.POSTGRES_HOST || 'localhost',
   port: Number(process.env.POSTGRES_PORT) || 5434,
   database: process.env.POSTGRES_DB || 'postgres',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
-};
+} as PostgresStoreConfig;
 
-export const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
+export const connectionString = `postgresql://${(TEST_CONFIG as any).user}:${(TEST_CONFIG as any).password}@${(TEST_CONFIG as any).host}:${(TEST_CONFIG as any).port}/${(TEST_CONFIG as any).database}`;
 
 export function pgTests() {
   let store: PostgresStore;
@@ -265,6 +266,7 @@ export function pgTests() {
         it('should fail when user lacks CREATE privilege', async () => {
           const restrictedDB = new PostgresStore({
             ...TEST_CONFIG,
+            id: 'restricted-db-no-create',
             user: schemaRestrictedUser,
             password: restrictedPassword,
             schemaName: testSchema,
@@ -297,6 +299,7 @@ export function pgTests() {
         it('should fail with schema creation error when saving thread', async () => {
           const restrictedDB = new PostgresStore({
             ...TEST_CONFIG,
+            id: 'restricted-db-thread',
             user: schemaRestrictedUser,
             password: restrictedPassword,
             schemaName: testSchema,
@@ -349,6 +352,7 @@ export function pgTests() {
 
         testStore = new PostgresStore({
           ...TEST_CONFIG,
+          id: 'schema-fn-test-store',
           schemaName: testSchema,
         });
         await testStore.init();
@@ -614,34 +618,34 @@ export function pgTests() {
 
       describe('Connection String Config', () => {
         it('throws if connectionString is empty', () => {
-          expect(() => new PostgresStore({ connectionString: '' })).toThrow();
-          expect(() => new PostgresStore({ ...validConfig, connectionString: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', connectionString: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, connectionString: '' })).toThrow();
         });
         it('does not throw on non-empty connection string', () => {
-          expect(() => new PostgresStore({ connectionString })).not.toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', connectionString })).not.toThrow();
         });
       });
 
       describe('TCP Host Config', () => {
         it('throws if host is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, host: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, host: '' })).toThrow();
           const { host, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('throws if database is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, database: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, database: '' })).toThrow();
           const { database, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('throws if user is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, user: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, user: '' })).toThrow();
           const { user, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('throws if password is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, password: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, password: '' })).toThrow();
           const { password, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('does not throw on valid config (host-based)', () => {
           expect(() => new PostgresStore(validConfig)).not.toThrow();
@@ -651,6 +655,7 @@ export function pgTests() {
       describe('Cloud SQL Connector Config', () => {
         it('accepts config with stream property (Cloud SQL connector)', () => {
           const connectorConfig = {
+            id: 'cloud-sql-connector-store',
             user: 'test-user',
             database: 'test-db',
             ssl: { rejectUnauthorized: false },
@@ -661,6 +666,7 @@ export function pgTests() {
 
         it('accepts config with password function (IAM auth)', () => {
           const iamConfig = {
+            id: 'iam-auth-store',
             user: 'test-user',
             database: 'test-db',
             host: 'localhost', // This could be present but ignored when password is a function
@@ -673,6 +679,7 @@ export function pgTests() {
 
         it('accepts generic pg ClientConfig', () => {
           const clientConfig = {
+            id: 'generic-client-config-store',
             user: 'test-user',
             database: 'test-db',
             application_name: 'test-app',
@@ -685,13 +692,14 @@ export function pgTests() {
 
       describe('SSL Configuration', () => {
         it('accepts connectionString with ssl: true', () => {
-          expect(() => new PostgresStore({ connectionString, ssl: true })).not.toThrow();
+          expect(() => new PostgresStore({ id: 'ssl-true-store', connectionString, ssl: true })).not.toThrow();
         });
 
         it('accepts connectionString with ssl object', () => {
           expect(
             () =>
               new PostgresStore({
+                id: 'ssl-object-store',
                 connectionString,
                 ssl: { rejectUnauthorized: false },
               }),
@@ -700,6 +708,7 @@ export function pgTests() {
 
         it('accepts host config with ssl: true', () => {
           const config = {
+            id: 'host-ssl-true-store',
             ...validConfig,
             ssl: true,
           };
@@ -708,6 +717,7 @@ export function pgTests() {
 
         it('accepts host config with ssl object', () => {
           const config = {
+            id: 'host-ssl-object-store',
             ...validConfig,
             ssl: { rejectUnauthorized: false },
           };
@@ -718,6 +728,7 @@ export function pgTests() {
       describe('Pool Options', () => {
         it('accepts max and idleTimeoutMillis with connectionString', () => {
           const config = {
+            id: 'pool-options-connection-store',
             connectionString,
             max: 30,
             idleTimeoutMillis: 60000,
@@ -727,6 +738,7 @@ export function pgTests() {
 
         it('accepts max and idleTimeoutMillis with host config', () => {
           const config = {
+            id: 'pool-options-host-store',
             ...validConfig,
             max: 30,
             idleTimeoutMillis: 60000,
@@ -737,11 +749,19 @@ export function pgTests() {
 
       describe('Schema Configuration', () => {
         it('accepts schemaName with connectionString', () => {
-          expect(() => new PostgresStore({ connectionString, schemaName: 'custom_schema' })).not.toThrow();
+          expect(
+            () =>
+              new PostgresStore({
+                id: 'custom-schema-connection-store',
+                connectionString,
+                schemaName: 'custom_schema',
+              }),
+          ).not.toThrow();
         });
 
         it('accepts schemaName with host config', () => {
           const config = {
+            id: 'custom-schema-host-store',
             ...validConfig,
             schemaName: 'custom_schema',
           };
@@ -751,13 +771,13 @@ export function pgTests() {
 
       describe('Invalid Config', () => {
         it('throws on invalid config (missing required fields)', () => {
-          expect(() => new PostgresStore({ user: 'test' } as any)).toThrow(
+          expect(() => new PostgresStore({ id: 'test-store', user: 'test' } as any)).toThrow(
             /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
           );
         });
 
         it('throws on completely empty config', () => {
-          expect(() => new PostgresStore({} as any)).toThrow(
+          expect(() => new PostgresStore({ id: 'test-store' } as any)).toThrow(
             /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
           );
         });

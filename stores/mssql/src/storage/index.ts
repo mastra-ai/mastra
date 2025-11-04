@@ -33,6 +33,7 @@ import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
 export type MSSQLConfigType = {
+  id: string;
   schemaName?: string;
 } & (
   | {
@@ -57,7 +58,7 @@ export class MSSQLStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
-    super({ name: 'MSSQLStore' });
+    super({ id: config.id, name: 'MSSQLStore' });
     try {
       if ('connectionString' in config) {
         if (

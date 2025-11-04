@@ -115,13 +115,15 @@ export abstract class MastraStorage extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
+  id: string;
   stores?: StorageDomains;
 
-  constructor({ name }: { name: string }) {
+  constructor({ id, name }: { id: string; name: string }) {
     super({
       component: 'STORAGE',
       name,
     });
+    this.id = id;
   }
 
   public get supports(): {

@@ -29,6 +29,7 @@ import { WorkflowsLibSQL } from './domains/workflows';
 
 export type LibSQLConfig =
   | {
+      id: string;
       url: string;
       authToken?: string;
       /**
@@ -44,6 +45,7 @@ export type LibSQLConfig =
       initialBackoffMs?: number;
     }
   | {
+      id: string;
       client: Client;
       maxRetries?: number;
       initialBackoffMs?: number;
@@ -57,7 +59,7 @@ export class LibSQLStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: LibSQLConfig) {
-    super({ name: `LibSQLStore` });
+    super({ id: config.id, name: `LibSQLStore` });
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;

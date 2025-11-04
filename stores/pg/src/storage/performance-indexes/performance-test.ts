@@ -37,6 +37,7 @@ export class PostgresPerformanceTest {
   constructor(config: PerformanceTestConfig) {
     this.config = config;
     this.store = new PostgresStore({
+      id: 'perf-test-store',
       connectionString: config.connectionString,
     });
   }

@@ -22,8 +22,8 @@ export enum StorageType {
 
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
-  storageConfigForWorker: LibSQLConfig | PostgresStoreConfig | UpstashConfig;
-  vectorConfigForWorker?: LibSQLVectorConfig;
+  storageConfigForWorker: (LibSQLConfig | PostgresStoreConfig | UpstashConfig) & { id: string };
+  vectorConfigForWorker?: LibSQLVectorConfig & { id: string };
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 

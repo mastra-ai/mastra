@@ -8,6 +8,7 @@ import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
  * @template SSLType - The SSL configuration type (ISSLConfig for pg-promise, ConnectionOptions for pg)
  */
 export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
+  id: string;
   schemaName?: string;
   max?: number;
   idleTimeoutMillis?: number;

@@ -23,6 +23,7 @@ import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
 
 export interface UpstashConfig {
+  id: string;
   url: string;
   token: string;
 }
@@ -32,7 +33,7 @@ export class UpstashStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: UpstashConfig) {
-    super({ name: 'Upstash' });
+    super({ id: config.id, name: 'Upstash' });
     this.redis = new Redis({
       url: config.url,
       token: config.token,
