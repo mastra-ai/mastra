@@ -254,6 +254,7 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ${getGeneratedComment()}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 ${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import Tabs from "@theme/Tabs";\nimport TabItem from "@theme/TabItem";' : ''}
 
