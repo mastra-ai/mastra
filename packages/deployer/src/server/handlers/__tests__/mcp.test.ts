@@ -213,12 +213,12 @@ describe('listMcpRegistryServersHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMastra = {
-      getMCPServers: vi.fn(),
+      listMCPServers: vi.fn(),
     };
   });
 
   it('should list all servers correctly without pagination', async () => {
-    (mockMastra.getMCPServers as ReturnType<typeof vi.fn>).mockReturnValue({
+    (mockMastra.listMCPServers as ReturnType<typeof vi.fn>).mockReturnValue({
       server1: mockServer1 as MastraMCPServerImplementation,
       server2: mockServer2 as MastraMCPServerImplementation,
     });
@@ -231,14 +231,14 @@ describe('listMcpRegistryServersHandler', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mockMastra.getMCPServers).toHaveBeenCalledTimes(1);
+    expect(mockMastra.listMCPServers).toHaveBeenCalledTimes(1);
     expect(body.servers).toEqual([server1Info, server2Info]);
     expect(body.total_count).toBe(2);
     expect(body.next).toBeNull();
   });
 
   it('should handle pagination correctly (limit and offset)', async () => {
-    (mockMastra.getMCPServers as ReturnType<typeof vi.fn>).mockReturnValue({
+    (mockMastra.listMCPServers as ReturnType<typeof vi.fn>).mockReturnValue({
       server1: mockServer1 as MastraMCPServerImplementation,
       server2: mockServer2 as MastraMCPServerImplementation,
     });
@@ -256,8 +256,8 @@ describe('listMcpRegistryServersHandler', () => {
     expect(body.next).toBe('http://localhost/api/mcp/v0/servers?limit=1&offset=1');
   });
 
-  it('should return empty list if getMCPServers returns undefined', async () => {
-    (mockMastra.getMCPServers as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+  it('should return empty list if listMCPServers returns undefined', async () => {
+    (mockMastra.listMCPServers as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
     const mockContext = createRegistryMockContext({
       requestUrl: 'http://localhost/api/mcp/v0/servers',
       mastraInstance: mockMastra,
@@ -272,16 +272,16 @@ describe('listMcpRegistryServersHandler', () => {
     expect(body.next).toBeNull();
   });
 
-  it('should return 500 if Mastra instance or getMCPServers is not available', async () => {
+  it('should return 500 if Mastra instance or listMCPServers is not available', async () => {
     const mockContext = createRegistryMockContext({
       requestUrl: 'http://localhost/api/mcp/v0/servers',
-      mastraInstance: {} as Partial<Mastra>, // Simulate missing getMCPServers
+      mastraInstance: {} as Partial<Mastra>, // Simulate missing listMCPServers
     }) as Context;
 
     const response = (await listMcpRegistryServersHandler(mockContext)) as Response;
     expect(response.status).toBe(500);
     const body = await response.json();
-    expect(body.error).toContain('Mastra instance or getMCPServers method not available');
+    expect(body.error).toContain('Mastra instance or listMCPServers method not available');
   });
 });
 
