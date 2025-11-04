@@ -144,9 +144,6 @@ export interface Config<
    */
   scorers?: TScorers;
 
-  // @deprecated add memory to your Agent directly instead
-  memory?: never;
-
   /**
    * Event handlers for custom application events.
    * Maps event topics to handler functions for event-driven architectures.
