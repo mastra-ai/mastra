@@ -172,7 +172,13 @@ export function createPrepareMemoryStep<
               requestContext,
             })
           : { messages: [] },
-        memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+        memory.getSystemMessage({
+          threadId: threadObject.id,
+          resourceId,
+          memoryConfig: capabilities._agentNetworkAppend
+            ? { ...memoryConfig, workingMemory: { enabled: false } }
+            : memoryConfig,
+        }),
       ]);
 
       const memoryMessages = memoryResult.messages;

@@ -1690,7 +1690,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthAuth0 Class
 [EN] Source: https://mastra.ai/en/docs/auth/auth0
 
-The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -1729,7 +1729,7 @@ import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0(),
+    auth: new MastraAuthAuth0(),
   },
 });
 ```
@@ -1743,7 +1743,7 @@ import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0({
+    auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
       audience: process.env.AUTH0_AUDIENCE,
     }),
@@ -1835,7 +1835,7 @@ export const useAuth0Token = () => {
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
 
 ```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -1929,7 +1929,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthClerk Class
 [EN] Source: https://mastra.ai/en/docs/auth/clerk
 
-The `MastraAuthClerk` class provides authentication for Mastra using Clerk. It verifies incoming requests using Clerk's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthClerk` class provides authentication for Mastra using Clerk. It verifies incoming requests using Clerk's authentication system and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -1960,7 +1960,7 @@ import { MastraAuthClerk } from "@mastra/auth-clerk";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthClerk({
+    auth: new MastraAuthClerk({
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
       jwksUri: process.env.CLERK_JWKS_URI,
@@ -2000,7 +2000,7 @@ export const useClerkAuth = () => {
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2076,7 +2076,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthFirebase Class
 [EN] Source: https://mastra.ai/en/docs/auth/firebase
 
-The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -2118,7 +2118,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase(),
+    auth: new MastraAuthFirebase(),
   },
 });
 ```
@@ -2132,7 +2132,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase({
+    auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account.json",
       databaseId: "your-database-id",
     }),
@@ -2241,7 +2241,7 @@ export const signOutUser = async () => {
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Firebase ID token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Firebase ID token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2389,7 +2389,7 @@ import TabItem from "@theme/TabItem";
 # MastraJwtAuth Class
 [EN] Source: https://mastra.ai/en/docs/auth/jwt
 
-The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `auth` option.
 
 ## Installation
 
@@ -2408,7 +2408,7 @@ import { MastraJwtAuth } from "@mastra/auth";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraJwtAuth({
+    auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
     }),
   },
@@ -2419,7 +2419,7 @@ export const mastra = new Mastra({
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2495,7 +2495,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthSupabase Class
 [EN] Source: https://mastra.ai/en/docs/auth/supabase
 
-The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -2525,7 +2525,7 @@ import { MastraAuthSupabase } from "@mastra/auth-supabase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthSupabase({
+    auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
       anonKey: process.env.SUPABASE_ANON_KEY,
     }),
@@ -2562,7 +2562,7 @@ const accessToken = authTokenResponse.data?.session?.access_token;
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2628,7 +2628,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthWorkos Class
 [EN] Source: https://mastra.ai/en/docs/auth/workos
 
-The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -2667,7 +2667,7 @@ import { MastraAuthWorkos } from "@mastra/auth-workos";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthWorkos(),
+    auth: new MastraAuthWorkos(),
   },
 });
 ```
@@ -2681,7 +2681,7 @@ import { MastraAuthWorkos } from "@mastra/auth-workos";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthWorkos({
+    auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
       clientId: process.env.WORKOS_CLIENT_ID,
     }),
@@ -2755,7 +2755,7 @@ export const authenticateWithWorkos = async (
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
 ```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -34704,6 +34704,7 @@ description: "Use Alibaba (China) models with Mastra. 61 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -35528,6 +35529,7 @@ description: "Use Alibaba models with Mastra. 39 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -36111,6 +36113,7 @@ description: "Use Anthropic models with Mastra. 19 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -36509,6 +36512,7 @@ description: "Use Baseten models with Mastra. 3 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -36637,6 +36641,7 @@ description: "Use Cerebras models with Mastra. 4 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -36788,6 +36793,7 @@ description: "Use Chutes models with Mastra. 31 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -37275,6 +37281,7 @@ description: "Use Cortecs models with Mastra. 11 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -37499,6 +37506,7 @@ description: "Use Deep Infra models with Mastra. 4 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -37650,6 +37658,7 @@ description: "Use DeepSeek models with Mastra. 2 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -37766,6 +37775,7 @@ description: "Use FastRouter models with Mastra. 14 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -38026,6 +38036,7 @@ description: "Use Fireworks AI models with Mastra. 11 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -38250,6 +38261,7 @@ description: "Use GitHub Models models with Mastra. 55 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -39025,6 +39037,7 @@ description: "Use Google models with Mastra. 24 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -39490,6 +39503,7 @@ description: "Use Groq models with Mastra. 17 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -39797,6 +39811,7 @@ description: "Use Hugging Face models with Mastra. 14 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -40057,6 +40072,7 @@ description: "Use iFlow models with Mastra. 17 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -40353,6 +40369,7 @@ description: "Use Inception models with Mastra. 2 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -40717,6 +40734,7 @@ description: "Use Inference models with Mastra. 9 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -40917,6 +40935,7 @@ description: "Use Llama models with Mastra. 7 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -41093,6 +41112,7 @@ description: "Use LMStudio models with Mastra. 3 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -41221,6 +41241,7 @@ description: "Use LucidQuery AI models with Mastra. 2 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -41337,6 +41358,7 @@ description: "Use Mistral models with Mastra. 19 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -41668,6 +41690,7 @@ description: "Use ModelScope models with Mastra. 7 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -41844,6 +41867,7 @@ description: "Use Moonshot AI (China) models with Mastra. 3 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -41972,6 +41996,7 @@ description: "Use Moonshot AI models with Mastra. 3 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42100,6 +42125,7 @@ description: "Use Morph models with Mastra. 3 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42228,6 +42254,7 @@ description: "Use Nebius AI Studio models with Mastra. 15 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42500,6 +42527,7 @@ description: "Use Nvidia models with Mastra. 20 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42855,6 +42883,7 @@ description: "Use OpenAI models with Mastra. 31 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -43446,6 +43475,7 @@ description: "Use OpenCode Zen models with Mastra. 13 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -43694,6 +43724,7 @@ description: "Use Perplexity models with Mastra. 4 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -43845,6 +43876,7 @@ description: "Use Requesty models with Mastra. 13 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44093,6 +44125,7 @@ description: "Use Scaleway models with Mastra. 13 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44341,6 +44374,7 @@ description: "Use submodel models with Mastra. 9 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44541,6 +44575,7 @@ description: "Use Synthetic models with Mastra. 22 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44897,6 +44932,7 @@ description: "Use Together AI models with Mastra. 6 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -45072,6 +45108,7 @@ description: "Use Upstage models with Mastra. 2 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -45188,6 +45225,7 @@ description: "Use Venice AI models with Mastra. 13 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -45436,6 +45474,7 @@ description: "Use Vultr models with Mastra. 5 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -45588,6 +45627,7 @@ description: "Use Weights & Biases models with Mastra. 10 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -45800,6 +45840,7 @@ description: "Use xAI models with Mastra. 20 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -46169,6 +46210,7 @@ description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -46321,6 +46363,7 @@ description: "Use Z.AI models with Mastra. 5 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -46473,6 +46516,7 @@ description: "Use ZenMux models with Mastra. 18 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -46781,6 +46825,7 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -46933,6 +46978,7 @@ description: "Use Zhipu AI models with Mastra. 5 models available."
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -49908,7 +49954,7 @@ description: "API reference for the MastraAuthAuth0 class, which authenticates M
 # MastraAuthAuth0 Class
 [EN] Source: https://mastra.ai/en/reference/auth/auth0
 
-The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -49919,7 +49965,7 @@ import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0({
+    auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
       audience: process.env.AUTH0_AUDIENCE,
     }),
@@ -50032,7 +50078,7 @@ description: "API reference for the MastraAuthClerk class, which authenticates M
 # MastraAuthClerk Class
 [EN] Source: https://mastra.ai/en/reference/auth/clerk
 
-The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -50043,7 +50089,7 @@ import { MastraAuthClerk } from "@mastra/auth-clerk";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthClerk({
+    auth: new MastraAuthClerk({
       jwksUri: process.env.CLERK_JWKS_URI,
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
@@ -50109,7 +50155,7 @@ description: "API reference for the MastraAuthFirebase class, which authenticate
 # MastraAuthFirebase Class
 [EN] Source: https://mastra.ai/en/reference/auth/firebase
 
-The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage examples
 
@@ -50123,7 +50169,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase(),
+    auth: new MastraAuthFirebase(),
   },
 });
 ```
@@ -50137,7 +50183,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase({
+    auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account-key.json",
       databaseId: "your-database-id",
     }),
@@ -50247,7 +50293,7 @@ description: "API reference for the MastraJwtAuth class, which authenticates Mas
 # MastraJwtAuth Class
 [EN] Source: https://mastra.ai/en/reference/auth/jwt
 
-The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -50258,7 +50304,7 @@ import { MastraJwtAuth } from "@mastra/auth";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraJwtAuth({
+    auth: new MastraJwtAuth({
       secret: "<your-secret>",
     }),
   },
@@ -50292,7 +50338,7 @@ description: "API reference for the MastraAuthSupabase class, which authenticate
 # MastraAuthSupabase Class
 [EN] Source: https://mastra.ai/en/reference/auth/supabase
 
-The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -50303,7 +50349,7 @@ import { MastraAuthSupabase } from "@mastra/auth-supabase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthSupabase({
+    auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
       anonKey: process.env.SUPABASE_ANON_KEY,
     }),
@@ -50360,7 +50406,7 @@ description: "API reference for the MastraAuthWorkos class, which authenticates 
 # MastraAuthWorkos Class
 [EN] Source: https://mastra.ai/en/reference/auth/workos
 
-The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -50371,7 +50417,7 @@ import { MastraAuthWorkos } from "@mastra/auth-workos";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthWorkos({
+    auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
       clientId: process.env.WORKOS_CLIENT_ID,
     }),
@@ -54173,27 +54219,6 @@ await memory?.query({ threadId: "user-123" });
       isOptional: true,
     },
     {
-      name: "selectBy",
-      type: "object",
-      description: "Options for filtering and selecting messages",
-      isOptional: true,
-    },
-    {
-      name: "threadConfig",
-      type: "MemoryConfig",
-      description:
-        "Configuration options for message retrieval and semantic search",
-      isOptional: true,
-    },
-
-  ]}
-/>
-
-### selectBy parameters
-
-<PropertiesTable
-  content={[
-    {
       name: "vectorSearchString",
       type: "string",
       description:
@@ -54201,10 +54226,17 @@ await memory?.query({ threadId: "user-123" });
       isOptional: true,
     },
     {
-      name: "last",
+      name: "perPage",
       type: "number | false",
       description:
-        "Number of most recent messages to retrieve. Set to false to disable limit. Note: threadConfig.lastMessages (default: 10) will override this if smaller.",
+        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination.",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description:
+        "Zero-based page number for pagination. Used with perPage to retrieve messages in batches.",
       isOptional: true,
     },
     {
@@ -54215,12 +54247,27 @@ await memory?.query({ threadId: "user-123" });
       isOptional: true,
     },
     {
-      name: "pagination",
-      type: "{ dateRange?: { start?: Date; end?: Date }; page?: number; perPage?: number }",
+      name: "filter",
+      type: "{ dateRange?: { start?: Date; end?: Date } }",
       description:
-        "Pagination options for retrieving messages in batches. Includes `dateRange` (filter by date range), `page` (0-based page number), and `perPage` (messages per page).",
+        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date.",
       isOptional: true,
     },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
+      description:
+        "Sort order for retrieved messages. Defaults to descending by creation date.",
+      isOptional: true,
+    },
+    {
+      name: "threadConfig",
+      type: "MemoryConfig",
+      description:
+        "Configuration options for message retrieval and semantic search",
+      isOptional: true,
+    },
+
   ]}
 />
 
@@ -54284,28 +54331,33 @@ import { mastra } from "./mastra";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
+// Retrieve messages with pagination
 const { messages } = await memory!.query({
   threadId: "thread-123",
-  selectBy: {
-    last: 50,
-    vectorSearchString: "What messages are there?",
-    include: [
-      {
-        id: "msg-123",
-      },
-      {
-        id: "msg-456",
-        withPreviousMessages: 3,
-        withNextMessages: 1,
-      },
-    ],
-  },
+  perPage: 50,
+  vectorSearchString: "What messages are there?",
+  include: [
+    {
+      id: "msg-123",
+    },
+    {
+      id: "msg-456",
+      withPreviousMessages: 3,
+      withNextMessages: 1,
+    },
+  ],
   threadConfig: {
     semanticRecall: true,
   },
 });
 
 console.log(messages); // MastraDBMessage[]
+
+// Fetch all messages without pagination
+const allMessages = await memory!.query({
+  threadId: "thread-123",
+  perPage: false, // Fetch all
+});
 
 // Convert to AI SDK format if needed
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
@@ -62115,7 +62167,7 @@ The output receives a high score because it accurately answers the query without
 
 ### Partial relevancy example
 
-In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
+In this example, the response addresses the query in part but includes additional information that isn't directly relevant.
 
 ```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
@@ -76028,7 +76080,8 @@ serve(async (req) => {
 });
 ```
 
-<Callout type="info">
+:::info
+
 **When to use `serverless: true`**
 
 Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
@@ -76053,7 +76106,8 @@ The serverless mode disables session management and creates fresh server instanc
 - **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
 
 These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
-</Callout>
+
+:::
 
 Here are the details for the values needed by the `startHTTP` method:
 
