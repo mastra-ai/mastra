@@ -1,5 +1,5 @@
 import type { ToolInvocation } from '@internal/ai-sdk-v4/tool';
-import type { UIMessageWithMetadata } from '../../agent';
+import type { MastraDBMessage, UIMessageWithMetadata } from '../../agent';
 import { convertMessages } from '../../agent/message-list/utils/convert-messages';
 import { AISpanType } from '../../observability';
 import type { AISpanRecord, AITraceRecord } from '../../storage';
@@ -283,10 +283,18 @@ export function transformTraceToScorerInputAndOutput(trace: AITraceRecord): {
   const currentInputContent = inputMessages[0]?.content || '';
   const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
 
+  // Convert UIMessageWithMetadata to MastraDBMessage format
+  // Note: TransformedUIMessage doesn't have id, so we add it for conversion
+  const inputMessagesDB = convertMessages(
+    inputMessages.map(msg => ({ ...msg, id: '' } as UIMessageWithMetadata)),
+  ).to('Mastra.V2') as MastraDBMessage[];
+  const rememberedMessagesDB = convertMessages(
+    rememberedMessages.map(msg => ({ ...msg, id: '' } as UIMessageWithMetadata)),
+  ).to('Mastra.V2') as MastraDBMessage[];
+
   const input = {
-    // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
-    inputMessages: inputMessages as UIMessageWithMetadata[],
-    rememberedMessages: rememberedMessages as UIMessageWithMetadata[],
+    inputMessages: inputMessagesDB,
+    rememberedMessages: rememberedMessagesDB,
     systemMessages,
     taggedSystemMessages: {}, // Todo: Support tagged system messages
   };
@@ -306,8 +314,9 @@ export function transformTraceToScorerInputAndOutput(trace: AITraceRecord): {
     toolInvocations: toolInvocations as unknown as ToolInvocation[],
   };
 
-  // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
-  const output = [responseMessage as UIMessageWithMetadata];
+  // Convert UIMessageWithMetadata to MastraDBMessage format
+  // Note: TransformedUIMessage doesn't have id, so we add it for conversion
+  const output = convertMessages([{ ...responseMessage, id: '' }]).to('Mastra.V2') as MastraDBMessage[];
 
   return {
     input,
