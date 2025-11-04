@@ -66,21 +66,13 @@ const config = {
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
   },
 
-  // Preconnect to Google Fonts
   headTags: [
+    // Block Google Fonts using Content Security Policy
     {
-      tagName: "link",
+      tagName: 'meta',
       attributes: {
-        rel: "preconnect",
-        href: "https://fonts.googleapis.com",
-      },
-    },
-    {
-      tagName: "link",
-      attributes: {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossorigin: "anonymous",
+        'http-equiv': 'Content-Security-Policy',
+        content: "font-src 'self' data:;",
       },
     },
   ],
@@ -89,15 +81,15 @@ const config = {
     // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
     ...(process.env.POSTHOG_API_KEY
       ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
-            },
-          ],
-        ]
+        [
+          "posthog-docusaurus",
+          {
+            apiKey: process.env.POSTHOG_API_KEY,
+            appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
+            enableInDevelopment: false,
+          },
+        ],
+      ]
       : []),
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
