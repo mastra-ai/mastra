@@ -72,6 +72,7 @@ export class MockMemory extends MastraMemory {
       page: args.page,
       orderBy: args.orderBy,
       filter: args.filter,
+      include: args.include,
     });
 
     return result;

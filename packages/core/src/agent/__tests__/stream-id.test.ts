@@ -138,7 +138,7 @@ describe('Stream ID Consistency', () => {
     const res = await stream.response;
     const messageId = res.messages[0].id;
 
-    const result = await memory.query({ threadId, include: [{ id: messageId }] });
+    const result = await memory.query({ threadId, perPage: 0, include: [{ id: messageId }] });
     const savedMessages = result.messages;
 
     expect(savedMessages).toHaveLength(1);
@@ -277,7 +277,7 @@ describe('Stream ID Consistency', () => {
     await stream.consumeStream();
     const res = await stream.response;
     const messageId = res?.uiMessages?.[0]?.id;
-    const result = await memory.query({ threadId, include: [{ id: messageId! }] });
+    const result = await memory.query({ threadId, perPage: 0, include: [{ id: messageId! }] });
     const savedMessages = result.messages;
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId!);

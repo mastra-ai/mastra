@@ -148,9 +148,10 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
         perPage: 100,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
+      expect(allMessages).toHaveLength(100);
 
       // Delete the most recent 50 messages (indices 50-99)
-      const messagesToDelete = allMessages.slice(50).map(msg => msg.id);
+      const messagesToDelete = messages.slice(50).map(msg => msg.id);
 
       await storage.deleteMessages(messagesToDelete);
 
