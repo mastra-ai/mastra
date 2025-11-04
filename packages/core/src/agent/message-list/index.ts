@@ -1,5 +1,5 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils';
+import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4/message';
 import type {
   LanguageModelV1Message,
