@@ -274,7 +274,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query to verify the index works
-      const result = await hnswMemory.query({
+      const result = await hnswMemory.recall({
         threadId,
         resourceId,
         vectorSearchString: 'HNSW test',
@@ -329,7 +329,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query to verify the index works
-      const result = await ivfflatMemory.query({
+      const result = await ivfflatMemory.recall({
         threadId,
         resourceId,
         vectorSearchString: 'IVFFlat test',
@@ -381,7 +381,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query to verify the index works
-      const result = await flatMemory.query({
+      const result = await flatMemory.recall({
         threadId,
         resourceId,
         vectorSearchString: 'flat scan test',
@@ -457,7 +457,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query should work with new index
-      const result = await memory2.query({
+      const result = await memory2.recall({
         threadId,
         resourceId,
       });
@@ -528,7 +528,7 @@ describe('Memory with PostgresStore Integration', () => {
       });
 
       // Query should work with preserved HNSW index
-      const result = await memory2.query({
+      const result = await memory2.recall({
         threadId,
         resourceId,
       });
