@@ -1,3 +1,105 @@
-### Changed: speakProvider -> output
-### Changed: listenProvider -> input
-### Changed: realtimeProvider -> realtime
+---
+title: "Voice | v1 Migration Guide"
+description: "Learn how to migrate voice package changes when upgrading to v1."
+---
+
+# Voice Packages
+
+## Changed
+
+### Changed: Package names from `@mastra/speech-*` to `@mastra/voice-*`
+
+Speech packages have been renamed to voice packages. This includes `@mastra/speech-murf`, `@mastra/speech-speechify`, and `@mastra/speech-playai`. This change provides more consistent naming that better describes the functionality.
+
+To migrate, update package names in your dependencies and imports.
+
+```diff
+  // package.json
+  {
+    "dependencies": {
+-     "@mastra/speech-murf": "^0.x.x",
+-     "@mastra/speech-speechify": "^0.x.x",
+-     "@mastra/speech-playai": "^0.x.x"
++     "@mastra/voice-murf": "^1.x.x",
++     "@mastra/voice-speechify": "^1.x.x",
++     "@mastra/voice-playai": "^1.x.x"
+    }
+  }
+
+- import { MurfTTS } from '@mastra/speech-murf';
++ import { MurfVoice } from '@mastra/voice-murf';
+```
+
+### Changed: Class names from `*TTS` to `*Voice`
+
+TTS class names have been renamed to Voice classes. `MurfTTS`, `SpeechifyTTS`, and `PlayAITTS` are now `MurfVoice`, `SpeechifyVoice`, and `PlayAIVoice` respectively. This change aligns class names with the package rename.
+
+To migrate, update class names in your code.
+
+```diff
+- import { MurfTTS } from '@mastra/voice-murf';
+- import { SpeechifyTTS } from '@mastra/voice-speechify';
+- import { PlayAITTS } from '@mastra/voice-playai';
++ import { MurfVoice } from '@mastra/voice-murf';
++ import { SpeechifyVoice } from '@mastra/voice-speechify';
++ import { PlayAIVoice } from '@mastra/voice-playai';
+
+- const tts = new MurfTTS({ apiKey: '...' });
++ const voice = new MurfVoice({ apiKey: '...' });
+```
+
+### Changed: `generate` and `stream` methods to `speak`
+
+The `generate()` and `stream()` methods have been combined into a single `speak()` method. This change simplifies the voice API by consolidating speech generation methods.
+
+To migrate, replace `generate()` and `stream()` calls with `speak()`.
+
+```diff
+- await tts.generate('Hello');
+- await tts.stream('Hello');
++ await voice.speak('Hello');
+```
+
+### Changed: `voices` method to `getSpeakers`
+
+The `voices()` method has been renamed to `getSpeakers()`. This change provides clearer naming that better describes the method's purpose.
+
+To migrate, rename method calls from `voices` to `getSpeakers`.
+
+```diff
+- const voices = await tts.voices();
++ const speakers = await voice.getSpeakers();
+```
+
+### Changed: Voice configuration property names
+
+Voice configuration properties have been renamed for consistency. `speakProvider` is now `output`, `listenProvider` is now `input`, and `realtimeProvider` is now `realtime`. This change provides more intuitive property names.
+
+To migrate, update configuration property names when configuring agents with voice capabilities.
+
+```diff
+  const agent = new Agent({
+    voice: {
+-     speakProvider: murfVoice,
+-     listenProvider: deepgramVoice,
+-     realtimeProvider: openaiRealtime,
++     output: murfVoice,
++     input: deepgramVoice,
++     realtime: openaiRealtime,
+    },
+  });
+```
+
+## Removed
+
+### Removed: TTS exports from `@mastra/core`
+
+TTS exports have been removed from `@mastra/core`. All TTS functionality is now in dedicated voice packages. This change improves tree-shaking by removing voice-specific code from the core package.
+
+To migrate, import voice functionality from dedicated voice packages instead of `@mastra/core`.
+
+```diff
+- import { TTS } from '@mastra/core/tts';
++ import { MurfVoice } from '@mastra/voice-murf';
++ // or other voice packages as needed
+```

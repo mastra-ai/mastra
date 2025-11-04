@@ -1,254 +1,248 @@
 ---
-title: "Migration: Upgrade to Memory v1 | Migration Guide"
-description: "Learn how to upgrade through breaking changes in pre-v1 versions of Mastra."
+title: "Memory | v1 Migration Guide"
+description: "Learn how to migrate memory-related changes when upgrading to v1."
 ---
 
-### Changed: Message Format
+# Memory
 
-An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
+## Changed
 
-**Action required only if** you have messages stored in the old `MastraMessageV1` format **and** you:
+### Changed: Required configuration parameters
 
-1. **Directly inspect message metadata** - `__originalContent` is no longer present
-2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
-3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
+The Memory constructor now requires `storage`, `vector`, and `embedder` parameters. These parameters no longer have defaults. This change makes dependencies explicit and prevents unexpected behavior from implicit defaults.
 
-The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
+To migrate, explicitly provide `storage`, `vector`, and `embedder` when creating a Memory instance.
 
-### Changed: Message Format Unification
+```diff
+  import { Memory } from '@mastra/memory';
++ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
++ import { fastembed } from '@mastra/fastembed';
 
-**Breaking Changes:**
-
-1. `MastraMessageV2` type renamed to `MastraDBMessage`
-2. `format` parameter removed from all get methods, `MastraDBMessage` is always the returned format, which can then be converted as needed via helper utils in `@mastra/ai-sdk`
-3. MessageList `.v2()` methods renamed to `.db()`
-4. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
-
-**Why these changes?**
-
-- Provide a consistent and predictable API across all memory methods
-- Clarify the purpose of message types with better naming
-- Simplify the API by removing unnecessary format parameters
-- Enable better tree-shaking by separating UI conversion utilities
-
-**Migration:**
-
-#### 1. Update Type Imports
-
-Replace all instances of `MastraMessageV2` with `MastraDBMessage`:
-
-```typescript
-// Before
-import { MastraMessageV2 } from "@mastra/core";
-function yourCustomFunction(input: MastraMessageV2) {}
-// After
-import { MastraDBMessage } from "@mastra/core";
-function yourCustomFunction(input: MastraDBMessage) {}
+  const memory = new Memory({
+-   // storage, vector, embedder were optional with defaults
++   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
++   vector: new LibSQLVector({ url: 'file:./mastra.db' }),
++   embedder: fastembed,
+  });
 ```
 
-#### 2. Update Memory Method Return Types
+### Changed: Default settings for semantic recall and last messages
 
-The `rememberMessages` method now returns an object wrapper for consistency between all methods:
+Default settings have changed to more reasonable values based on usage patterns. The `lastMessages` default decreased from 40 to 10, `semanticRecall` is now disabled by default, and thread title generation is disabled by default. These changes improve performance and reduce unexpected LLM API calls.
 
-```typescript
-// Before
-const messages = await memory.rememberMessages({ threadId, resourceId });
+To migrate, if you were relying on the old defaults, explicitly configure these settings.
 
-// After
-const { messages } = await memory.rememberMessages({ threadId, resourceId });
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
++   options: {
++     lastMessages: 40, // Was default before
++     semanticRecall: {
++       topK: 2,
++       messageRange: 2,
++       scope: 'thread',
++     }, // Was enabled by default before
++     generateTitle: true, // Was enabled by default before
++   },
+  });
 ```
 
-#### 4. Update AI SDK Format Conversion
+### Changed: Default memory scope from `thread` to `resource`
 
-Message format conversion for AI SDK compatibility has moved to dedicated utility functions:
+The default scope for both working memory and semantic recall has changed from `'thread'` to `'resource'`. This change aligns with common use cases where applications want to remember user information across conversations. When semantic recall is enabled, it now defaults to searching across all user conversations rather than just the current thread.
 
-```typescript
-// Before
-import { convertMessages } from '@mastra/core';
-const uiMessages = convertMessages(messages).to('AI.V5');
+To migrate, if you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'`.
 
-// After
-import { toAISdkV5Messages, toAISdkV4Messages } from '@mastra/ai-sdk/ui';
-
-// For AI SDK v5
-const v5Messages = toAISdkV5Messages(messages);
-
-// For AI SDK v4
-const v4Messages = toAISdkV4Messages(messages);
-```
-
-#### 5. Remove Format Parameters
-
-The `format` parameter has been removed from all get methods. `MastraDBMessage` is now the default return format everywhere:
-
-```typescript
-// Before
-const messages = await memory.getMessages({ threadId, format: "v2" });
-const uiMessages = await memory.getMessages({ threadId, format: "ui" });
-
-// After
-const result = await memory.query({ threadId });
-const messages = result.messages; // Always MastraDBMessage[]
-
-// Use conversion functions for AI SDK formats
-import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
-const uiMessages = toAISdkV5Messages(messages);
-```
-
-### Changed: Memory Scope Defaults
-
-`@mastra/memory` - `0.16.0`
-`@mastra/core` - `0.22.0`
-
-The default memory scope for both **working memory** and **semantic recall** has changed from `'thread'` to `'resource'`.
-
-**Before:**
-
-- Working memory defaulted to `scope: 'thread'` (isolated per conversation)
-- Semantic recall defaulted to `scope: 'thread'` (search within current conversation only)
-
-**After:**
-
-- Working memory defaults to `scope: 'resource'` (persists across all user conversations)
-- Semantic recall defaults to `scope: 'resource'` (search across all user conversations)
-
-**Why this change?**
-
-1. **Better user experience**: Most applications want to remember user information across conversations, not just within a single thread
-2. **More intuitive default**: Users expect AI agents to "remember" them, which requires resource-scoped memory
-3. **Alignment with common use cases**: The majority of production applications use resource-scoped memory
-
-**Migration:**
-
-If you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'` in your memory configuration:
-
-```typescript showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-
-const memory = new Memory({
-  storage: new LibSQLStore({ url: "file:local.db" }),
-  options: {
-    workingMemory: {
-      enabled: true,
-      scope: "thread", // Explicitly set to thread-scoped
-      template: `# User Profile
-- **Name**:
-- **Interests**:
-`,
-    },
-    semanticRecall: {
-      topK: 3,
-      scope: "thread", // Explicitly set to thread-scoped
-    },
-  },
-});
-```
-
-If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
-
-### Changed: Thread Title Generation Location and Default
-
-**Breaking Changes:**
-
-1. `generateTitle` has been moved from `threads.generateTitle` to the top-level of memory options
-2. The default value has changed from `true` to `false`
-3. Using `threads.generateTitle` will now throw an error
-
-**Why these changes?**
-
-- Simplify the API by moving `generateTitle` to the top level where it logically belongs
-- Avoid unexpected LLM API calls and associated costs
-- Give developers explicit control over when title generation occurs
-- Improve predictability of memory behavior
-
-**Migration:**
-
-If your application uses `threads.generateTitle`, you must update it to use the top-level `generateTitle` option:
-
-```typescript
-// Before (v0.22 and earlier)
-const agent = new Agent({
-  memory: new Memory({
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
     options: {
-      threads: {
-        generateTitle: true, // ❌ This will now throw an error
+      workingMemory: {
+        enabled: true,
++       scope: 'thread', // Explicitly set to thread-scoped
+        template: `# User Profile...`,
+      },
+      semanticRecall: {
+        topK: 3,
++       scope: 'thread', // Explicitly set to thread-scoped
       },
     },
-  }),
-});
-
-// After (v0.23+)
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      generateTitle: true, // ✅ Now at the top level
-    },
-  }),
-});
+  });
 ```
 
-If your application relied on the old default behavior (automatic title generation), explicitly enable it:
+### Changed: Thread title generation location
 
-```typescript
-// Before (implicit true in v0.22)
-const agent = new Agent({
-  memory: new Memory({
-    // generateTitle was true by default
-  }),
-});
+The `generateTitle` option has been moved from `threads.generateTitle` to the top-level of memory options. This change simplifies the API by moving the option to where it logically belongs.
 
-// After (explicit true in v0.23+)
-const agent = new Agent({
-  memory: new Memory({
+To migrate, move `generateTitle` from the `threads` config to the top level of options.
+
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
     options: {
-      generateTitle: true, // Explicitly enable title generation
+-     threads: {
+-       generateTitle: true,
+-     },
++     generateTitle: true,
     },
-  }),
-});
+  });
 ```
 
-You can also customize the model and instructions used for title generation:
+### Changed: Semantic recall default settings optimization
 
-```typescript
-const agent = new Agent({
-  memory: new Memory({
+The default settings for semantic recall have been optimized based on RAG research. The `topK` increased from 2 to 4, and `messageRange` changed from `{before: 2, after: 2}` to `{before: 1, after: 1}`. These changes provide better accuracy while only slightly increasing message count.
+
+To migrate, if you were relying on the previous defaults, explicitly set these values.
+
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
     options: {
-      generateTitle: {
-        model: openai("gpt-4o-mini"),
-        instructions:
-          "Generate a concise title (max 5 words) that summarizes the conversation",
+      semanticRecall: {
++       topK: 2, // Was default before
++       messageRange: { before: 2, after: 2 }, // Was default before
       },
     },
-  }),
-});
+  });
 ```
 
+### Changed: `Memory.query()` return format
 
-### Changed: Memory Default Settings
+The `Memory.query()` method now returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change simplifies the API and makes the return type more predictable.
 
-The default settings for semantic recall have been optimized based on RAG research:
+To migrate, update code that expects the old return format to use the new format.
 
-- **`topK`** increased from `2` to `4` - Retrieves 4 most relevant messages instead of 2
-- **`messageRange`** changed from `{before: 2, after: 2}` to `{before: 1, after: 1}` - Includes 1 message before and after each retrieved message instead of 2
+```diff
+  const result = await memory.query({ threadId: 'thread-123' });
+- // result: { messages: CoreMessage[], uiMessages: UIMessageWithMetadata[], messagesV2: MastraMessageV2[] }
++ // result: { messages: MastraDBMessage[] }
++ const messages = result.messages;
+```
 
-**Impact:**
+### Changed: `Memory.query()` parameter format
 
-When semantic recall is enabled, you'll now retrieve up to 12 messages total (4 × 3) instead of 10 messages (2 × 5). This provides ~8% better accuracy while only increasing message count by 20%.
+The `Memory.query()` method now uses `StorageListMessagesInput` format with pagination. This change aligns the memory query API with the storage pagination API.
 
-**Action Required:**
+To migrate, update query parameters to use the new pagination format.
 
-If you were relying on the previous defaults and want to maintain the old behavior, explicitly set these values:
+```diff
+  memory.query({
+    threadId: 'thread-123',
+-   selectBy: { ... },
++   page: 0,
++   perPage: 20,
++   orderBy: 'createdAt',
++   filter: { ... },
+  });
+```
 
-```typescript
-const agent = new Agent({
-  memory: {
-    semanticRecall: {
-      topK: 2,
-      messageRange: { before: 2, after: 2 },
+### Changed: `MastraMessageV2` type renamed to `MastraDBMessage`
+
+The `MastraMessageV2` type has been renamed to `MastraDBMessage` for clarity. This change better describes the purpose of this type as the database message format.
+
+To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
+
+```diff
+- import { MastraMessageV2 } from '@mastra/core';
+- function yourCustomFunction(input: MastraMessageV2) {}
++ import { MastraDBMessage } from '@mastra/core';
++ function yourCustomFunction(input: MastraDBMessage) {}
+```
+
+### Changed: `rememberMessages` return format
+
+The `rememberMessages` method now returns an object wrapper `{ messages }` for consistency between all memory methods. This change provides a consistent API across all memory operations.
+
+To migrate, destructure the returned messages from the object wrapper.
+
+```diff
+- const messages = await memory.rememberMessages({ threadId, resourceId });
++ const { messages } = await memory.rememberMessages({ threadId, resourceId });
+```
+
+## Removed
+
+### Removed: Working memory `text-stream` mode
+
+Working memory `use: "text-stream"` option has been removed. Only `tool-call` mode is supported. This change simplifies the working memory API by removing the less reliable streaming mode.
+
+To migrate, remove the `use: "text-stream"` option. Working memory will default to tool-call mode.
+
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
+    options: {
+      workingMemory: {
+        enabled: true,
+-       use: 'text-stream',
+        template: '...',
+      },
     },
-  },
-});
+  });
 ```
 
-If you're not using semantic recall (it's disabled by default), no changes are needed.
+### Removed: `format` parameter from memory methods
+
+The `format` parameter has been removed from all memory get methods. `MastraDBMessage` is now the default return format everywhere. AI SDK format conversion has moved to dedicated utility functions in `@mastra/ai-sdk/ui`. This change improves tree-shaking by moving UI-specific conversion code to a separate package.
+
+To migrate, remove the `format` parameter and use conversion functions for AI SDK formats.
+
+```diff
+- const messages = await memory.getMessages({ threadId, format: 'v2' });
+- const uiMessages = await memory.getMessages({ threadId, format: 'ui' });
+
++ const result = await memory.query({ threadId });
++ const messages = result.messages; // Always MastraDBMessage[]
++ 
++ // Use conversion functions for AI SDK formats
++ import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
++ const uiMessages = toAISdkV5Messages(messages);
+```
+
+### Removed: `MastraMessageV3` type
+
+The `MastraMessageV3` type and related conversion methods have been removed. Messages now convert directly between `MastraMessageV2` (now `MastraDBMessage`) and AI SDK v5 formats. This change simplifies the architecture by removing an intermediary format.
+
+To migrate, use `MastraDBMessage` for storage or AI SDK v5 message formats directly.
+
+```diff
+- import type { MastraMessageV3 } from '@mastra/core/agent';
+- const v3Messages = messageList.get.all.v3();
+
++ // For storage
++ const v2Messages = messageList.get.all.v2();
++ 
++ // For AI SDK v5
++ const uiMessages = messageList.get.all.aiV5.ui();
++ const modelMessages = messageList.get.all.aiV5.model();
+```
+
+### Removed: `processors` config from Memory constructor
+
+The `processors` config option in the Memory constructor has been deprecated and now throws an error. Processors should be configured at the Agent level instead. This change provides clearer configuration boundaries and better encapsulation.
+
+To migrate, move processor configuration from Memory to Agent.
+
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
+-   processors: [/* ... */],
+  });
+  
+  const agent = new Agent({
+    memory,
++   processors: [/* ... */],
+  });
+```

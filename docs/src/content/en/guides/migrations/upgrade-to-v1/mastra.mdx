@@ -1,96 +1,93 @@
 ---
-title: "Migration: Upgrade to Mastra v1 | Migration Guide"
-description: "Learn how to upgrade through breaking changes in pre-v1 versions of Mastra."
+title: "Mastra Class | v1 Migration Guide"
+description: "Learn how to migrate Mastra class changes when upgrading to v1."
 ---
 
-# Upgrade to Mastra v1
+# Mastra Class
 
-In this guide you'll learn how to upgrade through breaking changes in pre-v1 versions of Mastra. It'll also help you upgrade to Mastra v1.
+## Changed
 
-Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time.
+### Changed: Top-level imports to subpath imports
 
-:::info
+The main `@mastra/core` index file now only exports `Mastra` and `Config`. All other exports have been moved to subpath imports. This change improves tree-shaking and reduces bundle size by allowing bundlers to eliminate unused code.
 
-Versions mentioned in the headings refer to the `@mastra/core` package. If necessary, versions of other Mastra packages are called out in the detailed description.
+To migrate, update all imports from `@mastra/core` to use the appropriate subpath. The main index now only allows `Mastra` and `type Config` - everything else must be imported from specific subpaths.
 
-All Mastra packages have a peer dependency on `@mastra/core` so your package manager can inform you about compatibility.
-
-:::
-
-## Migrate to v1.0.0-beta
-
-### Changed: getAgents -> listAgents
-### Changed: getWorkflows -> listWorkflows
-### Changed: getScorers -> listScorers
-### Changed: getTools -> listTools
-### Changed: getLogs -> listLogs
-### Changed: getLogsByRunId -> listLogsByRunId
-### Changed: getLogTransports -> listLogTransports
-### Changed: `experimental_auth` -> `auth`
-### Removed: `memory` from Mastra class
-
-### Changed: `@mastra/core` subpath imports
-
-The `@mastra/core` package no longer allows top-level imports except for `Mastra` and `type Config`. You must use subpath imports for all other imports.
-
-Here are some examples of how to migrate your imports:
-
-```typescript
-// Before
-import { Mastra, type Config } from "@mastra/core"; // ✅
-import { Agent } from "@mastra/core"; // ❌
-import { createTool } from "@mastra/core"; // ❌
-import { createStep } from "@mastra/core"; // ❌
-
-// After
-import { Mastra, type Config } from "@mastra/core"; // ✅
-import { Agent } from "@mastra/core/agent"; // ✅
-import { createTool } from "@mastra/core/tools"; // ✅
-import { createStep } from "@mastra/core/workflows"; // ✅
+```diff
+- import { Mastra, Agent, Workflow, createTool } from '@mastra/core';
++ import { Mastra, type Config } from '@mastra/core';
++ import { Agent } from '@mastra/core/agent';
++ import { Workflow } from '@mastra/core/workflows';
++ import { createTool } from '@mastra/core/tools';
 ```
 
-Read the [package README](https://github.com/mastra-ai/mastra/blob/main/packages/core/README.md) or the [package.json](https://github.com/mastra-ai/mastra/blob/main/packages/core/package.json) for a full list of available subpath imports.
+### Changed: Direct property access to getter methods
 
-### Changed: `RuntimeContext` renamed to `RequestContext`
+Direct property access on the Mastra instance is deprecated. Methods like `mastra.logger`, `mastra.storage`, `mastra.agents`, etc. now show deprecation warnings and will be removed in a future version. This change provides better encapsulation and allows for dynamic configuration based on request context.
 
-The `RuntimeContext` class has been renamed to `RequestContext`, and all parameter names have been updated from `runtimeContext` to `requestContext` across all APIs.
+To migrate, replace direct property access with the corresponding getter methods.
 
-**Why this change?**
-
-- **Clearer naming**: "requestContext" better describes its purpose as request-specific data
-- **Consistency**: Aligns with web framework conventions where "request context" is a common pattern
-- **Less confusion**: Avoids ambiguity with "runtime" which could refer to execution environment
-
-**Migration:**
-
-Update imports, class instantiation, and parameter names:
-
-```typescript
-// Before
-import { RuntimeContext } from "@mastra/core/runtime-context"; // ❌
-
-const runtimeContext = new RuntimeContext(); // ❌
-runtimeContext.set("userTier", "enterprise");
-
-// After
-import { RequestContext } from "@mastra/core/request-context"; // ✅
-
-const requestContext = new RequestContext(); // ✅
-requestContext.set("userTier", "enterprise");
+```diff
+- const logger = mastra.logger;
+- const storage = mastra.storage;
+- const agents = mastra.agents;
+- const tts = mastra.tts;
+- const vectors = mastra.vectors;
+- const memory = mastra.memory;
++ const logger = mastra.getLogger();
++ const storage = mastra.getStorage();
++ const agents = mastra.listAgents();
++ const tts = mastra.getTTS();
++ const vectors = mastra.getVectors();
++ const memory = mastra.getMemory();
 ```
 
-**Agents:**
+### Changed: `experimental_auth` to `auth`
 
-```typescript
-// Before
-await agent.generate(messages, {
-  runtimeContext, // ❌
-});
+The experimental auth configuration has been promoted to stable. This change reflects that the auth API is now stable and production-ready.
 
-// After
-await agent.generate(messages, {
-  requestContext, // ✅
-});
+To migrate, rename the `experimental_auth` key to `auth` in your Mastra configuration.
+
+```diff
+  const mastra = new Mastra({
+-   experimental_auth: {
++   auth: {
+      provider: workos,
+    },
+  });
 ```
 
-**Note**: This also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext`/`requestContext` as a parameter. See the "Tool execute signature" section above for the updated tool signature pattern.
+## Removed
+
+### Removed: `memory` property from Mastra class
+
+The `memory` property has been removed from the Mastra class. Memory is now configured at the Agent level rather than globally.
+
+To migrate, move memory configuration from the Mastra constructor to individual Agent constructors.
+
+```diff
+- const mastra = new Mastra({
+-   memory: new Memory({
+-     storage: libsqlStore,
+-     vector: libsqlVector,
+-     embedder: fastembed,
+-   }),
+- });
+- 
+- const agent = new Agent({
+-   name: 'my-agent',
+- });
+
++ const mastra = new Mastra({
++   // memory removed from here
++ });
++ 
++ const agent = new Agent({
++   name: 'my-agent',
++   memory: new Memory({
++     storage: libsqlStore,
++     vector: libsqlVector,
++     embedder: fastembed,
++   }),
++ });
+```

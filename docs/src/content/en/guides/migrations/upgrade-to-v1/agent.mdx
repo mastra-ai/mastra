@@ -1,162 +1,204 @@
 ---
-title: "Migration: Upgrade to Mastra v1 | Migration Guide"
-description: "Learn how to upgrade through breaking changes in pre-v1 versions of Mastra."
+title: "Agent Class | v1 Migration Guide"
+description: "Learn how to migrate Agent class changes when upgrading to v1."
 ---
 
-# Upgrade to Mastra v1
+# Agent Class
 
-In this guide you'll learn how to upgrade through breaking changes in pre-v1 versions of Mastra. It'll also help you upgrade to Mastra v1.
+## Changed
 
-Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time.
+### Changed: `RuntimeContext` to `RequestContext`
 
-:::info
+The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.
 
-Versions mentioned in the headings refer to the `@mastra/core` package. If necessary, versions of other Mastra packages are called out in the detailed description.
+To migrate, update all imports and parameter names from `RuntimeContext`/`runtimeContext` to `RequestContext`/`requestContext`.
 
-All Mastra packages have a peer dependency on `@mastra/core` so your package manager can inform you about compatibility.
+```diff
+- import { RuntimeContext } from '@mastra/core/runtime-context';
++ import { RequestContext } from '@mastra/core/request-context';
 
-:::
+- const runtimeContext = new RuntimeContext();
+- runtimeContext.set('userTier', 'enterprise');
++ const requestContext = new RequestContext();
++ requestContext.set('userTier', 'enterprise');
 
-## Migrate to v1.0.0-beta
-
-
-### Agent class
-
-- Removed `generateVNext()` method. Use `generate()` instead.
-- Removed `streamVNext()` method. Use `stream()` instead.
-- `agent.llm` → `agent.getLLM()`
-- `agent.tools` → `agent.listTools()`
-- `agent.instructions` → `agent.getInstructions()`
-- `agent.speak()` → `agent.voice.speak()`
-- `agent.getSpeakers()` → `agent.voice.getSpeakers()`
-- `agent.listen` → `agent.voice.listen()`
-- `agent.fetchMemory` → `(await agent.getMemory()).query()`
-- `agent.toStep` → Add agent directly to the step, workflows handle the transformation
-- `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
-- `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
-- `getDefaultVNextStreamOptions()` → `getDefaultOptions()`
-
-### Removed: `format` Parameter from `agent.stream()`
-
-**Breaking Changes:**
-
-The `format` parameter has been removed from `agent.stream()`/`agent.generate()`. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package.
-
-**Why this change?**
-
-- **Better separation of concerns**: AI SDK-specific formatting logic is now in a dedicated package
-- **Improved tree-shaking**: Applications that don't use AI SDK don't bundle conversion code
-- **Clearer API**: Stream methods focus on generation, while formatting is handled explicitly
-- **Framework flexibility**: Makes it easier to support different UI frameworks without bloating the core
-
-**Migration:**
-
-If you were using `format: "aisdk"` for streaming, update your code to use `toAISdkStream` from `@mastra/ai-sdk`:
-
-```typescript
-// Before
-const stream = await agent.stream(messages, {
-  format: "aisdk", // ❌ No longer supported
-});
-
-// After
-import { toAISdkStream } from "@mastra/ai-sdk";
-
-const stream = await agent.stream(messages);
-const aiSdkStream = toAISdkStream(stream, { from: "agent" }); // ✅ Explicit conversion
+- await agent.generate(messages, { runtimeContext });
++ await agent.generate(messages, { requestContext });
 ```
 
-**Working with AI SDK UI components:**
+### Changed: Direct property access to getter methods
 
-The `@mastra/ai-sdk` package provides the `chatRoute()` utility for seamless integration with Vercel AI SDK. Instead of manually handling stream conversion, register a chat route in your Mastra server configuration:
+Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. This change provides better encapsulation and consistency with the broader API design.
 
-```typescript
-// src/mastra/index.ts
-import { Mastra } from "@mastra/core";
-import { chatRoute } from "@mastra/ai-sdk";
+To migrate, replace property access with the corresponding getter methods.
 
-export const mastra = new Mastra({
-  server: {
-    apiRoutes: [
-      chatRoute({
-        path: "/chat",
-        agent: "weatherAgent", // Fixed agent
-      }),
-      // Or use dynamic agents:
-      chatRoute({
-        path: "/chat/:agentId", // Dynamic agent ID
-      }),
-    ],
-  },
-});
+```diff
+- const llm = agent.llm;
+- const tools = agent.tools;
+- const instructions = agent.instructions;
++ const llm = agent.getLLM();
++ const tools = agent.getTools();
++ const instructions = agent.getInstructions();
 ```
 
-Then use the `useChat()` hook in your frontend:
+### Changed: Voice methods moved to `agent.voice` namespace
 
-```typescript
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.
 
-const { messages, sendMessage } = useChat({
-  transport: new DefaultChatTransport({
-    api: "http://localhost:4111/chat/weatherAgent",
-  }),
-});
+To migrate, update voice method calls to use the `agent.voice` namespace.
+
+```diff
+- await agent.speak('Hello');
+- await agent.listen();
+- const speakers = agent.getSpeakers();
++ await agent.voice.speak('Hello');
++ await agent.voice.listen();
++ const speakers = agent.voice.getSpeakers();
 ```
 
-**Advanced: Manual transformation**
+### Changed: `agent.fetchMemory()` to `(await agent.getMemory()).query()`
 
-If you need more control over the stream conversion, you can manually transform streams using `toAISdkStream`. See the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk) for details.
+The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
 
-**Note:** The `/api/agents/:agentId/stream/ui` HTTP endpoint has also been deprecated. Use the standard `/api/agents/:agentId/stream` endpoint with `@mastra/ai-sdk` transformations instead.
+To migrate, replace `fetchMemory()` calls with the new API.
 
-
-#### Input processors
-
-- Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
-- `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
-
-#### Abort Signal
-
-- Removed `modelSettings.abortSignal`. Use the top-level `abortSignal` option instead:
-
-```typescript
-// Before
-const result = await agent.stream(messages, {
-  modelSettings: {
-    abortSignal: controller.signal,
-    temperature: 0.7,
-  },
-});
-
-// After
-const result = await agent.stream(messages, {
-  abortSignal: controller.signal,
-  modelSettings: {
-    temperature: 0.7,
-  },
-});
+```diff
+- const messages = await agent.fetchMemory({ threadId: 'thread-123' });
++ const memory = await agent.getMemory();
++ const result = await memory.query({ threadId: 'thread-123' });
++ const messages = result.messages;
 ```
 
+### Changed: Processor method names from `get*` to `list*`
 
-#### Output Options
+Agent processor methods have been renamed from `get*` to `list*` pattern for consistency with the broader API. This change aligns with the convention that `list*` methods return collections.
 
-- Removed deprecated `output` field from `generate()`/`stream()` options. Use `structuredOutput.schema` instead:
+To migrate, update processor method names and the parameter from `runtimeContext` to `requestContext`.
 
-```typescript
-// Before
-const result = await agent.generate(messages, {
-  output: z.object({
-    answer: z.string(),
-  }),
-});
+```diff
+- const inputProcessors = await agent.getInputProcessors(runtimeContext);
+- const outputProcessors = await agent.getOutputProcessors(runtimeContext);
++ const inputProcessors = await agent.listInputProcessors(requestContext);
++ const outputProcessors = await agent.listOutputProcessors(requestContext);
+```
 
-// After
-const result = await agent.generate(messages, {
-  structuredOutput: {
-    schema: z.object({
-      answer: z.string(),
-    }),
-  },
-});
+### Changed: Default options method renames for AI SDK versions
+
+Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
+
+To migrate, update method names based on which AI SDK version you're using.
+
+```diff
+  // For legacy AI SDK v4
+- const options = await agent.getDefaultGenerateOptions();
+- const streamOptions = await agent.getDefaultStreamOptions();
++ const options = await agent.getDefaultGenerateOptionsLegacy();
++ const streamOptions = await agent.getDefaultStreamOptionsLegacy();
+
+  // For new AI SDK v5 (default)
+  const streamOptions = await agent.getDefaultStreamOptions();
+```
+
+### Changed: `modelSettings.abortSignal` to top-level `abortSignal`
+
+The `abortSignal` option has been moved from `modelSettings` to the top level of stream/generate options. This change provides a clearer separation between model-specific settings and execution control.
+
+To migrate, move `abortSignal` from `modelSettings` to the top level.
+
+```diff
+  agent.stream('Hello', {
+-   modelSettings: {
+-     abortSignal: abortController.signal,
+-   },
++   abortSignal: abortController.signal,
+  });
+```
+
+### Changed: `output` to `structuredOutput.schema`
+
+The deprecated `output` and `experimental_output` options have been removed. This change consolidates on a single, stable API for structured output.
+
+To migrate, update from `output` or `experimental_output` to `structuredOutput.schema`.
+
+```diff
+  agent.stream('Hello', {
+-   output: z.object({ result: z.string() }),
++   structuredOutput: {
++     schema: z.object({ result: z.string() }),
++   },
+  });
+```
+
+## Removed
+
+### Removed: `generateVNext` and `streamVNext` methods
+
+The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
+
+To migrate, use the standard `generate()` and `stream()` methods.
+
+```diff
+- const result = await agent.generateVNext('Hello');
+- const stream = await agent.streamVNext('Hello');
++ const result = await agent.generate('Hello');
++ const stream = await agent.stream('Hello');
+```
+
+### Removed: `format` parameter from `stream()` and `generate()`
+
+The `format` parameter has been removed from `agent.stream()` and `agent.generate()` methods. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package. This change improves tree-shaking by moving AI SDK-specific code to a dedicated package.
+
+To migrate, use the `toAISdkStream()` function from `@mastra/ai-sdk` for AI SDK format conversion.
+
+```diff
+- const stream = await agent.stream(messages, {
+-   format: 'aisdk',
+- });
+
++ import { toAISdkStream } from '@mastra/ai-sdk';
++ 
++ const stream = await agent.stream(messages);
++ const aiSdkStream = toAISdkStream(stream, { from: 'agent' });
+```
+
+### Removed: `agent.toStep()` method
+
+The `toStep()` method has been removed from the Agent class. Agents can now be added directly to workflow steps without explicit conversion.
+
+To migrate, add agents directly to workflow steps. Workflows handle the transformation automatically.
+
+```diff
+- const step = agent.toStep();
+- const workflow = new Workflow({
+-   steps: [step],
+- });
+
++ const workflow = new Workflow({
++   steps: [agent],
++ });
+```
+
+### Removed: `TMetrics` generic parameter from Agent
+
+The `TMetrics` generic parameter has been removed from `AgentConfig` and the `Agent` constructor. Metrics/scorers are now configured using the scorers API instead of being part of the Agent type system.
+
+To migrate, remove the `TMetrics` generic parameter and configure scorers using the new API.
+
+```diff
+- const agent = new Agent<AgentId, Tools, Metrics>({
++ const agent = new Agent<AgentId, Tools>({
+    // ...
+  });
+```
+
+### Removed: `experimental_generateMessageId` option
+
+The `experimental_generateMessageId` option has been removed from agent generate/stream methods. Message IDs are now automatically generated internally.
+
+To migrate, remove the `experimental_generateMessageId` option. Message ID generation is handled automatically by the Memory layer.
+
+```diff
+  agent.generate('Hello', {
+-   experimental_generateMessageId: () => 'custom-id',
+  });
 ```
