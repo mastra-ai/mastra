@@ -6,6 +6,6 @@ const config = await createConfig();
 export default [
   ...config,
   {
-    ignores: ['src/public/**'],
+    ignores: ['src/test/__fixtures__/**'],
   },
 ];

@@ -50,4 +50,5 @@ fs.writeFileSync(paths.test, testTemplate);
 fs.writeFileSync(path.join(paths.fixtures, `${codemodName}.input.ts`), inputTemplate);
 fs.writeFileSync(path.join(paths.fixtures, `${codemodName}.output.ts`), outputTemplate);
 
+// eslint-disable-next-line no-console
 console.log(`Created codemod files for '${codemodName}'`);

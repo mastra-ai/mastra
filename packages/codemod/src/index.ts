@@ -1,10 +1,9 @@
 #! /usr/bin/env node
 
-import debug from 'debug';
 import { Command } from 'commander';
+import debug from 'debug';
 import { transform } from './lib/transform';
 
-const log = debug('codemod');
 const error = debug('codemod:error');
 debug.enable('codemod:*');
 

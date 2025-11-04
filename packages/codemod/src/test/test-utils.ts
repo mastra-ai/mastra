@@ -1,10 +1,11 @@
+/* eslint-disable no-console */
 // Adjusted from https://github.com/vercel/ai/blob/main/packages/codemod/src/test/test-utils.ts
 // License: Apache-2.0
 
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import type { API, FileInfo } from 'jscodeshift';
 import jscodeshift from 'jscodeshift';
-import { join } from 'path';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
 import ts from 'typescript';
 import { expect } from 'vitest';
 
@@ -136,7 +137,7 @@ export function validateSyntax(code: string, extension: string): void {
   };
 
   // Override module resolution
-  host.resolveModuleNameLiterals = (moduleLiterals, containingFile) => {
+  host.resolveModuleNameLiterals = moduleLiterals => {
     return moduleLiterals.map(moduleLiteral => ({
       resolvedModule: {
         resolvedFileName: `${moduleLiteral.text}.d.ts`,

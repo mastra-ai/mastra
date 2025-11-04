@@ -2,9 +2,9 @@
 // License: Apache-2.0
 
 import { execSync } from 'child_process';
-import debug from 'debug';
 import fs from 'fs';
 import path from 'path';
+import debug from 'debug';
 
 interface TransformOptions {
   dry?: boolean;

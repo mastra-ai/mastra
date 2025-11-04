@@ -1,10 +1,10 @@
 // Copied from https://github.com/vercel/ai/blob/main/packages/codemod/src/test/test-utils.test.ts
 // License: Apache-2.0
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import * as testUtils from './test-utils';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as testUtils from './test-utils';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
