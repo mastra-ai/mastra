@@ -38,7 +38,7 @@ const auth = new MastraAuthWorkos({
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth,
+    auth,
   },
 });
 ```

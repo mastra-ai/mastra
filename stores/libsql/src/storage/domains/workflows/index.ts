@@ -386,7 +386,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
       let total = 0;
       // Only get total count when using pagination
-      if (perPage !== undefined && page !== undefined) {
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
+      if (usePagination) {
         const countResult = await this.client.execute({
           sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
           args,
@@ -395,9 +396,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       }
 
       // Get results
-      const usePagination = perPage !== undefined && page !== undefined;
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
-      const offset = usePagination ? page * normalizedPerPage : 0;
+      const offset = usePagination ? page! * normalizedPerPage : 0;
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
         args: usePagination ? [...args, normalizedPerPage, offset] : args,

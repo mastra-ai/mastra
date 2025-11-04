@@ -1,11 +1,11 @@
 import type { ModelMessage, ToolChoice } from 'ai-v5';
-import type { TracingContext, TracingOptions } from '../ai-tracing';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';

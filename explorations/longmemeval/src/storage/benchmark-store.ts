@@ -1,7 +1,6 @@
 import { MastraStorage } from '@mastra/core/storage';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   TABLE_NAMES,
   StorageColumn,
@@ -9,10 +8,11 @@ import type {
   StorageResourceType,
   WorkflowRun,
   WorkflowRuns,
-  PaginationInfo,
   StorageListWorkflowRunsInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -168,10 +168,10 @@ export class BenchmarkStore extends MastraStorage {
   }
 
   async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraDBMessage[]>;
   async getMessages(
     args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  ): Promise<MastraMessageV1[] | MastraDBMessage[]> {
     const { threadId, resourceId, selectBy, format = 'v1' } = args;
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
@@ -233,10 +233,10 @@ export class BenchmarkStore extends MastraStorage {
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
+  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     if (this.mode === `read`) return [];
 
     const { messages, format = 'v1' } = args;
@@ -249,8 +249,8 @@ export class BenchmarkStore extends MastraStorage {
     return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
-  async updateMessages(args: { messages: Partial<MastraMessageV2> & { id: string }[] }): Promise<MastraMessageV2[]> {
-    const updatedMessages: MastraMessageV2[] = [];
+  async updateMessages(args: { messages: Partial<MastraDBMessage> & { id: string }[] }): Promise<MastraDBMessage[]> {
+    const updatedMessages: MastraDBMessage[] = [];
 
     if (this.mode === `read`) return [];
 
@@ -407,31 +407,54 @@ export class BenchmarkStore extends MastraStorage {
     };
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format = 'v1' } = args;
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, page = 0, perPage = 40, resourceId, filter, include, orderBy } = args;
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    const { page = 0, perPage = 40 } = selectBy?.pagination || {};
 
     // Get all messages
     const allMessages = await this.getMessages({
       threadId,
-      selectBy: { ...selectBy, pagination: undefined },
-      format: format as any,
+      format: 'v2',
+      ...(include && { selectBy: { include } }),
     } as any);
 
+    // Apply filters
+    let filteredMessages = allMessages;
+    if (resourceId) {
+      filteredMessages = filteredMessages.filter((m: any) => m.resourceId === resourceId);
+    }
+    if (filter?.dateRange?.start) {
+      filteredMessages = filteredMessages.filter((m: any) => new Date(m.createdAt) >= filter.dateRange!.start!);
+    }
+    if (filter?.dateRange?.end) {
+      filteredMessages = filteredMessages.filter((m: any) => new Date(m.createdAt) <= filter.dateRange!.end!);
+    }
+
+    // Apply ordering
+    if (orderBy?.field) {
+      const direction = orderBy.direction === 'ASC' ? 1 : -1;
+      const field = orderBy.field;
+      filteredMessages.sort((a: any, b: any) => {
+        const aVal = a[field];
+        const bVal = b[field];
+        if (aVal instanceof Date && bVal instanceof Date) {
+          return direction * (aVal.getTime() - bVal.getTime());
+        }
+        return direction * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0);
+      });
+    }
+
     // Apply pagination
-    const start = page * perPage;
-    const messages = allMessages.slice(start, start + perPage);
+    const normalizedPerPage = perPage === false ? filteredMessages.length : perPage;
+    const start = perPage === false ? 0 : page * normalizedPerPage;
+    const messages = filteredMessages.slice(start, start + normalizedPerPage) as any as MastraDBMessage[];
 
     return {
       messages,
-      total: allMessages.length,
+      total: filteredMessages.length,
       page,
-      perPage,
-      hasMore: allMessages.length > (page + 1) * perPage,
+      perPage: perPage === false ? false : normalizedPerPage,
+      hasMore: perPage === false ? false : filteredMessages.length > (page + 1) * normalizedPerPage,
     };
   }
 

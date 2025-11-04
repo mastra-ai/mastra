@@ -27,10 +27,10 @@ import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 // Initialize with default configuration
-const auth = new MastraAuthFirebase();
+const firebaseAuth = new MastraAuthFirebase();
 
 // Or with custom options
-const auth = new MastraAuthFirebase({
+const firebaseAuth = new MastraAuthFirebase({
   serviceAccount: 'path/to/service-account.json',
   databaseId: 'your-database-id',
 });
@@ -39,7 +39,7 @@ const auth = new MastraAuthFirebase({
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth,
+    auth: firebaseAuth,
   },
 });
 ```

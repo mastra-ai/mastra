@@ -31,7 +31,7 @@ const auth0Provider = new MastraAuthAuth0();
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth0Provider,
+    auth: auth0Provider,
   },
 });
 ```

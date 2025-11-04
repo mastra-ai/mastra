@@ -8,8 +8,14 @@ export function getDefaultValueInZodStack(schema: z.core.$ZodType): any {
   } else if ('shape' in schema._zod.def) {
     return getDefaultValues(schema as z.core.$ZodObject);
   } else if ('left' in schema._zod.def && 'right' in schema._zod.def) {
-    const left = getDefaultValues(schema._zod.def.left as z.core.$ZodObject);
-    const right = getDefaultValues(schema._zod.def.right as z.core.$ZodObject);
+    const leftSchema = schema._zod.def.left as z.core.$ZodObject;
+    const rightSchema = schema._zod.def.right as z.core.$ZodObject;
+    const left =
+      'shape' in leftSchema ? getDefaultValues(leftSchema) : getDefaultValueInZodStack(leftSchema as z.core.$ZodType);
+    const right =
+      'shape' in rightSchema
+        ? getDefaultValues(rightSchema)
+        : getDefaultValueInZodStack(rightSchema as z.core.$ZodType);
     return { ...left, ...right };
   }
   return undefined;

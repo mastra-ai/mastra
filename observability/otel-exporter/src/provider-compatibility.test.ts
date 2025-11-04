@@ -7,8 +7,8 @@ import type {
   AgentRunAttributes,
   ModelGenerationAttributes,
   ToolCallAttributes,
-} from '@mastra/core/ai-tracing';
-import { AISpanType } from '@mastra/core/ai-tracing';
+} from '@mastra/core/observability';
+import { AISpanType } from '@mastra/core/observability';
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
