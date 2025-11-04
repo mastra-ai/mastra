@@ -81,9 +81,9 @@ export class MemoryThread extends BaseResource {
     if (include) queryParams.include = JSON.stringify(include);
 
     const query = new URLSearchParams(queryParams);
-    return this.request(
-      `/api/memory/threads/${this.threadId}/messages?${query.toString()}${requestContextQueryString(requestContext, '&')}`,
-    );
+    const queryString = query.toString();
+    const url = `/api/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
+    return this.request(url);
   }
 
   /**

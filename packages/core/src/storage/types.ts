@@ -1,4 +1,4 @@
-import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { MastraDBMessage, StorageThreadType } from '../memory/types';
 import type { AISpanType } from '../observability';
 import type { WorkflowRunState } from '../workflows';
 
