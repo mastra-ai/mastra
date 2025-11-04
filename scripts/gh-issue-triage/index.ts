@@ -87,6 +87,7 @@ async function main() {
           github_username: { type: 'string' },
         },
         required: ['assignee', 'reason', 'product_area', 'github_username'],
+        additionalProperties: false,
       },
     },
   });
