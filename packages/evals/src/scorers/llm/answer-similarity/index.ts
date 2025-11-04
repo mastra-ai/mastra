@@ -1,9 +1,7 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
-import { roundToTwoDecimals } from '../../../metrics/llm/utils';
-import { getAssistantMessageFromRunOutput } from '../../utils';
+import { roundToTwoDecimals, getAssistantMessageFromRunOutput } from '../../utils';
 import { createExtractPrompt, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface AnswerSimilarityOptions {
@@ -66,17 +64,19 @@ export function createAnswerSimilarityScorer({
   model,
   options = ANSWER_SIMILARITY_DEFAULT_OPTIONS,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options?: AnswerSimilarityOptions;
 }) {
   const mergedOptions = { ...ANSWER_SIMILARITY_DEFAULT_OPTIONS, ...options };
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
+    id: 'answer-similarity-scorer',
     name: 'Answer Similarity Scorer',
     description: 'Evaluates how similar an agent output is to a ground truth answer for CI/CD testing',
     judge: {
       model,
       instructions: ANSWER_SIMILARITY_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .preprocess({
       description: 'Extract semantic units from output and ground truth',

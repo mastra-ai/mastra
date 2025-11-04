@@ -9,7 +9,7 @@ export const createPinoStream = (logger: IMastraLogger) => {
       const line = chunk.toString().trim();
 
       if (line) {
-        console.log(line);
+        console.info(line);
         // Log each line through Pino
         logger.info(line);
       }
@@ -52,7 +52,7 @@ export function createChildProcessLogger({ logger, root }: { logger: IMastraLogg
         });
       });
     } catch (error) {
-      console.log(error);
+      console.error(error);
       logger.error('Process failed', { error });
       pinoStream.end();
       return { success: false, error };

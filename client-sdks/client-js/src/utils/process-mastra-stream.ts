@@ -29,15 +29,18 @@ async function sharedProcessMastraStream({
           const data = line.slice(6); // Remove 'data: '
 
           if (data === '[DONE]') {
-            console.log('🏁 Stream finished');
+            console.info('🏁 Stream finished');
             return;
           }
-
+          let json;
           try {
-            const json = JSON.parse(data);
-            await onChunk(json);
+            json = JSON.parse(data);
           } catch (error) {
             console.error('❌ JSON parse error:', error, 'Data:', data);
+            continue;
+          }
+          if (json) {
+            await onChunk(json);
           }
         }
       }

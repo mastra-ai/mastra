@@ -1,13 +1,16 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../../../memory/types';
+import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
   StorageGetMessagesArg,
-  PaginationInfo,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
-  ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+  StorageOrderBy,
 } from '../../types';
 
 export abstract class MemoryStorage extends MastraBase {
@@ -19,10 +22,6 @@ export abstract class MemoryStorage extends MastraBase {
   }
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
-
-  abstract getThreadsByResourceId({
-    resourceId,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
@@ -38,36 +37,20 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
-  abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
-  abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+  abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
+
+  abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
+
+  abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
-  }): Promise<MastraMessageV2[]>;
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    })[];
+  }): Promise<MastraDBMessage[]>;
 
   async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
@@ -76,31 +59,23 @@ export abstract class MemoryStorage extends MastraBase {
     );
   }
 
-  abstract getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
-
-  abstract getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
+  abstract listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
   async saveResource(_: { resource: StorageResourceType }): Promise<StorageResourceType> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
@@ -110,18 +85,18 @@ export abstract class MemoryStorage extends MastraBase {
     metadata?: Record<string, unknown>;
   }): Promise<StorageResourceType> {
     throw new Error(
-      `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-        `To use per-resource working memory, switch to one of these supported storage adapters.`,
+      `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
+        `This is likely a bug - all Mastra storage adapters should implement resource support. ` +
+        `Please report this issue at https://github.com/mastra-ai/mastra/issues`,
     );
   }
 
-  protected castThreadOrderBy(v: unknown): ThreadOrderBy {
-    return (v as string) in THREAD_ORDER_BY_SET ? (v as ThreadOrderBy) : 'createdAt';
-  }
-
-  protected castThreadSortDirection(v: unknown): ThreadSortDirection {
-    return (v as string) in THREAD_THREAD_SORT_DIRECTION_SET ? (v as ThreadSortDirection) : 'DESC';
+  protected parseOrderBy(orderBy?: StorageOrderBy): { field: ThreadOrderBy; direction: ThreadSortDirection } {
+    return {
+      field: orderBy?.field && orderBy.field in THREAD_ORDER_BY_SET ? orderBy.field : 'createdAt',
+      direction:
+        orderBy?.direction && orderBy.direction in THREAD_THREAD_SORT_DIRECTION_SET ? orderBy.direction : 'DESC',
+    };
   }
 }
 

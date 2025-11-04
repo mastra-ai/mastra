@@ -1,7 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 import type { StoreOperationsLibSQL } from '../operations';
 
@@ -137,13 +137,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     return this.executeWithRetry(async () => {
       // Use a transaction to ensure atomicity
@@ -163,12 +163,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             activePaths: [],
             timestamp: Date.now(),
             suspendedPaths: {},
+            resumeLabels: {},
             serializedStepGraph: [],
             value: {},
             waitingPaths: {},
             status: 'pending',
             runId: runId,
-            runtimeContext: {},
+            requestContext: {},
           } as WorkflowRunState;
         } else {
           // Parse existing snapshot
@@ -176,9 +177,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result and runtime context
+        // Merge the new step result and request context
         snapshot.context[stepId] = result;
-        snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
         // Update the snapshot within the same transaction
         await tx.execute({
@@ -344,21 +345,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const args: InValue[] = [];
@@ -392,7 +386,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
       let total = 0;
       // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
+      if (usePagination) {
         const countResult = await this.client.execute({
           sql: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
           args,
@@ -401,9 +396,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       }
 
       // Get results
+      const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const offset = usePagination ? page! * normalizedPerPage : 0;
       const result = await this.client.execute({
-        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${limit !== undefined && offset !== undefined ? ` LIMIT ? OFFSET ?` : ''}`,
-        args: limit !== undefined && offset !== undefined ? [...args, limit, offset] : args,
+        sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
+        args: usePagination ? [...args, normalizedPerPage, offset] : args,
       });
 
       const runs = (result.rows || []).map(row => parseWorkflowRun(row));
@@ -413,7 +410,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'LIBSQL_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

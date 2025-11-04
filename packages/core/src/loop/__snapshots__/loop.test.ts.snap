@@ -64,6 +64,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -133,6 +135,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -255,6 +259,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -324,6 +330,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -402,6 +410,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -471,6 +481,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -593,6 +605,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "usage": {
@@ -662,6 +676,8 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
         },
       ],
       "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
       "timestamp": 1970-01-01T00:00:10.000Z,
     },
     "usage": {
@@ -695,6 +711,8 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     },
   ],
   "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
   "timestamp": 1970-01-01T00:00:10.000Z,
 }
 `;
@@ -718,6 +736,8 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain
     },
   ],
   "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
   "timestamp": 1970-01-01T00:00:10.000Z,
   "uiMessages": [
     {
@@ -795,9 +815,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.response.messages > shoul
 exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain sources 1`] = `
 [
   {
-    "filename": undefined,
     "id": "123",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value",
@@ -809,9 +827,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
     "url": "https://example.com",
   },
   {
-    "filename": undefined,
     "id": "456",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value2",
@@ -1168,24 +1184,25 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1224,24 +1241,25 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1286,24 +1304,25 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",
@@ -1342,7 +1361,7 @@ exports[`Loop Tests > AISDK v5 > result.pipeUIMessageStreamToResponse > should s
   "data: {"type":"start-step"}
 
 ",
-  "data: {"type":"error","errorText":"custom error message: error"}
+  "data: {"type":"error","errorText":"custom error message: Error: error"}
 
 ",
   "data: {"type":"finish-step"}
@@ -1412,9 +1431,7 @@ exports[`Loop Tests > AISDK v5 > result.reasoningText > should contain reasoning
 exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 [
   {
-    "filename": undefined,
     "id": "123",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value",
@@ -1426,9 +1443,7 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
     "url": "https://example.com",
   },
   {
-    "filename": undefined,
     "id": "456",
-    "mediaType": undefined,
     "providerMetadata": {
       "provider": {
         "custom": "value2",
@@ -1443,13 +1458,6 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 `;
 
 exports[`Loop Tests > AISDK v5 > result.text > should resolve with full text 1`] = `"Hello, world!"`;
-
-exports[`Loop Tests > AISDK v5 > result.textStream > should not include reasoning content in textStream 1`] = `
-[
-  "Hi",
-  " there!",
-]
-`;
 
 exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error messages by default 1`] = `
 [
@@ -1530,7 +1538,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should support custo
     "type": "start-step",
   },
   {
-    "errorText": "custom error message: error",
+    "errorText": "custom error message: Error: error",
     "type": "error",
   },
   {
@@ -1573,7 +1581,7 @@ exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should suppo
   "data: {"type":"start-step"}
 
 ",
-  "data: {"type":"error","errorText":"custom error message: error"}
+  "data: {"type":"error","errorText":"custom error message: Error: error"}
 
 ",
   "data: {"type":"finish-step"}
@@ -1654,166 +1662,6 @@ exports[`Loop Tests > AISDK v5 > telemetry > should not record telemetry inputs 
 ]
 `;
 
-exports[`Loop Tests > AISDK v5 > telemetry > should record successful tool call 1`] = `
-[
-  {
-    "attributes": {
-      "aisdk.model.id": "mock-model-id",
-      "aisdk.model.provider": "mock-provider",
-      "mastra.operationId": "mastra.stream",
-      "operation.name": "mastra.stream",
-      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-      "stream.response.finishReason": "stop",
-      "stream.response.text": "",
-      "stream.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
-      "stream.settings.maxRetries": 2,
-      "stream.usage.inputTokens": 3,
-      "stream.usage.outputTokens": 10,
-      "stream.usage.totalTokens": 13,
-    },
-    "events": [],
-    "name": "mastra.stream",
-  },
-  {
-    "attributes": {
-      "aisdk.model.id": "mock-model-id",
-      "aisdk.model.provider": "mock-provider",
-      "mastra.operationId": "mastra.stream.aisdk.doStream",
-      "operation.name": "mastra.stream.aisdk.doStream",
-      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-      "stream.prompt.toolChoice": "auto",
-      "stream.prompt.tools": [
-        "{"type":"function","name":"tool1","inputSchema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
-      ],
-      "stream.response.avgOutputTokensPerSecond": 20,
-      "stream.response.finishReason": "stop",
-      "stream.response.id": "id-0",
-      "stream.response.model": "mock-model-id",
-      "stream.response.msToFinish": 500,
-      "stream.response.msToFirstChunk": 100,
-      "stream.response.text": "",
-      "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
-      "stream.response.toolCalls": "[{"toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
-      "stream.settings.maxRetries": 2,
-      "stream.usage.inputTokens": 3,
-      "stream.usage.outputTokens": 10,
-      "stream.usage.totalTokens": 13,
-    },
-    "events": [
-      {
-        "attributes": {
-          "ai.response.msToFirstChunk": 100,
-        },
-        "name": "ai.stream.firstChunk",
-      },
-      {
-        "attributes": undefined,
-        "name": "ai.stream.finish",
-      },
-    ],
-    "name": "mastra.stream.aisdk.doStream",
-  },
-  {
-    "attributes": {
-      "mastra.operationId": "mastra.stream.toolCall",
-      "operation.name": "mastra.stream.toolCall",
-      "stream.toolCall.args": "{"value":"value"}",
-      "stream.toolCall.result": ""value-result"",
-      "stream.toolCall.toolCallId": "call-1",
-      "stream.toolCall.toolName": "tool1",
-    },
-    "events": [],
-    "name": "mastra.stream.toolCall",
-  },
-]
-`;
-
-exports[`Loop Tests > AISDK v5 > telemetry > should record telemetry data when enabled 1`] = `
-[
-  {
-    "attributes": {
-      "aisdk.model.id": "mock-model-id",
-      "aisdk.model.provider": "mock-provider",
-      "mastra.operationId": "mastra.stream",
-      "operation.name": "mastra.stream test-function-id",
-      "resource.name": "test-function-id",
-      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-      "stream.request.headers.header1": "value1",
-      "stream.request.headers.header2": "value2",
-      "stream.response.finishReason": "stop",
-      "stream.response.providerMetadata": "{"testProvider":{"testKey":"testValue"}}",
-      "stream.response.text": "Hello, world!",
-      "stream.response.toolCalls": "[]",
-      "stream.settings.frequencyPenalty": 0.3,
-      "stream.settings.maxRetries": 2,
-      "stream.settings.presencePenalty": 0.4,
-      "stream.settings.stopSequences": [
-        "stop",
-      ],
-      "stream.settings.temperature": 0.5,
-      "stream.settings.topK": 0.1,
-      "stream.settings.topP": 0.2,
-      "stream.telemetry.metadata.test1": "value1",
-      "stream.telemetry.metadata.test2": false,
-      "stream.usage.inputTokens": 3,
-      "stream.usage.outputTokens": 10,
-      "stream.usage.totalTokens": 13,
-    },
-    "events": [],
-    "name": "mastra.stream",
-  },
-  {
-    "attributes": {
-      "aisdk.model.id": "mock-model-id",
-      "aisdk.model.provider": "mock-provider",
-      "mastra.operationId": "mastra.stream.aisdk.doStream",
-      "operation.name": "mastra.stream.aisdk.doStream test-function-id",
-      "resource.name": "test-function-id",
-      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-      "stream.prompt.toolChoice": "auto",
-      "stream.request.headers.header1": "value1",
-      "stream.request.headers.header2": "value2",
-      "stream.response.avgOutputTokensPerSecond": 20,
-      "stream.response.finishReason": "stop",
-      "stream.response.id": "id-0",
-      "stream.response.model": "mock-model-id",
-      "stream.response.msToFinish": 500,
-      "stream.response.msToFirstChunk": 100,
-      "stream.response.providerMetadata": "{"testProvider":{"testKey":"testValue"}}",
-      "stream.response.text": "Hello, world!",
-      "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
-      "stream.settings.frequencyPenalty": 0.3,
-      "stream.settings.maxRetries": 2,
-      "stream.settings.presencePenalty": 0.4,
-      "stream.settings.stopSequences": [
-        "stop",
-      ],
-      "stream.settings.temperature": 0.5,
-      "stream.settings.topK": 0.1,
-      "stream.settings.topP": 0.2,
-      "stream.telemetry.metadata.test1": "value1",
-      "stream.telemetry.metadata.test2": false,
-      "stream.usage.inputTokens": 3,
-      "stream.usage.outputTokens": 10,
-      "stream.usage.totalTokens": 13,
-    },
-    "events": [
-      {
-        "attributes": {
-          "ai.response.msToFirstChunk": 100,
-        },
-        "name": "ai.stream.firstChunk",
-      },
-      {
-        "attributes": undefined,
-        "name": "ai.stream.finish",
-      },
-    ],
-    "name": "mastra.stream.aisdk.doStream",
-  },
-]
-`;
-
 exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool calls 1`] = `
 [
   {
@@ -1841,24 +1689,25 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       "headers": undefined,
       "id": "id-0",
       "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
       "timestamp": 1970-01-01T00:00:00.000Z,
     },
     "type": "finish-step",
     "usage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
   },
   {
     "finishReason": "stop",
     "totalUsage": {
-      "cachedInputTokens": undefined,
       "inputTokens": 3,
       "outputTokens": 10,
-      "reasoningTokens": undefined,
       "totalTokens": 13,
     },
     "type": "finish",

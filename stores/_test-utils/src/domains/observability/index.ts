@@ -1,4 +1,4 @@
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AISpanType } from '@mastra/core/observability';
 import { MastraStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type { AISpanRecord } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -40,12 +40,44 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           parentSpanId: null,
           attributes: expect.objectContaining(span.attributes),
           metadata: expect.objectContaining(span.metadata),
-          createdAt: span.createdAt,
-          updatedAt: span.updatedAt,
           input: span.input,
           output: span.output,
           error: span.error,
         });
+        // Database should set createdAt/updatedAt, not preserve application-provided ones
+        expect(retrievedSpan?.createdAt).toBeDefined();
+        expect(retrievedSpan?.updatedAt).toBeDefined();
+      });
+
+      it('should handle primitive values in JSONB fields (strings, numbers, booleans)', async () => {
+        // Regression test for PostgreSQL "invalid input syntax for type json" bug
+        // Bug: JSONB columns require valid JSON, but primitive strings were not being stringified
+        // This test ensures all storage providers properly handle primitives in JSONB fields
+        const span = createRootSpan({
+          name: 'test-primitive-jsonb',
+          scope: 'test-scope',
+        });
+
+        // Override with primitive values that should be JSON-encoded
+        span.input = 'Tell me a story about a dragon' as any; // Plain string
+        span.output = 'Once upon a time there was a dragon...' as any; // Plain string
+        span.attributes = { temperature: 0.7, maxTokens: 100 } as any; // Object with number values
+        span.metadata = { isTest: true, retryCount: 3 } as any; // Object with boolean and number
+
+        await storage.createAISpan(span);
+
+        const trace = await storage.getAITrace(span.traceId);
+        const retrievedSpan = trace?.spans[0];
+
+        expect(retrievedSpan).toBeDefined();
+
+        // Verify primitive strings are retrieved as strings (not corrupted)
+        expect(retrievedSpan?.input).toBe('Tell me a story about a dragon');
+        expect(retrievedSpan?.output).toBe('Once upon a time there was a dragon...');
+
+        // Verify objects with primitives are retrieved correctly
+        expect(retrievedSpan?.attributes).toEqual({ temperature: 0.7, maxTokens: 100 });
+        expect(retrievedSpan?.metadata).toEqual({ isTest: true, retryCount: 3 });
       });
     });
 

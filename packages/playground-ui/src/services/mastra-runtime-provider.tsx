@@ -6,28 +6,19 @@ import {
   AppendMessage,
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
-import { useState, ReactNode, useEffect, useRef } from 'react';
-import { RuntimeContext } from '@mastra/core/di';
+import { useState, ReactNode, useRef } from 'react';
+import { RequestContext } from '@mastra/core/di';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-import { MastraModelOutput } from '@mastra/core/stream';
 
-import { handleNetworkMessageFromMemory } from './agent-network-message';
-import {
-  createRootToolAssistantMessage,
-  handleAgentChunk,
-  handleStreamChunk,
-  handleWorkflowChunk,
-} from './stream-chunk-message';
-
-const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
-  return message;
-};
+import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
+import { ToolCallProvider } from './tool-call-provider';
+import { useAgentPromptExperiment } from '@/domains/agents/context';
 
 const handleFinishReason = (finishReason: string) => {
   switch (finishReason) {
@@ -84,23 +75,107 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
   return Promise.all(promises);
 };
 
+const initializeMessageState = (initialMessages: Message[]) => {
+  // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
+  const convertedMessages: ThreadMessageLike[] = initialMessages
+    ?.map((message: Message) => {
+      const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+        type: image.contentType.startsWith(`image/`)
+          ? 'image'
+          : image.contentType.startsWith(`audio/`)
+            ? 'audio'
+            : 'file',
+        mimeType: image.contentType,
+        image: image.url,
+      }));
+
+      const formattedParts = (message.parts || [])
+        .map(part => {
+          if (part.type === 'reasoning') {
+            return {
+              type: 'reasoning',
+              text:
+                part.reasoning ||
+                part?.details
+                  ?.filter(detail => detail.type === 'text')
+                  ?.map(detail => detail.text)
+                  .join(' '),
+            };
+          }
+          if (part.type === 'tool-invocation') {
+            if (part.toolInvocation.state === 'result') {
+              return {
+                type: 'tool-call',
+                toolCallId: part.toolInvocation.toolCallId,
+                toolName: part.toolInvocation.toolName,
+                args: part.toolInvocation.args,
+                result: part.toolInvocation.result,
+              };
+            }
+          }
+
+          if (part.type === 'file') {
+            return {
+              type: 'file',
+              mimeType: part.mimeType,
+              data: part.data,
+            };
+          }
+
+          if (part.type === 'text') {
+            return {
+              type: 'text',
+              text: part.text,
+            };
+          }
+        })
+        .filter(Boolean);
+
+      return {
+        ...message,
+        content: [...formattedParts, ...attachmentsAsContentParts],
+      };
+    })
+    .filter(Boolean);
+
+  return convertedMessages;
+};
+
 export function MastraRuntimeProvider({
   children,
   agentId,
   initialMessages,
+  initialLegacyMessages,
   memory,
   threadId,
   refreshThreadList,
   settings,
-  runtimeContext,
+  requestContext,
   modelVersion,
 }: Readonly<{
   children: ReactNode;
 }> &
   ChatProps) {
-  const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>([]);
-  const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+  const { prompt: instructions } = useAgentPromptExperiment();
+  const [isLegacyRunning, setIsLegacyRunning] = useState(false);
+  const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
+    memory ? initializeMessageState(initialLegacyMessages || []) : [],
+  );
+
+  const {
+    messages,
+    sendMessage,
+    cancelRun,
+    isRunning: isRunningStream,
+    setMessages,
+    approveToolCall,
+    declineToolCall,
+    toolCallApprovals,
+  } = useChat({
+    agentId,
+    initializeMessages: () => initialMessages || [],
+  });
+
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -113,102 +188,36 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
-    instructions,
+    chatWithGenerateLegacy,
     chatWithGenerate,
-    chatWithGenerateVNext,
     chatWithNetwork,
     providerOptions,
+    requireToolApproval,
   } = settings?.modelSettings ?? {};
   const toolCallIdToName = useRef<Record<string, string>>({});
 
-  const runtimeContextInstance = new RuntimeContext();
-  Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {
-    runtimeContextInstance.set(key, value);
+  const requestContextInstance = new RequestContext();
+  Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+    requestContextInstance.set(key, value);
   });
 
-  useEffect(() => {
-    const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
-    if (
-      messages.length === 0 ||
-      currentThreadId !== threadId ||
-      (hasNewInitialMessages && currentThreadId === threadId)
-    ) {
-      if (initialMessages && threadId && memory) {
-        const convertedMessages: ThreadMessageLike[] = initialMessages
-          ?.map((message: Message) => {
-            let content;
-            try {
-              content = JSON.parse(message.content);
-              if (content.isNetwork) {
-                return handleNetworkMessageFromMemory(content);
-              }
-            } catch (e) {}
-
-            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
-              type: image.contentType.startsWith(`image/`)
-                ? 'image'
-                : image.contentType.startsWith(`audio/`)
-                  ? 'audio'
-                  : 'file',
-              mimeType: image.contentType,
-              image: image.url,
-            }));
-
-            const formattedParts = (message.parts || [])
-              .map(part => {
-                if (part.type === 'reasoning') {
-                  return {
-                    type: 'reasoning',
-                    text:
-                      part.reasoning ||
-                      part?.details
-                        ?.filter(detail => detail.type === 'text')
-                        ?.map(detail => detail.text)
-                        .join(' '),
-                  };
-                }
-                if (part.type === 'tool-invocation') {
-                  if (part.toolInvocation.state === 'result') {
-                    return {
-                      type: 'tool-call',
-                      toolCallId: part.toolInvocation.toolCallId,
-                      toolName: part.toolInvocation.toolName,
-                      args: part.toolInvocation.args,
-                      result: part.toolInvocation.result,
-                    };
-                  }
-                }
-
-                if (part.type === 'file') {
-                  return {
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: part.data,
-                  };
-                }
-
-                if (part.type === 'text') {
-                  return {
-                    type: 'text',
-                    text: part.text,
-                  };
-                }
-              })
-              .filter(Boolean);
-
-            return {
-              ...message,
-              content: [...formattedParts, ...attachmentsAsContentParts],
-            } as ThreadMessageLike;
-          })
-          .filter(Boolean);
-        setMessages(convertedMessages);
-        setCurrentThreadId(threadId);
-      }
-    }
-  }, [initialMessages, threadId, memory]);
+  const modelSettingsArgs: ModelSettings = {
+    frequencyPenalty,
+    presencePenalty,
+    maxRetries,
+    temperature,
+    topK,
+    topP,
+    maxTokens,
+    instructions,
+    providerOptions,
+    maxSteps,
+    requireToolApproval,
+  };
 
   const baseClient = useMastraClient();
+
+  const isVNext = modelVersion === 'v2';
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
@@ -216,11 +225,9 @@ export function MastraRuntimeProvider({
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    setMessages(currentConversation => [
-      ...currentConversation,
-      { role: 'user', content: input, attachments: message.attachments },
-    ]);
-    setIsRunning(true);
+    if (!isVNext) {
+      setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
+    }
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -235,304 +242,80 @@ export function MastraRuntimeProvider({
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
-      function handleGenerateResponse(generatedResponse: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>) {
-        if (generatedResponse.response && 'messages' in generatedResponse.response) {
-          const latestMessage = generatedResponse.response.messages.reduce(
-            (acc: ThreadMessageLike, message: any) => {
-              const _content = Array.isArray(acc.content) ? acc.content : [];
-
-              if (typeof message.content === 'string') {
-                return {
-                  ...acc,
-                  content: [
-                    ..._content,
-                    ...(generatedResponse.reasoning ? [{ type: 'reasoning', text: generatedResponse.reasoning }] : []),
-                    {
-                      type: 'text',
-                      text: message.content,
-                    },
-                  ],
-                } as ThreadMessageLike;
-              }
-
-              if (message.role === 'assistant') {
-                const toolCallContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'tool-call')
-                  : undefined;
-
-                const reasoningContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'reasoning')
-                  : undefined;
-
-                if (toolCallContent) {
-                  const newContent = message.content.map((c: any) => {
-                    if (c.type === 'tool-call' && c.toolCallId === toolCallContent?.toolCallId) {
-                      return {
-                        ...c,
-                        toolCallId: toolCallContent.toolCallId,
-                        toolName: toolCallContent.toolName,
-                        args: toolCallContent.input,
-                      };
-                    }
-                    return c;
-                  });
-
-                  const containsToolCall = newContent.some((c: any) => c.type === 'tool-call');
-
-                  return {
-                    ...acc,
-                    content: containsToolCall
-                      ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
-                      : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                  } as ThreadMessageLike;
-                }
-
-                const textContent = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'text' && content.text)
-                  : undefined;
-
-                if (textContent) {
-                  return {
-                    ...acc,
-                    content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                  } as ThreadMessageLike;
-                }
-              }
-
-              if (message.role === 'tool') {
-                const toolResult = Array.isArray(message.content)
-                  ? message.content.find((content: any) => content.type === 'tool-result')
-                  : undefined;
-
-                if (toolResult) {
-                  const newContent = _content.map(c => {
-                    if (c.type === 'tool-call' && c.toolCallId === toolResult?.toolCallId) {
-                      return { ...c, result: toolResult.output?.value };
-                    }
-                    return c;
-                  });
-                  const containsToolCall = newContent.some(c => c.type === 'tool-call');
-
-                  return {
-                    ...acc,
-                    content: containsToolCall
-                      ? newContent
-                      : [
-                          ..._content,
-                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output?.value },
-                        ],
-                  } as ThreadMessageLike;
-                }
-
-                return {
-                  ...acc,
-                  content: [..._content, toolResult],
-                } as ThreadMessageLike;
-              }
-              return acc;
-            },
-            { role: 'assistant', content: [] } as ThreadMessageLike,
-          );
-
-          setMessages(currentConversation => [...currentConversation, latestMessage]);
-
-          if (generatedResponse.finishReason) {
-            handleFinishReason(generatedResponse.finishReason);
-          }
-        }
-      }
-
-      if (modelVersion === 'v2') {
+      if (isVNext) {
         if (chatWithNetwork) {
-          const response = await agent.network({
-            messages: [
-              {
-                role: 'user',
-                content: input,
-              },
-            ],
-            maxSteps,
-            modelSettings: {
-              frequencyPenalty,
-              presencePenalty,
-              maxRetries,
-              maxOutputTokens: maxTokens,
-              temperature,
-              topK,
-              topP,
-            },
+          await sendMessage({
+            message: input,
+            mode: 'network',
+            coreUserMessages: attachments,
+            requestContext: requestContextInstance,
+            threadId,
+            modelSettings: modelSettingsArgs,
+            signal: controller.signal,
+            onNetworkChunk: async chunk => {
+              if (
+                chunk.type === 'tool-execution-end' &&
+                chunk.payload?.toolName === 'updateWorkingMemory' &&
+                typeof chunk.payload.result === 'object' &&
+                'success' in chunk.payload.result! &&
+                chunk.payload.result?.success
+              ) {
+                refreshWorkingMemory?.();
+              }
 
-            runId: agentId,
-
-            runtimeContext: runtimeContextInstance,
-
-            ...(memory ? { thread: threadId, resourceId: agentId } : {}),
-          });
-
-          const _sideEffects = {
-            assistantMessageAdded: false,
-            assistantToolCallAddedForUpdater: false,
-            assistantToolCallAddedForContent: false,
-            content: '',
-            toolCallIdToName: toolCallIdToName,
-          };
-
-          let currentEntityId: string | undefined;
-
-          await response.processDataStream({
-            onChunk: async chunk => {
-              if (chunk.type.startsWith('agent-execution-event-')) {
-                const agentChunk = chunk.payload;
-                if (!currentEntityId) return;
-                await handleAgentChunk({ agentChunk, setMessages, entityName: currentEntityId });
-              } else if (chunk.type === 'tool-execution-start') {
-                await handleStreamChunk({
-                  chunk: {
-                    ...chunk,
-                    type: 'tool-call',
-                    payload: {
-                      ...chunk?.payload,
-                      toolCallId: chunk?.payload?.args?.toolCallId,
-                      toolName: chunk?.payload?.args?.toolName,
-                      args: {
-                        ...chunk?.payload?.args?.args,
-                        __mastraMetadata: {
-                          ...chunk?.payload?.args?.__mastraMetadata,
-                          networkMetadata: {
-                            selectionReason: chunk?.payload?.args?.selectionReason || '',
-                            input: chunk?.payload?.args?.args,
-                          },
-                        },
-                      },
-                    },
-                  },
-                  setMessages,
-                  refreshWorkingMemory,
-                  _sideEffects,
-                });
-              } else if (chunk.type === 'tool-execution-end') {
-                await handleStreamChunk({
-                  chunk: { ...chunk, type: 'tool-result' },
-                  setMessages,
-                  refreshWorkingMemory,
-                  _sideEffects,
-                });
-              } else if (chunk.type.startsWith('workflow-execution-event-')) {
-                const workflowChunk = chunk.payload;
-                if (!currentEntityId) return;
-                await handleWorkflowChunk({ workflowChunk, setMessages, entityName: currentEntityId });
-              } else if (chunk.type === 'workflow-execution-start' || chunk.type === 'agent-execution-start') {
-                currentEntityId = chunk.payload?.args?.resourceId;
-
-                const runId = chunk.payload.runId;
-
-                if (!currentEntityId || !runId) return;
-
-                createRootToolAssistantMessage({
-                  entityName: currentEntityId,
-                  setMessages,
-                  runId,
-                  _sideEffects,
-                  chunk,
-                  from: chunk.type === 'agent-execution-start' ? 'AGENT' : 'WORKFLOW',
-                  networkMetadata: {
-                    selectionReason: chunk?.payload?.args?.selectionReason || '',
-                    input: chunk?.payload?.args?.prompt,
-                  },
-                });
-
-                _sideEffects.toolCallIdToName.current[runId] = currentEntityId;
-              } else if (chunk.type === 'network-execution-event-step-finish') {
-                setMessages(currentConversation => {
-                  return [
-                    ...currentConversation,
-                    { role: 'assistant', content: [{ type: 'text', text: chunk?.payload?.result || '' }] },
-                  ];
-                });
-              } else {
-                await handleStreamChunk({ chunk, setMessages, refreshWorkingMemory, _sideEffects });
+              if (chunk.type === 'network-execution-event-step-finish') {
+                refreshThreadList?.();
               }
             },
           });
         } else {
-          if (chatWithGenerateVNext) {
-            const response = await agent.generateVNext({
-              messages: [
-                {
-                  role: 'user',
-                  content: input,
-                },
-                ...attachments,
-              ],
-              runId: agentId,
-              modelSettings: {
-                frequencyPenalty,
-                presencePenalty,
-                maxRetries,
-                temperature,
-                topK,
-                topP,
-                maxOutputTokens: maxTokens,
-              },
-              providerOptions: providerOptions as any,
-              instructions,
-              runtimeContext: runtimeContextInstance,
-              ...(memory ? { threadId, resourceId: agentId } : {}),
+          if (chatWithGenerate) {
+            await sendMessage({
+              message: input,
+              mode: 'generate',
+              coreUserMessages: attachments,
+              requestContext: requestContextInstance,
+              threadId,
+              modelSettings: modelSettingsArgs,
+              signal: controller.signal,
             });
 
-            handleGenerateResponse(response);
-            setIsRunning(false);
+            await refreshThreadList?.();
+
             return;
           } else {
-            const response = await agent.streamVNext({
-              messages: [
-                {
-                  role: 'user',
-                  content: input,
-                },
-                ...attachments,
-              ],
-              runId: agentId,
-              modelSettings: {
-                frequencyPenalty,
-                presencePenalty,
-                maxRetries,
-                maxOutputTokens: maxTokens,
-                temperature,
-                topK,
-                topP,
-              },
-              instructions,
-              runtimeContext: runtimeContextInstance,
-              ...(memory ? { threadId, resourceId: agentId } : {}),
-              providerOptions: providerOptions as any,
-            });
-
-            if (!response.body) {
-              throw new Error('No response body');
-            }
-
-            const _sideEffects = {
-              assistantMessageAdded: false,
-              assistantToolCallAddedForUpdater: false,
-              assistantToolCallAddedForContent: false,
-              content: '',
-              toolCallIdToName: toolCallIdToName,
-            };
-
-            await response.processDataStream({
+            await sendMessage({
+              message: input,
+              mode: 'stream',
+              coreUserMessages: attachments,
+              requestContext: requestContextInstance,
+              threadId,
+              modelSettings: modelSettingsArgs,
               onChunk: async chunk => {
-                await handleStreamChunk({ chunk, setMessages, refreshWorkingMemory, _sideEffects });
+                if (chunk.type === 'finish') {
+                  await refreshThreadList?.();
+                }
+
+                if (
+                  chunk.type === 'tool-result' &&
+                  chunk.payload?.toolName === 'updateWorkingMemory' &&
+                  typeof chunk.payload.result === 'object' &&
+                  'success' in chunk.payload.result! &&
+                  chunk.payload.result?.success
+                ) {
+                  refreshWorkingMemory?.();
+                }
               },
+              signal: controller.signal,
             });
 
-            setIsRunning(false);
             return;
           }
         }
       } else {
-        if (chatWithGenerate) {
-          const generateResponse = await agent.generate({
+        if (chatWithGenerateLegacy) {
+          setIsLegacyRunning(true);
+          const generateResponse = await agent.generateLegacy({
             messages: [
               {
                 role: 'user',
@@ -550,13 +333,13 @@ export function MastraRuntimeProvider({
             topK,
             topP,
             instructions,
-            runtimeContext: runtimeContextInstance,
+            requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
           if (generateResponse.response && 'messages' in generateResponse.response) {
             const latestMessage = generateResponse.response.messages.reduce(
-              (acc, message) => {
+              (acc: ThreadMessageLike, message) => {
                 const _content = Array.isArray(acc.content) ? acc.content : [];
                 if (typeof message.content === 'string') {
                   return {
@@ -569,7 +352,7 @@ export function MastraRuntimeProvider({
                         text: message.content,
                       },
                     ],
-                  } as ThreadMessageLike;
+                  };
                 }
                 if (message.role === 'assistant') {
                   const toolCallContent = Array.isArray(message.content)
@@ -593,7 +376,7 @@ export function MastraRuntimeProvider({
                       content: containsToolCall
                         ? [...(reasoningContent ? [reasoningContent] : []), ...newContent]
                         : [..._content, ...(reasoningContent ? [reasoningContent] : []), toolCallContent],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   const textContent = Array.isArray(message.content)
@@ -604,7 +387,7 @@ export function MastraRuntimeProvider({
                     return {
                       ...acc,
                       content: [..._content, ...(reasoningContent ? [reasoningContent] : []), textContent],
-                    } as ThreadMessageLike;
+                    };
                   }
                 }
 
@@ -630,23 +413,26 @@ export function MastraRuntimeProvider({
                             ..._content,
                             { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
                           ],
-                    } as ThreadMessageLike;
+                    };
                   }
 
                   return {
                     ...acc,
                     content: [..._content, toolResult],
-                  } as ThreadMessageLike;
+                  };
                 }
                 return acc;
               },
-              { role: 'assistant', content: [] } as ThreadMessageLike,
+              { role: 'assistant', content: [] },
             );
-            setMessages(currentConversation => [...currentConversation, latestMessage]);
+            setLegacyMessages(currentConversation => [...currentConversation, latestMessage as ThreadMessageLike]);
             handleFinishReason(generateResponse.finishReason);
           }
+
+          setIsLegacyRunning(false);
         } else {
-          const response = await agent.stream({
+          setIsLegacyRunning(true);
+          const response = await agent.streamLegacy({
             messages: [
               {
                 role: 'user',
@@ -664,9 +450,9 @@ export function MastraRuntimeProvider({
             topK,
             topP,
             instructions,
-            runtimeContext: runtimeContextInstance,
+            requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
-            providerOptions: providerOptions as any,
+            providerOptions,
           });
 
           if (!response.body) {
@@ -679,7 +465,7 @@ export function MastraRuntimeProvider({
           let assistantToolCallAddedForContent = false;
 
           function updater() {
-            setMessages(currentConversation => {
+            setLegacyMessages(currentConversation => {
               const message: ThreadMessageLike = {
                 role: 'assistant',
                 content: [{ type: 'text', text: content }],
@@ -715,7 +501,7 @@ export function MastraRuntimeProvider({
             },
             async onToolCallPart(value) {
               // Update the messages state
-              setMessages(currentConversation => {
+              setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
                 const lastMessage = currentConversation[currentConversation.length - 1];
 
@@ -773,9 +559,9 @@ export function MastraRuntimeProvider({
               });
               toolCallIdToName.current[value.toolCallId] = value.toolName;
             },
-            async onToolResultPart(value: any) {
+            async onToolResultPart(value) {
               // Update the messages state
-              setMessages(currentConversation => {
+              setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
                 const lastMessage = currentConversation[currentConversation.length - 1];
 
@@ -819,7 +605,7 @@ export function MastraRuntimeProvider({
               handleFinishReason(finishReason);
             },
             onReasoningPart(value) {
-              setMessages(currentConversation => {
+              setLegacyMessages(currentConversation => {
                 // Get the last message (should be the assistant's message)
                 const lastMessage = currentConversation[currentConversation.length - 1];
 
@@ -861,15 +647,15 @@ export function MastraRuntimeProvider({
             },
           });
         }
+        setIsLegacyRunning(false);
       }
 
-      setIsRunning(false);
       setTimeout(() => {
         refreshThreadList?.();
       }, 500);
     } catch (error: any) {
       console.error('Error occurred in MastraRuntimeProvider', error);
-      setIsRunning(false);
+      setIsLegacyRunning(false);
 
       // Handle cancellation gracefully
       if (error.name === 'AbortError') {
@@ -877,10 +663,17 @@ export function MastraRuntimeProvider({
         return;
       }
 
-      setMessages(currentConversation => [
-        ...currentConversation,
-        { role: 'assistant', content: [{ type: 'text', text: `${error}` as string }] },
-      ]);
+      if (isVNext) {
+        setMessages(currentConversation => [
+          ...currentConversation,
+          { role: 'assistant', parts: [{ type: 'text', text: `${error}` }] } as MastraUIMessage,
+        ]);
+      } else {
+        setLegacyMessages(currentConversation => [
+          ...currentConversation,
+          { role: 'assistant', content: [{ type: 'text', text: `${error}` }] },
+        ]);
+      }
     } finally {
       // Clean up the abort controller reference
       abortControllerRef.current = null;
@@ -891,22 +684,40 @@ export function MastraRuntimeProvider({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
-      setIsRunning(false);
+      setIsLegacyRunning(false);
+      cancelRun?.();
     }
   };
 
   const { adapters, isReady } = useAdapters(agentId);
 
+  const vnextmessages = messages.map(toAssistantUIMessage);
+
   const runtime = useExternalStoreRuntime({
-    isRunning,
-    messages,
-    convertMessage,
+    isRunning: isLegacyRunning || isRunningStream,
+    messages: isVNext ? vnextmessages : legacyMessages,
+    convertMessage: x => x,
     onNew,
     onCancel,
     adapters: isReady ? adapters : undefined,
+    extras: {
+      approveToolCall,
+      declineToolCall,
+    },
   });
 
   if (!isReady) return null;
 
-  return <AssistantRuntimeProvider runtime={runtime}> {children} </AssistantRuntimeProvider>;
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <ToolCallProvider
+        approveToolcall={approveToolCall}
+        declineToolcall={declineToolCall}
+        isRunning={isRunningStream}
+        toolCallApprovals={toolCallApprovals}
+      >
+        {children}
+      </ToolCallProvider>
+    </AssistantRuntimeProvider>
+  );
 }

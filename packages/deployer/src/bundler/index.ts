@@ -1,22 +1,20 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import virtual from '@rollup/plugin-virtual';
+import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
-import { globby } from 'globby';
 import type { InputOptions, OutputOptions } from 'rollup';
+import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
-import { writeCustomInstrumentation } from '../build/customInstrumentation';
-import { writeTelemetryConfig } from '../build/telemetry';
 import { getPackageRootPath } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
-import { collectTransitiveWorkspaceDependencies, packWorkspaceDependencies } from './workspaceDependencies';
+import { getWorkspaceInformation } from './workspaceDependencies';
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -32,17 +30,6 @@ export abstract class Bundler extends MastraBundler {
 
     await ensureDir(join(outputDirectory, this.analyzeOutputDir));
     await ensureDir(join(outputDirectory, this.outputDir));
-  }
-
-  async writeInstrumentationFile(outputDirectory: string, customInstrumentationFile?: string) {
-    const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-
-    if (customInstrumentationFile) {
-      await copy(customInstrumentationFile, instrumentationFile);
-    } else {
-      await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
-    }
   }
 
   async writePackageJson(
@@ -68,18 +55,6 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    // add telemetry dependencies
-    dependenciesMap.set('@opentelemetry/core', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/api', '^1.9.0');
-    dependenciesMap.set('@opentelemetry/auto-instrumentations-node', '^0.59.0');
-    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-grpc', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-http', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/resources', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/sdk-node', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/sdk-trace-base', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/semantic-conventions', '^1.33.0');
-    dependenciesMap.set('@opentelemetry/instrumentation', '^0.202.0');
-
     await writeFile(
       pkgPath,
       JSON.stringify(
@@ -90,7 +65,7 @@ export abstract class Bundler extends MastraBundler {
           type: 'module',
           main: 'index.mjs',
           scripts: {
-            start: 'node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs ./index.mjs',
+            start: 'node ./index.mjs',
           },
           author: 'Mastra',
           license: 'ISC',
@@ -110,12 +85,23 @@ export abstract class Bundler extends MastraBundler {
     return createBundlerUtil(inputOptions, outputOptions);
   }
 
-  protected async analyze(entry: string | string[], mastraFile: string, outputDirectory: string) {
+  protected async analyze(
+    entry: string | string[],
+    mastraFile: string,
+    outputDirectory: string,
+    { enableEsmShim = true }: { enableEsmShim?: boolean } = {},
+  ) {
     return await analyzeBundle(
       ([] as string[]).concat(entry),
       mastraFile,
-      join(outputDirectory, this.analyzeOutputDir),
-      'node',
+      {
+        outputDir: join(outputDirectory, this.analyzeOutputDir),
+        projectRoot: outputDirectory,
+        platform: 'node',
+        bundlerOptions: {
+          enableEsmShim,
+        },
+      },
       this.logger,
     );
   }
@@ -164,6 +150,10 @@ export abstract class Bundler extends MastraBundler {
     toolsPaths: (string | string[])[],
     { enableSourcemap = false, enableEsmShim = true }: { enableSourcemap?: boolean; enableEsmShim?: boolean } = {},
   ) {
+    const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
+    const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
+    const projectRoot = closestPkgJson ? dirname(closestPkgJson) : process.cwd();
+
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
       analyzedBundleInfo,
@@ -171,11 +161,11 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, enableEsmShim },
+      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim },
     );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     if (isVirtual) {
       inputOptions.input = { index: '#entry', ...toolsInputOptions };
@@ -192,11 +182,14 @@ export abstract class Bundler extends MastraBundler {
     return inputOptions;
   }
 
-  async getToolsInputOptions(toolsPaths: (string | string[])[]) {
+  async listToolsInputOptions(toolsPaths: (string | string[])[]) {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
-      const expandedPaths = await globby(toolPath, {});
+      const expandedPaths = await glob(toolPath, {
+        absolute: true,
+        expandDirectories: false,
+      });
 
       for (const path of expandedPaths) {
         if (await fsExtra.pathExists(path)) {
@@ -214,7 +207,9 @@ export abstract class Bundler extends MastraBundler {
           }
 
           const uniqueToolID = crypto.randomUUID();
-          inputs[`tools/${uniqueToolID}`] = entryFile;
+          // Normalize Windows paths to forward slashes for consistent handling
+          const normalizedEntryFile = entryFile.replaceAll('\\', '/');
+          inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
         } else {
           this.logger.warn(`Tool path ${path} does not exist, skipping...`);
         }
@@ -227,16 +222,19 @@ export abstract class Bundler extends MastraBundler {
   protected async _bundle(
     serverFile: string,
     mastraEntryFile: string,
-    outputDirectory: string,
+    {
+      projectRoot,
+      outputDirectory,
+      enableEsmShim = true,
+    }: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean },
     toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
-    this.logger.info('Start bundling Mastra');
-
+    const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
     let sourcemap = false;
 
     try {
-      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+      const bundlerOptions = await getBundlerOptions(mastraEntryFile, analyzeDir);
       sourcemap = !!bundlerOptions?.sourcemap;
     } catch (error) {
       this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
@@ -244,17 +242,27 @@ export abstract class Bundler extends MastraBundler {
 
     let analyzedBundleInfo;
     try {
-      const resolvedToolsPaths = await this.getToolsInputOptions(toolsPaths);
+      const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths);
       analyzedBundleInfo = await analyzeBundle(
         [serverFile, ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
-        join(outputDirectory, this.analyzeOutputDir),
-        'node',
+        {
+          outputDir: analyzeDir,
+          projectRoot,
+          platform: 'node',
+          bundlerOptions: {
+            enableEsmShim,
+          },
+        },
         this.logger,
-        sourcemap,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
       throw new MastraError(
         {
           id: 'DEPLOYER_BUNDLER_ANALYZE_FAILED',
@@ -266,116 +274,24 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
-    let externalDependencies: string[];
-    try {
-      const result = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));
-
-      externalDependencies = result?.externalDependencies ?? [];
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new MastraError(
-        {
-          id: 'DEPLOYER_BUNDLER_TELEMETRY_FAILED',
-          text: `Failed to write telemetry config: ${message}`,
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        },
-        error,
-      );
-    }
-
-    const mastraFolder = dirname(mastraEntryFile);
-
-    const fileService = new FileService();
-    const customInstrumentation = fileService.getFirstExistingFileOrUndefined([
-      join(mastraFolder, 'instrumentation.js'),
-      join(mastraFolder, 'instrumentation.ts'),
-      join(mastraFolder, 'instrumentation.mjs'),
-    ]);
-
-    try {
-      if (customInstrumentation) {
-        const result = await writeCustomInstrumentation(customInstrumentation, join(outputDirectory, this.outputDir), {
-          sourcemap,
-        });
-        externalDependencies = [...externalDependencies, ...result.externalDependencies];
-        await this.writeInstrumentationFile(join(outputDirectory, this.outputDir), customInstrumentation);
-      } else {
-        await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new MastraError(
-        {
-          id: 'DEPLOYER_BUNDLER_INSTRUMENTATION_FILE_FAILED',
-          text: `Failed to write instrumentation file: ${message}, ${customInstrumentation ? ` Found custom instrumentation file: ${customInstrumentation}` : ''}`,
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        },
-        error,
-      );
-    }
-
     const dependenciesToInstall = new Map<string, string>();
-
-    // Add extenal dependencies from telemetry file
-    for (const external of externalDependencies) {
-      dependenciesToInstall.set(external, 'latest');
-    }
-
-    const workspaceDependencies = new Set<string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
         if (analyzedBundleInfo.workspaceMap.has(dep)) {
-          workspaceDependencies.add(dep);
           continue;
         }
 
         const rootPath = await getPackageRootPath(dep);
         const pkg = await readJSON(`${rootPath}/package.json`);
 
-        dependenciesToInstall.set(dep, pkg.version);
+        dependenciesToInstall.set(dep, pkg.version || 'latest');
       } catch {
         dependenciesToInstall.set(dep, 'latest');
       }
     }
 
-    let resolutions: Record<string, string> = {};
-    if (workspaceDependencies.size > 0) {
-      try {
-        const result = collectTransitiveWorkspaceDependencies({
-          workspaceMap: analyzedBundleInfo.workspaceMap,
-          initialDependencies: workspaceDependencies,
-          logger: this.logger,
-        });
-        resolutions = result.resolutions;
-
-        // Update dependenciesToInstall with the resolved TGZ paths
-        Object.entries(resolutions).forEach(([pkgName, tgzPath]) => {
-          dependenciesToInstall.set(pkgName, tgzPath);
-        });
-
-        await packWorkspaceDependencies({
-          workspaceMap: analyzedBundleInfo.workspaceMap,
-          usedWorkspacePackages: result.usedWorkspacePackages,
-          bundleOutputDir: join(outputDirectory, this.outputDir),
-          logger: this.logger,
-        });
-      } catch (error) {
-        throw new MastraError(
-          {
-            id: 'DEPLOYER_BUNDLER_WORKSPACE_DEPS_FAILED',
-            text: `Failed to collect and pack workspace dependencies.`,
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-          },
-          error,
-        );
-      }
-    }
-
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
+      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 
       this.logger.info('Bundling Mastra application');
       const inputOptions: InputOptions = await this.getBundlerOptions(
@@ -383,7 +299,7 @@ export abstract class Bundler extends MastraBundler {
         mastraEntryFile,
         analyzedBundleInfo,
         toolsPaths,
-        { enableSourcemap: sourcemap },
+        { enableSourcemap: sourcemap, enableEsmShim },
       );
 
       const bundler = await this.createBundler(
@@ -434,12 +350,12 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Done copying public files');
 
       this.logger.info('Copying .npmrc file');
-      await this.copyDOTNPMRC({ outputDirectory });
+      await this.copyDOTNPMRC({ outputDirectory, rootDir: projectRoot });
 
       this.logger.info('Done copying .npmrc file');
 
       this.logger.info('Installing dependencies');
-      await this.installDependencies(outputDirectory);
+      await this.installDependencies(outputDirectory, projectRoot);
 
       this.logger.info('Done installing dependencies');
     } catch (error) {
@@ -457,7 +373,7 @@ export const tools = [${toolsExports.join(', ')}]`,
   }
 
   async lint(_entryFile: string, _outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
       this.logger.info(`Found ${toolsLength} ${toolsLength === 1 ? 'tool' : 'tools'}`);

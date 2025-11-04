@@ -23,7 +23,7 @@ import { mastra } from './mastra-instance';
 
 const app = new Hono();
 
-app.get('/mastra/agents', ctx => handlers.agents.getAgentsHandler({ mastra, runtimeContext: ctx }));
+app.get('/mastra/agents', ctx => handlers.agents.listAgentsHandler({ mastra, runtimeContext: ctx }));
 app.post('/mastra/agents/:id/generate', async ctx => {
   const body = await ctx.req.json();
   return handlers.agents.generateHandler({
@@ -65,8 +65,3 @@ pnpm run pull:openapispec
 ```
 
 within the `@mastra/server` directory.
-
-## License
-
-Released under the Elastic License 2.0. The full license text is available in
-this repository.

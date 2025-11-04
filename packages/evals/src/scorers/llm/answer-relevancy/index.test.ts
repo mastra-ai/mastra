@@ -1,8 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
-import type { TestCase } from '../../../metrics/llm/utils';
-import { isCloserTo } from '../../../metrics/llm/utils';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import type { TestCase } from '../../utils';
+import { createAgentTestRun, createUIMessage, isCloserTo } from '../../utils';
 import { createAnswerRelevancyScorer } from '.';
 
 const testCases: TestCase[] = [
@@ -209,6 +208,23 @@ describe('AnswerRelevancyScorer', () => {
 
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[9].expectedResult.score, 1);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'should work with model router magic string format',
+    async () => {
+      // Test using model router format instead of createOpenAI
+      const modelRouterScorer = createAnswerRelevancyScorer({
+        model: 'openai/gpt-4o-mini',
+      });
+
+      const inputMessages = [createUIMessage({ role: 'user', content: testCases[0].input })];
+      const output = [createUIMessage({ role: 'assistant', content: testCases[0].output })];
+
+      const result = await modelRouterScorer.run(createAgentTestRun({ inputMessages, output }));
+      expect(result.score).toBeCloseTo(testCases[0].expectedResult.score, 1);
     },
     TIMEOUT,
   );

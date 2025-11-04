@@ -1,13 +1,13 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { ModerationResult } from './moderation';
 import { ModerationProcessor } from './moderation';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -24,7 +24,7 @@ function createTestMessageWithContent(
   content: string,
   role: 'user' | 'assistant' = 'user',
   id = 'test-id',
-): MastraMessageV2 {
+): MastraDBMessage {
   return {
     id,
     role,
@@ -38,31 +38,18 @@ function createTestMessageWithContent(
 }
 
 function createMockModerationResult(flagged: boolean, categories: string[] = []): ModerationResult {
-  const allCategories = [
-    'hate',
-    'hate/threatening',
-    'harassment',
-    'harassment/threatening',
-    'self-harm',
-    'self-harm/intent',
-    'self-harm/instructions',
-    'sexual',
-    'sexual/minors',
-    'violence',
-    'violence/graphic',
-  ];
-
-  const categoryScores = allCategories.reduce(
-    (scores, category) => {
-      scores[category] = categories.includes(category) ? 0.8 : 0.1;
-      return scores;
-    },
-    {} as Record<string, number>,
-  );
+  // Only return scores for flagged categories (matching new array-based structure)
+  const categoryScores =
+    categories.length > 0
+      ? categories.map(category => ({
+          category,
+          score: 0.8, // Above default threshold (0.5)
+        }))
+      : null;
 
   return {
     category_scores: categoryScores,
-    reason: flagged ? `Content flagged for: ${categories.join(', ')}` : undefined,
+    reason: flagged && categories.length > 0 ? `Content flagged for: ${categories.join(', ')}` : null,
   };
 }
 
@@ -98,7 +85,7 @@ describe('ModerationProcessor', () => {
         model,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should use default categories when none specified', () => {
@@ -107,7 +94,7 @@ describe('ModerationProcessor', () => {
         model,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should accept custom categories', () => {
@@ -117,7 +104,7 @@ describe('ModerationProcessor', () => {
         categories: ['custom-category', 'another-category'],
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should accept custom threshold and strategy', () => {
@@ -128,7 +115,7 @@ describe('ModerationProcessor', () => {
         strategy: 'warn',
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
   });
 
@@ -277,10 +264,10 @@ describe('ModerationProcessor', () => {
 
   describe('threshold handling', () => {
     it('should flag content when any score exceeds threshold', async () => {
-      const mockResult = createMockModerationResult(false, []);
-      // Override with high violence score to exceed threshold
-      mockResult.category_scores!.violence = 0.7; // Above threshold (0.6)
-      mockResult.reason = 'High violence score';
+      const mockResult: ModerationResult = {
+        category_scores: [{ category: 'violence', score: 0.7 }], // Above threshold (0.6)
+        reason: 'High violence score',
+      };
       const model = setupMockModel({ object: mockResult });
       const moderator = new ModerationProcessor({
         model,
@@ -302,9 +289,10 @@ describe('ModerationProcessor', () => {
     });
 
     it('should not flag content when scores are below threshold', async () => {
-      const mockResult = createMockModerationResult(false, []);
-      // Set violence score below threshold
-      mockResult.category_scores!.violence = 0.7; // Below threshold (0.8)
+      const mockResult: ModerationResult = {
+        category_scores: [{ category: 'violence', score: 0.7 }], // Below threshold (0.8)
+        reason: null,
+      };
       const model = setupMockModel({ object: mockResult });
       const moderator = new ModerationProcessor({
         model,
@@ -324,10 +312,8 @@ describe('ModerationProcessor', () => {
 
   describe('custom categories', () => {
     it('should work with custom moderation categories', async () => {
-      const mockResult = {
-        flagged: true,
-        categories: { spam: true, advertising: false, 'off-topic': false },
-        category_scores: { spam: 0.9, advertising: 0.1, 'off-topic': 0.2 },
+      const mockResult: ModerationResult = {
+        category_scores: [{ category: 'spam', score: 0.9 }],
         reason: 'Detected spam content',
       };
       const model = setupMockModel({ object: mockResult });
@@ -360,7 +346,7 @@ describe('ModerationProcessor', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -400,7 +386,7 @@ describe('ModerationProcessor', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -509,7 +495,7 @@ describe('ModerationProcessor', () => {
         instructions: customInstructions,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
       // The custom instructions are used in the Agent constructor
       // which is mocked, but we can verify the processor was created successfully
     });

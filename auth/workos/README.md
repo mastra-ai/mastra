@@ -22,7 +22,7 @@ pnpm add @mastra/auth-workos
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 
 // Initialize with environment variables
@@ -38,7 +38,7 @@ const auth = new MastraAuthWorkos({
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth,
+    auth,
   },
 });
 ```
@@ -72,7 +72,3 @@ Verifies a JWT token using WorkOS JWKS and returns the user information if valid
 ### `authorizeUser(user: WorkosUser): Promise<boolean>`
 
 Checks if a user has admin privileges by verifying their organization memberships and roles.
-
-## License
-
-MIT

@@ -9,12 +9,13 @@ import { PosthogAnalytics, setAnalytics } from './analytics/index';
 import { addScorer } from './commands/actions/add-scorer';
 import { buildProject } from './commands/actions/build-project';
 import { createProject } from './commands/actions/create-project';
-import { deployProject } from './commands/actions/deploy-project';
 import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
+import { COMPONENTS, LLMProvider } from './commands/init/utils';
+import { parseComponents, parseLlmProvider, parseMcp } from './commands/utils';
 
 const mastraPkg = pkgJson as PackageJson;
 export const version = mastraPkg.version;
@@ -48,8 +49,12 @@ program
   .command('create [project-name]')
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
-  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, cerebras or mistral)')
+  .option(
+    '-c, --components <components>',
+    `Comma-separated list of components (${COMPONENTS.join(', ')})`,
+    parseComponents,
+  )
+  .option('-l, --llm <model-provider>', `Default model provider (${LLMProvider.join(', ')})`, parseLlmProvider)
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
@@ -59,7 +64,7 @@ program
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
   .option(
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
@@ -71,12 +76,16 @@ program
   .description('Initialize Mastra in your project')
   .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
-  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
+  .option(
+    '-c, --components <components>',
+    `Comma-separated list of components (${COMPONENTS.join(', ')})`,
+    parseComponents,
+  )
+  .option('-l, --llm <model-provider>', `Default model provider (${LLMProvider.join(', ')})`, parseLlmProvider)
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
   .action(initProject);
 
 program
@@ -93,7 +102,6 @@ program
   .option('-d, --dir <dir>', 'Path to your mastra folder')
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
-  .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
   .option('-e, --env <env>', 'Custom env file to include in the dev server')
   .option('-i, --inspect', 'Start the dev server in inspect mode')
   .option('-b, --inspect-brk', 'Start the dev server in inspect mode and break at the beginning of the script')
@@ -101,6 +109,8 @@ program
     '-c, --custom-args <args>',
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
+  .option('-s, --https', 'Enable local HTTPS')
+  .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 
 program
@@ -109,21 +119,14 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra Folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
-  .option('-e, --env <env>', 'Custom env file to include in the build')
+  .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
-
-program
-  .command('deploy')
-  .description('Deploy your Mastra project')
-  .option('-d, --dir <path>', 'Path to directory')
-  .action(deployProject);
 
 program
   .command('start')
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-e, --env <env>', 'Custom env file to include in the start')
-  .option('-nt, --no-telemetry', 'Disable telemetry on start')
   .action(startProject);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');

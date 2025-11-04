@@ -48,7 +48,7 @@ const myStep = createStep({
 - \`mastra\`: Access to Mastra instance (agents, tools, other workflows)
 - \`getStepResult(stepInstance)\`: Get results from previous steps
 - \`getInitData()\`: Access original workflow input data
-- \`runtimeContext\`: Runtime dependency injection context
+- \`requestContext\`: Runtime dependency injection context
 - \`runCount\`: Number of times this step has run (useful for retries)
 
 ### **🔄 CONTROL FLOW METHODS**
@@ -127,10 +127,10 @@ const toolStep = createStep(myTool);
 
 // Method 2: Call tool in execute function
 const step = createStep({
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     const result = await myTool.execute({
       context: inputData,
-      runtimeContext
+      requestContext
     });
     return result;
   }
@@ -222,7 +222,7 @@ export const mastra = new Mastra({
 **Running Workflows:**
 \`\`\`typescript
 // Create and start run
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 const result = await run.start({ inputData: {...} });
 
 // Stream execution for real-time monitoring
@@ -246,7 +246,7 @@ run.watch((event) => console.log(event));
 - Use workflows as steps: \`.then(otherWorkflow)\`
 - Enable complex workflow composition
 
-**Runtime Context:**
+**Request Context:**
 - Pass shared data across all steps
 - Enable dependency injection patterns
 

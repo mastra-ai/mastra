@@ -1,10 +1,11 @@
 import type { WritableStream } from 'stream/web';
 import type { ToolsInput } from '@mastra/core/agent';
-import { RuntimeContext as RuntimeContextClass } from '@mastra/core/runtime-context';
+import { RequestContext as RequestContextClass } from '@mastra/core/request-context';
+import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraClient } from '../client';
-import type { StreamVNextParams } from '../types';
+import type { StreamParams, ClientOptions } from '../types';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 import { Agent } from './agent';
 
@@ -12,10 +13,10 @@ import { Agent } from './agent';
 global.fetch = vi.fn();
 
 class TestAgent extends Agent {
-  public lastProcessedParams: StreamVNextParams<any> | null = null;
+  public lastProcessedParams: StreamParams<any> | null = null;
 
-  public async processStreamResponse_vNext(
-    params: StreamVNextParams<any>,
+  public async processStreamResponse(
+    params: StreamParams<any>,
     writable: WritableStream<Uint8Array>,
   ): Promise<Response> {
     this.lastProcessedParams = params;
@@ -32,7 +33,7 @@ class TestAgent extends Agent {
   }
 }
 
-describe('Agent.streamVNext', () => {
+describe('Agent.stream', () => {
   let agent: TestAgent;
 
   beforeEach(() => {
@@ -51,62 +52,43 @@ describe('Agent.streamVNext', () => {
     vi.resetAllMocks();
   });
 
-  it('should transform params.output using zodToJsonSchema when provided', async () => {
-    // Arrange: Create a sample Zod schema and params
+  it('should transform params.structuredOutput.schema using zodToJsonSchema when provided', async () => {
     const outputSchema = z.object({
       name: z.string(),
       age: z.number(),
     });
-
-    const params: StreamVNextParams<typeof outputSchema> = {
+    const jsonSchema = zodToJsonSchema(outputSchema);
+    const params: StreamParams<typeof outputSchema> = {
       messages: [] as any,
-      output: outputSchema,
+      structuredOutput: { schema: outputSchema },
     };
-
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
-
-    // Assert: Verify output schema transformation
-    const expectedSchema = zodToJsonSchema(outputSchema);
-    expect(agent.lastProcessedParams?.output).toEqual(expectedSchema);
+    await agent.stream(params);
+    expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
   });
 
-  it('should set processedParams.output to undefined when params.output is not provided', async () => {
-    // Arrange: Create params without output schema
-    const params: StreamVNextParams<undefined> = {
-      messages: [] as any,
-    };
-
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
-
-    // Assert: Verify output is undefined
-    expect(agent.lastProcessedParams?.output).toBeUndefined();
-  });
-
-  it('should process runtimeContext through parseClientRuntimeContext', async () => {
-    // Arrange: Create a RuntimeContext-like instance with test data
+  it('should process requestContext through parseClientRequestContext', async () => {
+    // Arrange: Create a RequestContext-like instance with test data
     const contextData = new Map([
       ['env', 'test'],
       ['userId', '123'],
     ]);
 
-    const runtimeContext: any = {
+    const requestContext: any = {
       entries: () => contextData,
     };
-    // Ensure instanceof RuntimeContext succeeds so parseClientRuntimeContext converts it
-    Object.setPrototypeOf(runtimeContext, RuntimeContextClass.prototype);
+    // Ensure instanceof RequestContext succeeds so parseClientRequestContext converts it
+    Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
 
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
-      runtimeContext,
+      requestContext,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
-    // Assert: Verify runtimeContext was converted to plain object
-    expect(agent.lastProcessedParams?.runtimeContext).toEqual({
+    // Assert: Verify requestContext was converted to plain object
+    expect(agent.lastProcessedParams?.requestContext).toEqual({
       env: 'test',
       userId: '123',
     });
@@ -130,13 +112,13 @@ describe('Agent.streamVNext', () => {
       },
     };
 
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [] as any,
       clientTools,
     };
 
-    // Act: Call streamVNext with the params
-    await agent.streamVNext(params);
+    // Act: Call stream with the params
+    await agent.stream(params);
 
     // Assert: Verify schemas were converted while preserving other properties
     expect(agent.lastProcessedParams?.clientTools).toEqual({
@@ -151,12 +133,12 @@ describe('Agent.streamVNext', () => {
 
   it('should return a Response object with processDataStream method', async () => {
     // Arrange: Create minimal params
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [],
     };
 
-    // Act: Call streamVNext
-    const response = await agent.streamVNext(params);
+    // Act: Call stream
+    const response = await agent.stream(params);
 
     // Assert: Verify response structure
     expect(response).toBeInstanceOf(Response);
@@ -168,12 +150,12 @@ describe('Agent.streamVNext', () => {
   it('should invoke onChunk callback when processing stream data', async () => {
     // Arrange: Create callback and params
     const onChunk = vi.fn();
-    const params: StreamVNextParams<undefined> = {
+    const params: StreamParams<undefined> = {
       messages: [],
     };
 
     // Act: Process the stream
-    const response = await agent.streamVNext(params);
+    const response = await agent.stream(params);
     await response.processDataStream({ onChunk });
 
     // Assert: Verify callback execution
@@ -417,7 +399,7 @@ describe('Agent Client Methods', () => {
       agent2: { name: 'Agent 2', model: 'gpt-3.5' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents();
+    const result = await client.listAgents();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/agents`,
@@ -427,23 +409,197 @@ describe('Agent Client Methods', () => {
     );
   });
 
-  it('should get all agents with runtimeContext', async () => {
+  it('should get all agents with requestContext', async () => {
     const mockResponse = {
       agent1: { name: 'Agent 1', model: 'gpt-4' },
       agent2: { name: 'Agent 2', model: 'gpt-3.5' },
     };
-    const runtimeContext = { userId: '123', sessionId: 'abc' };
-    const expectedBase64 = btoa(JSON.stringify(runtimeContext));
+    const requestContext = { userId: '123', sessionId: 'abc' };
+    const expectedBase64 = btoa(JSON.stringify(requestContext));
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents(runtimeContext);
+    const result = await client.listAgents(requestContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/agents?runtimeContext=${expectedEncodedBase64}`,
+      `${clientOptions.baseUrl}/api/agents?requestContext=${expectedEncodedBase64}`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),
     );
+  });
+});
+
+describe('Agent - Storage Duplicate Messages Issue', () => {
+  let agent: Agent;
+  let mockRequest: ReturnType<typeof vi.fn>;
+
+  const mockClientOptions: ClientOptions = {
+    baseUrl: 'https://api.test.com',
+  };
+
+  beforeEach(() => {
+    mockRequest = vi.fn();
+    agent = new Agent(mockClientOptions, 'test-agent-id');
+    // Replace the request method with our mock
+    agent['request'] = mockRequest;
+  });
+
+  it('should not re-send the original user message when executing client-side tools', async () => {
+    const clientTool = createTool({
+      id: 'clientTool',
+      description: 'A client-side tool',
+      execute: vi.fn().mockResolvedValue('Tool result'),
+      inputSchema: undefined,
+    });
+
+    const initialMessage = 'Test message';
+
+    // First call returns tool-calls
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'tool-calls',
+      toolCalls: [
+        {
+          toolName: 'clientTool',
+          args: { test: 'args' },
+          toolCallId: 'tool-1',
+        },
+      ],
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [
+              {
+                toolName: 'clientTool',
+                args: { test: 'args' },
+                toolCallId: 'tool-1',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    // Second call (after tool execution) returns final response
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'stop',
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Final response',
+          },
+        ],
+      },
+    });
+
+    await agent.generate(initialMessage, {
+      clientTools: { clientTool },
+    });
+
+    // Check that the second request was called with the correct messages
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+    const secondCallArgs = mockRequest.mock.calls[1][1];
+    const messagesInSecondCall = secondCallArgs.body.messages;
+
+    // The messages sent in the second call should NOT include the original user message
+    // It should only have the assistant's tool call response and the tool result
+    // This prevents duplicate user messages from being stored
+    const userMessages = messagesInSecondCall.filter(msg => msg.role === 'user');
+
+    // Should be no user messages in the second call
+    expect(userMessages).toHaveLength(0);
+
+    // Should have assistant message with tool call and tool result
+    expect(messagesInSecondCall).toHaveLength(2);
+    expect(messagesInSecondCall[0].role).toBe('assistant');
+    expect(messagesInSecondCall[1].role).toBe('tool');
+  });
+
+  it('should handle multiple tool calls without duplicating the user message', async () => {
+    const clientTool = createTool({
+      id: 'clientTool',
+      description: 'A client-side tool',
+      execute: vi
+        .fn()
+        .mockResolvedValueOnce('First result')
+        .mockResolvedValueOnce('Second result')
+        .mockResolvedValueOnce('Third result')
+        .mockResolvedValueOnce('Fourth result'),
+      inputSchema: undefined,
+    });
+
+    const initialMessage = 'Test message that triggers 4 tool calls';
+
+    // Simulate 4 tool call iterations
+    for (let i = 0; i < 4; i++) {
+      mockRequest.mockResolvedValueOnce({
+        finishReason: 'tool-calls',
+        toolCalls: [
+          {
+            toolName: 'clientTool',
+            args: { iteration: i + 1 },
+            toolCallId: `tool-${i + 1}`,
+          },
+        ],
+        response: {
+          messages: [
+            {
+              role: 'assistant',
+              content: '',
+              toolCalls: [
+                {
+                  toolName: 'clientTool',
+                  args: { iteration: i + 1 },
+                  toolCallId: `tool-${i + 1}`,
+                },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    // Final response after 4 tool calls
+    mockRequest.mockResolvedValueOnce({
+      finishReason: 'stop',
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Final response after 4 tool calls',
+          },
+        ],
+      },
+    });
+
+    await agent.generate(initialMessage, {
+      clientTools: { clientTool },
+    });
+
+    // The agent should have made 5 requests total (1 initial + 4 tool calls)
+    expect(mockRequest).toHaveBeenCalledTimes(5);
+
+    // Check each recursive call to ensure no user messages are being re-sent
+    for (let i = 1; i < 5; i++) {
+      const callArgs = mockRequest.mock.calls[i][1];
+      const messagesInCall = callArgs.body.messages;
+
+      const userMessages = messagesInCall.filter(msg => msg.role === 'user');
+
+      // No user messages should be in any of the recursive calls
+      expect(userMessages).toHaveLength(0);
+
+      // Each recursive call should only contain the latest assistant response and tool result
+      // Not the accumulated history (that's already on the server)
+      const assistantMessages = messagesInCall.filter(msg => msg.role === 'assistant');
+      const toolMessages = messagesInCall.filter(msg => msg.role === 'tool');
+
+      // Should always have just the last assistant message and the new tool result
+      expect(assistantMessages).toHaveLength(1);
+      expect(toolMessages).toHaveLength(1);
+    }
   });
 });

@@ -1,88 +1,76 @@
 ---
-title: "Memory Overview | Memory | Mastra Docs"
+title: "Memory overview | Memory | Mastra Docs"
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
 ---
 
-import { Steps, Callout } from "nextra/components";
-
 # Memory overview
 
-Memory in Mastra helps agents manage context across conversations by condensing relevant information into the language model’s context window.
+Memory in Mastra helps agents manage context across conversations by condensing relevant information into the language model's context window.
 
-Mastra supports three complementary memory systems: [working memory](./working-memory.mdx), [conversation history](#conversation-history), and [semantic recall](./semantic-recall.mdx). Together, they allow agents to track preferences, maintain conversational flow, and retrieve relevant historical messages.
+Mastra supports three types of memory: working memory, conversation history, and semantic recall. It uses a two-tier scoping system where memory can be isolated per conversation thread (thread-scoped) or shared across all conversations for the same user (resource-scoped).
 
-To persist and recall information between conversations, memory requires a storage adapter.
-
-Supported options include:
-
-- [Memory with LibSQL](/examples/memory/memory-with-libsql)
-- [Memory with Postgres](/examples/memory/memory-with-pg)
-- [Memory with Upstash](/examples/memory/memory-with-upstash)
-
-## Types of memory
-
-All memory types are [thread-scoped](./working-memory.mdx#thread-scoped-memory-default) by default, meaning they apply only to a single conversation. [Resource-scoped](./working-memory.mdx#resource-scoped-memory) configuration allows working memory and semantic recall to persist across all threads that use the same user or entity.
-
-
-### Working memory
-
-Stores persistent user-specific details such as names, preferences, goals, and other structured data. Uses [Markdown templates](./working-memory.mdx) or [Zod schemas](./working-memory.mdx#structured-working-memory) to define structure.
-
-### Conversation history
-
-Captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
-
-### Semantic recall
-
-Retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
-
-## How memory works together
-
-Mastra combines all memory types into a single context window. If the total exceeds the model’s token limit, use [memory processors](./memory-processors.mdx) to trim or filter messages before sending them to the model.
+Mastra's memory system uses [storage providers](#memory-storage-adapters) to persist conversation threads, messages, and working memory across application restarts.
 
 ## Getting started
 
-To use memory, install the required dependencies:
+First install the required dependencies:
 
 ```bash copy
 npm install @mastra/core @mastra/memory @mastra/libsql
 ```
 
-### Shared storage
+Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
 
-To share memory across agents, add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
-
-```typescript {6-8} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+```typescript {6-8} title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
-    url: ":memory:"
-  })
+    url: ":memory:",
+  }),
 });
 ```
 
-### Adding working memory to agents
+Now, enable memory by passing a `Memory` instance to the agent's `memory` parameter:
 
-Enable working memory by passing a `Memory` instance to the agent's `memory` parameter and setting `workingMemory.enabled` to `true`:
-
-```typescript {1,6-12} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {3-5} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  // ..
-  memory: new Memory({
-    options: {
-      workingMemory: {
-        enabled: true
-      }
-    }
-  })
-})
+  id: "test-agent",
+  // ...
+  memory: new Memory(),
+});
 ```
+
+That memory instance has options you can configure for working memory, conversation history, and semantic recall.
+
+## Different types of memory
+
+Mastra supports three types of memory: working memory, conversation history, and semantic recall.
+
+[**Working memory**](./working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data. (Compare this to ChatGPT where you can ask it to tell you about yourself). This is implemented as a block of Markdown text that the agent is able to update over time (or alternately, as a Zod schema)
+
+[**Conversation history**](./conversation-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
+
+[**Semantic recall**](./semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
+
+Mastra combines all memory types into a single context window. If the total exceeds the model’s token limit, use [memory processors](./memory-processors) to trim or filter messages before sending them to the model.
+
+## Scoping memory with threads and resources
+
+All memory types are [resource-scoped](./working-memory#resource-scoped-memory-default) by default, meaning they persist across all conversations for the same user or entity. [Thread-scoped](./working-memory#thread-scoped-memory) configuration isolates memory to a single conversation thread.
+
+## Memory Storage Adapters
+
+To persist and recall information between conversations, memory requires a storage adapter.
+
+Supported options include [LibSQL](/docs/memory/storage/memory-with-libsql), [MongoDB](/examples/memory/memory-with-mongodb), [Postgres](/docs/memory/storage/memory-with-pg), and [Upstash](/docs/memory/storage/memory-with-upstash)
+
+We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with Studio.
 
 ## Dedicated storage
 
@@ -92,123 +80,21 @@ Agents can be configured with their own dedicated storage, keeping tasks, conver
 
 To assign dedicated storage to an agent, install and import the required dependency and pass a `storage` instance to the `Memory` constructor:
 
-```typescript {3, 9-11} filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {3, 9-11} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     // ...
     storage: new LibSQLStore({
-      url: "file:agent-memory.db"
-    })
-  // ...
-  })
-});
-```
-
-## Memory threads
-
-Mastra organizes memory into threads, which are records that group related interactions, using two identifiers:
-
-1. **`thread`**: A globally unique ID representing the conversation (e.g., `support_123`). Must be unique across all resources.
-2. **`resource`**: The user or entity that owns the thread (e.g., `user_123`, `org_456`).
-
-The `resource` is especially important for [resource-scoped memory](./working-memory.mdx#resource-scoped-memory), which allows memory to persist across all threads associated with the same user or entity.
-
-```typescript {4} showLineNumbers
-const stream = await agent.stream("message for agent", {
-  memory: {
-    thread: "user-123",
-    resource: "test-123"
-  }
-});
-```
-
-<Callout type="warning">
-Even with memory configured, agents won’t store or recall information unless both `thread` and `resource` are provided.
-</Callout>
-
-> Mastra Playground sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
-
-### Thread title generation
-
-Mastra can automatically generate descriptive thread titles based on the user's first message. Enable this by setting `generateTitle` to `true`. This improves organization and makes it easier to display conversations in your UI.
-
-```typescript {3-7} showLineNumbers
-export const testAgent = new Agent({
-  memory: new Memory({
-    options: {
-      threads: {
-        generateTitle: true,
-      }
-    },
-  })
-});
-```
-
-> Title generation runs asynchronously after the agent responds and does not affect response time. See the [full configuration reference](../../reference/memory/Memory.mdx#thread-title-generation) for details and examples.
-
-#### Optimizing title generation
-
-Titles are generated using your agent's model by default. To optimize cost or behavior, provide a smaller `model` and custom `instructions`. This keeps title generation separate from main conversation logic.
-
-```typescript {5-9} showLineNumbers
-export const testAgent = new Agent({
-  // ...
-  memory: new Memory({
-    options: {
-      threads: {
-        generateTitle: {
-          model: openai("gpt-4.1-nano"),
-          instructions: "Generate a concise title based on the user's first message",
-        },
-      },
-    }
-  })
-});
-```
-
-#### Dynamic model selection and instructions
-
-You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `runtimeContext` object, allowing you to adapt title generation based on user-specific values.
-
-```typescript {7-16} showLineNumbers
-export const testAgent = new Agent({
-  // ...
-  memory: new Memory({
-    options: {
-      threads: {
-        generateTitle: {
-          model: ({ runtimeContext }) => {
-            const userTier = runtimeContext.get("userTier");
-            return userTier === "premium" ? openai("gpt-4.1") : openai("gpt-4.1-nano");
-          },
-          instructions: ({ runtimeContext }) => {
-            const language = runtimeContext.get("userLanguage") || "English";
-            return `Generate a concise, engaging title in ${language} based on the user's first message.`;
-          }
-        }
-      }
-    }
-  })
-});
-```
-
-## Increasing conversation history
-
-By default, each request includes the last 10 messages from the current memory thread, giving the agent short-term conversational context. This limit can be increased using the `lastMessages` parameter.
-
-```typescript {3-7} showLineNumbers
-export const testAgent = new Agent({
-  // ...
-  memory: new Memory({
-    options: {
-      lastMessages: 100
-    },
-  })
+      url: "file:agent-memory.db",
+    }),
+    // ...
+  }),
 });
 ```
 
@@ -218,17 +104,16 @@ If tracing is enabled in your Mastra deployment and memory is configured either 
 
 This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
 
-For more details on enabling and configuring tracing, see [Tracing](../observability/tracing).
+For more details on enabling and configuring tracing, see [AI Tracing](../observability/ai-tracing/overview).
 
 ## Local development with LibSQL
 
 For local development with `LibSQLStore`, you can inspect stored memory using the [SQLite Viewer](https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer) extension in VS Code.
 
-![SQLite Viewer](/image/memory/memory-sqlite-viewer.jpg)
-
+![SQLite Viewer](/img/memory/memory-sqlite-viewer.jpg)
 
 ## Next Steps
 
-Now that you understand the core concepts, continue to [semantic recall](./semantic-recall.mdx) to learn how to add RAG memory to your Mastra agents.
+Now that you understand the core concepts, continue to [semantic recall](./semantic-recall) to learn how to add RAG memory to your Mastra agents.
 
-Alternatively you can visit the [configuration reference](../../reference/memory/Memory.mdx) for available options.
+Alternatively you can visit the [configuration reference](/reference/memory/memory-class) for available options.

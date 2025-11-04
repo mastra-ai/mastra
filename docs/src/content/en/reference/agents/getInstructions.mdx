@@ -19,10 +19,10 @@ await agent.getInstructions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -33,8 +33,9 @@ await agent.getInstructions();
   content={[
     {
       name: "instructions",
-      type: "string | Promise<string>",
-      description: "The instructions configured for the agent, either as a direct string or a promise that resolves to the instructions.",
+      type: "SystemMessage | Promise<SystemMessage>",
+      description:
+        "The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.",
     },
   ]}
 />
@@ -43,7 +44,7 @@ await agent.getInstructions();
 
 ```typescript copy
 await agent.getInstructions({
-  runtimeContext: new RuntimeContext()
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -52,16 +53,17 @@ await agent.getInstructions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       defaultValue: "undefined",
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.mdx)
-- [Agent Runtime Context](../../docs/agents/runtime-context.mdx)
+- [Agents overview](/docs/agents/overview)
+- [Request Context](/docs/server-db/request-context)

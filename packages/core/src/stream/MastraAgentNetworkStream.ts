@@ -4,9 +4,11 @@ import type { ChunkType } from './types';
 
 export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
   #usageCount = {
-    promptTokens: 0,
-    completionTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
     totalTokens: 0,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
   };
   #streamPromise: {
     promise: Promise<void>;
@@ -37,13 +39,17 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
     });
 
     const updateUsageCount = (usage: {
-      promptTokens?: `${number}` | number;
-      completionTokens?: `${number}` | number;
+      inputTokens?: `${number}` | number;
+      outputTokens?: `${number}` | number;
       totalTokens?: `${number}` | number;
+      reasoningTokens?: `${number}` | number;
+      cachedInputTokens?: `${number}` | number;
     }) => {
-      this.#usageCount.promptTokens += parseInt(usage?.promptTokens?.toString() ?? '0', 10);
-      this.#usageCount.completionTokens += parseInt(usage?.completionTokens?.toString() ?? '0', 10);
+      this.#usageCount.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
+      this.#usageCount.outputTokens += parseInt(usage?.outputTokens?.toString() ?? '0', 10);
       this.#usageCount.totalTokens += parseInt(usage?.totalTokens?.toString() ?? '0', 10);
+      this.#usageCount.reasoningTokens += parseInt(usage?.reasoningTokens?.toString() ?? '0', 10);
+      this.#usageCount.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
     };
 
     super({
@@ -58,9 +64,17 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
                 chunk.payload?.output?.from === 'WORKFLOW' &&
                 chunk.payload?.output?.type === 'finish')
             ) {
-              const finishPayload = chunk.payload?.output.payload;
-              if (finishPayload) {
-                updateUsageCount(finishPayload.usage);
+              const output = chunk.payload?.output;
+              if (output && 'payload' in output && output.payload) {
+                const finishPayload = output.payload;
+                if ('usage' in finishPayload && finishPayload.usage) {
+                  updateUsageCount(finishPayload.usage);
+                } else if ('output' in finishPayload && finishPayload.output) {
+                  const outputPayload = finishPayload.output;
+                  if ('usage' in outputPayload && outputPayload.usage) {
+                    updateUsageCount(outputPayload.usage);
+                  }
+                }
               }
             }
 
@@ -70,12 +84,34 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
 
         const stream: ReadableStream<ChunkType> = await createStream(writer);
 
+        const getInnerChunk = (chunk: ChunkType) => {
+          if (chunk.type === 'workflow-step-output') {
+            return getInnerChunk(chunk.payload.output as any);
+          }
+          return chunk;
+        };
+
         for await (const chunk of stream) {
           if (chunk.type === 'workflow-step-output') {
-            const innerChunk = chunk.payload.output;
-            const innerChunkType = innerChunk.payload.output;
-
-            controller.enqueue(innerChunkType);
+            const innerChunk = getInnerChunk(chunk);
+            if (
+              innerChunk.type === 'routing-agent-end' ||
+              innerChunk.type === 'agent-execution-end' ||
+              innerChunk.type === 'workflow-execution-end'
+            ) {
+              if (innerChunk.payload?.usage) {
+                updateUsageCount(innerChunk.payload.usage);
+              }
+            }
+            if (innerChunk.type === 'network-execution-event-finish') {
+              const finishPayload = {
+                ...innerChunk.payload,
+                usage: this.#usageCount,
+              };
+              controller.enqueue({ ...innerChunk, payload: finishPayload });
+            } else {
+              controller.enqueue(innerChunk);
+            }
           }
         }
 

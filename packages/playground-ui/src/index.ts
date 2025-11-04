@@ -1,17 +1,13 @@
 import './index.css';
 
-export * from './contexts/mastra-client-context';
 export * from './domains/agents/index';
-export * from './domains/networks/index';
 export * from './domains/scores/index';
 export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
-export * from './domains/traces/index';
 export * from './domains/observability/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
-export * from './components/ui/data-table';
 export * from './components/ui/containers';
 export * from './components/ui/elements';
 export * from './components/threads';
@@ -29,20 +25,26 @@ export * from './ds/components/Txt/index';
 export * from './ds/components/Entity/index';
 export * from './ds/components/EmptyState/index';
 export * from './ds/icons/index';
+export * from './ds/components/Alert';
 export * from './lib/polls';
 export * from './domains/voice/hooks/use-speech-recognition';
 export * from './components/ui/radio-group';
 export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
-
-export type { TraceContextType } from './domains/traces/context/trace-context';
+export * from './domains/memory/hooks';
 
 export * from './store/playground-store';
 export * from './lib/framework';
 export { MemorySearch } from './components/assistant-ui/memory-search';
 export * from './components/ui/alert-dialog';
 export * from './components/ui/searchbar';
+export * from './components/ui/tooltip';
 export * from './components/ui/kbd';
 export * from './components/ui/collapsible';
 export * from './domains/conversation/index';
+export * from './lib/errors';
+export * from './components/assistant-ui/tools/tool-fallback';
+export * from './domains/workflows/runs/workflow-run-list';
+export * from './domains/mcps/index';
+export * from './lib/toast';

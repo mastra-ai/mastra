@@ -2,13 +2,11 @@
 
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../ds/components/Button';
-import { ScrollArea } from '../ui/scroll-area';
 import { AutoForm } from '@/components/ui/autoform';
 import type { ExtendableAutoFormProps } from '@autoform/react';
 import z, { ZodObject, ZodIntersection } from 'zod';
 import { Label } from '../ui/label';
 import { Icon } from '@/ds/icons';
-import { ZodProvider, fieldConfig } from '@autoform/zod/v4';
 import { CustomZodProvider } from '../ui/autoform/zodProvider';
 
 interface DynamicFormProps<T extends z.ZodSchema> {
@@ -71,6 +69,7 @@ export function DynamicForm<T extends z.ZodSchema>({
     defaultValues: isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : (defaultValues as any),
     formProps: {
       className,
+      noValidate: true,
     },
     uiComponents: {
       SubmitButton: ({ children }) =>

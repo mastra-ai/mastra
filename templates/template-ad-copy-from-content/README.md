@@ -239,7 +239,3 @@ S3_PUBLIC_URL_BASE=https://mastra-generated-images.s3.amazonaws.com
 - `pdf2json`: PDF text extraction
 - `ai`: AI SDK for image generation
 - `zod`: Schema validation
-
-## License
-
-This template is part of the Mastra framework and follows the same licensing terms.

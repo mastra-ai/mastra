@@ -1,5 +1,5 @@
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 
 import { MastraLLMV1 } from '../llm/model/model';
 

@@ -9,7 +9,7 @@ const openai = createOpenAI({
 
 const model = openai('gpt-4o');
 
-vi.setConfig({ testTimeout: 10_000, hookTimeout: 10_000 });
+vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
 
 describe('SummaryExtractor', () => {
   it('can use a custom model from the test suite', async () => {

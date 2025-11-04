@@ -16,8 +16,6 @@ vi.mock('./utils', () => ({
   createMastraDir: vi.fn(),
   writeCodeSample: vi.fn(),
   checkDependencies: vi.fn(),
-  getAISDKPackage: vi.fn(() => '@ai-sdk/openai'),
-  getAISDKPackageVersion: vi.fn(() => '^1.0.0'),
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -110,7 +108,7 @@ describe('CLI', () => {
     vi.spyOn(utils, 'writeIndexFile').mockImplementation(async ({ dirPath, addExample }) => {
       const content = addExample
         ? `
-        import { Mastra } from '@mastra/core';
+        import { Mastra } from '@mastra/core/mastra';
         export const mastra = new Mastra({});
       `
         : ``;

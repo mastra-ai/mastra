@@ -1,15 +1,13 @@
-import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
-import type { TracingStrategy } from '../ai-tracing';
+import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { MastraMessageV1, StorageThreadType } from '../memory/types';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../scores';
-import type { Trace } from '../telemetry';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
+import type { StorageThreadType } from '../memory/types';
+import type { TracingStrategy } from '../observability';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
@@ -19,42 +17,34 @@ import {
   TABLE_AI_SPANS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
+import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 import type {
-  ScoresStorage,
-  StoreOperations,
-  WorkflowsStorage,
-  TracesStorage,
-  MemoryStorage,
-  LegacyEvalsStorage,
-  ObservabilityStorage,
-} from './domains';
-import type {
-  EvalRow,
   PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
   StorageResourceType,
   StoragePagination,
-  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
-  StorageGetTracesArg,
-  PaginationArgs,
-  StorageGetTracesPaginatedArg,
   AISpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
+  UpdateAISpanRecord,
+  CreateAISpanRecord,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListWorkflowRunsInput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
 } from './types';
 
 export type StorageDomains = {
-  legacyEvals: LegacyEvalsStorage;
   operations: StoreOperations;
   workflows: WorkflowsStorage;
   scores: ScoresStorage;
-  traces: TracesStorage;
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
 };
@@ -70,6 +60,45 @@ export function serializeDate(date: Date | string | undefined): string | undefin
   return dateObj?.toISOString();
 }
 
+/**
+ * Normalizes perPage input for pagination queries.
+ *
+ * @param perPageInput - The raw perPage value from the user
+ * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
+ * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER, negative values fall back to default)
+ */
+export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
+  if (perPageInput === false) {
+    return Number.MAX_SAFE_INTEGER; // Get all results
+  } else if (perPageInput === 0) {
+    return 0; // Return zero results
+  } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+    return perPageInput; // Valid positive number
+  }
+  // For undefined, negative, or other invalid values, use default
+  return defaultValue;
+}
+
+/**
+ * Calculates pagination offset and prepares perPage value for response.
+ * When perPage is false (fetch all), offset is always 0 regardless of page.
+ *
+ * @param page - The page number (0-indexed)
+ * @param perPageInput - The original perPage input (number, false for all, or undefined)
+ * @param normalizedPerPage - The normalized perPage value (from normalizePerPage)
+ * @returns Object with offset for query and perPage for response
+ */
+export function calculatePagination(
+  page: number,
+  perPageInput: number | false | undefined,
+  normalizedPerPage: number,
+): { offset: number; perPage: number | false } {
+  return {
+    offset: perPageInput === false ? 0 : page * normalizedPerPage,
+    perPage: perPageInput === false ? false : normalizedPerPage,
+  };
+}
+
 export function resolveMessageLimit({
   last,
   defaultLimit,
@@ -83,17 +112,6 @@ export function resolveMessageLimit({
   return defaultLimit;
 }
 export abstract class MastraStorage extends MastraBase {
-  /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
-  static readonly TABLE_WORKFLOW_SNAPSHOT = TABLE_WORKFLOW_SNAPSHOT;
-  /** @deprecated import from { TABLE_EVALS } '@mastra/core/storage' instead */
-  static readonly TABLE_EVALS = TABLE_EVALS;
-  /** @deprecated import from { TABLE_MESSAGES } '@mastra/core/storage' instead */
-  static readonly TABLE_MESSAGES = TABLE_MESSAGES;
-  /** @deprecated import from { TABLE_THREADS } '@mastra/core/storage' instead */
-  static readonly TABLE_THREADS = TABLE_THREADS;
-  /** @deprecated import { TABLE_TRACES } from '@mastra/core/storage' instead */
-  static readonly TABLE_TRACES = TABLE_TRACES;
-
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
@@ -114,6 +132,7 @@ export abstract class MastraStorage extends MastraBase {
     deleteMessages: boolean;
     aiTracing?: boolean;
     indexManagement?: boolean;
+    listScoresBySpan?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -123,6 +142,7 @@ export abstract class MastraStorage extends MastraBase {
       deleteMessages: false,
       aiTracing: false,
       indexManagement: false,
+      listScoresBySpan: false,
     };
   }
 
@@ -210,22 +230,9 @@ export abstract class MastraStorage extends MastraBase {
     records: Record<string, any>[];
   }): Promise<void>;
 
-  batchTraceInsert({ records }: { records: Record<string, any>[] }): Promise<void> {
-    if (this.stores?.traces) {
-      return this.stores.traces.batchTraceInsert({ records });
-    }
-    return this.batchInsert({ tableName: TABLE_TRACES, records });
-  }
-
   abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
-
-  abstract getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
@@ -269,36 +276,67 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-  abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessagesById({ messageIds }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessagesById({
-    messageIds,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
 
-  abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+  abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
+
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listMessages(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    if (this.stores?.workflows) {
+      return this.stores.workflows.listWorkflowRuns(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_WORKFLOW_RUNS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing workflow runs is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
+    if (this.stores?.memory) {
+      return this.stores.memory.listThreadsByResourceId(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_THREADS_BY_RESOURCE_ID_PAGINATED_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing threads by resource ID paginated is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    if (this.stores?.memory) {
+      const result = await this.stores.memory.listMessagesById({ messageIds });
+      return result;
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_MESSAGES_BY_ID_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Listing messages by ID is not implemented by this storage adapter (${this.constructor.name})`,
+    });
+  }
 
   abstract updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
-  }): Promise<MastraMessageV2[]>;
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: Partial<MastraMessageContentV2>;
+    })[];
+  }): Promise<MastraDBMessage[]>;
 
   async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
@@ -306,10 +344,6 @@ export abstract class MastraStorage extends MastraBase {
         `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
-
-  abstract getTraces(args: StorageGetTracesArg): Promise<Trace[]>;
-
-  abstract getTracesPaginated(args: StorageGetTracesPaginatedArg): Promise<PaginationInfo & { traces: Trace[] }>;
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
@@ -321,11 +355,6 @@ export abstract class MastraStorage extends MastraBase {
       this.createTable({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-      }),
-
-      this.createTable({
-        tableName: TABLE_EVALS,
-        schema: TABLE_SCHEMAS[TABLE_EVALS],
       }),
 
       this.createTable({
@@ -382,6 +411,11 @@ export abstract class MastraStorage extends MastraBase {
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
       ifNotExists: ['resourceId'],
     });
+    await this?.alterTable?.({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['spanId'],
+    });
   }
 
   async persistWorkflowSnapshot({
@@ -422,7 +456,7 @@ export abstract class MastraStorage extends MastraBase {
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({
@@ -468,12 +502,12 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }>;
 
-  abstract getScoresByScorerId({
+  abstract listScoresByScorerId({
     scorerId,
-    pagination,
+    source,
     entityId,
     entityType,
-    source,
+    pagination,
   }: {
     scorerId: string;
     pagination: StoragePagination;
@@ -482,7 +516,7 @@ export abstract class MastraStorage extends MastraBase {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByRunId({
+  abstract listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -490,7 +524,7 @@ export abstract class MastraStorage extends MastraBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByEntityId({
+  abstract listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -500,37 +534,24 @@ export abstract class MastraStorage extends MastraBase {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs,
-  ): Promise<PaginationInfo & { evals: EvalRow[] }>;
-
-  abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
-
-  abstract getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns>;
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination: _pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { traceId, spanId },
+    });
+  }
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
-
-  abstract getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
-
-  abstract getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
 
   /**
    * OBSERVABILITY
@@ -558,7 +579,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Creates a single AI span record in the storage provider.
    */
-  async createAISpan(span: AISpanRecord): Promise<void> {
+  async createAISpan(span: CreateAISpanRecord): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.createAISpan(span);
     }
@@ -573,11 +594,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Updates a single AI span with partial data. Primarily used for realtime trace creation.
    */
-  async updateAISpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
+  async updateAISpan(params: { spanId: string; traceId: string; updates: Partial<UpdateAISpanRecord> }): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.updateAISpan(params);
     }
@@ -624,7 +641,7 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Creates multiple AI spans in a single batch.
    */
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
+  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
     if (this.stores?.observability) {
       return this.stores.observability.batchCreateAISpans(args);
     }
@@ -643,7 +660,7 @@ export abstract class MastraStorage extends MastraBase {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
     if (this.stores?.observability) {

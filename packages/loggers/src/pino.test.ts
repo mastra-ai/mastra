@@ -22,7 +22,7 @@ class MemoryStream extends LoggerTransport {
     callback(null, chunk);
   }
 
-  async getLogs() {
+  async listLogs() {
     return this.chunks;
   }
 
@@ -55,7 +55,7 @@ describe('Logger', () => {
       // Wait for async logging
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      const logs = await memoryStream.getLogs();
+      const logs = await memoryStream.listLogs();
 
       expect(logs[0]).toMatchObject({
         level: 'info',
@@ -86,8 +86,8 @@ describe('MultiLogger', () => {
 
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    const logs1 = await memoryStream1.getLogs();
-    const logs2 = await memoryStream2.getLogs();
+    const logs1 = await memoryStream1.listLogs();
+    const logs2 = await memoryStream2.listLogs();
 
     expect(logs1[0]).toMatchObject({ msg: testMessage });
     expect(logs2[0]).toMatchObject({ msg: testMessage });
@@ -126,7 +126,7 @@ describe('createLogger', () => {
     // Increase wait time to ensure logs are processed
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    const logs = await customStream.getLogs();
+    const logs = await customStream.listLogs();
 
     expect(logs[0]).toMatchObject({
       level: 'debug',

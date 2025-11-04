@@ -6,6 +6,8 @@ import React from 'react';
 
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import Markdown from 'react-markdown';
+import { MastraUIMessage } from '@mastra/react';
+import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 
 type TextMessage = {
   type: 'text';
@@ -15,35 +17,35 @@ type TextMessage = {
 type ToolMessage = {
   type: 'tool';
   toolName: string;
-  toolInput?: any;
   toolOutput?: any;
   args?: any;
   toolCallId: string;
   result?: any;
 };
 
-export type BadgeMessage = TextMessage | ToolMessage;
+export type AgentMessage = TextMessage | ToolMessage;
 
-export interface AgentBadgeProps {
+export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;
-  messages: BadgeMessage[];
-  networkMetadata?: {
-    selectionReason?: string;
-    input?: string | Record<string, unknown>;
-  };
+  messages: AgentMessage[];
+  metadata?: MastraUIMessage['metadata'];
 }
 
-export const AgentBadge = ({ agentId, messages = [], networkMetadata }: AgentBadgeProps) => {
+export const AgentBadge = ({ agentId, messages = [], metadata, toolCallId, toolApprovalMetadata }: AgentBadgeProps) => {
+  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
   return (
     <BadgeWrapper
+      data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
       initialCollapsed={false}
       extraInfo={
-        networkMetadata && (
+        metadata?.mode === 'network' && (
           <NetworkChoiceMetadataDialogTrigger
-            selectionReason={networkMetadata?.selectionReason || ''}
-            input={networkMetadata?.input}
+            selectionReason={selectionReason ?? ''}
+            input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
         )
       }
@@ -53,7 +55,13 @@ export const AgentBadge = ({ agentId, messages = [], networkMetadata }: AgentBad
           return <Markdown key={index}>{message.content}</Markdown>;
         }
 
-        const result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
+        let result;
+
+        try {
+          result = typeof message.toolOutput === 'string' ? JSON.parse(message.toolOutput) : message.toolOutput;
+        } catch (error) {
+          result = message.toolOutput;
+        }
 
         return (
           <React.Fragment key={index}>
@@ -66,10 +74,19 @@ export const AgentBadge = ({ agentId, messages = [], networkMetadata }: AgentBad
               type="tool-call"
               toolCallId={message.toolCallId}
               addResult={() => {}}
+              metadata={{
+                mode: 'stream',
+              }}
             />
           </React.Fragment>
         );
       })}
+
+      <ToolApprovalButtons
+        toolCalled={messages?.length > 0}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+      />
     </BadgeWrapper>
   );
 };

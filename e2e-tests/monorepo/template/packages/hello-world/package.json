@@ -5,16 +5,18 @@
   "type": "module",
   "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./agent": "./src/agent/index.ts"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@mastra/core": "monorepo-test",
-    "round-to": "^6.0.0"
+    "round-to": "^6.0.0",
+    "tinyrainbow": "^3.0.3"
   }
 }

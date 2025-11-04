@@ -1,5 +1,5 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/evals';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ToolInvocation, UIMessage } from 'ai';
 
 export const roundToTwoDecimals = (num: number) => {
@@ -27,13 +27,13 @@ export const createTestRun = (
   input: string,
   output: string,
   additionalContext?: Record<string, any>,
-  runtimeContext?: Record<string, any>,
+  requestContext?: Record<string, any>,
 ): ScoringInput => {
   return {
     input: [{ role: 'user', content: input }],
     output: { role: 'assistant', text: output },
     additionalContext: additionalContext ?? {},
-    runtimeContext: runtimeContext ?? {},
+    requestContext: requestContext ?? {},
   };
 };
 
@@ -142,7 +142,7 @@ export const createAgentTestRun = ({
   rememberedMessages = [],
   systemMessages = [],
   taggedSystemMessages = {},
-  runtimeContext = new RuntimeContext(),
+  requestContext = new RequestContext(),
   runId = crypto.randomUUID(),
 }: {
   inputMessages?: ScorerRunInputForAgent['inputMessages'];
@@ -150,12 +150,12 @@ export const createAgentTestRun = ({
   rememberedMessages?: ScorerRunInputForAgent['rememberedMessages'];
   systemMessages?: ScorerRunInputForAgent['systemMessages'];
   taggedSystemMessages?: ScorerRunInputForAgent['taggedSystemMessages'];
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   runId?: string;
 }): {
   input: ScorerRunInputForAgent;
   output: ScorerRunOutputForAgent;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   runId: string;
 } => {
   return {
@@ -166,7 +166,7 @@ export const createAgentTestRun = ({
       taggedSystemMessages,
     },
     output,
-    runtimeContext,
+    requestContext,
     runId,
   };
 };

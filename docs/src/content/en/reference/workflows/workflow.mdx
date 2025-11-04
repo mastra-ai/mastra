@@ -9,7 +9,7 @@ The `Workflow` class enables you to create state machines for complex sequences 
 
 ## Usage example
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -20,8 +20,8 @@ export const workflow = createWorkflow({
   }),
   outputSchema: z.object({
     value: z.string(),
-  })
-})
+  }),
+});
 ```
 
 ## Constructor parameters
@@ -42,7 +42,49 @@ export const workflow = createWorkflow({
       name: "outputSchema",
       type: "z.ZodType<any>",
       description: "Zod schema defining the output structure for the workflow",
-    }
+    },
+    {
+      name: "stateSchema",
+      type: "z.ZodObject<any>",
+      description:
+        "Optional Zod schema for the workflow state. Automatically injected when using Mastra's state system. If not specified, type is 'any'.",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "WorkflowOptions",
+      description: "Optional options for the workflow",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### WorkflowOptions
+
+<PropertiesTable
+  content={[
+    {
+      name: "tracingPolicy",
+      type: "TracingPolicy",
+      description: "Optional tracing policy for the workflow",
+      isOptional: true,
+    },
+    {
+      name: "validateInputs",
+      type: "boolean",
+      description:
+        "Optional flag to determine whether to validate the workflow inputs. This also applies default values from zodSchemas on the workflow/step input/resume data. If input/resume data validation fails on start/resume, the workflow will not start/resume, it throws an error instead. If input data validation fails on a step execution, the step fails, causing the workflow to fail and the error is returned.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "shouldPersistSnapshot",
+      type: "(params: { stepResults: Record<string, StepResult<any, any, any, any>>; workflowStatus: WorkflowRunStatus }) => boolean",
+      description:
+        "Optional flag to determine whether to persist the workflow snapshot",
+      isOptional: true,
+      defaultValue: "() => true",
+    },
   ]}
 />
 
@@ -73,21 +115,7 @@ A workflow's `status` indicates its current execution state. The possible values
   ]}
 />
 
-## Extended usage example
-
-```typescript filename="src/test-run.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("workflow").createRunAsync();
-
-const result = await run.start({...});
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({...});
-}
-```
-
 ## Related
 
-- [Step Class](./step.mdx)
-- [Control flow](../../docs/workflows/control-flow.mdx)
+- [Step Class](./step)
+- [Control flow](/docs/workflows/control-flow)

@@ -37,11 +37,12 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
     serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
+    resumeLabels: {},
     waitingPaths: {},
     runId,
     status: status as WorkflowRunState['status'],
     timestamp: timestamp.getTime(),
-    runtimeContext: {},
+    requestContext: {},
   };
   return { snapshot, runId, stepId };
 };

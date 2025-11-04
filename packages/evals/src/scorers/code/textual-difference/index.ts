@@ -1,12 +1,12 @@
-import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { SequenceMatcher } from 'difflib';
 
 export function createTextualDifferenceScorer() {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
-    description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+  return createScorer({
+    id: 'textual-difference-scorer',
+    name: 'Textual Difference Scorer',
+    description: 'Calculate textual difference between input and output using sequence matching algorithms.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';

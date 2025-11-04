@@ -81,24 +81,20 @@ export function KeyValueList({ data, LinkComponent, className, labelsAreHidden, 
                 >
                   &nbsp;
                 </span>
-              ) : (
-                <>
-                  {isValueItemArray ? (
-                    value?.map(item => {
-                      return item.path ? (
-                        <RelationWrapper description={item.description} key={item.id}>
-                          <Link href={item.path}>
-                            {item?.name} <ChevronRightIcon />
-                          </Link>
-                        </RelationWrapper>
-                      ) : (
-                        <span key={item.id}>{item?.name}</span>
-                      );
-                    })
+              ) : isValueItemArray ? (
+                value?.map(item => {
+                  return item.path ? (
+                    <RelationWrapper description={item.description} key={item.id}>
+                      <Link href={item.path}>
+                        {item?.name} <ChevronRightIcon />
+                      </Link>
+                    </RelationWrapper>
                   ) : (
-                    <>{value ? value : <span className="text-icon3 text-[0.75rem]">n/a</span>}</>
-                  )}
-                </>
+                    <span key={item.id}>{item?.name}</span>
+                  );
+                })
+              ) : (
+                <>{value ? value : <span className="text-icon3 text-[0.75rem]">n/a</span>}</>
               )}
             </dd>
           </React.Fragment>

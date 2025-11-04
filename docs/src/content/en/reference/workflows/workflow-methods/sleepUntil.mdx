@@ -20,7 +20,8 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
     {
       name: "dateOrCallback",
       type: "Date | ((params: ExecuteFunctionParams) => Promise<Date>)",
-      description: "Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.",
+      description:
+        "Either a Date object or a callback function that returns a Date. The callback receives execution context and can compute the target time dynamically based on input data.",
       isOptional: false,
     },
   ]}
@@ -41,11 +42,21 @@ workflow.sleepUntil(new Date(Date.now() + 5000));
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-workflow.sleepUntil(async ({ inputData }) => {
-  return new Date(Date.now() + inputData.value);
-});
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .sleepUntil(async ({ inputData }) => {
+    const { delayInMs } = inputData;
+    return new Date(Date.now() + delayInMs);
+  })
+  .then(step2)
+  .commit();
 ```
 
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.mdx)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume#sleep--events)

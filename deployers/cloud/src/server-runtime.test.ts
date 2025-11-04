@@ -24,6 +24,7 @@ vi.mock('./utils/constants.js', () => ({
   LOCAL: false,
   BUILD_URL: '',
   BUSINESS_JWT_TOKEN: '',
+  PLAYGROUND_JWT_TOKEN: '',
   USER_IP_ADDRESS: '',
   PROJECT_ENV_VARS: {},
   PROJECT_ROOT: '/project',
@@ -117,25 +118,6 @@ describe('CloudDeployer Server Runtime', () => {
       expect(entry).toContain('mastra?.setStorage(storage)');
       expect(entry).toContain('mastra?.memory?.setStorage(storage)');
       expect(entry).toContain('mastra?.memory?.setVector(vector)');
-    });
-
-    it('should register hooks for generation and evaluation', () => {
-      // @ts-ignore - accessing private method for testing
-      const entry = deployer.getEntry();
-
-      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
-      expect(entry).toContain('evaluate({');
-      expect(entry).toContain('agentName,');
-      expect(entry).toContain('input,');
-      expect(entry).toContain('metric,');
-      expect(entry).toContain('output,');
-      expect(entry).toContain('runId,');
-      expect(entry).toContain('globalRunId: runId,');
-      expect(entry).toContain('instructions,');
-
-      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
-      expect(entry).toContain('await mastra.storage.insert({');
-      expect(entry).toContain('tableName: MastraStorage.TABLE_EVALS');
     });
 
     it('should create node server with correct configuration', () => {

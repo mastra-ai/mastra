@@ -1,15 +1,16 @@
 import { createHash } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage } from 'ai';
+import type { CoreMessage } from '@internal/ai-sdk-v4/message';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { TracingContext } from './ai-tracing';
+import type { MastraLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraLanguageModel, MastraMemory } from './memory';
-import type { RuntimeContext } from './runtime-context';
+import type { AiMessageType, MastraMemory } from './memory';
+import type { TracingContext, TracingPolicy } from './observability';
+import type { RequestContext } from './request-context';
 import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
@@ -223,12 +224,20 @@ export interface ToolOptions {
   logger?: IMastraLogger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
+  /** Build-time tracing context (fallback for Legacy methods that can't pass request context) */
   tracingContext?: TracingContext;
+  tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
   model?: MastraLanguageModel;
   writableStream?: WritableStream<ChunkType>;
+  requireApproval?: boolean;
+  // Workflow-specific properties
+  workflow?: any;
+  workflowId?: string;
+  state?: any;
+  setState?: (state: any) => void;
 }
 
 /**
@@ -260,12 +269,17 @@ function createDeterministicId(input: string): string {
  * @returns The tool with the properties set
  */
 function setVercelToolProperties(tool: VercelTool) {
-  const inputSchema = convertVercelToolParameters(tool);
+  // Check if the tool already has inputSchema (v5 format)
+  // If it does, use it directly (it might be a function)
+  // Otherwise, convert the parameters to inputSchema
+  const inputSchema = 'inputSchema' in tool ? tool.inputSchema : convertVercelToolParameters(tool);
+
   const toolId = !('id' in tool)
     ? tool.description
       ? `tool-${createDeterministicId(tool.description)}`
       : `tool-${Math.random().toString(36).substring(2, 9)}`
     : tool.id;
+
   return {
     ...tool,
     id: toolId,
@@ -297,7 +311,14 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
 function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   // If the tool is a Vercel Tool, check if the parameters are already a zod object
   // If not, convert the parameters to a zod object using jsonSchemaToZod
-  const schema = tool.parameters ?? z.object({});
+  // Handle case where parameters (or inputSchema in v5) is a function that returns a schema
+  let schema = tool.parameters ?? z.object({});
+
+  // If schema is a function, call it to get the actual schema
+  if (typeof schema === 'function') {
+    schema = schema();
+  }
+
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 
@@ -349,19 +370,14 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
         return Reflect.apply(target.getLogger, target, []);
       }
 
-      if (prop === 'telemetry') {
-        logger.warn(`Please use 'getTelemetry' instead, telemetry is deprecated`);
-        return Reflect.apply(target.getTelemetry, target, []);
-      }
-
       if (prop === 'storage') {
         logger.warn(`Please use 'getStorage' instead, storage is deprecated`);
         return Reflect.get(target, 'storage');
       }
 
       if (prop === 'agents') {
-        logger.warn(`Please use 'getAgents' instead, agents is deprecated`);
-        return Reflect.apply(target.getAgents, target, []);
+        logger.warn(`Please use 'listAgents' instead, agents is deprecated`);
+        return Reflect.apply(target.listAgents, target, []);
       }
 
       if (prop === 'tts') {
@@ -556,4 +572,73 @@ export async function fetchWithRetry(
   }
 
   throw lastError || new Error('Request failed after multiple retry attempts');
+}
+
+/**
+ * Removes specific keys from an object.
+ * @param obj - The original object
+ * @param keysToOmit - Keys to exclude from the returned object
+ * @returns A new object with the specified keys removed
+ */
+export function omitKeys<T extends Record<string, any>>(obj: T, keysToOmit: string[]): Partial<T> {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !keysToOmit.includes(key))) as Partial<T>;
+}
+
+/**
+ * Selectively extracts specific fields from an object using dot notation.
+ * Does not error if fields don't exist - simply omits them from the result.
+ * @param obj - The source object to extract fields from
+ * @param fields - Array of field paths (supports dot notation like 'output.text')
+ * @returns New object containing only the specified fields
+ */
+export function selectFields(obj: any, fields: string[]): any {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  const result: any = {};
+
+  for (const field of fields) {
+    const value = getNestedValue(obj, field);
+    if (value !== undefined) {
+      setNestedValue(result, field, value);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Gets a nested value from an object using dot notation
+ * @param obj - Source object
+ * @param path - Dot notation path (e.g., 'output.text')
+ * @returns The value at the path, or undefined if not found
+ */
+export function getNestedValue(obj: any, path: string): any {
+  return path.split('.').reduce((current, key) => {
+    return current && typeof current === 'object' ? current[key] : undefined;
+  }, obj);
+}
+
+/**
+ * Sets a nested value in an object using dot notation
+ * @param obj - Target object
+ * @param path - Dot notation path (e.g., 'output.text')
+ * @param value - Value to set
+ */
+export function setNestedValue(obj: any, path: string, value: any): void {
+  const keys = path.split('.');
+  const lastKey = keys.pop();
+  if (!lastKey) {
+    return;
+  }
+
+  const target = keys.reduce((current, key) => {
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    return current[key];
+  }, obj);
+
+  target[lastKey] = value;
 }

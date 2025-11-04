@@ -1,15 +1,25 @@
-import type { Emitter, ExecutionGraph, SerializedStepFlowEntry, StepResult, Mastra } from '../..';
-import type { RuntimeContext } from '../../di';
+import type { RequestContext } from '../../di';
 import type { Event } from '../../events/types';
+import type { Mastra } from '../../mastra';
 import { ExecutionEngine } from '../../workflows/execution-engine';
+import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
+import type { Emitter, SerializedStepFlowEntry, StepResult } from '../types';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
 
-  constructor({ mastra, eventProcessor }: { mastra?: Mastra; eventProcessor: WorkflowEventProcessor }) {
-    super({ mastra });
+  constructor({
+    mastra,
+    eventProcessor,
+    options,
+  }: {
+    mastra?: Mastra;
+    eventProcessor: WorkflowEventProcessor;
+    options: ExecutionEngineOptions;
+  }) {
+    super({ mastra, options });
     this.eventProcessor = eventProcessor;
   }
 
@@ -37,13 +47,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
       resumePath: number[];
     };
     emitter: Emitter;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     retryConfig?: {
       attempts?: number;
       delay?: number;
     };
     abortController: AbortController;
-    format?: 'aisdk' | 'mastra' | undefined;
+    format?: 'legacy' | 'vnext' | undefined;
   }): Promise<TOutput> {
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
@@ -65,7 +75,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resumeSteps: params.resume.steps,
           prevResult: { status: 'success', output: prevResult?.payload },
           resumeData: params.resume.resumePayload,
-          runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
+          requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
         },
       });
@@ -77,7 +87,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           workflowId: params.workflowId,
           runId: params.runId,
           prevResult: { status: 'success', output: params.input },
-          runtimeContext: Object.fromEntries(params.runtimeContext.entries()),
+          requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
         },
       });

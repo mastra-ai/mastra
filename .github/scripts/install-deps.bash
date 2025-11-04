@@ -12,7 +12,7 @@ echo "Using base SHA: $BASE_SHA"
 
 
 # Get list of changed package.json files in examples and e2e-tests directories
-changed_files=$(git diff --name-only $BASE_SHA HEAD | grep -E "(examples|e2e-tests)/.*package.json" | grep -v "e2e-tests/.*/templates/")
+changed_files=$(git diff --name-only $BASE_SHA HEAD | grep -E "(examples|e2e-tests|integration-tests)/.*package.json" | grep -v "e2e-tests/.*/templates/")
 
 echo "changed_files: $changed_files"
 

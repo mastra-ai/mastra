@@ -25,7 +25,7 @@ Your template folder **must** include the following files:
   "version": "1.0.0",
   "description": "A template that demonstrates how to build an OpenAI-powered agent using Mastra.",
   "main": "index.js",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "type": "module",
 
   "scripts": {

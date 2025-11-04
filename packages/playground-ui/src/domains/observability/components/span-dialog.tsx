@@ -1,82 +1,110 @@
-import { cn } from '@/lib/utils';
 import {
   SideDialog,
-  SideDialogTop,
   KeyValueList,
   type KeyValueListItemData,
   TextAndIcon,
-  SideDialogHeader,
-  SideDialogHeading,
   getShortId,
+  Section,
 } from '@/components/ui/elements';
-import { PanelTopIcon, ChevronsLeftRightEllipsisIcon, HashIcon, EyeIcon } from 'lucide-react';
-import { TraceSpanUsage } from './trace-span-usage';
+import {
+  PanelTopIcon,
+  ChevronsLeftRightEllipsisIcon,
+  HashIcon,
+  EyeIcon,
+  CircleGaugeIcon,
+  GaugeIcon,
+} from 'lucide-react';
 import { SpanDetails } from './span-details';
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
 import { useLinkComponent } from '@/lib/framework';
+import { Tabs } from '@/components/ui/elements/tabs/tabs';
+import { Sections } from '@/components/ui/containers';
+import { SpanScoreList } from './span-score-list';
+import { SpanScoring } from './span-scoring';
+import { TraceSpanUsage } from './trace-span-usage';
+import { ListScoresResponse } from '@mastra/client-js';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { SpanTabs } from './span-tabs';
 
 type SpanDialogProps = {
+  trace: AISpanRecord;
   span?: AISpanRecord;
+  spanScoresData?: ListScoresResponse | null;
+  onSpanScoresPageChange?: (page: number) => void;
+  isLoadingSpanScoresData?: boolean;
   spanInfo?: KeyValueListItemData[];
   isOpen: boolean;
   onClose?: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
   onViewToggle?: () => void;
+  defaultActiveTab?: string;
+  initialScoreId?: string;
+  computeTraceLink: (traceId: string, spanId?: string) => string;
 };
 
 export function SpanDialog({
+  trace,
   span,
+  spanScoresData,
+  onSpanScoresPageChange,
+  isLoadingSpanScoresData,
   isOpen,
   onClose,
   onNext,
   onPrevious,
   onViewToggle,
   spanInfo = [],
+  defaultActiveTab = 'details',
+  initialScoreId,
+  computeTraceLink,
 }: SpanDialogProps) {
-  const { Link } = useLinkComponent();
-
   return (
     <SideDialog
       dialogTitle="Observability Span"
       dialogDescription="View and analyze span details"
       isOpen={isOpen}
       onClose={onClose}
-      hasCloseButton={true}
-      className={cn('w-[calc(100vw-25rem)] max-w-[65%]', '3xl:max-w-[50%]', '4xl:max-w-[40%]')}
+      level={2}
     >
-      <div className="flex items-center justify-between pr-[1.5rem]">
-        <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
-          <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
-            <TextAndIcon>
-              <EyeIcon /> {getShortId(span?.traceId)}
-            </TextAndIcon>
-            ›
-            <TextAndIcon>
-              <ChevronsLeftRightEllipsisIcon />
-              {getShortId(span?.spanId)}
-            </TextAndIcon>
-          </div>
-        </SideDialogTop>
-        <button className="flex items-center gap-1" onClick={onViewToggle}>
+      <SideDialog.Top>
+        <TextAndIcon>
+          <EyeIcon /> {getShortId(span?.traceId)}
+        </TextAndIcon>
+        ›
+        <TextAndIcon>
+          <ChevronsLeftRightEllipsisIcon />
+          {getShortId(span?.spanId)}
+        </TextAndIcon>
+        |
+        <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
+        <button className="ml-auto mr-[2rem]" onClick={onViewToggle}>
           <PanelTopIcon />
+          <VisuallyHidden>Switch to dialog view</VisuallyHidden>
         </button>
-      </div>
+      </SideDialog.Top>
 
-      <div className="p-[1.5rem] px-[2.5rem] overflow-y-auto grid gap-[1.5rem] content-start">
-        <SideDialogHeader className="flex gap-[1rem] items-baseline pr-[2.5rem]">
-          <SideDialogHeading>
+      <SideDialog.Content>
+        <SideDialog.Header>
+          <SideDialog.Heading>
             <ChevronsLeftRightEllipsisIcon /> {span?.name}
-          </SideDialogHeading>
+          </SideDialog.Heading>
           <TextAndIcon>
             <HashIcon /> {span?.spanId}
           </TextAndIcon>
-        </SideDialogHeader>
-
-        {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} className="mt-[1.5rem]" />}
-        <KeyValueList data={spanInfo} LinkComponent={Link} className="mt-[1.5rem]" />
-        <SpanDetails span={span} />
-      </div>
+        </SideDialog.Header>
+        <SpanTabs
+          trace={trace}
+          span={span}
+          spanScoresData={spanScoresData}
+          onSpanScoresPageChange={onSpanScoresPageChange}
+          isLoadingSpanScoresData={isLoadingSpanScoresData}
+          spanInfo={spanInfo}
+          defaultActiveTab={defaultActiveTab}
+          initialScoreId={initialScoreId}
+          computeTraceLink={computeTraceLink}
+        />
+      </SideDialog.Content>
     </SideDialog>
   );
 }

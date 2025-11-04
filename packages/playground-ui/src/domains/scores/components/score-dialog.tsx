@@ -1,60 +1,186 @@
-import { cn } from '@/lib/utils';
-import { SideDialog, SideDialogTop, TextAndIcon, SideDialogCodeSection } from '@/components/ui/elements';
-import { HashIcon, GaugeIcon } from 'lucide-react';
+import { SideDialog, TextAndIcon, KeyValueList, type SideDialogRootProps, getShortId } from '@/components/ui/elements';
+import {
+  HashIcon,
+  GaugeIcon,
+  FileInputIcon,
+  FileOutputIcon,
+  ReceiptText,
+  EyeIcon,
+  ChevronsLeftRightEllipsisIcon,
+  CalculatorIcon,
+} from 'lucide-react';
 
-import { MastraScorer } from '@mastra/core/scores';
 import { ClientScoreRowData } from '@mastra/client-js';
+import { useLinkComponent } from '@/lib/framework';
+import { Sections } from '@/index';
+import { format } from 'date-fns/format';
 
 type ScoreDialogProps = {
   score?: ClientScoreRowData;
-  scorer?: MastraScorer;
+  scorerName?: string;
   isOpen: boolean;
   onClose: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
+  computeTraceLink: (traceId: string, spanId?: string) => string;
+  dialogLevel?: SideDialogRootProps['level'];
+  usageContext?: 'scorerPage' | 'aiSpanDialog';
 };
 
-export function ScoreDialog({ scorer, score, isOpen, onClose, onNext, onPrevious }: ScoreDialogProps) {
+export function ScoreDialog({
+  score,
+  scorerName,
+  isOpen,
+  onClose,
+  onNext,
+  onPrevious,
+  computeTraceLink,
+  dialogLevel = 1,
+  usageContext = 'scorerPage',
+}: ScoreDialogProps) {
+  const { Link } = useLinkComponent();
+
   return (
     <SideDialog
       dialogTitle="Scorer Score"
       dialogDescription="View and analyze score details"
       isOpen={isOpen}
       onClose={onClose}
-      className={cn('w-[calc(100vw-20rem)] max-w-[80%]', '3xl:max-w-[65%]', '4xl:max-w-[55%]')}
+      level={dialogLevel}
     >
-      <SideDialogTop onNext={onNext} onPrevious={onPrevious} showInnerNav={true}>
-        <div className="flex items-center gap-[1rem] text-icon4 text-[0.875rem]">
+      <SideDialog.Top>
+        {usageContext === 'scorerPage' && (
           <TextAndIcon>
-            <GaugeIcon /> {scorer?.config?.name}
+            <GaugeIcon /> {scorerName}
           </TextAndIcon>
-          ›
-          <TextAndIcon>
-            <HashIcon />
-            {score?.id}
-          </TextAndIcon>
-        </div>
-      </SideDialogTop>
+        )}
+        {usageContext === 'aiSpanDialog' && (
+          <>
+            <TextAndIcon>
+              <EyeIcon /> {getShortId(score?.traceId)}
+            </TextAndIcon>
+            {score?.spanId && (
+              <>
+                ›
+                <TextAndIcon>
+                  <ChevronsLeftRightEllipsisIcon />
+                  {getShortId(score?.spanId)}
+                </TextAndIcon>
+              </>
+            )}
+          </>
+        )}
+        ›
+        <TextAndIcon>
+          <CalculatorIcon />
+          {getShortId(score?.id)}
+        </TextAndIcon>
+        |
+        <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
+      </SideDialog.Top>
 
-      <div className="p-[1.5rem] px-[2.5rem] overflow-y-auto grid gap-[1.5rem] content-start">
-        <div className="grid gap-[1.5rem] mb-[2rem]">
-          <SideDialogCodeSection
-            title={`Score: ${score?.score ? score?.score : 'n/a'}`}
-            codeStr={score?.reason}
+      <SideDialog.Content>
+        <SideDialog.Header>
+          <SideDialog.Heading>
+            <CalculatorIcon /> Score
+          </SideDialog.Heading>
+          <TextAndIcon>
+            <HashIcon /> {score?.id}
+          </TextAndIcon>
+        </SideDialog.Header>
+
+        <Sections>
+          <KeyValueList
+            data={[
+              ...(usageContext === 'aiSpanDialog'
+                ? [
+                    {
+                      label: 'Scorer',
+                      value: score?.scorer?.name || '-',
+                      key: 'scorer-name',
+                    },
+                  ]
+                : []),
+              {
+                label: 'Created at',
+                value: score?.createdAt ? format(new Date(score?.createdAt), 'MMM d, h:mm:ss aaa') : 'n/a',
+                key: 'date',
+              },
+              ...(usageContext !== 'aiSpanDialog'
+                ? [
+                    {
+                      label: 'Trace ID',
+                      value: score?.traceId ? (
+                        <Link href={computeTraceLink(score?.traceId)}>{score?.traceId}</Link>
+                      ) : (
+                        'n/a'
+                      ),
+                      key: 'traceId',
+                    },
+                    {
+                      label: 'Span ID',
+                      value:
+                        score?.traceId && score?.spanId ? (
+                          <Link href={computeTraceLink(score?.traceId, score?.spanId)}>{score?.spanId}</Link>
+                        ) : (
+                          'n/a'
+                        ),
+                      key: 'spanId',
+                    },
+                  ]
+                : []),
+            ]}
+            LinkComponent={Link}
+          />
+
+          <SideDialog.CodeSection
+            title={`Score: ${Number.isNaN(score?.score) ? 'n/a' : score?.score}`}
+            icon={<GaugeIcon />}
+            codeStr={score?.reason || 'null'}
             simplified={true}
           />
-          <SideDialogCodeSection title="Input" codeStr={JSON.stringify(score?.input || null, null, 2)} />
-          <SideDialogCodeSection title="Output" codeStr={JSON.stringify(score?.output || null, null, 2)} />
-          <SideDialogCodeSection title="Preprocess Prompt" codeStr={score?.preprocessPrompt} simplified={true} />
-          <SideDialogCodeSection title="Analyze Prompt" codeStr={score?.analyzePrompt} simplified={true} />
-          <SideDialogCodeSection title="Generate Score Prompt" codeStr={score?.generateScorePrompt} simplified={true} />
-          <SideDialogCodeSection
+
+          <SideDialog.CodeSection
+            title="Input"
+            icon={<FileInputIcon />}
+            codeStr={JSON.stringify(score?.input || null, null, 2)}
+          />
+
+          <SideDialog.CodeSection
+            title="Output"
+            icon={<FileOutputIcon />}
+            codeStr={JSON.stringify(score?.output || null, null, 2)}
+          />
+
+          <SideDialog.CodeSection
+            title="Preprocess Prompt"
+            icon={<ReceiptText />}
+            codeStr={score?.preprocessPrompt || 'null'}
+            simplified={true}
+          />
+
+          <SideDialog.CodeSection
+            title="Analyze Prompt"
+            icon={<ReceiptText />}
+            codeStr={score?.analyzePrompt || 'null'}
+            simplified={true}
+          />
+
+          <SideDialog.CodeSection
+            title="Generate Score Prompt"
+            icon={<ReceiptText />}
+            codeStr={score?.generateScorePrompt || 'null'}
+            simplified={true}
+          />
+
+          <SideDialog.CodeSection
             title="Generate Reason Prompt"
-            codeStr={score?.generateReasonPrompt}
+            icon={<ReceiptText />}
+            codeStr={score?.generateReasonPrompt || 'null'}
             simplified={true}
           />
-        </div>
-      </div>
+        </Sections>
+      </SideDialog.Content>
     </SideDialog>
   );
 }

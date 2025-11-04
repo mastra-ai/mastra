@@ -3,21 +3,24 @@
  *
  * This exporter sends tracing data to Langfuse for AI observability.
  * Root spans start traces in Langfuse.
- * LLM_GENERATION spans become Langfuse generations, all others become spans.
+ * MODEL_GENERATION spans become Langfuse generations, all others become spans.
+ *
+ * Compatible with both AI SDK v4 and v5:
+ * - Handles both legacy token usage format (promptTokens/completionTokens)
+ *   and v5 format (inputTokens/outputTokens)
+ * - Supports v5 reasoning tokens and cache-related metrics
+ * - Adapts to v5 streaming protocol changes
  */
 
-import type {
-  AITracingExporter,
-  AITracingEvent,
-  AnyExportedAISpan,
-  LLMGenerationAttributes,
-} from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import { AISpanType } from '@mastra/core/observability';
+import { omitKeys } from '@mastra/core/utils';
+import { BaseExporter } from '@mastra/observability';
+import type { BaseExporterConfig } from '@mastra/observability';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 
-export interface LangfuseExporterConfig {
+export interface LangfuseExporterConfig extends BaseExporterConfig {
   /** Langfuse API key */
   publicKey?: string;
   /** Langfuse secret key */
@@ -26,8 +29,6 @@ export interface LangfuseExporterConfig {
   baseUrl?: string;
   /** Enable realtime mode - flushes after each event for immediate visibility */
   realtime?: boolean;
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Additional options to pass to the Langfuse client */
   options?: any;
 }
@@ -36,26 +37,90 @@ type TraceData = {
   trace: LangfuseTraceClient; // Langfuse trace object
   spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
   events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
+  activeSpans: Set<string>; // Tracks which spans haven't ended yet
+  rootSpanId?: string; // Track the root span ID
 };
 
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
 
-export class LangfuseExporter implements AITracingExporter {
+/**
+ * Normalized token usage format compatible with Langfuse.
+ * This unified format supports both AI SDK v4 and v5 token structures.
+ *
+ * @example
+ * ```typescript
+ * // AI SDK v4 format normalizes to:
+ * { input: 100, output: 50, total: 150 }
+ *
+ * // AI SDK v5 format normalizes to:
+ * { input: 120, output: 60, total: 180, reasoning: 1000, cachedInput: 50 }
+ * ```
+ */
+interface NormalizedUsage {
+  /**
+   * Input tokens sent to the model
+   * @source AI SDK v5: `inputTokens` | AI SDK v4: `promptTokens`
+   */
+  input?: number;
+
+  /**
+   * Output tokens received from the model
+   * @source AI SDK v5: `outputTokens` | AI SDK v4: `completionTokens`
+   */
+  output?: number;
+
+  /**
+   * Total tokens (input + output + reasoning if applicable)
+   * @source AI SDK v4 & v5: `totalTokens`
+   */
+  total?: number;
+
+  /**
+   * Reasoning tokens used by reasoning models
+   * @source AI SDK v5: `reasoningTokens`
+   * @since AI SDK v5.0.0
+   * @example Models like o1-preview, o1-mini
+   */
+  reasoning?: number;
+
+  /**
+   * Cached input tokens (prompt cache hit)
+   * @source AI SDK v5: `cachedInputTokens`
+   * @since AI SDK v5.0.0
+   * @example Anthropic's prompt caching, OpenAI prompt caching
+   */
+  cachedInput?: number;
+
+  /**
+   * Prompt cache hit tokens (legacy format)
+   * @source AI SDK v4: `promptCacheHitTokens`
+   * @deprecated Prefer `cachedInput` from v5 format
+   */
+  promptCacheHit?: number;
+
+  /**
+   * Prompt cache miss tokens (legacy format)
+   * @source AI SDK v4: `promptCacheMissTokens`
+   * @deprecated Prefer v5 format which uses `cachedInputTokens`
+   */
+  promptCacheMiss?: number;
+}
+
+export class LangfuseExporter extends BaseExporter {
   name = 'langfuse';
   private client: Langfuse;
   private realtime: boolean;
   private traceMap = new Map<string, TraceData>();
-  private logger: ConsoleLogger;
 
   constructor(config: LangfuseExporterConfig) {
+    super(config);
+
     this.realtime = config.realtime ?? false;
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
 
     if (!config.publicKey || !config.secretKey) {
-      this.logger.error('LangfuseExporter: Missing required credentials, exporter will be disabled', {
-        hasPublicKey: !!config.publicKey,
-        hasSecretKey: !!config.secretKey,
-      });
+      this.setDisabled(
+        `Missing required credentials (publicKey: ${!!config.publicKey}, secretKey: ${!!config.secretKey})`,
+      );
       // Create a no-op client to prevent runtime errors
       this.client = null as any;
       return;
@@ -69,12 +134,7 @@ export class LangfuseExporter implements AITracingExporter {
     });
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.client) {
-      // Exporter is disabled due to missing credentials
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -117,9 +177,10 @@ export class LangfuseExporter implements AITracingExporter {
     const payload = this.buildSpanPayload(span, true);
 
     const langfuseSpan =
-      span.type === AISpanType.LLM_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
+      span.type === AISpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
     traceData.spans.set(span.id, langfuseSpan);
+    traceData.activeSpans.add(span.id); // Track as active
   }
 
   private async handleSpanUpdateOrEnd(span: AnyExportedAISpan, isEnd: boolean): Promise<void> {
@@ -132,6 +193,16 @@ export class LangfuseExporter implements AITracingExporter {
 
     const langfuseSpan = traceData.spans.get(span.id);
     if (!langfuseSpan) {
+      // For event spans that only send SPAN_ENDED, we might not have the span yet
+      if (isEnd && span.isEvent) {
+        // Just make sure it's not in active spans
+        traceData.activeSpans.delete(span.id);
+        if (traceData.activeSpans.size === 0) {
+          this.traceMap.delete(span.traceId);
+        }
+        return;
+      }
+
       this.logger.warn('Langfuse exporter: No Langfuse span found for span update/end', {
         traceId: span.traceId,
         spanId: span.id,
@@ -148,9 +219,18 @@ export class LangfuseExporter implements AITracingExporter {
     // end time we set when ending the span.
     langfuseSpan.update(this.buildSpanPayload(span, false));
 
-    if (isEnd && span.isRootSpan) {
-      traceData.trace.update({ output: span.output });
-      this.traceMap.delete(span.traceId);
+    if (isEnd) {
+      // Remove from active spans
+      traceData.activeSpans.delete(span.id);
+
+      if (span.isRootSpan) {
+        traceData.trace.update({ output: span.output });
+      }
+
+      // Only clean up the trace when ALL spans have ended
+      if (traceData.activeSpans.size === 0) {
+        this.traceMap.delete(span.traceId);
+      }
     }
   }
 
@@ -181,18 +261,31 @@ export class LangfuseExporter implements AITracingExporter {
     const langfuseEvent = langfuseParent.event(payload);
 
     traceData.events.set(span.id, langfuseEvent);
+
+    // Event spans are typically immediately ended, but let's track them properly
+    if (!span.endTime) {
+      traceData.activeSpans.add(span.id);
+    }
   }
 
   private initTrace(span: AnyExportedAISpan): void {
     const trace = this.client.trace(this.buildTracePayload(span));
-    this.traceMap.set(span.traceId, { trace, spans: new Map(), events: new Map() });
+    this.traceMap.set(span.traceId, {
+      trace,
+      spans: new Map(),
+      events: new Map(),
+      activeSpans: new Set(),
+      rootSpanId: span.id,
+    });
   }
 
   private getTraceData(options: { span: AnyExportedAISpan; method: string }): TraceData | undefined {
     const { span, method } = options;
+
     if (this.traceMap.has(span.traceId)) {
       return this.traceMap.get(span.traceId);
     }
+
     this.logger.warn('Langfuse exporter: No trace data found for span', {
       traceId: span.traceId,
       spanId: span.id,
@@ -253,6 +346,64 @@ export class LangfuseExporter implements AITracingExporter {
     return payload;
   }
 
+  /**
+   * Normalize usage data to handle both AI SDK v4 and v5 formats.
+   *
+   * AI SDK v4 uses: promptTokens, completionTokens
+   * AI SDK v5 uses: inputTokens, outputTokens
+   *
+   * This function normalizes to a unified format that Langfuse can consume,
+   * prioritizing v5 format while maintaining backward compatibility.
+   *
+   * @param usage - Token usage data from AI SDK (v4 or v5 format)
+   * @returns Normalized usage object, or undefined if no usage data available
+   */
+  private normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
+    if (!usage) return undefined;
+
+    const normalized: NormalizedUsage = {};
+
+    // Handle input tokens (v5 'inputTokens' or v4 'promptTokens')
+    // Using ?? to prioritize v5 format while falling back to v4
+    const inputTokens = usage.inputTokens ?? usage.promptTokens;
+    if (inputTokens !== undefined) {
+      normalized.input = inputTokens;
+    }
+
+    // Handle output tokens (v5 'outputTokens' or v4 'completionTokens')
+    const outputTokens = usage.outputTokens ?? usage.completionTokens;
+    if (outputTokens !== undefined) {
+      normalized.output = outputTokens;
+    }
+
+    // Total tokens - calculate if not provided
+    if (usage.totalTokens !== undefined) {
+      normalized.total = usage.totalTokens;
+    } else if (normalized.input !== undefined && normalized.output !== undefined) {
+      normalized.total = normalized.input + normalized.output;
+    }
+
+    // AI SDK v5-specific: reasoning tokens
+    if (usage.reasoningTokens !== undefined) {
+      normalized.reasoning = usage.reasoningTokens;
+    }
+
+    // AI SDK v5-specific: cached tokens (cache hit)
+    if (usage.cachedInputTokens !== undefined) {
+      normalized.cachedInput = usage.cachedInputTokens;
+    }
+
+    // Legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)
+    if (usage.promptCacheHitTokens !== undefined) {
+      normalized.promptCacheHit = usage.promptCacheHitTokens;
+    }
+    if (usage.promptCacheMissTokens !== undefined) {
+      normalized.promptCacheMiss = usage.promptCacheMissTokens;
+    }
+
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+  }
+
   private buildSpanPayload(span: AnyExportedAISpan, isCreate: boolean): Record<string, any> {
     const payload: Record<string, any> = {};
 
@@ -271,21 +422,25 @@ export class LangfuseExporter implements AITracingExporter {
     // Strip special fields from metadata if used in top-level keys
     const attributesToOmit: string[] = [];
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
-      if (llmAttr.model !== undefined) {
-        payload.model = llmAttr.model;
+      if (modelAttr.model !== undefined) {
+        payload.model = modelAttr.model;
         attributesToOmit.push('model');
       }
 
-      if (llmAttr.usage !== undefined) {
-        payload.usage = llmAttr.usage;
+      if (modelAttr.usage !== undefined) {
+        // Normalize usage to handle both v4 and v5 formats
+        const normalizedUsage = this.normalizeUsage(modelAttr.usage);
+        if (normalizedUsage) {
+          payload.usage = normalizedUsage;
+        }
         attributesToOmit.push('usage');
       }
 
-      if (llmAttr.parameters !== undefined) {
-        payload.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.modelParameters = modelAttr.parameters;
         attributesToOmit.push('parameters');
       }
     }
@@ -304,10 +459,49 @@ export class LangfuseExporter implements AITracingExporter {
     return payload;
   }
 
+  async addScoreToTrace({
+    traceId,
+    spanId,
+    score,
+    reason,
+    scorerName,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      await this.client.score({
+        id: `${traceId}-${scorerName}`,
+        traceId,
+        observationId: spanId,
+        name: scorerName,
+        value: score,
+        ...(metadata?.sessionId ? { sessionId: metadata.sessionId } : {}),
+        metadata: { ...(reason ? { reason } : {}) },
+        dataType: 'NUMERIC',
+      });
+    } catch (error) {
+      this.logger.error('Langfuse exporter: Error adding score to trace', {
+        error,
+        traceId,
+        spanId,
+        scorerName,
+      });
+    }
+  }
+
   async shutdown(): Promise<void> {
     if (this.client) {
       await this.client.shutdownAsync();
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

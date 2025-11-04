@@ -1,25 +1,31 @@
-import type { Mastra } from '@mastra/core';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
+import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { ProviderConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { ChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import {
-  getAgentsHandler as getOriginalAgentsHandler,
+  listAgentsHandler as getOriginalListAgentsHandler,
   getAgentByIdHandler as getOriginalAgentByIdHandler,
-  getEvalsByAgentIdHandler as getOriginalEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler as getOriginalLiveEvalsByAgentIdHandler,
   generateHandler as getOriginalGenerateHandler,
   streamGenerateHandler as getOriginalStreamGenerateHandler,
-  streamVNextGenerateHandler as getOriginalStreamVNextGenerateHandler,
   updateAgentModelHandler as getOriginalUpdateAgentModelHandler,
-  generateVNextHandler as getOriginalVNextGenerateHandler,
-  streamVNextUIMessageHandler as getOriginalStreamVNextUIMessageHandler,
+  resetAgentModelHandler as getOriginalResetAgentModelHandler,
+  streamUIMessageHandler as getOriginalStreamUIMessageHandler,
   generateLegacyHandler as getOriginalGenerateLegacyHandler,
   streamGenerateLegacyHandler as getOriginalStreamGenerateLegacyHandler,
+  reorderAgentModelListHandler as getOriginalReorderAgentModelListHandler,
+  updateAgentModelInModelListHandler as getOriginalUpdateAgentModelInModelListHandler,
   streamNetworkHandler as getOriginalStreamNetworkHandler,
+  approveToolCallHandler as getOriginalApproveToolCallHandler,
+  declineToolCallHandler as getOriginalDeclineToolCallHandler,
+  getAgentFromSystem as getOriginalGetAgentFromSystem,
 } from '@mastra/server/handlers/agents';
 import type { Context } from 'hono';
 
 import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
-import { AllowedProviderKeys } from '../../utils';
 
 export const sharedBodyOptions: any = {
   messages: {
@@ -74,58 +80,71 @@ export const vNextBodyOptions: any = {
     description: 'Controls how tools are selected during generation',
   },
   format: { type: 'string', enum: ['mastra', 'aisdk'], description: 'Response format' },
+  tracingOptions: {
+    type: 'object',
+    description: 'Tracing options for the agent execution',
+    properties: {
+      metadata: {
+        type: 'object',
+        description: 'Custom metadata to attach to the trace',
+        additionalProperties: true,
+      },
+    },
+  },
   ...sharedBodyOptions,
 };
 
 // Agent handlers
-export async function getAgentsHandler(c: Context) {
-  const serializedAgents = await getOriginalAgentsHandler({
+export async function listAgentsHandler(c: Context) {
+  const serializedAgents = await getOriginalListAgentsHandler({
     mastra: c.get('mastra'),
-    runtimeContext: c.get('runtimeContext'),
+    requestContext: c.get('requestContext'),
   });
 
   return c.json(serializedAgents);
 }
 
+export async function getProvidersHandler(c: Context) {
+  try {
+    const providers = [];
+
+    // Check each provider in the registry
+    for (const [providerId, config] of Object.entries(PROVIDER_REGISTRY as Record<string, ProviderConfig>)) {
+      const hasApiKey = !!(typeof config.apiKeyEnvVar === `string`
+        ? process.env[config.apiKeyEnvVar]
+        : Array.isArray(config.apiKeyEnvVar)
+          ? config.apiKeyEnvVar.every((k: string) => !!process.env[k])
+          : false);
+
+      const providerConfig = getProviderConfig(providerId);
+
+      providers.push({
+        id: providerId,
+        name: config.name,
+        envVar: config.apiKeyEnvVar,
+        connected: hasApiKey,
+        models: [...config.models], // Convert readonly array to mutable
+        docUrl: providerConfig?.docUrl || null,
+      });
+    }
+
+    return c.json({ providers });
+  } catch (error) {
+    return handleError(error, 'Error getting providers');
+  }
+}
+
 export async function getAgentByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const isPlayground = c.req.header('x-mastra-dev-playground') === 'true';
 
   const result = await getOriginalAgentByIdHandler({
     mastra,
     agentId,
-    runtimeContext,
+    requestContext,
     isPlayground,
-  });
-
-  return c.json(result);
-}
-
-export async function getEvalsByAgentIdHandler(c: Context) {
-  const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
-
-  const result = await getOriginalEvalsByAgentIdHandler({
-    mastra,
-    agentId,
-    runtimeContext,
-  });
-
-  return c.json(result);
-}
-
-export async function getLiveEvalsByAgentIdHandler(c: Context) {
-  const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
-
-  const result = await getOriginalLiveEvalsByAgentIdHandler({
-    mastra,
-    agentId,
-    runtimeContext,
   });
 
   return c.json(result);
@@ -135,13 +154,13 @@ export async function generateLegacyHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateLegacyHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -156,13 +175,13 @@ export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -173,38 +192,17 @@ export async function generateHandler(c: Context) {
   }
 }
 
-export async function generateVNextHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-
-    const result = await getOriginalVNextGenerateHandler({
-      mastra,
-      agentId,
-      runtimeContext,
-      body,
-      abortSignal: c.req.raw.signal,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error generating vnext from agent');
-  }
-}
-
 export async function streamGenerateLegacyHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateLegacyHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -216,135 +214,302 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
 }
 
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
-  try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
+  const mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const requestContext: RequestContext = c.get('requestContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
 
-    const streamResponse = await getOriginalStreamGenerateHandler({
+  let streamResponse;
+  try {
+    streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
-
-    return streamResponse;
-  } catch (error) {
-    return handleError(error, 'Error streaming from agent');
+  } catch (err) {
+    return handleError(err, 'Error streaming from agent');
   }
-}
 
-export async function streamVNextGenerateHandler(c: Context): Promise<Response | undefined> {
-  try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-    const logger = mastra.getLogger();
+  c.header('Transfer-Encoding', 'chunked');
 
-    c.header('Transfer-Encoding', 'chunked');
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.fullStream.getReader();
 
-    return stream(
-      c,
-      async stream => {
-        try {
-          const streamResponse = await getOriginalStreamVNextGenerateHandler({
-            mastra,
-            agentId,
-            runtimeContext,
-            body,
-            abortSignal: c.req.raw.signal,
-          });
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
 
-          const reader = streamResponse.fullStream.getReader();
-
-          stream.onAbort(() => {
-            void reader.cancel('request aborted');
-          });
-
-          let chunkResult;
-          while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
-          }
-
-          await stream.write('data: [DONE]\n\n');
-        } catch (err) {
-          logger.error('Error in streamVNext generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
         }
 
-        await stream.close();
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
-    );
-  } catch (error) {
-    return handleError(error, 'Error streaming from agent');
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in stream generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error: getErrorFromUnknown(err, { fallbackMessage: 'Unknown error in stream generate' }),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
+}
+
+export async function approveToolCallHandler(c: Context): Promise<Response | undefined> {
+  const mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const requestContext: RequestContext = c.get('requestContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
+
+  let streamResponse;
+  try {
+    streamResponse = await getOriginalApproveToolCallHandler({
+      mastra,
+      requestContext,
+      agentId,
+      body,
+      abortSignal: c.req.raw.signal,
+    });
+  } catch (err) {
+    return handleError(err, 'Error approving tool call');
   }
+
+  c.header('Transfer-Encoding', 'chunked');
+
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.fullStream.getReader();
+
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
+
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
+        }
+
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in approve tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error:
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : String(err),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
+}
+
+export async function declineToolCallHandler(c: Context): Promise<Response | undefined> {
+  const mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const requestContext: RequestContext = c.get('requestContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
+
+  let streamResponse;
+  try {
+    streamResponse = await getOriginalDeclineToolCallHandler({
+      mastra,
+      requestContext,
+      agentId,
+      body,
+      abortSignal: c.req.raw.signal,
+    });
+  } catch (err) {
+    return handleError(err, 'Error declining tool call');
+  }
+
+  c.header('Transfer-Encoding', 'chunked');
+
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.fullStream.getReader();
+
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
+
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
+        }
+
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in decline tool call: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error:
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : String(err),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
 }
 
 export async function streamNetworkHandler(c: Context) {
-  try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-    const logger = mastra.getLogger();
+  const mastra: Mastra = c.get('mastra');
+  const agentId = c.req.param('agentId');
+  const requestContext: RequestContext = c.get('requestContext');
+  const body = await c.req.json();
+  const logger = mastra.getLogger();
 
-    c.header('Transfer-Encoding', 'chunked');
+  // Validate agent exists and has memory before starting stream
+  const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
-    return stream(
-      c,
-      async stream => {
-        try {
-          const streamResponse = await getOriginalStreamNetworkHandler({
-            mastra,
-            agentId,
-            runtimeContext,
-            body,
-            // abortSignal: c.req.raw.signal,
-          });
+  // Check if agent has memory configured before starting the stream
+  const memory = await agent.getMemory({ requestContext });
 
-          const reader = streamResponse.getReader();
-
-          stream.onAbort(() => {
-            void reader.cancel('request aborted');
-          });
-
-          let chunkResult;
-          while ((chunkResult = await reader.read()) && !chunkResult.done) {
-            await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
-          }
-
-          await stream.write('data: [DONE]\n\n');
-        } catch (err) {
-          logger.error('Error in streamNetwork generate: ' + ((err as Error)?.message ?? 'Unknown error'));
-        }
-
-        await stream.close();
-      },
-      async err => {
-        logger.error('Error in watch stream: ' + err?.message);
-      },
+  if (!memory) {
+    return handleError(
+      new MastraError({
+        id: 'AGENT_NETWORK_MEMORY_REQUIRED',
+        domain: ErrorDomain.AGENT_NETWORK,
+        category: ErrorCategory.USER,
+        text: 'Memory is required for the agent network to function properly. Please configure memory for the agent.',
+        details: {
+          status: 400,
+        },
+      }),
+      'Memory required for agent network',
     );
-  } catch (error) {
-    return handleError(error, 'Error streaming from agent in network mode');
   }
-}
 
-export async function streamVNextUIMessageHandler(c: Context): Promise<Response | undefined> {
+  let streamResponse;
   try {
-    const mastra = c.get('mastra');
-    const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const body = await c.req.json();
-
-    const streamResponse = await getOriginalStreamVNextUIMessageHandler({
+    streamResponse = await getOriginalStreamNetworkHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
+      body,
+      // abortSignal: c.req.raw.signal,
+    });
+  } catch (err) {
+    return handleError(err, 'Error streaming from agent in network mode');
+  }
+
+  c.header('Transfer-Encoding', 'chunked');
+
+  return stream(
+    c,
+    async stream => {
+      try {
+        const reader = streamResponse.getReader();
+
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
+
+        let chunkResult;
+        while ((chunkResult = await reader.read()) && !chunkResult.done) {
+          await stream.write(`data: ${JSON.stringify(chunkResult.value)}\n\n`);
+        }
+
+        await stream.write('data: [DONE]\n\n');
+      } catch (err) {
+        logger.error('Error in streamNetwork generate: ' + ((err as Error)?.message ?? 'Unknown error'));
+
+        const errorChunk: ChunkType = {
+          type: 'error',
+          from: ChunkFrom.AGENT,
+          runId: body.runId || 'unknown',
+          payload: {
+            error:
+              err instanceof Error
+                ? {
+                    message: err.message,
+                    name: err.name,
+                    stack: err.stack,
+                  }
+                : String(err),
+          },
+        };
+
+        await stream.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+      }
+
+      await stream.close();
+    },
+    async err => {
+      logger.error('Error in watch stream: ' + err?.message);
+    },
+  );
+}
+
+export async function streamUIMessageHandler(c: Context): Promise<Response | undefined> {
+  try {
+    const mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const requestContext: RequestContext = c.get('requestContext');
+    const body = await c.req.json();
+
+    const streamResponse = await getOriginalStreamUIMessageHandler({
+      mastra,
+      agentId,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -371,10 +536,7 @@ export async function setAgentInstructionsHandler(c: Context) {
     }
 
     const mastra: Mastra = c.get('mastra');
-    const agent = mastra.getAgent(agentId);
-    if (!agent) {
-      return c.json({ error: 'Agent not found' }, 404);
-    }
+    const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
     agent.__updateInstructions(instructions);
 
@@ -407,27 +569,68 @@ export async function updateAgentModelHandler(c: Context) {
   }
 }
 
+export async function resetAgentModelHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+
+    const result = await getOriginalResetAgentModelHandler({
+      mastra,
+      agentId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error resetting agent model');
+  }
+}
+
 export async function deprecatedStreamVNextHandler(c: Context) {
   return c.json(
     {
       error: 'This endpoint is deprecated',
-      message: 'The /streamVNext endpoint has been deprecated. Please use an alternative streaming endpoint.',
-      deprecated_endpoint: '/api/agents/:agentId/streamVNext',
-      replacement_endpoint: '/api/agents/:agentId/stream/vnext',
+      message: 'The /stream/vnext endpoint has been deprecated. Please use an alternative streaming endpoint.',
+      deprecated_endpoint: '/api/agents/:agentId/stream/vnext',
+      replacement_endpoint: '/api/agents/:agentId/stream',
     },
     410, // 410 Gone status code for deprecated endpoints
   );
 }
 
-export async function getModelProvidersHandler(c: Context) {
-  const isPlayground = c.get('playground') === true;
-  if (!isPlayground) {
-    return c.json({ error: 'This API is only available in the playground environment' }, 403);
+export async function updateAgentModelInModelListHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const modelConfigId = c.req.param('modelConfigId');
+    const body = await c.req.json();
+
+    const result = await getOriginalUpdateAgentModelInModelListHandler({
+      mastra,
+      agentId,
+      body,
+      modelConfigId,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error updating agent model in model list');
   }
-  const envVars = process.env;
-  const providers = Object.entries(AllowedProviderKeys);
-  const envKeys = Object.keys(envVars);
-  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
-  const availableProvidersNames = availableProviders.map(([key]) => key);
-  return c.json(availableProvidersNames);
+}
+
+export async function reorderAgentModelListHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+    const body = await c.req.json();
+
+    const result = await getOriginalReorderAgentModelListHandler({
+      mastra,
+      agentId,
+      body,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error reordering agent model list');
+  }
 }

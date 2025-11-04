@@ -1,19 +1,21 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
-import { myWorkflow } from './workflows';
-import { chefModelV2Agent, networkAgent } from './agents/model-v2-agent';
-import { createScorer } from '@mastra/core/scores';
+import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { chefModelV2Agent, errorAgent, networkAgent } from './agents/model-v2-agent';
+import { createScorer } from '@mastra/core/evals';
+import { myWorkflowX } from './workflows/other';
 
 const storage = new LibSQLStore({
   url: 'file:./mastra.db',
 });
 
 const testScorer = createScorer({
-  name: 'scorer1',
+  id: 'scorer1',
+  name: 'My Scorer',
   description: 'Scorer 1',
 }).generateScore(() => {
   return 1;
@@ -21,6 +23,7 @@ const testScorer = createScorer({
 
 export const mastra = new Mastra({
   agents: {
+    errorAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
@@ -35,7 +38,7 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow },
+  workflows: { myWorkflow, myWorkflowX, lessComplexWorkflow },
   bundler: {
     sourcemap: true,
   },
@@ -50,7 +53,9 @@ export const mastra = new Mastra({
   scorers: {
     testScorer,
   },
-  // telemetry: {
-  //   enabled: false,
-  // }
+  observability: {
+    default: {
+      enabled: true,
+    },
+  },
 });

@@ -1,10 +1,16 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
-import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2, UIMessageWithMetadata } from '../agent/message-list';
+import type { EmbeddingModel } from '@internal/ai-sdk-v4/embed';
+import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
+import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
-import type { MastraStorage, PaginationInfo, StorageGetMessagesArg, ThreadSortOptions } from '../storage';
+import type {
+  MastraStorage,
+  StorageGetMessagesArg,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+} from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
@@ -16,6 +22,7 @@ import type {
   MemoryConfig,
   MastraMessageV1,
   WorkingMemoryTemplate,
+  MessageDeleteInput,
 } from './types';
 
 export type MemoryProcessorOpts = {
@@ -41,9 +48,7 @@ export abstract class MemoryProcessor extends MastraBase {
 export const memoryDefaultOptions = {
   lastMessages: 10,
   semanticRecall: false,
-  threads: {
-    generateTitle: false,
-  },
+  generateTitle: false,
   workingMemory: {
     enabled: false,
     template: `
@@ -62,8 +67,13 @@ export const memoryDefaultOptions = {
 } satisfies MemoryConfig;
 
 /**
- * Abstract Memory class that defines the interface for storing and retrieving
- * conversation threads and messages.
+ * Abstract base class for implementing conversation memory systems.
+ *
+ * Key features:
+ * - Thread-based conversation organization with resource association
+ * - Optional vector database integration for semantic similarity search
+ * - Working memory templates for structured conversation state
+ * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
@@ -98,7 +108,13 @@ export abstract class MastraMemory extends MastraBase {
           `Semantic recall requires an embedder to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
         );
       }
-      this.embedder = config.embedder;
+
+      // Convert string embedder to ModelRouterEmbeddingModel
+      if (typeof config.embedder === 'string') {
+        this.embedder = new ModelRouterEmbeddingModel(config.embedder);
+      } else {
+        this.embedder = config.embedder;
+      }
     }
   }
 
@@ -155,11 +171,11 @@ export abstract class MastraMemory extends MastraBase {
    * This will be called when converting tools for the agent.
    * Implementations can override this to provide additional tools.
    */
-  public getTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
     return {};
   }
 
-  protected async createEmbeddingIndex(dimensions?: number): Promise<{ indexName: string }> {
+  protected async createEmbeddingIndex(dimensions?: number, config?: MemoryConfig): Promise<{ indexName: string }> {
     const defaultDimensions = 1536;
     const isDefault = dimensions === defaultDimensions;
     const usedDimensions = dimensions ?? defaultDimensions;
@@ -171,10 +187,28 @@ export abstract class MastraMemory extends MastraBase {
     if (typeof this.vector === `undefined`) {
       throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);
     }
-    await this.vector.createIndex({
+
+    // Get index configuration from memory config
+    const semanticConfig = typeof config?.semanticRecall === 'object' ? config.semanticRecall : undefined;
+    const indexConfig = semanticConfig?.indexConfig;
+
+    // Base parameters that all vector stores support
+    const createParams: any = {
       indexName,
       dimension: usedDimensions,
-    });
+      ...(indexConfig?.metric && { metric: indexConfig.metric }),
+    };
+
+    // Add PG-specific configuration if provided
+    // Only PG vector store will use these parameters
+    if (indexConfig && (indexConfig.type || indexConfig.ivf || indexConfig.hnsw)) {
+      createParams.indexConfig = {};
+      if (indexConfig.type) createParams.indexConfig.type = indexConfig.type;
+      if (indexConfig.ivf) createParams.indexConfig.ivf = indexConfig.ivf;
+      if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
+    }
+
+    await this.vector.createIndex(createParams);
     return { indexName };
   }
 
@@ -182,6 +216,13 @@ export abstract class MastraMemory extends MastraBase {
     if (config?.workingMemory && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
+
+    if (config?.threads?.generateTitle !== undefined) {
+      throw new Error(
+        'The threads.generateTitle option has been moved. Use the top-level generateTitle option instead.',
+      );
+    }
+
     const mergedConfig = deepMerge(this.threadConfig, config || {});
 
     if (config?.workingMemory?.schema) {
@@ -233,17 +274,12 @@ export abstract class MastraMemory extends MastraBase {
     return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
-  abstract rememberMessages({
-    threadId,
-    resourceId,
-    vectorMessageSearch,
-    config,
-  }: {
+  abstract rememberMessages(args: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
+  }): Promise<{ messages: MastraDBMessage[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
@@ -257,28 +293,19 @@ export abstract class MastraMemory extends MastraBase {
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   /**
-   * Retrieves all threads that belong to the specified resource.
-   * @param resourceId - The unique identifier of the resource
-   * @param orderBy - Which timestamp field to sort by (`'createdAt'` or `'updatedAt'`);
-   *                  defaults to `'createdAt'`
-   * @param sortDirection - Sort order for the results (`'ASC'` or `'DESC'`);
-   *                        defaults to `'DESC'`
-   * @returns Promise resolving to an array of matching threads; resolves to an empty array
-   *          if the resource has no threads
+   * Lists all threads that belong to the specified resource.
+   * @param args.resourceId - The unique identifier of the resource
+   * @param args.offset - The number of threads to skip (for pagination)
+   * @param args.limit - The maximum number of threads to return
+   * @param args.orderBy - Optional sorting configuration with `field` (`'createdAt'` or `'updatedAt'`)
+   *                       and `direction` (`'ASC'` or `'DESC'`);
+   *                       defaults to `{ field: 'createdAt', direction: 'DESC' }`
+   * @returns Promise resolving to paginated thread results with metadata;
+   *          resolves to an empty array if the resource has no threads
    */
-  abstract getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
-
-  abstract getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+  abstract listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput>;
 
   /**
    * Saves or updates a thread
@@ -299,31 +326,20 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved messages
    */
   abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
-    memoryConfig?: MemoryConfig | undefined;
-    format: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  abstract saveMessages(args: {
-    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV2[] | MastraMessageV1[]>;
+  }): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread
-   * @returns Promise resolving to array of messages and uiMessages
+   * @returns Promise resolving to array of messages in mastra-db format
    */
-  abstract query({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessageWithMetadata[] }>;
+  abstract query(
+    args: StorageGetMessagesArg & {
+      threadConfig?: MemoryConfig;
+    },
+  ): Promise<{ messages: MastraDBMessage[] }>;
 
   /**
    * Helper method to create a new thread
@@ -376,17 +392,7 @@ export abstract class MastraMemory extends MastraBase {
    * @returns Promise resolving to the saved message
    * @deprecated use saveMessages instead
    */
-  async addMessage({
-    threadId,
-    resourceId,
-    config,
-    content,
-    role,
-    type,
-    toolNames,
-    toolCallArgs,
-    toolCallIds,
-  }: {
+  async addMessage(_params: {
     threadId: string;
     resourceId: string;
     config?: MemoryConfig;
@@ -397,22 +403,7 @@ export abstract class MastraMemory extends MastraBase {
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
   }): Promise<MastraMessageV1> {
-    const message: MastraMessageV1 = {
-      id: this.generateId(),
-      content,
-      role,
-      createdAt: new Date(),
-      threadId,
-      resourceId,
-      type,
-      toolNames,
-      toolCallArgs,
-      toolCallIds,
-    };
-
-    const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
-    const list = new MessageList({ threadId, resourceId }).add(savedMessages[0]!, 'memory');
-    return list.get.all.v1()[0]!;
+    throw new Error('addMessage is deprecated. Please use saveMessages instead.');
   }
 
   /**
@@ -485,5 +476,5 @@ export abstract class MastraMemory extends MastraBase {
    * @param messageIds - Array of message IDs to delete
    * @returns Promise that resolves when all messages are deleted
    */
-  abstract deleteMessages(messageIds: string[]): Promise<void>;
+  abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 }

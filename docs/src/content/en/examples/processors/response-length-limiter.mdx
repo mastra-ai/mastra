@@ -1,0 +1,317 @@
+---
+title: "Example: Response Length Limiter | Processors | Mastra Docs"
+description: Example of creating a custom output processor that limits AI response length during streaming to prevent excessively long outputs.
+---
+
+# Response Length Limiter
+
+This example shows how to create a custom output processor that monitors and limits the length of AI responses during streaming. This processor tracks cumulative response length and aborts generation when a specified character limit is reached, helping control costs and response quality.
+
+## Create a custom output processor
+
+A custom output processor in Mastra implements the `Processor` interface with the `processOutputStream` method for streaming responses. This processor tracks the cumulative length of text deltas and terminates the stream when the limit is exceeded.
+
+```typescript title="src/mastra/processors/response-length-limiter.ts" showLineNumbers copy
+import type { Processor } from "@mastra/core/processors";
+import type { ChunkType } from "@mastra/core/stream";
+
+type ResponseLengthLimiterOptions = {
+  maxLength?: number;
+  strategy?: "block" | "warn" | "truncate";
+};
+
+export class ResponseLengthLimiter implements Processor {
+  readonly id = "response-length-limiter";
+  readonly name = "Response Length Limiter";
+  private maxLength: number;
+  private strategy: "block" | "warn" | "truncate";
+
+  constructor(options: ResponseLengthLimiterOptions | number = {}) {
+    if (typeof options === "number") {
+      this.maxLength = options;
+      this.strategy = "block";
+    } else {
+      this.maxLength = options.maxLength ?? 1000;
+      this.strategy = options.strategy ?? "block";
+    }
+  }
+
+  async processOutputStream({
+    part,
+    streamParts,
+    state,
+    abort,
+  }: {
+    part: ChunkType;
+    streamParts: ChunkType[];
+    state: Record<string, unknown>;
+    abort: (reason?: string) => never;
+  }): Promise<ChunkType | null | undefined> {
+    if (!state.cumulativeLength) {
+      state.cumulativeLength = 0;
+    }
+
+    if (part.type === "text-delta") {
+      const newLength = state.cumulativeLength + part.payload.text.length;
+
+      if (newLength > this.maxLength) {
+        switch (this.strategy) {
+          case "block":
+            abort(
+              `Response too long: ${newLength} characters (max: ${this.maxLength})`,
+            );
+            break;
+          case "warn":
+            console.warn(
+              `Warning: Response length ${newLength} exceeds recommended limit of ${this.maxLength} characters`,
+            );
+            state.cumulativeLength = newLength;
+            return part;
+          case "truncate":
+            const remainingChars = this.maxLength - state.cumulativeLength;
+            if (remainingChars > 0) {
+              const truncatedText = part.payload.text.substring(
+                0,
+                remainingChars,
+              );
+              state.cumulativeLength = this.maxLength;
+              return {
+                ...part,
+                payload: { ...part.payload, text: truncatedText },
+              };
+            }
+            return null;
+        }
+      }
+
+      state.cumulativeLength = newLength;
+    }
+
+    return part;
+  }
+}
+```
+
+### Key components
+
+- **Constructor**: Accepts options object or number
+- **Strategy options**: Choose how to handle length violations:
+  - `'block'`: Stop generation and abort the stream (default)
+  - `'warn'`: Log warning but continue streaming
+  - `'truncate'`: Cut off text at the exact limit
+- **State tracking**: Uses processor state to track cumulative text length across stream parts
+- **Text delta filtering**: Only counts `text-delta` parts in the character limit
+- **Dynamic handling**: Applies the chosen strategy when limits are exceeded
+
+### Using the processor
+
+Using the options object approach with explicit strategy configuration:
+
+```typescript title="src/mastra/agents/blocking-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "../processors/response-length-limiter";
+
+export const blockingAgent = new Agent({
+  id: "blocking-agent",
+  name: "Blocking Agent",
+  instructions: "You are a helpful assistant with response length limits",
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter({ maxLength: 1000, strategy: "block" }),
+  ],
+});
+```
+
+Using the simple number approach (defaults to 'block' strategy):
+
+```typescript title="src/mastra/agents/simple-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "../processors/response-length-limiter";
+
+export const simpleAgent = new Agent({
+  id: "simple-agent",
+  name: "Simple Agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o",
+  outputProcessors: [new ResponseLengthLimiter(300)],
+});
+```
+
+## High example (within limits)
+
+This example shows a response that stays within the configured character limit and streams successfully to completion.
+
+```typescript title="src/example-high-response-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+
+// Create agent with generous response limit
+export const agent = new Agent({
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
+  instructions: "You are a helpful assistant. Keep responses concise.",
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter(300), // 300 character limit
+  ],
+});
+
+const result = await agent.generate("What is the capital of France?");
+console.log(result.text);
+console.log("Character count:", result.text.length);
+```
+
+### High example output
+
+The response completes successfully because it stays under the 300-character limit:
+
+```typescript
+"The capital of France is Paris. It's located in the north-central part of the country and serves as the political, economic, and cultural center of France."
+
+Character count: 156
+```
+
+## Partial example (reaches limits)
+
+This example shows what happens when a response reaches exactly the character limit during generation.
+
+```typescript title="src/example-partial-response-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+
+// Reuse same agent but with stricter response limit
+export const agent = new Agent({
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
+  instructions: "You are a helpful assistant.",
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter(200), // Strict 200 character limit
+  ],
+});
+
+const result = await agent.generate("Explain machine learning in detail.");
+
+if (result.tripwire) {
+  console.log("Response blocked:", result.tripwireReason);
+  console.log("Partial response received:", result.text);
+} else {
+  console.log(result.text);
+}
+console.log("Character count:", result.text.length);
+```
+
+### Partial example output
+
+The response is cut off when it hits the 200-character limit:
+
+```typescript
+Response blocked: Response too long: 201 characters (max: 200)
+Partial response received: "Machine learning is a subset of artificial intelligence that enables computers to learn and improve from experience without being explicitly programmed. It uses algori"
+Character count: 200
+```
+
+## Low example (exceeds limits with streaming)
+
+This example demonstrates streaming behavior when the response limit is exceeded.
+
+```typescript title="src/example-low-response-length.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ResponseLengthLimiter } from "./mastra/processors/response-length-limiter";
+
+// Reuse same agent but with very strict response limit
+export const agent = new Agent({
+  id: "response-limited-agent",
+  name: "Response Limited Agent",
+  instructions:
+    "You are a verbose assistant who provides detailed explanations.",
+  model: "openai/gpt-4o",
+  outputProcessors: [
+    new ResponseLengthLimiter(100), // Very strict 100 character limit
+  ],
+});
+
+const stream = await agent.stream(
+  "Write a comprehensive essay about artificial intelligence.",
+);
+
+let responseText = "";
+let wasBlocked = false;
+let blockReason = "";
+
+for await (const part of stream.fullStream) {
+  if (part.type === "text-delta") {
+    responseText += part.payload.text;
+    process.stdout.write(part.payload.text);
+  } else if (part.type === "tripwire") {
+    wasBlocked = true;
+    blockReason = part.payload.tripwireReason;
+    console.log("\n\nStream blocked:", blockReason);
+    break;
+  }
+}
+
+if (wasBlocked) {
+  console.log("Final response length:", responseText.length);
+  console.log("Reason:", blockReason);
+}
+```
+
+### Low example output
+
+The stream is blocked when the response exceeds the 100-character limit:
+
+```typescript
+Artificial intelligence represents one of the most transformative technologies of our time. It encom
+
+Stream blocked: Response too long: 101 characters (max: 100)
+Final response length: 100
+Reason: Response too long: 101 characters (max: 100)
+```
+
+## Understanding the results
+
+When using `ResponseLengthLimiter`, the processor:
+
+### Successful processing
+
+- **Within limits**: Responses under the character limit stream normally to completion
+- **Real-time tracking**: Monitors length incrementally as text deltas are generated
+- **State persistence**: Maintains cumulative count across all stream parts
+
+### Blocked processing
+
+- **Exceeded limits**: Generation stops immediately when limit is reached
+- **Tripwire flag**: `result.tripwire = true` or stream emits `tripwire` chunk
+- **Partial content**: Users receive content generated up to the block point
+- **No exceptions**: Check `result.tripwire` or handle `tripwire` chunks in streams
+
+### Stream behavior
+
+- **Text-delta counting**: Only text content counts toward the limit
+- **Other parts ignored**: Non-text parts (like function calls) don't affect the counter
+- **Immediate termination**: No additional content is generated after abort
+
+### Configuration options
+
+- **maxLength**: Set the character limit (default: 1000)
+- **Per-agent limits**: Different agents can have different response limits
+- **Runtime overrides**: Can be overridden per-call if needed
+
+### Best practices
+
+- Set limits based on your use case (summaries vs. detailed explanations)
+- Consider user experience when responses are truncated
+- Combine with input processors for comprehensive length control
+- Monitor abort rates to adjust limits appropriately
+- Implement graceful handling of aborted responses in your UI
+
+### Use cases
+
+- **Cost control**: Prevent unexpectedly expensive long responses
+- **UI constraints**: Ensure responses fit within specific display areas
+- **Quality control**: Encourage concise, focused answers
+- **Performance**: Reduce latency for applications requiring quick responses
+- **Rate limiting**: Control resource usage across multiple concurrent requests
+
+This processor is particularly valuable for applications that need predictable response lengths, whether for cost management, user interface constraints, or maintaining consistent response quality.

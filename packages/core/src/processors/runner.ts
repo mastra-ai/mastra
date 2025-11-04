@@ -1,32 +1,61 @@
-import type { MastraMessageV2, MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import type { TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
-import type { ChunkType } from '../stream';
+import { AISpanType } from '../observability';
+import type { AISpan, TracingContext } from '../observability';
+import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
 
 /**
  * Implementation of processor state management
  */
-export class ProcessorState {
+export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
-  public streamParts: ChunkType[] = [];
+  public streamParts: ChunkType<OUTPUT>[] = [];
+  public span?: AISpan<AISpanType.PROCESSOR_RUN>;
 
-  constructor(_processorName: string) {}
+  constructor(options: { processorName: string; tracingContext?: TracingContext; processorIndex?: number }) {
+    const { processorName, tracingContext, processorIndex } = options;
+    const currentSpan = tracingContext?.currentSpan;
+
+    // Find the AGENT_RUN span by walking up the parent chain
+    const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+    this.span = parentSpan?.createChildSpan({
+      type: AISpanType.PROCESSOR_RUN,
+      name: `output processor: ${processorName}`,
+      attributes: {
+        processorName: processorName,
+        processorType: 'output',
+        processorIndex: processorIndex ?? 0,
+      },
+      input: {
+        streamParts: [],
+        state: {},
+        totalChunks: 0,
+      },
+    });
+  }
 
   // Internal methods for the runner
-  addPart(part: ChunkType): void {
+  addPart(part: ChunkType<OUTPUT>): void {
     // Extract text from text-delta chunks for accumulated text
     if (part.type === 'text-delta') {
       this.accumulatedText += part.payload.text;
     }
     this.streamParts.push(part);
+
+    if (this.span) {
+      this.span.input = {
+        streamParts: this.streamParts,
+        state: this.customState,
+        totalChunks: this.streamParts.length,
+        accumulatedText: this.accumulatedText,
+      };
+    }
   }
 }
-
-export type ProcessorRunnerMode = 'stream' | 'result' | false;
 
 export class ProcessorRunner {
   public readonly inputProcessors: Processor[];
@@ -51,16 +80,12 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
-  async runOutputProcessors(
-    messageList: MessageList,
-    tracingContext?: TracingContext,
-    telemetry?: any,
-  ): Promise<MessageList> {
-    const responseMessages = messageList.clear.response.v2();
+  async runOutputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
+    const responseMessages = messageList.clear.response.db();
 
-    let processableMessages: MastraMessageV2[] = [...responseMessages];
+    let processableMessages: MastraDBMessage[] = [...responseMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
@@ -69,7 +94,7 @@ export class ProcessorRunner {
 
     for (const [index, processor] of this.outputProcessors.entries()) {
       const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.name}`);
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
 
       ctx.abort = abort;
@@ -82,28 +107,26 @@ export class ProcessorRunner {
         continue;
       }
 
-      if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
-      } else {
-        await telemetry.traceMethod(
-          async () => {
-            processableMessages = await processMethod({
-              messages: processableMessages,
-              abort: ctx.abort,
-              tracingContext,
-            });
-            return processableMessages;
-          },
-          {
-            spanName: `agent.outputProcessor.${processor.name}`,
-            attributes: {
-              'processor.name': processor.name,
-              'processor.index': index.toString(),
-              'processor.total': this.outputProcessors.length.toString(),
-            },
-          },
-        )();
-      }
+      const currentSpan = tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: AISpanType.PROCESSOR_RUN,
+        name: `output processor: ${processor.id}`,
+        attributes: {
+          processorName: processor.name ?? processor.id,
+          processorType: 'output',
+          processorIndex: index,
+        },
+        input: processableMessages,
+      });
+
+      processableMessages = await processMethod({
+        messages: processableMessages,
+        abort: ctx.abort,
+        tracingContext: { currentSpan: processorSpan },
+      });
+
+      processorSpan?.end({ output: processableMessages });
     }
 
     if (processableMessages.length > 0) {
@@ -116,12 +139,12 @@ export class ProcessorRunner {
   /**
    * Process a stream part through all output processors with state management
    */
-  async processPart(
-    part: ChunkType,
-    processorStates: Map<string, ProcessorState>,
+  async processPart<OUTPUT extends OutputSchema>(
+    part: ChunkType<OUTPUT>,
+    processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
   ): Promise<{
-    part: ChunkType | null | undefined;
+    part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
     reason?: string;
   }> {
@@ -130,58 +153,94 @@ export class ProcessorRunner {
     }
 
     try {
-      let processedPart: ChunkType | null | undefined = part;
+      let processedPart: ChunkType<OUTPUT> | null | undefined = part;
+      const isFinishChunk = part.type === 'finish';
 
-      for (const processor of this.outputProcessors) {
+      for (const [index, processor] of this.outputProcessors.entries()) {
         try {
           if (processor.processOutputStream && processedPart) {
             // Get or create state for this processor
-            let state = processorStates.get(processor.name);
+            let state = processorStates.get(processor.id);
             if (!state) {
-              state = new ProcessorState(processor.name);
-              processorStates.set(processor.name, state);
+              state = new ProcessorState<OUTPUT>({
+                processorName: processor.name ?? processor.id,
+                tracingContext,
+                processorIndex: index,
+              });
+              processorStates.set(processor.id, state);
             }
 
             // Add the current part to accumulated text
             state.addPart(processedPart);
 
             const result = await processor.processOutputStream({
-              part: processedPart,
-              streamParts: state.streamParts,
+              part: processedPart as ChunkType,
+              streamParts: state.streamParts as ChunkType[],
               state: state.customState,
               abort: (reason?: string) => {
-                throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
+                throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
-              tracingContext,
+              tracingContext: { currentSpan: state.span },
             });
 
+            if (state.span && !state.span.isEvent) {
+              state.span.output = result;
+            }
+
             // If result is null, or undefined, don't emit
-            processedPart = result;
+            processedPart = result as ChunkType<OUTPUT> | null | undefined;
           }
         } catch (error) {
           if (error instanceof TripWire) {
+            // End span with blocked metadata
+            const state = processorStates.get(processor.id);
+            state?.span?.end({
+              metadata: { blocked: true, reason: error.message },
+            });
             return { part: null, blocked: true, reason: error.message };
           }
+          // End span with error
+          const state = processorStates.get(processor.id);
+          state?.span?.error({ error: error as Error, endSpan: true });
           // Log error but continue with original part
-          this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.name} failed:`, error);
+          this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.id} failed:`, error);
+        }
+      }
+
+      // If this was a finish chunk, end all processor spans AFTER processing
+      if (isFinishChunk) {
+        for (const state of processorStates.values()) {
+          if (state.span) {
+            // Preserve the existing output (last processed part) and add metadata
+            const finalOutput = {
+              ...state.span.output,
+              totalChunks: state.streamParts.length,
+              finalState: state.customState,
+            };
+            state.span.end({ output: finalOutput });
+          }
         }
       }
 
       return { part: processedPart, blocked: false };
     } catch (error) {
       this.logger.error(`[Agent:${this.agentName}] - Stream part processing failed:`, error);
+      // End all spans on fatal error
+      for (const state of processorStates.values()) {
+        state.span?.error({ error: error as Error, endSpan: true });
+      }
       return { part, blocked: false };
     }
   }
 
-  async runOutputProcessorsForStream(
-    streamResult: MastraModelOutput,
+  async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
+    streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
         const reader = streamResult.fullStream.getReader();
-        const processorStates = new Map<string, ProcessorState>();
+        const processorStates = new Map<string, ProcessorState<OUTPUT>>();
 
         try {
           while (true) {
@@ -226,16 +285,12 @@ export class ProcessorRunner {
     });
   }
 
-  async runInputProcessors(
-    messageList: MessageList,
-    tracingContext?: TracingContext,
-    telemetry?: any,
-  ): Promise<MessageList> {
-    const userMessages = messageList.clear.input.v2();
+  async runInputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
+    const userMessages = messageList.clear.input.db();
 
-    let processableMessages: MastraMessageV2[] = [...userMessages];
+    let processableMessages: MastraDBMessage[] = [...userMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
@@ -244,7 +299,7 @@ export class ProcessorRunner {
 
     for (const [index, processor] of this.inputProcessors.entries()) {
       const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.name}`);
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
 
       ctx.abort = abort;
@@ -257,32 +312,45 @@ export class ProcessorRunner {
         continue;
       }
 
-      if (!telemetry) {
-        processableMessages = await processMethod({ messages: processableMessages, abort: ctx.abort, tracingContext });
-      } else {
-        await telemetry.traceMethod(
-          async () => {
-            processableMessages = await processMethod({
-              messages: processableMessages,
-              abort: ctx.abort,
-              tracingContext,
-            });
-            return processableMessages;
-          },
-          {
-            spanName: `agent.inputProcessor.${processor.name}`,
-            attributes: {
-              'processor.name': processor.name,
-              'processor.index': index.toString(),
-              'processor.total': this.inputProcessors.length.toString(),
-            },
-          },
-        )();
-      }
+      const currentSpan = tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: AISpanType.PROCESSOR_RUN,
+        name: `input processor: ${processor.id}`,
+        attributes: {
+          processorName: processor.name ?? processor.id,
+          processorType: 'input',
+          processorIndex: index,
+        },
+        input: processableMessages,
+      });
+
+      processableMessages = await processMethod({
+        messages: processableMessages,
+        abort: ctx.abort,
+        tracingContext: { currentSpan: processorSpan },
+      });
+
+      processorSpan?.end({ output: processableMessages });
     }
 
     if (processableMessages.length > 0) {
-      messageList.add(processableMessages, 'user');
+      // Separate system messages from other messages since they need different handling
+      const systemMessages = processableMessages.filter(m => m.role === 'system');
+      const nonSystemMessages = processableMessages.filter(m => m.role !== 'system');
+
+      // Add system messages using addSystem
+      for (const sysMsg of systemMessages) {
+        messageList.addSystem(
+          (sysMsg.content.content as string) ||
+            sysMsg.content.parts.map(p => (p.type === 'text' ? p.text : '')).join('\n'),
+        );
+      }
+
+      // Add non-system messages normally
+      if (nonSystemMessages.length > 0) {
+        messageList.add(nonSystemMessages, 'input');
+      }
     }
 
     return messageList;

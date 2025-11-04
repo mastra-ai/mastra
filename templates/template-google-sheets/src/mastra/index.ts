@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { financialModelingAgent } from './agents/financial-modeling-agent';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { HTTPException } from 'hono/http-exception';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Composio } from '@composio/core';
@@ -33,19 +33,19 @@ export const mastra = new Mastra({
           provider: new MastraProvider(),
         });
 
-        const runtimeContext = c.get('runtimeContext') as RuntimeContext<string | undefined>;
+        const requestContext = c.get('requestContext') as RequestContext<string | undefined>;
 
         if (!process.env.COMPOSIO_AUTH_CONFIG_ID)
           throw new HTTPException(500, {
             message: 'COMPOSIO_AUTH_CONFIG_ID missing',
           });
 
-        // TODO: Retrieve unique user id and set it on the runtime context
+        // TODO: Retrieve unique user id and set it on the request context
         // Consider using Authentication headers for user identification
         // e.g const bearerToken = c.get('Authorization')
         // https://mastra.ai/en/docs/server-db/middleware#common-examples
         const userId = 'unique-user-id';
-        runtimeContext.set('userId', userId);
+        requestContext.set('userId', userId);
 
         // check for active/intiated connection or initiate a new connection to composio
         const connectedAccounts = await composio.connectedAccounts.list({
@@ -56,14 +56,14 @@ export const mastra = new Mastra({
         // active connection
         const activeAccount = connectedAccounts.items.find(item => item.status === 'ACTIVE');
         if (activeAccount) {
-          runtimeContext.set('activeAccount', activeAccount);
+          requestContext.set('activeAccount', activeAccount);
           return await next();
         }
 
         // initiated connection
         const initiatedAccount = connectedAccounts.items.find(item => item.status === 'INITIATED');
         if (initiatedAccount && initiatedAccount.data?.redirectUrl) {
-          runtimeContext.set('redirectUrl', initiatedAccount.data.redirectUrl);
+          requestContext.set('redirectUrl', initiatedAccount.data.redirectUrl);
           return await next();
         }
 
@@ -73,7 +73,7 @@ export const mastra = new Mastra({
           process.env.COMPOSIO_AUTH_CONFIG_ID,
         );
         if (connectionRequest.redirectUrl) {
-          runtimeContext.set('redirectUrl', connectionRequest.redirectUrl);
+          requestContext.set('redirectUrl', connectionRequest.redirectUrl);
           return await next();
         }
 
@@ -82,5 +82,10 @@ export const mastra = new Mastra({
         });
       },
     ],
+  },
+  observability: {
+    default: {
+      enabled: true,
+    },
   },
 });

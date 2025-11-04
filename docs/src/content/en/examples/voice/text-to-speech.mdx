@@ -1,19 +1,19 @@
 ---
-title: "Example: Text to Speech | Voice | Mastra Docs"
+title: "Example: Interactive Story Generator | Voice | Mastra Docs"
 description: Example of using Mastra to create a text to speech application.
 ---
 
-import { GithubLink } from "@/components/github-link";
+import GithubLink from "@site/src/components/GithubLink";
 
 # Interactive Story Generator
 
-The following code snippets provide example implementations of Text-to-Speech (TTS) functionality in an interactive story generator application using Next.js with Mastra as a separate backend integration. This example demonstrates how to use the Mastra client-js SDK to connect to your Mastra backend. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/docs/frameworks/next-js) documentation.
+The following code snippets provide example implementations of Text-to-Speech (TTS) functionality in an interactive story generator application using Next.js with Mastra as a separate backend integration. This example demonstrates how to use the Mastra client-js SDK to connect to your Mastra backend. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/docs/frameworks/web-frameworks/next-js) documentation.
 
 ## Creating an Agent with TTS Capabilities
 
 The following example shows how to set up a story generator agent with TTS capabilities on the backend:
 
-```typescript filename="src/mastra/agents/index.ts"
+```typescript title="src/mastra/agents/index.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
@@ -25,6 +25,7 @@ const instructions = `
 `;
 
 export const storyTellerAgent = new Agent({
+  id: "story-teller-agent",
   name: "Story Teller Agent",
   instructions: instructions,
   model: openai("gpt-4o"),
@@ -36,9 +37,9 @@ export const storyTellerAgent = new Agent({
 
 This snippet demonstrates how to register the agent with your Mastra instance:
 
-```typescript filename="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { storyTellerAgent } from "./agents";
 
 export const mastra = new Mastra({
@@ -52,9 +53,9 @@ export const mastra = new Mastra({
 
 ## Connecting to Mastra from the Frontend
 
-Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](../../docs/server-db/mastra-client.mdx).
+Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, check out the [documentation](/docs/server-db/mastra-client).
 
-```typescript filename="src/app/page.tsx"
+```typescript title="src/app/page.tsx"
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
@@ -66,7 +67,7 @@ export const mastraClient = new MastraClient({
 
 This example demonstrates how to get a reference to a Mastra agent, generate story content based on user input, and then convert that content to speech:
 
-```typescript filename="/app/components/StoryManager.tsx"
+```typescript title="/app/components/StoryManager.tsx"
 const handleInitialSubmit = async (formData: FormData) => {
   setIsLoading(true);
   try {
@@ -112,7 +113,7 @@ const handleInitialSubmit = async (formData: FormData) => {
 
 This snippet demonstrates how to handle text-to-speech audio playback by monitoring for new audio data. When audio is received, the code creates a browser-playable URL from the audio blob, assigns it to an audio element, and attempts to play it automatically:
 
-```typescript filename="/app/components/StoryManager.tsx"
+```typescript title="/app/components/StoryManager.tsx"
 useEffect(() => {
   if (!audioRef.current || !audioData) return;
 

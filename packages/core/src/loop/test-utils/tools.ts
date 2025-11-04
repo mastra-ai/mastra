@@ -1,4 +1,4 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from 'ai-v5';
 import {
   convertArrayToReadableStream,
@@ -12,7 +12,7 @@ import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
-import { createTestModel, defaultSettings, testUsage } from './utils';
+import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
@@ -22,8 +22,8 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       beforeEach(async () => {
         result = await loopFn({
           runId,
-          messageList: new MessageList(),
-          model: createTestModel({
+          messageList: createMessageListWithUserMessage(),
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -314,8 +314,8 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       beforeEach(async () => {
         result = await loopFn({
           runId,
-          messageList: new MessageList(),
-          model: createTestModel({
+          messageList: createMessageListWithUserMessage(),
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -531,19 +531,13 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
   describe('tool callbacks', () => {
     it('should invoke callbacks in the correct order', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const recordedCalls: unknown[] = [];
 
       const result = await loopFn({
         runId,
-        model: createTestModel({
+        agentId: 'agent-id',
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -817,66 +811,66 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
   describe('tools with custom schema', () => {
     it('should send tool calls', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ prompt, tools, toolChoice }) => {
-            expect(tools).toStrictEqual([
-              {
-                type: 'function',
-                name: 'tool1',
-                description: undefined,
-                inputSchema: {
-                  additionalProperties: false,
-                  properties: { value: { type: 'string' } },
-                  required: ['value'],
-                  type: 'object',
-                },
-                providerOptions: undefined,
+        agentId: 'agent-id',
+        models: [
+          {
+            maxRetries: 0,
+            id: 'test-model',
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt, tools, toolChoice }) => {
+                expect(tools).toStrictEqual([
+                  {
+                    type: 'function',
+                    name: 'tool1',
+                    description: undefined,
+                    inputSchema: {
+                      additionalProperties: false,
+                      properties: { value: { type: 'string' } },
+                      required: ['value'],
+                      type: 'object',
+                    },
+                    providerOptions: undefined,
+                  },
+                ]);
+
+                expect(toolChoice).toStrictEqual({ type: 'required' });
+
+                expect(prompt).toStrictEqual([
+                  {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
+                  },
+                ]);
+
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'call-1',
+                      toolName: 'tool1',
+                      input: `{ "value": "value" }`,
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
               },
-            ]);
-
-            expect(toolChoice).toStrictEqual({ type: 'required' });
-
-            expect(prompt).toStrictEqual([
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'test-input' }],
-                // providerOptions: undefined,
-              },
-            ]);
-
-            return {
-              stream: convertArrayToReadableStream([
-                {
-                  type: 'response-metadata',
-                  id: 'id-0',
-                  modelId: 'mock-model-id',
-                  timestamp: new Date(0),
-                },
-                {
-                  type: 'tool-call',
-                  toolCallId: 'call-1',
-                  toolName: 'tool1',
-                  input: `{ "value": "value" }`,
-                },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+            }),
           },
-        }),
+        ],
         tools: {
           tool1: {
             inputSchema: jsonSchema<{ value: string }>({
@@ -905,8 +899,8 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     beforeEach(async () => {
       result = await loopFn({
         runId,
-        messageList: new MessageList(),
-        model: createTestModel({
+        messageList: createMessageListWithUserMessage(),
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -981,24 +975,25 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
               "headers": undefined,
               "id": "id-0",
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "type": "finish-step",
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
           },
           {
             "finishReason": "stop",
             "totalUsage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "type": "finish",
@@ -1170,8 +1165,8 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       // This test simulates the exact scenario from issue #7558
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
-        model: createTestModel({
+        messageList: createMessageListWithUserMessage(),
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',

@@ -1,0 +1,33 @@
+{
+  "name": "cloudflare-deployer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.44",
+    "@mastra/core": "deployers-e2e-test",
+    "@mastra/deployer-cloudflare": "deployers-e2e-test",
+    "@mastra/pg": "deployers-e2e-test",
+    "@mastra/loggers": "deployers-e2e-test",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "mastra": "deployers-e2e-test",
+    "wrangler": "^4.42.1",
+    "typescript": "^5.9.2"
+  }
+}

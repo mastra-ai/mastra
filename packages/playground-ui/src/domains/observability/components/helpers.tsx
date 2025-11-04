@@ -1,25 +1,17 @@
 import { format } from 'date-fns';
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
+import { useLinkComponent } from '@/lib/framework';
 
-export function getTraceInfo(
-  trace: AISpanRecord | undefined,
-  computeAgentsLink?: () => string,
-  computeWorkflowsLink?: () => string,
-) {
+export function useTraceInfo(trace: AISpanRecord | undefined) {
+  const { paths } = useLinkComponent();
   if (!trace) {
     return [];
   }
 
-  const agentsLink = computeAgentsLink ? computeAgentsLink() : '/agents';
-  const workflowsLink = computeWorkflowsLink ? computeWorkflowsLink() : '/workflows';
-
-  const agentLink = computeAgentsLink
-    ? `${agentsLink}/${trace?.metadata?.resourceId}`
-    : `/agents/${trace?.metadata?.resourceId}`;
-
-  const workflowLink = computeWorkflowsLink
-    ? `${workflowsLink}/${trace?.metadata?.resourceId}`
-    : `/workflows/${trace?.metadata?.resourceId}`;
+  const agentsLink = paths.agentsLink();
+  const workflowsLink = paths.workflowsLink();
+  const agentLink = paths.agentLink(trace?.metadata?.resourceId!);
+  const workflowLink = paths.workflowLink(trace?.metadata?.resourceId!);
 
   return [
     {

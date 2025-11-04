@@ -9,7 +9,7 @@ const openai = createOpenAI({
 
 const model = openai('gpt-4o');
 
-vi.setConfig({ testTimeout: 50_000, hookTimeout: 50_000 });
+vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 
 describe('TitleExtractor', () => {
   it('can use a custom model from the test suite', async () => {
@@ -48,7 +48,7 @@ describe('TitleExtractor', () => {
     expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
-  it('handles very long input', async () => {
+  it('handles very long input', { retry: 2 }, async () => {
     const extractor = new TitleExtractor({ llm: model });
     const longText = 'A'.repeat(1000);
     const node = new TextNode({ text: longText });

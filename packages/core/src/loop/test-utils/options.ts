@@ -1,11 +1,10 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import type {
   LanguageModelV2CallOptions,
   LanguageModelV2FunctionTool,
   LanguageModelV2ProviderDefinedTool,
 } from '@ai-sdk/provider-v5';
 import { stepCountIs, tool } from 'ai-v5';
-import type { TextStreamPart } from 'ai-v5';
 import {
   convertArrayToReadableStream,
   convertReadableStreamToArray,
@@ -15,29 +14,29 @@ import {
 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
-import { MockTracer } from './mockTracer';
-import { createTestModel, testUsage, defaultSettings, modelWithSources, modelWithFiles, testUsage2 } from './utils';
+import type { ChunkType } from '../../stream/types';
+import {
+  createTestModels,
+  testUsage,
+  defaultSettings,
+  modelWithSources,
+  modelWithFiles,
+  testUsage2,
+  createMessageListWithUserMessage,
+} from './utils';
 
 export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('options.abortSignal', () => {
     it('should forward abort signal to tool execution during streaming', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const abortController = new AbortController();
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',
@@ -62,6 +61,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         options: {
           abortSignal: abortController.signal,
         },
+        agentId: 'agent-id',
       });
 
       await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
@@ -75,6 +75,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           toolCallId: 'call-1',
           messages: expect.any(Array),
           writableStream: expect.any(Object),
+          resumeData: undefined,
+          suspend: expect.any(Function),
         },
       );
     });
@@ -82,30 +84,33 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.onError', () => {
     it('should invoke onError', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result: Array<{ error: unknown }> = [];
 
       const resultObject = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async () => {
-            throw new Error('test error');
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                throw new Error('test error');
+              },
+            }),
           },
-        }),
+        ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onError(event) {
             result.push(event);
           },
         },
+        agentId: 'agent-id',
       });
 
       await resultObject.aisdk.v5.consumeStream();
@@ -116,45 +121,45 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.providerMetadata', () => {
     it('should pass provider metadata to model', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ providerOptions }) => {
-            expect(providerOptions).toStrictEqual({
-              aProvider: { someKey: 'someValue' },
-            });
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async ({ providerOptions }) => {
+                expect(providerOptions).toStrictEqual({
+                  aProvider: { someKey: 'someValue' },
+                });
 
-            return {
-              stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                {
-                  type: 'text-delta',
-                  id: '1',
-                  delta: 'provider metadata test',
-                },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'text-start', id: '1' },
+                    {
+                      type: 'text-delta',
+                      id: '1',
+                      delta: 'provider metadata test',
+                    },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
+              },
+            }),
           },
-        }),
+        ],
         messageList,
         providerOptions: {
           aProvider: { someKey: 'someValue' },
         },
+        agentId: 'agent-id',
       });
 
       expect(await convertAsyncIterableToArray(result.textStream as any)).toEqual(['provider metadata test']);
@@ -163,39 +168,38 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.activeTools', () => {
     it('should filter available tools to only the ones in activeTools', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       let tools: (LanguageModelV2FunctionTool | LanguageModelV2ProviderDefinedTool)[] | undefined;
 
       const result = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async ({ tools: toolsArg }) => {
-            tools = toolsArg;
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async ({ tools: toolsArg }) => {
+                tools = toolsArg;
 
-            return {
-              stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: `world!` },
-                { type: 'text-end', id: '1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            };
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'Hello' },
+                    { type: 'text-delta', id: '1', delta: ', ' },
+                    { type: 'text-delta', id: '1', delta: `world!` },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsage,
+                    },
+                  ]),
+                };
+              },
+            }),
           },
-        }),
+        ],
         tools: {
           tool1: {
             inputSchema: z.object({ value: z.string() }),
@@ -210,6 +214,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         options: {
           activeTools: ['tool1'],
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -248,20 +253,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     let stepInputs: Array<any>;
 
     beforeEach(() => {
-      tracer = new MockTracer();
       stepInputs = [];
     });
 
     describe('2 steps: initial, tool-result', () => {
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         result = undefined as any;
         onFinishResult = undefined as any;
@@ -270,66 +267,72 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         let responseCount = 0;
         result = await loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async ({ prompt, tools, toolChoice }) => {
-              stepInputs.push({ prompt, tools, toolChoice });
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async ({ prompt, tools, toolChoice }) => {
+                  stepInputs.push({ prompt, tools, toolChoice });
 
-              switch (responseCount++) {
-                case 0: {
-                  return {
-                    stream: convertArrayToReadableStream([
-                      {
-                        type: 'response-metadata',
-                        id: 'id-0',
-                        modelId: 'mock-model-id',
-                        timestamp: new Date(0),
-                      },
-                      { type: 'reasoning-start', id: '0' },
-                      { type: 'reasoning-delta', id: '0', delta: 'thinking' },
-                      { type: 'reasoning-end', id: '0' },
-                      {
-                        type: 'tool-call',
-                        id: 'call-1',
-                        toolCallId: 'call-1',
-                        toolName: 'tool1',
-                        input: `{ "value": "value" }`,
-                      },
-                      {
-                        type: 'finish',
-                        finishReason: 'tool-calls',
-                        usage: testUsage,
-                      },
-                    ]),
-                    response: { headers: { call: '1' } },
-                  };
-                }
-                case 1: {
-                  return {
-                    stream: convertArrayToReadableStream([
-                      {
-                        type: 'response-metadata',
-                        id: 'id-1',
-                        modelId: 'mock-model-id',
-                        timestamp: new Date(1000),
-                      },
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: 'Hello, ' },
-                      { type: 'text-delta', id: '1', delta: `world!` },
-                      { type: 'text-end', id: '1' },
-                      {
-                        type: 'finish',
-                        finishReason: 'stop',
-                        usage: testUsage2,
-                      },
-                    ]),
-                    response: { headers: { call: '2' } },
-                  };
-                }
-                default:
-                  throw new Error(`Unexpected response count: ${responseCount}`);
-              }
+                  switch (responseCount++) {
+                    case 0: {
+                      return {
+                        stream: convertArrayToReadableStream([
+                          {
+                            type: 'response-metadata',
+                            id: 'id-0',
+                            modelId: 'mock-model-id',
+                            timestamp: new Date(0),
+                          },
+                          { type: 'reasoning-start', id: '0' },
+                          { type: 'reasoning-delta', id: '0', delta: 'thinking' },
+                          { type: 'reasoning-end', id: '0' },
+                          {
+                            type: 'tool-call',
+                            id: 'call-1',
+                            toolCallId: 'call-1',
+                            toolName: 'tool1',
+                            input: `{ "value": "value" }`,
+                          },
+                          {
+                            type: 'finish',
+                            finishReason: 'tool-calls',
+                            usage: testUsage,
+                          },
+                        ]),
+                        response: { headers: { call: '1' } },
+                      };
+                    }
+                    case 1: {
+                      return {
+                        stream: convertArrayToReadableStream([
+                          {
+                            type: 'response-metadata',
+                            id: 'id-1',
+                            modelId: 'mock-model-id',
+                            timestamp: new Date(1000),
+                          },
+                          { type: 'text-start', id: '1' },
+                          { type: 'text-delta', id: '1', delta: 'Hello, ' },
+                          { type: 'text-delta', id: '1', delta: `world!` },
+                          { type: 'text-end', id: '1' },
+                          {
+                            type: 'finish',
+                            finishReason: 'stop',
+                            usage: testUsage2,
+                          },
+                        ]),
+                        response: { headers: { call: '2' } },
+                      };
+                    }
+                    default:
+                      throw new Error(`Unexpected response count: ${responseCount}`);
+                  }
+                },
+              }),
             },
-          }),
+          ],
           tools: {
             tool1: {
               inputSchema: z.object({ value: z.string() }),
@@ -346,12 +349,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               onStepFinishResults.push(event);
             },
           },
-          telemetry_settings: { isEnabled: true, tracer },
           stopWhen: stepCountIs(3),
           _internal: {
             now: mockValues(0, 100, 500, 600, 1000),
             generateId: mockId({ prefix: 'id' }),
           },
+          agentId: 'agent-id',
         });
       });
 
@@ -527,14 +530,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },
@@ -574,6 +580,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "id": "id-1",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
                 "timestamp": 1970-01-01T00:00:01.000Z,
               },
               "type": "finish-step",
@@ -1283,11 +1294,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         });
       });
 
-      it('should record telemetry data for each step', async () => {
-        await result.aisdk.v5.consumeStream();
-        expect(tracer.jsonSpans).toMatchSnapshot();
-      });
-
       it('should have correct ui message stream', async () => {
         expect(await convertReadableStreamToArray(result.aisdk.v5.toUIMessageStream())).toMatchInlineSnapshot(`
           [
@@ -1369,73 +1375,73 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       }>;
 
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         doStreamCalls = [];
         prepareStepCalls = [];
 
         result = await loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async options => {
-              doStreamCalls.push(options);
-              switch (doStreamCalls.length) {
-                case 1:
-                  return {
-                    stream: convertArrayToReadableStream([
-                      {
-                        type: 'response-metadata',
-                        id: 'id-0',
-                        modelId: 'mock-model-id',
-                        timestamp: new Date(0),
-                      },
-                      {
-                        type: 'tool-call',
-                        toolCallId: 'call-1',
-                        toolName: 'tool1',
-                        input: `{ "value": "value" }`,
-                      },
-                      {
-                        type: 'finish',
-                        finishReason: 'tool-calls',
-                        usage: testUsage,
-                      },
-                    ]),
-                    response: { headers: { call: '1' } },
-                  };
-                case 2:
-                  return {
-                    stream: convertArrayToReadableStream([
-                      {
-                        type: 'response-metadata',
-                        id: 'id-1',
-                        modelId: 'mock-model-id',
-                        timestamp: new Date(1000),
-                      },
-                      { type: 'text-start', id: '2' },
-                      { type: 'text-delta', id: '2', delta: 'Hello, ' },
-                      { type: 'text-delta', id: '2', delta: `world!` },
-                      { type: 'text-end', id: '2' },
-                      {
-                        type: 'finish',
-                        finishReason: 'stop',
-                        usage: testUsage2,
-                      },
-                    ]),
-                    response: { headers: { call: '2' } },
-                  };
-                default:
-                  throw new Error(`Unexpected response count: ${doStreamCalls.length}`);
-              }
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async options => {
+                  doStreamCalls.push(options);
+                  switch (doStreamCalls.length) {
+                    case 1:
+                      return {
+                        stream: convertArrayToReadableStream([
+                          {
+                            type: 'response-metadata',
+                            id: 'id-0',
+                            modelId: 'mock-model-id',
+                            timestamp: new Date(0),
+                          },
+                          {
+                            type: 'tool-call',
+                            toolCallId: 'call-1',
+                            toolName: 'tool1',
+                            input: `{ "value": "value" }`,
+                          },
+                          {
+                            type: 'finish',
+                            finishReason: 'tool-calls',
+                            usage: testUsage,
+                          },
+                        ]),
+                        response: { headers: { call: '1' } },
+                      };
+                    case 2:
+                      return {
+                        stream: convertArrayToReadableStream([
+                          {
+                            type: 'response-metadata',
+                            id: 'id-1',
+                            modelId: 'mock-model-id',
+                            timestamp: new Date(1000),
+                          },
+                          { type: 'text-start', id: '2' },
+                          { type: 'text-delta', id: '2', delta: 'Hello, ' },
+                          { type: 'text-delta', id: '2', delta: `world!` },
+                          { type: 'text-end', id: '2' },
+                          {
+                            type: 'finish',
+                            finishReason: 'stop',
+                            usage: testUsage2,
+                          },
+                        ]),
+                        response: { headers: { call: '2' } },
+                      };
+                    default:
+                      throw new Error(`Unexpected response count: ${doStreamCalls.length}`);
+                  }
+                },
+              }),
             },
-          }),
+          ],
+          agentId: 'agent-id',
           tools: {
             tool1: tool({
               inputSchema: z.object({ value: z.string() }),
@@ -1623,7 +1629,109 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
               ],
               "stepNumber": 0,
-              "steps": [],
+              "steps": [
+                DefaultStepResult {
+                  "content": [],
+                  "finishReason": undefined,
+                  "providerMetadata": undefined,
+                  "request": {},
+                  "response": {
+                    "headers": {
+                      "call": "1",
+                    },
+                    "id": "id-0",
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [],
+                        "role": "tool",
+                      },
+                    ],
+                    "modelId": "mock-model-id",
+                    "timestamp": 1970-01-01T00:00:00.000Z,
+                  },
+                  "usage": {
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "totalTokens": 13,
+                  },
+                  "warnings": [],
+                },
+                DefaultStepResult {
+                  "content": [],
+                  "finishReason": undefined,
+                  "providerMetadata": undefined,
+                  "request": {},
+                  "response": {
+                    "headers": {
+                      "call": "2",
+                    },
+                    "id": "id-1",
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [
+                          {
+                            "output": {
+                              "type": "text",
+                              "value": "result1",
+                            },
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-result",
+                          },
+                        ],
+                        "role": "tool",
+                      },
+                      {
+                        "content": [
+                          {
+                            "text": "Hello, world!",
+                            "type": "text",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                    ],
+                    "modelId": "mock-model-id",
+                    "timestamp": 1970-01-01T00:00:01.000Z,
+                  },
+                  "usage": {
+                    "cachedInputTokens": 3,
+                    "inputTokens": 3,
+                    "outputTokens": 10,
+                    "reasoningTokens": 10,
+                    "totalTokens": 23,
+                  },
+                  "warnings": [],
+                },
+              ],
             },
             {
               "messages": [
@@ -1677,45 +1785,38 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "call": "1",
                     },
                     "id": "id-0",
-                    "messages": [],
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [],
+                        "role": "tool",
+                      },
+                    ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
                   "usage": {
-                    "cachedInputTokens": undefined,
                     "inputTokens": 3,
                     "outputTokens": 10,
-                    "reasoningTokens": undefined,
                     "totalTokens": 13,
                   },
                   "warnings": [],
                 },
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                    {
-                      "input": {},
-                      "output": {
-                        "type": "text",
-                        "value": "result1",
-                      },
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-result",
-                    },
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
+                  "content": [],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -1882,7 +1983,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     //       onStepFinish: async event => {
     //         onStepFinishResults.push(event);
     //       },
-    //       experimental_telemetry: { isEnabled: true, tracer },
     //       stopWhen: stepCountIs(3),
     //       _internal: {
     //         now: mockValues(0, 100, 500, 600, 1000),
@@ -2702,142 +2802,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     //     });
     //   });
 
-    //   it('should record telemetry data for each step', async () => {
-    //     await result.consumeStream();
-    //     expect(tracer.jsonSpans).toMatchInlineSnapshot(`
-    //       [
-    //         {
-    //           "attributes": {
-    //             "ai.model.id": "mock-model-id",
-    //             "ai.model.provider": "mock-provider",
-    //             "ai.operationId": "ai.streamText",
-    //             "ai.prompt": "{"prompt":"test-input"}",
-    //             "ai.response.finishReason": "stop",
-    //             "ai.response.text": "Hello, world!",
-    //             "ai.settings.maxRetries": 2,
-    //             "ai.usage.cachedInputTokens": 3,
-    //             "ai.usage.inputTokens": 6,
-    //             "ai.usage.outputTokens": 20,
-    //             "ai.usage.reasoningTokens": 10,
-    //             "ai.usage.totalTokens": 36,
-    //             "operation.name": "ai.streamText",
-    //           },
-    //           "events": [],
-    //           "name": "ai.streamText",
-    //         },
-    //         {
-    //           "attributes": {
-    //             "ai.model.id": "mock-model-id",
-    //             "ai.model.provider": "mock-provider",
-    //             "ai.operationId": "ai.streamText.doStream",
-    //             "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-    //             "ai.prompt.toolChoice": "{"type":"auto"}",
-    //             "ai.prompt.tools": [
-    //               "{"type":"function","name":"tool1","inputSchema":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}",
-    //             ],
-    //             "ai.response.avgOutputTokensPerSecond": 20,
-    //             "ai.response.finishReason": "tool-calls",
-    //             "ai.response.id": "id-0",
-    //             "ai.response.model": "mock-model-id",
-    //             "ai.response.msToFinish": 500,
-    //             "ai.response.msToFirstChunk": 100,
-    //             "ai.response.text": "",
-    //             "ai.response.timestamp": "1970-01-01T00:00:00.000Z",
-    //             "ai.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"value"}}]",
-    //             "ai.settings.maxRetries": 2,
-    //             "ai.usage.inputTokens": 3,
-    //             "ai.usage.outputTokens": 10,
-    //             "ai.usage.totalTokens": 13,
-    //             "gen_ai.request.model": "mock-model-id",
-    //             "gen_ai.response.finish_reasons": [
-    //               "tool-calls",
-    //             ],
-    //             "gen_ai.response.id": "id-0",
-    //             "gen_ai.response.model": "mock-model-id",
-    //             "gen_ai.system": "mock-provider",
-    //             "gen_ai.usage.input_tokens": 3,
-    //             "gen_ai.usage.output_tokens": 10,
-    //             "operation.name": "ai.streamText.doStream",
-    //           },
-    //           "events": [
-    //             {
-    //               "attributes": {
-    //                 "ai.response.msToFirstChunk": 100,
-    //               },
-    //               "name": "ai.stream.firstChunk",
-    //             },
-    //             {
-    //               "attributes": undefined,
-    //               "name": "ai.stream.finish",
-    //             },
-    //           ],
-    //           "name": "ai.streamText.doStream",
-    //         },
-    //         {
-    //           "attributes": {
-    //             "ai.operationId": "ai.toolCall",
-    //             "ai.toolCall.args": "{"value":"value"}",
-    //             "ai.toolCall.id": "call-1",
-    //             "ai.toolCall.name": "tool1",
-    //             "ai.toolCall.result": ""result1"",
-    //             "operation.name": "ai.toolCall",
-    //           },
-    //           "events": [],
-    //           "name": "ai.toolCall",
-    //         },
-    //         {
-    //           "attributes": {
-    //             "ai.model.id": "mock-model-id",
-    //             "ai.model.provider": "mock-provider",
-    //             "ai.operationId": "ai.streamText.doStream",
-    //             "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]},{"role":"assistant","content":[{"type":"reasoning","text":"thinking"},{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"value"}}]},{"role":"tool","content":[{"type":"tool-result","toolCallId":"call-1","toolName":"tool1","output":{"type":"text","value":"RESULT1"}}]}]",
-    //             "ai.prompt.toolChoice": "{"type":"auto"}",
-    //             "ai.prompt.tools": [
-    //               "{"type":"function","name":"tool1","inputSchema":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}",
-    //             ],
-    //             "ai.response.avgOutputTokensPerSecond": 25,
-    //             "ai.response.finishReason": "stop",
-    //             "ai.response.id": "id-1",
-    //             "ai.response.model": "mock-model-id",
-    //             "ai.response.msToFinish": 400,
-    //             "ai.response.msToFirstChunk": 400,
-    //             "ai.response.text": "Hello, world!",
-    //             "ai.response.timestamp": "1970-01-01T00:00:01.000Z",
-    //             "ai.settings.maxRetries": 2,
-    //             "ai.usage.cachedInputTokens": 3,
-    //             "ai.usage.inputTokens": 3,
-    //             "ai.usage.outputTokens": 10,
-    //             "ai.usage.reasoningTokens": 10,
-    //             "ai.usage.totalTokens": 23,
-    //             "gen_ai.request.model": "mock-model-id",
-    //             "gen_ai.response.finish_reasons": [
-    //               "stop",
-    //             ],
-    //             "gen_ai.response.id": "id-1",
-    //             "gen_ai.response.model": "mock-model-id",
-    //             "gen_ai.system": "mock-provider",
-    //             "gen_ai.usage.input_tokens": 3,
-    //             "gen_ai.usage.output_tokens": 10,
-    //             "operation.name": "ai.streamText.doStream",
-    //           },
-    //           "events": [
-    //             {
-    //               "attributes": {
-    //                 "ai.response.msToFirstChunk": 400,
-    //               },
-    //               "name": "ai.stream.firstChunk",
-    //             },
-    //             {
-    //               "attributes": undefined,
-    //               "name": "ai.stream.finish",
-    //             },
-    //           ],
-    //           "name": "ai.streamText.doStream",
-    //         },
-    //       ]
-    //     `);
-    //   });
-
     //   it('should have correct ui message stream', async () => {
     //     expect(await convertReadableStreamToArray(result.toUIMessageStream())).toMatchInlineSnapshot(`
     //         [
@@ -2915,66 +2879,66 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       }>;
 
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
 
         stopConditionCalls = [];
 
         let responseCount = 0;
         result = await loopFn({
           runId,
-          model: new MockLanguageModelV2({
-            doStream: async () => {
-              switch (responseCount++) {
-                case 0: {
-                  return {
-                    stream: convertArrayToReadableStream([
-                      {
-                        type: 'response-metadata',
-                        id: 'id-0',
-                        modelId: 'mock-model-id',
-                        timestamp: new Date(0),
-                      },
-                      {
-                        type: 'reasoning-start',
-                        id: 'id-0',
-                      },
-                      {
-                        type: 'reasoning-delta',
-                        id: 'id-0',
-                        delta: 'thinking',
-                      },
-                      {
-                        type: 'reasoning-end',
-                        id: 'id-0',
-                      },
-                      {
-                        type: 'tool-call',
-                        id: 'call-1',
-                        toolCallId: 'call-1',
-                        toolName: 'tool1',
-                        input: `{ "value": "value" }`,
-                      },
-                      {
-                        type: 'finish',
-                        finishReason: 'tool-calls',
-                        usage: testUsage,
-                      },
-                    ]),
-                    response: { headers: { call: '1' } },
-                  };
-                }
-                default:
-                  throw new Error(`Unexpected response count: ${responseCount}`);
-              }
+          agentId: 'agent-id',
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => {
+                  switch (responseCount++) {
+                    case 0: {
+                      return {
+                        stream: convertArrayToReadableStream([
+                          {
+                            type: 'response-metadata',
+                            id: 'id-0',
+                            modelId: 'mock-model-id',
+                            timestamp: new Date(0),
+                          },
+                          {
+                            type: 'reasoning-start',
+                            id: 'id-0',
+                          },
+                          {
+                            type: 'reasoning-delta',
+                            id: 'id-0',
+                            delta: 'thinking',
+                          },
+                          {
+                            type: 'reasoning-end',
+                            id: 'id-0',
+                          },
+                          {
+                            type: 'tool-call',
+                            id: 'call-1',
+                            toolCallId: 'call-1',
+                            toolName: 'tool1',
+                            input: `{ "value": "value" }`,
+                          },
+                          {
+                            type: 'finish',
+                            finishReason: 'tool-calls',
+                            usage: testUsage,
+                          },
+                        ]),
+                        response: { headers: { call: '1' } },
+                      };
+                    }
+                    default:
+                      throw new Error(`Unexpected response count: ${responseCount}`);
+                  }
+                },
+              }),
             },
-          }),
+          ],
           tools: {
             tool1: {
               inputSchema: z.object({ value: z.string() }),
@@ -2982,7 +2946,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             },
           },
           messageList,
-          telemetry_settings: { isEnabled: true, tracer },
           stopWhen: [
             ({ steps }) => {
               stopConditionCalls.push({ number: 0, steps });
@@ -3196,14 +3159,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('options.onFinish', () => {
     it.todo('should send correct information', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
 
       let result!: any;
 
       const resultObject = await loopFn({
         runId,
         messageList,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -3465,13 +3428,13 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it.todo('should send sources', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
       let result!: any;
 
       const resultObject = await loopFn({
         runId,
         messageList,
-        model: modelWithSources,
+        models: [{ id: 'test-model', maxRetries: 0, model: modelWithSources }],
         options: {
           onFinish: async event => {
             result = event as unknown as typeof result;
@@ -3655,8 +3618,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const resultObject = await loopFn({
         runId,
-        messageList: new MessageList(),
-        model: modelWithFiles,
+        messageList: createMessageListWithUserMessage(),
+        models: [{ id: 'test-model', maxRetries: 0, model: modelWithFiles }],
         options: {
           onFinish: async event => {
             result = event as unknown as typeof result;
@@ -3836,22 +3799,25 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should not prevent error from being forwarded', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
         runId,
-        model: new MockLanguageModelV2({
-          doStream: async () => {
-            throw new Error('test error');
+        agentId: 'agent-id',
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                throw new Error('test error');
+              },
+            }),
           },
-        }),
+        ],
+        modelSettings: {
+          maxRetries: 0,
+        },
         messageList,
         options: {
           onFinish() {}, // just defined; do nothing
@@ -3880,38 +3846,17 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   });
 
   describe('options.onChunk', () => {
-    let result: Array<
-      Extract<
-        TextStreamPart<any>,
-        {
-          type:
-            | 'text-delta'
-            | 'reasoning-delta'
-            | 'source'
-            | 'tool-call'
-            | 'tool-input-start'
-            | 'tool-input-delta'
-            | 'tool-result'
-            | 'raw';
-        }
-      >
-    >;
+    let result: Array<ChunkType>;
 
     beforeEach(async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test-input',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       result = [];
 
       const resultObject = await loopFn({
         runId,
-        model: createTestModel({
+        agentId: 'agent-id',
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -3957,8 +3902,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         },
         messageList,
         options: {
-          onChunk(event) {
-            result.push((event as any).chunk);
+          onChunk(chunk) {
+            result.push(chunk);
           },
         },
       });
@@ -3970,86 +3915,126 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(result).toMatchInlineSnapshot(`
         [
           {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello",
+            "from": "AGENT",
+            "payload": {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello",
+            },
+            "runId": "test-run-id",
             "type": "text-delta",
           },
           {
-            "dynamic": false,
-            "id": "2",
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
-            "toolName": "tool1",
-            "type": "tool-input-start",
+            "from": "AGENT",
+            "payload": {
+              "providerExecuted": undefined,
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-input-streaming-start",
           },
           {
-            "delta": "{"value": "",
-            "id": "2",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
+            "from": "AGENT",
+            "payload": {
+              "argsTextDelta": "{"value": "",
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-delta",
           },
           {
-            "id": "3",
-            "providerMetadata": undefined,
-            "text": "Feeling clever",
+            "from": "AGENT",
+            "payload": {
+              "id": "3",
+              "providerMetadata": undefined,
+              "text": "Feeling clever",
+            },
+            "runId": "test-run-id",
             "type": "reasoning-delta",
           },
           {
-            "delta": "test",
-            "id": "2",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": ""}",
-            "id": "2",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "filename": undefined,
-            "id": "123",
-            "mediaType": undefined,
-            "providerMetadata": {
-              "provider": {
-                "custom": "value",
-              },
+            "from": "AGENT",
+            "payload": {
+              "argsTextDelta": "test",
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
             },
-            "sourceType": "url",
-            "title": "Example",
+            "runId": "test-run-id",
+            "type": "tool-call-delta",
+          },
+          {
+            "from": "AGENT",
+            "payload": {
+              "argsTextDelta": ""}",
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-delta",
+          },
+          {
+            "from": "AGENT",
+            "payload": {
+              "filename": undefined,
+              "id": "123",
+              "mimeType": undefined,
+              "providerMetadata": {
+                "provider": {
+                  "custom": "value",
+                },
+              },
+              "sourceType": "url",
+              "title": "Example",
+              "url": "https://example.com",
+            },
+            "runId": "test-run-id",
             "type": "source",
-            "url": "https://example.com",
           },
           {
-            "input": {
-              "value": "test",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": {
-              "provider": {
-                "custom": "value",
+            "from": "AGENT",
+            "payload": {
+              "args": {
+                "value": "test",
               },
+              "providerExecuted": undefined,
+              "providerMetadata": {
+                "provider": {
+                  "custom": "value",
+                },
+              },
+              "toolCallId": "2",
+              "toolName": "tool1",
             },
-            "toolCallId": "2",
-            "toolName": "tool1",
+            "runId": "test-run-id",
             "type": "tool-call",
           },
           {
-            "id": "4",
-            "providerMetadata": undefined,
-            "text": " World",
+            "from": "AGENT",
+            "payload": {
+              "id": "4",
+              "providerMetadata": undefined,
+              "text": " World",
+            },
+            "runId": "test-run-id",
             "type": "text-delta",
           },
           {
-            "input": {
-              "value": "test",
+            "chunk": {
+              "input": {
+                "value": "test",
+              },
+              "output": "test-result",
+              "providerExecuted": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+              "type": "tool-result",
             },
-            "output": "test-result",
-            "providerExecuted": undefined,
-            "toolCallId": "2",
-            "toolName": "tool1",
-            "type": "tool-result",
           },
         ]
       `);
@@ -4108,7 +4093,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('should transform the stream', async () => {
   //         const result = streamText({
-  //           model: createTestModel(),
+  //           models: createTestModels(),
   //           experimental_transform: upperCaseTransform,
   //           prompt: 'test-input',
   //         });
@@ -4118,7 +4103,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.text should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel(),
+  //           models: createTestModels(),
   //           experimental_transform: upperCaseTransform,
   //           prompt: 'test-input',
   //         });
@@ -4130,7 +4115,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.response.messages should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel(),
+  //           models: createTestModels(),
   //           experimental_transform: upperCaseTransform,
   //           prompt: 'test-input',
   //         });
@@ -4159,7 +4144,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.totalUsage should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -4202,7 +4187,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.finishReason should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -4233,7 +4218,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.toolCalls should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
@@ -4282,7 +4267,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.toolResults should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
@@ -4332,7 +4317,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.steps should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               {
   //                 type: 'response-metadata',
@@ -4460,7 +4445,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.request should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               {
   //                 type: 'response-metadata',
@@ -4492,7 +4477,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('result.providerMetadata should be transformed', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               {
   //                 type: 'response-metadata',
@@ -4535,7 +4520,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         let result!: Parameters<Required<Parameters<typeof streamText>[0]>['onFinish']>[0];
 
   //         const resultObject = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               {
   //                 type: 'response-metadata',
@@ -4809,7 +4794,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         let result!: Parameters<Required<Parameters<typeof streamText>[0]>['onStepFinish']>[0];
 
   //         const resultObject = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               {
   //                 type: 'response-metadata',
@@ -4947,56 +4932,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         `);
   //       });
 
-  //       it('telemetry should record transformed data when enabled', async () => {
-  //         const tracer = new MockTracer();
-
-  //         const result = streamText({
-  //           model: createTestModel({
-  //             stream: convertArrayToReadableStream([
-  //               {
-  //                 type: 'response-metadata',
-  //                 id: 'id-0',
-  //                 modelId: 'mock-model-id',
-  //                 timestamp: new Date(0),
-  //               },
-  //               { type: 'text-start', id: '1' },
-  //               { type: 'text-delta', id: '1', delta: 'Hello' },
-  //               { type: 'text-delta', id: '1', delta: ', ' },
-  //               {
-  //                 type: 'tool-call',
-  //                 toolCallId: 'call-1',
-  //                 toolName: 'tool1',
-  //                 input: `{ "value": "value" }`,
-  //               },
-  //               { type: 'text-delta', id: '1', delta: 'world!' },
-  //               { type: 'text-end', id: '1' },
-  //               {
-  //                 type: 'finish',
-  //                 finishReason: 'stop',
-  //                 usage: testUsage,
-  //                 providerMetadata: {
-  //                   testProvider: { testKey: 'testValue' },
-  //                 },
-  //               },
-  //             ]),
-  //           }),
-  //           tools: {
-  //             tool1: tool({
-  //               inputSchema: z.object({ value: z.string() }),
-  //               execute: async ({ value }) => `${value}-result`,
-  //             }),
-  //           },
-  //           prompt: 'test-input',
-  //           experimental_transform: upperCaseTransform,
-  //           experimental_telemetry: { isEnabled: true, tracer },
-  //           _internal: { now: mockValues(0, 100, 500) },
-  //         });
-
-  //         await result.consumeStream();
-
-  //         expect(tracer.jsonSpans).toMatchSnapshot();
-  //       });
-
   //       it('it should send transformed chunks to onChunk', async () => {
   //         const result: Array<
   //           Extract<
@@ -5016,7 +4951,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         > = [];
 
   //         const resultObject = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -5162,7 +5097,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('should transform the stream', async () => {
   //         const result = streamText({
-  //           model: createTestModel(),
+  //           models: createTestModels(),
   //           experimental_transform: [toUppercaseAndAddCommaTransform(), omitCommaTransform()],
   //           prompt: 'test-input',
   //         });
@@ -5228,7 +5163,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('stream should stop when STOP token is encountered', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
@@ -5308,7 +5243,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         let result!: Parameters<Required<Parameters<typeof streamText>[0]>['onStepFinish']>[0];
 
   //         const resultObject = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
@@ -5378,7 +5313,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //     describe('no output', () => {
   //       it('should throw error when accessing partial output stream', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: '{ ' },
@@ -5407,7 +5342,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //     describe('text output', () => {
   //       it('should send partial output stream', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: 'Hello, ' },
@@ -5518,7 +5453,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('should send valid partial text fragments', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: '{ ' },
@@ -5553,7 +5488,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('should send partial output stream', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: '{ ' },
@@ -5586,7 +5521,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('should send partial output stream when last chunk contains content', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: '{ ' },
@@ -5616,7 +5551,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   //       it('should resolve text promise with the correct content', async () => {
   //         const result = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: '{ ' },
@@ -5647,7 +5582,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   //         let result!: Parameters<Required<Parameters<typeof streamText>[0]>['onFinish']>[0];
 
   //         const resultObject = streamText({
-  //           model: createTestModel({
+  //           models: createTestModels({
   //             stream: convertArrayToReadableStream([
   //               { type: 'text-start', id: '1' },
   //               { type: 'text-delta', id: '1', delta: '{ ' },
@@ -5829,16 +5764,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('raw chunks forwarding', () => {
     it('should forward raw chunks when includeRawChunks is enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
-      const modelWithRawChunks = createTestModel({
+      const modelWithRawChunks = createTestModels({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           {
@@ -5866,8 +5794,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
-        model: modelWithRawChunks,
+        models: modelWithRawChunks,
         messageList,
         includeRawChunks: true,
       });
@@ -5888,16 +5817,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should not forward raw chunks when includeRawChunks is disabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
-      const modelWithRawChunks = createTestModel({
+      const modelWithRawChunks = createTestModels({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           {
@@ -5925,8 +5847,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       });
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
-        model: modelWithRawChunks,
+        models: modelWithRawChunks,
         messageList,
         includeRawChunks: false,
       });
@@ -5937,32 +5860,32 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should pass through the includeRawChunks flag correctly to the model', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       let capturedOptions: any;
 
-      const model = new MockLanguageModelV2({
-        doStream: async options => {
-          capturedOptions = options;
+      const models = [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: new MockLanguageModelV2({
+            doStream: async options => {
+              capturedOptions = options;
 
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'finish', finishReason: 'stop', usage: testUsage },
-            ]),
-          };
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'finish', finishReason: 'stop', usage: testUsage },
+                ]),
+              };
+            },
+          }),
         },
-      });
+      ];
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
-        model,
+        models,
         messageList,
         includeRawChunks: true,
       });
@@ -5973,17 +5896,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should call onChunk with raw chunks when includeRawChunks is enabled', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       const onChunkCalls: Array<any> = [];
 
-      const modelWithRawChunks = createTestModel({
+      const modelWithRawChunks = createTestModels({
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           {
@@ -6029,12 +5945,12 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const result = await loopFn({
         runId,
-        model: modelWithRawChunks,
+        agentId: 'agent-id',
+        models: modelWithRawChunks,
         messageList,
         includeRawChunks: true,
         options: {
-          onChunk(event) {
-            const chunk = (event as any).chunk;
+          onChunk(chunk) {
             onChunkCalls.push(chunk);
           },
         },
@@ -6045,45 +5961,59 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(onChunkCalls).toMatchInlineSnapshot(`
         [
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "data": "start",
               "type": "stream-start",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "id": "test-id",
               "modelId": "test-model",
               "type": "response-metadata",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "content": "Hello",
               "type": "text-delta",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "content": ", world!",
               "type": "text-delta",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "reason": "stop",
               "type": "finish",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello, world!",
+            "from": "AGENT",
+            "payload": {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello, world!",
+            },
+            "runId": "test-run-id",
             "type": "text-delta",
           },
         ]
@@ -6091,44 +6021,44 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
     });
 
     it('should pass includeRawChunks flag correctly to the model', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       let capturedOptions: any;
 
-      const model = new MockLanguageModelV2({
-        doStream: async options => {
-          capturedOptions = options;
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              {
-                type: 'response-metadata',
-                id: 'test-id',
-                modelId: 'test-model',
-                timestamp: new Date(0),
-              },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Hello' },
-              { type: 'text-end', id: '1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: testUsage,
-              },
-            ]),
-          };
+      const models = [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: new MockLanguageModelV2({
+            doStream: async options => {
+              capturedOptions = options;
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'response-metadata',
+                    id: 'test-id',
+                    modelId: 'test-model',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: '1' },
+                  { type: 'text-delta', id: '1', delta: 'Hello' },
+                  { type: 'text-end', id: '1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsage,
+                  },
+                ]),
+              };
+            },
+          }),
         },
-      });
+      ];
 
       const result = await loopFn({
+        agentId: 'agent-id',
         runId,
-        model,
+        models,
         messageList,
         includeRawChunks: true,
       });
@@ -6137,8 +6067,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(true);
 
       const result2 = await loopFn({
+        agentId: 'agent-id',
         runId,
-        model,
+        models,
         messageList,
         includeRawChunks: false,
       });
@@ -6147,8 +6078,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(capturedOptions.includeRawChunks).toBe(false);
 
       const result3 = await loopFn({
+        agentId: 'agent-id',
         runId,
-        model,
+        models,
         messageList,
       });
       await result3.aisdk.v5.consumeStream();
@@ -6159,20 +6091,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
   describe('mixed multi content streaming with interleaving parts', () => {
     describe('mixed text and reasoning blocks', () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: 'test prompt',
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
       let result: any;
 
       beforeEach(async () => {
         result = await loopFn({
           runId,
-          model: createTestModel({
+          agentId: 'agent-id',
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'reasoning-start', id: '0' },
@@ -6326,24 +6252,27 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "headers": undefined,
                 "id": "id-1",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
                 "timestamp": 1970-01-01T00:00:02.000Z,
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },
             {
               "finishReason": "stop",
               "totalUsage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "type": "finish",
@@ -6467,14 +6396,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       let onAbortCalls: Array<{ steps: any[] }> = [];
 
       beforeEach(async () => {
-        const messageList = new MessageList();
-        messageList.add(
-          {
-            role: 'user',
-            content: 'test-input',
-          },
-          'input',
-        );
+        const messageList = createMessageListWithUserMessage();
         onErrorCalls = [];
         onAbortCalls = [];
 
@@ -6483,6 +6405,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         result = await loopFn({
           runId,
+          agentId: 'agent-id',
           options: {
             abortSignal: abortController.signal,
             onError: error => {
@@ -6492,39 +6415,45 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               onAbortCalls.push(event);
             },
           },
-          model: new MockLanguageModelV2({
-            doStream: async () => ({
-              stream: new ReadableStream({
-                pull(controller) {
-                  switch (pullCalls++) {
-                    case 0:
-                      controller.enqueue({
-                        type: 'stream-start',
-                        warnings: [],
-                      });
-                      break;
-                    case 1:
-                      controller.enqueue({
-                        type: 'text-start',
-                        id: '1',
-                      });
-                      break;
-                    case 2:
-                      controller.enqueue({
-                        type: 'text-delta',
-                        id: '1',
-                        delta: 'Hello',
-                      });
-                      break;
-                    case 3:
-                      abortController.abort();
-                      controller.error(new DOMException('The user aborted a request.', 'AbortError'));
-                      break;
-                  }
-                },
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => ({
+                  stream: new ReadableStream({
+                    pull(controller) {
+                      switch (pullCalls++) {
+                        case 0:
+                          controller.enqueue({
+                            type: 'stream-start',
+                            warnings: [],
+                          });
+                          break;
+                        case 1:
+                          controller.enqueue({
+                            type: 'text-start',
+                            id: '1',
+                          });
+                          break;
+                        case 2:
+                          controller.enqueue({
+                            type: 'text-delta',
+                            id: '1',
+                            delta: 'Hello',
+                          });
+                          break;
+                        case 3:
+                          abortController.abort();
+                          controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                          break;
+                      }
+                    },
+                  }),
+                }),
               }),
-            }),
-          }),
+            },
+          ],
           messageList,
           _internal: {
             generateId: mockId({ prefix: 'id' }),
@@ -6619,70 +6548,76 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
         result = loopFn({
           runId,
-          messageList: new MessageList(),
-          model: new MockLanguageModelV2({
-            doStream: async () => ({
-              stream: new ReadableStream({
-                start() {
-                  streamCalls++;
-                  pullCalls = 0;
-                },
-                pull(controller) {
-                  if (streamCalls === 1) {
-                    switch (pullCalls++) {
-                      case 0:
-                        controller.enqueue({
-                          type: 'stream-start',
-                          warnings: [],
-                        });
-                        break;
-                      case 1:
-                        controller.enqueue({
-                          type: 'tool-call',
-                          toolCallId: 'call-1',
-                          toolName: 'tool1',
-                          input: `{ "value": "value" }`,
-                        });
-                        break;
-                      case 2:
-                        controller.enqueue({
-                          type: 'finish',
-                          finishReason: 'tool-calls',
-                          usage: testUsage,
-                        });
-                        controller.close();
-                        break;
-                    }
-                  } else
-                    switch (pullCalls++) {
-                      case 0:
-                        controller.enqueue({
-                          type: 'stream-start',
-                          warnings: [],
-                        });
-                        break;
-                      case 1:
-                        controller.enqueue({
-                          type: 'text-start',
-                          id: '1',
-                        });
-                        break;
-                      case 2:
-                        controller.enqueue({
-                          type: 'text-delta',
-                          id: '1',
-                          delta: 'Hello',
-                        });
-                        break;
-                      case 3:
-                        abortController.abort();
-                        controller.error(new DOMException('The user aborted a request.', 'AbortError'));
-                        break;
-                    }
-                },
+          messageList: createMessageListWithUserMessage(),
+          models: [
+            {
+              id: 'test-model',
+              maxRetries: 0,
+              model: new MockLanguageModelV2({
+                doStream: async () => ({
+                  stream: new ReadableStream({
+                    start() {
+                      streamCalls++;
+                      pullCalls = 0;
+                    },
+                    pull(controller) {
+                      if (streamCalls === 1) {
+                        switch (pullCalls++) {
+                          case 0:
+                            controller.enqueue({
+                              type: 'stream-start',
+                              warnings: [],
+                            });
+                            break;
+                          case 1:
+                            controller.enqueue({
+                              type: 'tool-call',
+                              toolCallId: 'call-1',
+                              toolName: 'tool1',
+                              input: `{ "value": "value" }`,
+                            });
+                            break;
+                          case 2:
+                            controller.enqueue({
+                              type: 'finish',
+                              finishReason: 'tool-calls',
+                              usage: testUsage,
+                            });
+                            controller.close();
+                            break;
+                        }
+                      } else
+                        switch (pullCalls++) {
+                          case 0:
+                            controller.enqueue({
+                              type: 'stream-start',
+                              warnings: [],
+                            });
+                            break;
+                          case 1:
+                            controller.enqueue({
+                              type: 'text-start',
+                              id: '1',
+                            });
+                            break;
+                          case 2:
+                            controller.enqueue({
+                              type: 'text-delta',
+                              id: '1',
+                              delta: 'Hello',
+                            });
+                            break;
+                          case 3:
+                            abortController.abort();
+                            controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                            break;
+                        }
+                    },
+                  }),
+                }),
               }),
-            }),
-          }),
+            },
+          ],
           tools: {
             tool1: {
               inputSchema: z.object({ value: z.string() }),
@@ -6832,14 +6767,19 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "headers": undefined,
                 "id": "id-0",
                 "modelId": "mock-model-id",
+                "modelMetadata": {
+                  "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
+                },
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
                 "timestamp": 1970-01-01T00:00:00.000Z,
               },
               "type": "finish-step",
               "usage": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
             },

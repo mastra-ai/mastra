@@ -123,6 +123,7 @@ You can customize the agent behavior by modifying the instructions in `src/mastr
 
 ```typescript
 export const codingAgent = new Agent({
+  id: 'coding-agent',
   name: 'Coding Agent',
   instructions: `
     // Customize agent instructions here
@@ -175,7 +176,3 @@ src/mastra/
         e2b.ts                      # Complete E2B sandbox interaction toolkit
       index.ts                        # Mastra configuration with storage and logging
 ```
-
-## License
-
-This project is part of the Mastra ecosystem and follows the same licensing terms.

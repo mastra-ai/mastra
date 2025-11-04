@@ -1,12 +1,10 @@
-import type { AISpanType } from '../ai-tracing';
-import type { MetricResult, TestInfo } from '../eval';
-import type { MemoryConfig } from '../memory/types';
+import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { AISpanType } from '../observability';
 import type { WorkflowRunState } from '../workflows';
-import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
 export type StoragePagination = {
   page: number;
-  perPage: number;
+  perPage: number | false;
 };
 
 export interface StorageColumn {
@@ -18,21 +16,6 @@ export interface StorageColumn {
     column: string;
   };
 }
-
-export interface LegacyWorkflowRuns {
-  runs: LegacyWorkflowRun[];
-  total: number;
-}
-
-export interface LegacyWorkflowRun {
-  workflowName: string;
-  runId: string;
-  snapshot: LegacyWorkflowRunState | string;
-  createdAt: Date;
-  updatedAt: Date;
-  resourceId?: string;
-}
-
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -67,11 +50,85 @@ export type PaginationArgs = {
 export type PaginationInfo = {
   total: number;
   page: number;
-  perPage: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * When `false`, all matching records are returned in a single response.
+   */
+  perPage: number | false;
   hasMore: boolean;
 };
 
 export type MastraMessageFormat = 'v1' | 'v2';
+
+export type StorageListMessagesInput = {
+  threadId: string;
+  resourceId?: string;
+  include?: {
+    id: string;
+    threadId?: string;
+    withPreviousMessages?: number;
+    withNextMessages?: number;
+  }[];
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 40 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  filter?: {
+    dateRange?: {
+      start?: Date;
+      end?: Date;
+    };
+  };
+  orderBy?: StorageOrderBy;
+};
+
+export type StorageListMessagesOutput = PaginationInfo & {
+  messages: MastraDBMessage[];
+};
+
+export type StorageListWorkflowRunsInput = {
+  workflowName?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * When undefined, returns all workflow runs without pagination.
+   * When both perPage and page are provided, pagination is applied.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * When both perPage and page are provided, pagination is applied.
+   * When either is undefined, all results are returned.
+   */
+  page?: number;
+  resourceId?: string;
+};
+
+export type StorageListThreadsByResourceIdInput = {
+  resourceId: string;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+};
+
+export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
+  threads: StorageThreadType[];
+};
 
 export type StorageGetMessagesArg = {
   threadId: string;
@@ -91,50 +148,6 @@ export type StorageGetMessagesArg = {
   format?: MastraMessageFormat;
 };
 
-export type StorageEvalRow = {
-  input: string;
-  output: string;
-  result: Record<string, any>;
-  agent_name: string;
-  metric_name: string;
-  instructions: string;
-  test_info: Record<string, any> | null;
-  global_run_id: string;
-  run_id: string;
-  created_at: Date;
-};
-
-export type EvalRow = {
-  input: string;
-  output: string;
-  result: MetricResult;
-  agentName: string;
-  createdAt: string;
-  metricName: string;
-  instructions: string;
-  runId: string;
-  globalRunId: string;
-  testInfo?: TestInfo;
-};
-
-export type StorageGetTracesArg = {
-  name?: string;
-  scope?: string;
-  page: number;
-  perPage: number;
-  attributes?: Record<string, string>;
-  filters?: Record<string, any>;
-  fromDate?: Date;
-  toDate?: Date;
-};
-
-export type StorageGetTracesPaginatedArg = {
-  name?: string;
-  scope?: string;
-  attributes?: Record<string, string>;
-  filters?: Record<string, any>;
-} & PaginationArgs;
-
 export type StorageResourceType = {
   id: string;
   workingMemory?: string;
@@ -152,6 +165,11 @@ export type StorageMessageType = {
   createdAt: Date;
   resourceId: string | null;
 };
+
+export interface StorageOrderBy {
+  field?: ThreadOrderBy;
+  direction?: ThreadSortDirection;
+}
 
 export interface ThreadSortOptions {
   orderBy?: ThreadOrderBy;
@@ -181,6 +199,9 @@ export interface AISpanRecord {
   error: any;
   isEvent: boolean;
 }
+
+export type CreateAISpanRecord = Omit<AISpanRecord, 'createdAt' | 'updatedAt'>;
+export type UpdateAISpanRecord = Omit<CreateAISpanRecord, 'spanId' | 'traceId'>;
 
 export interface AITraceRecord {
   traceId: string;

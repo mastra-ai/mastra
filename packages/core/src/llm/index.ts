@@ -1,26 +1,27 @@
+import type { EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult } from '@internal/ai-sdk-v4/embed';
 import type {
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
   CoreSystemMessage as AiCoreSystemMessage,
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
-  EmbedManyResult as AiEmbedManyResult,
-  EmbedResult as AiEmbedResult,
-  TelemetrySettings,
+  UIMessage,
+} from '@internal/ai-sdk-v4/message';
+import type {
   streamText,
   streamObject,
   generateText,
   generateObject,
-  UIMessage,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from 'ai';
+} from '@internal/ai-sdk-v4/model';
+import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
 import type { Run } from '../run/types';
-import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
 
@@ -76,9 +77,20 @@ export type {
   StreamObjectResult,
   StreamTextResult,
 } from './model/base.types';
-export type { TripwireProperties } from './model/shared.types';
+export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
+export { ModelRouterLanguageModel } from './model/router';
+export { PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.js';
+export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
+
+export type SystemMessage =
+  | string
+  | string[]
+  | CoreSystemMessage
+  | SystemModelMessage
+  | CoreSystemMessage[]
+  | SystemModelMessage[];
 
 type GenerateTextOptions = Parameters<typeof generateText>[0];
 type StreamTextOptions = Parameters<typeof streamText>[0];
@@ -91,7 +103,6 @@ type MastraCustomLLMOptionsKeys =
   | 'model'
   | 'onStepFinish'
   | 'experimental_output'
-  | 'experimental_telemetry'
   | 'messages'
   | 'onFinish'
   | 'output';
@@ -105,10 +116,9 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   tools?: Record<string, CoreTool>;
   onStepFinish?: (step: unknown) => Promise<void> | void;
   experimental_output?: Z;
-  telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
 } & Run;
 
@@ -138,3 +148,7 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
   onFinish?: StreamObjectOnFinishCallback<any>;
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
+
+export type { ProviderConfig } from './model/gateways/base';
+
+export { ModelRouterEmbeddingModel, type EmbeddingModelId } from './model';

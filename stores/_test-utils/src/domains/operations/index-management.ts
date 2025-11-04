@@ -1,5 +1,5 @@
 import type { MastraStorage } from '@mastra/core/storage';
-import { TABLE_THREADS, TABLE_MESSAGES, TABLE_TRACES, TABLE_EVALS } from '@mastra/core/storage';
+import { TABLE_THREADS, TABLE_MESSAGES, TABLE_TRACES } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 export function createIndexManagementTests({ storage }: { storage: MastraStorage }) {
@@ -112,7 +112,6 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
             { name: `${testIndexPrefix}_threads`, table: TABLE_THREADS, columns: ['resourceId'] },
             { name: `${testIndexPrefix}_messages`, table: TABLE_MESSAGES, columns: ['thread_id'] },
             { name: `${testIndexPrefix}_traces`, table: TABLE_TRACES, columns: ['name'] },
-            { name: `${testIndexPrefix}_evals`, table: TABLE_EVALS, columns: ['agent_name'] },
           ];
 
           for (const indexDef of testIndexes) {
@@ -318,8 +317,10 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
 
           // Perform a query that should use the index
-          await storage.getThreadsByResourceId({
+          await storage.listThreadsByResourceId({
             resourceId: testThread.resourceId,
+            page: 0,
+            perPage: 10,
           });
 
           // Get updated statistics
@@ -385,7 +386,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should list indexes for all mastra tables', async () => {
-          const tables = ['mastra_threads', 'mastra_messages', 'mastra_traces', 'mastra_evals'];
+          const tables = ['mastra_threads', 'mastra_messages', 'mastra_traces'];
 
           for (const table of tables) {
             const indexes = await storage.listIndexes(table);
@@ -395,20 +396,39 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
       });
 
       describe('Automatic Performance Indexes', () => {
-        it('should have automatic composite indexes from initialization', async () => {
+        it('should create all defined automatic indexes during initialization', async () => {
+          // Get automatic index definitions (if provider supports it)
+          const definitions = (storage as any).stores?.operations?.getAutomaticIndexDefinitions?.();
+
+          if (!definitions || definitions.length === 0) {
+            // Provider doesn't define automatic indexes, skip test
+            return;
+          }
+
           const indexes = await storage.listIndexes();
 
-          // Check for automatic composite indexes (these are created during init)
-          const expectedPatterns = [
-            'threads_resourceid_createdat',
-            'messages_thread_id_createdat',
-            'traces_name_starttime',
-            'evals_agent_name_created_at',
-          ];
+          // Verify each defined automatic index was created
+          for (const def of definitions) {
+            const found = indexes.some(i => i.name === def.name);
+            expect(found, `Expected automatic index "${def.name}" to be created`).toBe(true);
+          }
+        });
 
-          for (const pattern of expectedPatterns) {
-            const hasIndex = indexes.some(i => i.name.toLowerCase().includes(pattern));
-            expect(hasIndex).toBe(true);
+        it('should have valid automatic index definitions', () => {
+          // Get automatic index definitions (if provider supports it)
+          const definitions = (storage as any).stores?.operations?.getAutomaticIndexDefinitions?.();
+
+          if (!definitions || definitions.length === 0) {
+            // Provider doesn't define automatic indexes, skip test
+            return;
+          }
+
+          // Verify each definition has required fields
+          for (const def of definitions) {
+            expect(def.name, 'Index definition must have a name').toBeTruthy();
+            expect(def.table, 'Index definition must have a table').toBeTruthy();
+            expect(Array.isArray(def.columns), 'Index definition must have columns array').toBe(true);
+            expect(def.columns.length, 'Index definition must have at least one column').toBeGreaterThan(0);
           }
         });
 
@@ -464,10 +484,11 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
           // Measure query performance
           const startTime = Date.now();
-          await storage.getThreadsByResourceId({
+          await storage.listThreadsByResourceId({
             resourceId: `perf-resource-5`,
-            orderBy: 'createdAt',
-            sortDirection: 'DESC',
+            page: 0,
+            perPage: 10,
+            orderBy: { field: 'createdAt', direction: 'DESC' },
           });
           const queryTime = Date.now() - startTime;
 

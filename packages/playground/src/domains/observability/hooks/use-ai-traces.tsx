@@ -1,34 +1,29 @@
-import { client } from '@/lib/client';
-import { AITracesPaginatedArg } from '@mastra/core';
+import { useMastraClient } from '@mastra/react';
+import { AITracesPaginatedArg } from '@mastra/core/storage';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
 const fetchAITracesFn = async ({
+  client,
   page,
   perPage,
   dateRange,
   filters,
 }: AITracesFilters & {
+  client: ReturnType<typeof useMastraClient>;
   page: number;
   perPage: number;
 }) => {
-  try {
-    const res = await client.getAITraces({
-      pagination: {
-        page,
-        perPage,
-        dateRange,
-      },
-      filters,
-    });
+  const res = await client.getAITraces({
+    pagination: {
+      page,
+      perPage,
+      dateRange,
+    },
+    filters,
+  });
 
-    if (!res.spans) {
-      throw new Error('Error fetching AI traces');
-    }
-    return res.spans;
-  } catch (error) {
-    throw error;
-  }
+  return res.spans || [];
 };
 
 export interface AITracesFilters {
@@ -40,12 +35,14 @@ export interface AITracesFilters {
 }
 
 export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
+  const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
     queryKey: ['ai-traces', filters, dateRange],
     queryFn: ({ pageParam }) =>
       fetchAITracesFn({
+        client,
         page: pageParam,
         perPage: 25,
         dateRange,
@@ -63,6 +60,8 @@ export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
     select: data => {
       return data.pages.flatMap(page => page);
     },
+    retry: false,
+    refetchInterval: 3000,
   });
 
   useEffect(() => {

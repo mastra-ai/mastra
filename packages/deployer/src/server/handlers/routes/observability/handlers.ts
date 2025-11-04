@@ -1,9 +1,11 @@
-import { AISpanType } from '@mastra/core/ai-tracing';
 import type { Mastra } from '@mastra/core/mastra';
-import type { AITracesPaginatedArg } from '@mastra/core/storage';
+import { AISpanType } from '@mastra/core/observability';
+import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import {
   getAITraceHandler as getOriginalAITraceHandler,
   getAITracesPaginatedHandler as getOriginalAITracesPaginatedHandler,
+  scoreTracesHandler as getOriginalScoreTracesHandler,
+  listScoresBySpan as getOriginalScoresBySpanHandler,
 } from '@mastra/server/handlers/observability';
 import type { Context } from 'hono';
 import { handleError } from '../../error';
@@ -79,5 +81,43 @@ export async function getAITracesPaginatedHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error getting AI traces paginated');
+  }
+}
+
+export async function processTraceScoringHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const { scorerName, targets } = await c.req.json();
+
+    const result = await getOriginalScoreTracesHandler({
+      mastra,
+      body: { scorerName, targets },
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error processing trace scoring');
+  }
+}
+
+export async function listScoresBySpan(c: Context) {
+  const mastra = c.get('mastra');
+  const traceId = c.req.param('traceId');
+  const spanId = c.req.param('spanId');
+  const page = parseInt(c.req.query('page') || '0');
+  const perPage = parseInt(c.req.query('perPage') || '10');
+  const pagination: StoragePagination = { page, perPage };
+
+  try {
+    const scores = await getOriginalScoresBySpanHandler({
+      mastra,
+      traceId,
+      spanId,
+      pagination,
+    });
+
+    return c.json(scores);
+  } catch (error) {
+    return handleError(error, 'Error getting scores by span');
   }
 }

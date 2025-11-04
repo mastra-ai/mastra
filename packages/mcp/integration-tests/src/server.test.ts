@@ -3,6 +3,7 @@ import { MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ServerInfo } from '@mastra/core/mcp';
 import path from 'node:path';
+import { RequestContext } from '@mastra/core/di';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
@@ -16,15 +17,14 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   beforeAll(async () => {
     mastraServer = spawn(
       'pnpm',
-      [
-        path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-        'dev',
-        '--port',
-        port.toString(),
-      ],
+      [path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`), 'dev'],
       {
         stdio: 'pipe',
         detached: true, // Run in a new process group so we can kill it and children
+        env: {
+          ...process.env,
+          PORT: port.toString(),
+        },
       },
     );
 
@@ -76,13 +76,13 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       },
     };
 
-    const tools = await client.getTools();
+    const tools = await client.listTools();
     console.log('Tools:', tools);
 
     const tool = tools['myMcpServer_calculator'];
     console.log('Tool:', tool);
 
-    const result = await tool.execute({ context: toolCallPayload.params.args });
+    const result = await tool.execute(toolCallPayload.params.args);
     console.log('Result:', result);
 
     expect(result).toBeDefined();
@@ -112,14 +112,14 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     const toolCallPayloadParams = { num1: 10, num2: 5, operation: 'add' };
 
     // Get tools (this will connect the client internally if not already connected)
-    const tools = await sseClient.getTools();
+    const tools = await sseClient.listTools();
 
     const toolName = `${mcpServerId}_${testToolId}`;
     const tool = tools[toolName];
     expect(tool, `Tool '${toolName}' should be available via SSE client`).toBeDefined();
 
     // Execute the tool
-    const result = await tool.execute({ context: toolCallPayloadParams });
+    const result = await tool.execute(toolCallPayloadParams);
 
     expect(result).toBeDefined();
     expect(result.isError).toBe(false);
@@ -248,11 +248,11 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         },
       };
 
-      const tools = await client.getTools();
+      const tools = await client.listTools();
       const tool = tools['myMcpServer_testMastraInstance'];
       expect(tool).toBeDefined();
 
-      const result = await tool.execute({ context: toolCallPayload.params.args });
+      const result = await tool.execute!(toolCallPayload.params.args, {});
 
       expect(result).toBeDefined();
       expect(result.isError).toBe(false);

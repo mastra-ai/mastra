@@ -21,13 +21,14 @@ pnpm add @mastra/deployer-vercel
 The Vercel deployer is used as part of the Mastra framework:
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { VercelDeployer } from '@mastra/deployer-vercel';
 
 const deployer = new VercelDeployer({
-  teamSlug: 'your-team-slug',
-  projectName: 'your-project-name',
-  token: 'your-vercel-token',
+  // Optional per-function overrides (written to .vc-config.json)
+  maxDuration: 600,
+  memory: 1536,
+  regions: ['sfo1', 'iad1'],
 });
 
 const mastra = new Mastra({
@@ -40,9 +41,11 @@ const mastra = new Mastra({
 
 ### Constructor Options
 
-- `teamSlug` (required): Your Vercel team slug
-- `projectName`: Name of your Vercel project (will be created if it doesn't exist)
-- `token`: Your Vercel API token (required for authentication)
+High‑value overrides written to `.vercel/output/functions/index.func/.vc-config.json`:
+
+- `maxDuration?: number` — Function execution timeout (seconds)
+- `memory?: number` — Function memory (MB)
+- `regions?: string[]` — Regions (e.g. `['sfo1','iad1']`)
 
 ## Project Structure
 

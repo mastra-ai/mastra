@@ -1,8 +1,8 @@
-import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
+import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from '@internal/ai-sdk-v4/message';
 import { isToolUIPart } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../index';
+import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
 import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
 import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
@@ -281,7 +281,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with pending state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -322,7 +322,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with result state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -365,7 +365,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert reasoning parts', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -400,7 +400,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert file parts with URL handling', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'user',
           createdAt: new Date(),
@@ -433,6 +433,8 @@ describe('MessageList V5 Support', () => {
       it('should convert system messages correctly', () => {
         const list = new MessageList({ threadId, resourceId });
         list.addSystem('You are a helpful assistant');
+        // Add a user message to avoid empty message list error
+        list.add({ role: 'user', content: 'Hello' }, 'input');
 
         const v5Prompt = list.get.all.aiV5.prompt();
         expect(v5Prompt[0]).toMatchObject({
@@ -529,30 +531,30 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it('prompt() should handle empty message list by adding default user message', () => {
+      it('prompt() should throw error for empty message list', () => {
         const list = new MessageList({ threadId, resourceId });
 
-        const prompt = list.get.all.aiV5.prompt();
-
-        expect(prompt).toHaveLength(1);
-        expect(prompt[0]).toMatchObject({
-          role: 'user',
-          content: '.', // Default message uses a period
-        });
+        expect(() => list.get.all.aiV5.prompt()).toThrow(
+          'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+        );
       });
 
-      it('prompt() should prepend user message when first message is assistant', () => {
+      it('prompt() should ensure proper message ordering for Gemini compatibility', () => {
         const list = new MessageList({ threadId, resourceId });
         list.add({ role: 'assistant', content: 'I am ready to help' }, 'response');
 
         const prompt = list.get.all.aiV5.prompt();
 
+        // Should have 2 messages: injected user at start, assistant (no user at end)
         expect(prompt).toHaveLength(2);
+        expect(prompt[0]).toMatchObject({
+          role: 'user',
+          content: '.',
+        });
         expect(prompt[1]).toMatchObject({
           role: 'assistant',
           content: [{ type: 'text', text: 'I am ready to help' }],
         });
-        expect(prompt[1].role).toBe('assistant');
       });
 
       it('llmPrompt() should return proper LanguageModelV2Prompt format', async () => {
@@ -565,6 +567,7 @@ describe('MessageList V5 Support', () => {
 
         // llmPrompt returns messages array directly based on the implementation
         expect(Array.isArray(llmPrompt)).toBe(true);
+        // Should have 3 messages: system, user, assistant (no injected user at end)
         expect(llmPrompt).toHaveLength(3);
         expect(llmPrompt[0].role).toBe('system');
         expect(llmPrompt[1].role).toBe('user');
@@ -749,7 +752,7 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
 
       // Add a v5 message with reasoning through the conversion pipeline
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -936,9 +939,9 @@ describe('MessageList V5 Support', () => {
       const messageList = new MessageList();
       const imageUrl = 'https://httpbin.org/image/png';
 
-      // This mimics what happens when the user passes messages to streamVNext
+      // This mimics what happens when the user passes messages to stream
       // with format: 'aisdk' containing file parts with URLs
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'test-msg-1',
         role: 'user',
         content: {
@@ -955,18 +958,18 @@ describe('MessageList V5 Support', () => {
 
       messageList.add(v2Message, 'user');
 
-      // Get V3 messages (internal format used for message processing)
-      const v3Messages = messageList.get.all.v3();
-      const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
+      // Get V5 UI messages (used for message processing)
+      const v5UiMessages = messageList.get.all.aiV5.ui();
+      const v5UiFilePart = v5UiMessages[0].parts.find((p: any) => p.type === 'file');
 
-      if (v3FilePart?.type === 'file') {
-        expect(v3FilePart.url).toBe(imageUrl);
+      if (v5UiFilePart?.type === 'file') {
+        expect(v5UiFilePart.url).toBe(imageUrl);
         // It should NOT be wrapped as a malformed data URI
-        expect(v3FilePart.url).not.toContain('data:image/png;base64,https://');
+        expect(v5UiFilePart.url).not.toContain('data:image/png;base64,https://');
       }
 
       // Get V2 messages back (this is what InputProcessors receive)
-      const v2Messages = messageList.get.all.v2();
+      const v2Messages = messageList.get.all.db();
       const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
 
       // The URL should remain unchanged when converting back to V2
@@ -1122,18 +1125,16 @@ describe('MessageList V5 Support', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle empty message list with prompt methods', () => {
+    it('should throw error for empty message list with prompt methods', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const v4Prompt = list.get.all.aiV4.prompt();
-      const v5Prompt = list.get.all.aiV5.prompt();
-
-      // Both should add a default user message
-      expect(v4Prompt).toHaveLength(1);
-      expect(v4Prompt[0].role).toBe('user');
-
-      expect(v5Prompt).toHaveLength(1);
-      expect(v5Prompt[0].role).toBe('user');
+      // Both v4 and v5 should throw error for empty list
+      expect(() => list.get.all.aiV4.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
+      expect(() => list.get.all.aiV5.prompt()).toThrow(
+        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
+      );
     });
 
     it('should throw error for system messages with wrong role', () => {
@@ -1151,7 +1152,8 @@ describe('MessageList V5 Support', () => {
       const v4Prompt = list.get.all.aiV4.prompt();
       const v5Prompt = list.get.all.aiV5.prompt();
 
-      // Should prepend user message
+      // Should add user message before assistant for Gemini compatibility
+      // Both V4 and V5 use same behavior now (prepend only, no append)
       expect(v4Prompt).toHaveLength(2);
       expect(v4Prompt[0].role).toBe('user');
       expect(v4Prompt[1].role).toBe('assistant');
@@ -1164,7 +1166,7 @@ describe('MessageList V5 Support', () => {
     it('should handle tool invocations with missing fields gracefully', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const incompleteToolMessage: MastraMessageV2 = {
+      const incompleteToolMessage: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -1204,7 +1206,7 @@ describe('MessageList V5 Support', () => {
     it('should filter out empty reasoning parts', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const messageWithEmptyReasoning: MastraMessageV2 = {
+      const messageWithEmptyReasoning: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -1291,7 +1293,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'input');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const filePart = v2Messages[0].content.parts.find(p => p.type === 'file');
         expect(filePart).toBeDefined();
@@ -1327,7 +1329,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const textPart = v2Messages[0].content.parts.find(p => p.type === 'text');
         expect(textPart).toBeDefined();
@@ -1364,7 +1366,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const reasoningPart = v2Messages[0].content.parts.find(p => p.type === 'reasoning');
         expect(reasoningPart).toBeDefined();
@@ -1404,7 +1406,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check callProviderMetadata was preserved on tool-invocation
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const toolPart = v2Messages[0].content.parts.find(p => p.type === 'tool-invocation');
         expect(toolPart).toBeDefined();
@@ -1446,7 +1448,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const sourcePart = v2Messages[0].content.parts.find(p => p.type === 'source');
         expect(sourcePart).toBeDefined();
@@ -1493,7 +1495,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and verify all providerMetadata preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         const parts = v2Messages[0].content.parts;
 
         const textPart = parts.find(p => p.type === 'text');

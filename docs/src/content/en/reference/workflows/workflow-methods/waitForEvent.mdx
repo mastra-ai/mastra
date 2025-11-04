@@ -10,7 +10,7 @@ The `.waitForEvent()` method pauses execution until an event is received.
 ## Usage example
 
 ```typescript copy
-workflow.waitForEvent('event-name', step1);
+workflow.waitForEvent("event-name", step1);
 ```
 
 ## Parameters
@@ -44,6 +44,23 @@ workflow.waitForEvent('event-name', step1);
   ]}
 />
 
+## Extended usage example
+
+```typescript showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+const step2 = createStep({...});
+const step3 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .waitForEvent("event-name", step2)
+  .then(step3)
+  .commit();
+```
+
 ## Related
 
-- [Sleep & Events](../../../docs/workflows/pausing-execution.mdx)
+- [.sendEvent()](./sendEvent)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume#sleep--events)

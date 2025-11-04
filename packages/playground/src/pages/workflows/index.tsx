@@ -1,26 +1,46 @@
-import { useWorkflows } from '@/hooks/use-workflows';
-import { Header, HeaderTitle, MainContentLayout, MainContentContent, WorkflowTable } from '@mastra/playground-ui';
+import {
+  Header,
+  HeaderTitle,
+  MainContentLayout,
+  MainContentContent,
+  WorkflowTable,
+  Icon,
+  HeaderAction,
+  Button,
+  DocsIcon,
+  WorkflowIcon,
+  useWorkflows,
+} from '@mastra/playground-ui';
+
+import { Link } from 'react-router';
 
 function Workflows() {
-  const { data, isLoading } = useWorkflows();
-  const [legacyWorkflows, workflows] = data ?? [];
+  const { data: workflows, isLoading } = useWorkflows();
 
-  const isEmpty =
-    !isLoading && Object.keys(legacyWorkflows || {}).length === 0 && Object.keys(workflows || {}).length === 0;
+  const isEmpty = !isLoading && Object.keys(workflows || {}).length === 0;
 
   return (
     <MainContentLayout>
       <Header>
-        <HeaderTitle>Workflows</HeaderTitle>
+        <HeaderTitle>
+          <Icon>
+            <WorkflowIcon />
+          </Icon>
+          Workflows
+        </HeaderTitle>
+
+        <HeaderAction>
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            Workflows documentation
+          </Button>
+        </HeaderAction>
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <WorkflowTable
-          workflows={workflows}
-          legacyWorkflows={legacyWorkflows}
-          isLoading={isLoading}
-          computeLink={workflowId => `/workflows/${workflowId}/graph`}
-        />
+        <WorkflowTable workflows={workflows || {}} isLoading={isLoading} />
       </MainContentContent>
     </MainContentLayout>
   );

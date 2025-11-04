@@ -6,27 +6,22 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type {
-  AITracingExporter,
-  AITracingEvent,
-  AnyExportedAISpan,
-  LLMGenerationAttributes,
-} from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys } from '@mastra/core/ai-tracing';
-import { ConsoleLogger } from '@mastra/core/logger';
+import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import { AISpanType } from '@mastra/core/observability';
+import { omitKeys } from '@mastra/core/utils';
+import { BaseExporter } from '@mastra/observability';
+import type { BaseExporterConfig } from '@mastra/observability';
 import { initLogger } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { normalizeUsageMetrics } from './metrics';
 
-export interface BraintrustExporterConfig {
+export interface BraintrustExporterConfig extends BaseExporterConfig {
   /** Braintrust API key */
   apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
   /** Braintrust project name (default: 'mastra-tracing') */
   projectName?: string;
-  /** Logger level for diagnostic messages (default: 'warn') */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
   /** Support tuning parameters */
   tuningParameters?: Record<string, any>;
 }
@@ -34,6 +29,7 @@ export interface BraintrustExporterConfig {
 type SpanData = {
   logger: Logger<true>; // Braintrust logger (for root spans)
   spans: Map<string, Span>; // Maps span.id to Braintrust span
+  activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
 };
 
 // Default span type for all spans
@@ -41,8 +37,8 @@ const DEFAULT_SPAN_TYPE = 'task';
 
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
-  [AISpanType.LLM_GENERATION]: 'llm',
-  [AISpanType.LLM_CHUNK]: 'llm',
+  [AISpanType.MODEL_GENERATION]: 'llm',
+  [AISpanType.MODEL_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
   [AISpanType.MCP_TOOL_CALL]: 'tool',
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
@@ -54,19 +50,16 @@ function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
-export class BraintrustExporter implements AITracingExporter {
+export class BraintrustExporter extends BaseExporter {
   name = 'braintrust';
   private traceMap = new Map<string, SpanData>();
-  private logger: ConsoleLogger;
   private config: BraintrustExporterConfig;
 
   constructor(config: BraintrustExporterConfig) {
-    this.logger = new ConsoleLogger({ level: config.logLevel ?? 'warn' });
+    super(config);
 
     if (!config.apiKey) {
-      this.logger.error('BraintrustExporter: Missing required credentials, exporter will be disabled', {
-        hasApiKey: !!config.apiKey,
-      });
+      this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
       this.config = null as any;
       return;
     }
@@ -74,11 +67,7 @@ export class BraintrustExporter implements AITracingExporter {
     this.config = config;
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.config) {
-      return;
-    }
-
+  protected async _exportEvent(event: AITracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -108,6 +97,11 @@ export class BraintrustExporter implements AITracingExporter {
       return;
     }
 
+    // Refcount: track active non-event spans (including root)
+    if (!span.isEvent) {
+      spanData.activeIds.add(span.id);
+    }
+
     const braintrustParent = this.getBraintrustParent({ spanData, span, method });
     if (!braintrustParent) {
       return;
@@ -116,8 +110,12 @@ export class BraintrustExporter implements AITracingExporter {
     const payload = this.buildSpanPayload(span);
 
     const braintrustSpan = braintrustParent.startSpan({
+      spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
+      parentSpanIds: span.parentSpanId
+        ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
+        : { spanId: span.traceId, rootSpanId: span.traceId },
       ...payload,
     });
 
@@ -156,7 +154,13 @@ export class BraintrustExporter implements AITracingExporter {
         braintrustSpan.end();
       }
 
-      if (span.isRootSpan) {
+      // Refcount: mark this span as ended
+      if (!span.isEvent) {
+        spanData.activeIds.delete(span.id);
+      }
+
+      // If no more active spans remain for this trace, clean up the trace entry
+      if (spanData.activeIds.size === 0) {
         this.traceMap.delete(span.traceId);
       }
     }
@@ -188,14 +192,17 @@ export class BraintrustExporter implements AITracingExporter {
 
     // Create zero-duration span for event (convert milliseconds to seconds)
     const braintrustSpan = braintrustParent.startSpan({
+      spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
+      parentSpanIds: span.parentSpanId
+        ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
+        : { spanId: span.traceId, rootSpanId: span.traceId },
       startTime: span.startTime.getTime() / 1000,
       ...payload,
     });
 
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
-    spanData.spans.set(span.id, braintrustSpan);
   }
 
   private async initLogger(span: AnyExportedAISpan): Promise<void> {
@@ -206,7 +213,7 @@ export class BraintrustExporter implements AITracingExporter {
       ...this.config.tuningParameters,
     });
 
-    this.traceMap.set(span.traceId, { logger, spans: new Map() });
+    this.traceMap.set(span.traceId, { logger, spans: new Map(), activeIds: new Set() });
   }
 
   private getSpanData(options: { span: AnyExportedAISpan; method: string }): SpanData | undefined {
@@ -242,6 +249,16 @@ export class BraintrustExporter implements AITracingExporter {
       return spanData.spans.get(parentId);
     }
 
+    // If the parent exists but is the root span (not represented as a Braintrust
+    // span because we use the logger as the root), attach to the logger so the
+    // span is not orphaned. We need to check if parentSpanId exists but the
+    // parent span is not in our spans map (indicating it's the root span).
+    if (parentId && !spanData.spans.has(parentId)) {
+      // This means the parent exists but isn't tracked as a Braintrust span,
+      // which happens when the parent is the root span (we use logger as root)
+      return spanData.logger;
+    }
+
     this.logger.warn('Braintrust exporter: No parent data found for span', {
       traceId: span.traceId,
       spanId: span.id,
@@ -274,25 +291,25 @@ export class BraintrustExporter implements AITracingExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.LLM_GENERATION) {
-      const llmAttr = attributes as LLMGenerationAttributes;
+    if (span.type === AISpanType.MODEL_GENERATION) {
+      const modelAttr = attributes as ModelGenerationAttributes;
 
       // Model goes to metadata
-      if (llmAttr.model !== undefined) {
-        payload.metadata.model = llmAttr.model;
+      if (modelAttr.model !== undefined) {
+        payload.metadata.model = modelAttr.model;
       }
 
       // Provider goes to metadata (if provided by attributes)
-      if (llmAttr.provider !== undefined) {
-        payload.metadata.provider = llmAttr.provider;
+      if (modelAttr.provider !== undefined) {
+        payload.metadata.provider = modelAttr.provider;
       }
 
       // Usage/token info goes to metrics
-      payload.metrics = normalizeUsageMetrics(llmAttr);
+      payload.metrics = normalizeUsageMetrics(modelAttr);
 
       // Model parameters go to metadata
-      if (llmAttr.parameters !== undefined) {
-        payload.metadata.modelParameters = llmAttr.parameters;
+      if (modelAttr.parameters !== undefined) {
+        payload.metadata.modelParameters = modelAttr.parameters;
       }
 
       // Other LLM attributes go to metadata
@@ -336,5 +353,6 @@ export class BraintrustExporter implements AITracingExporter {
       // Loggers don't have an explicit shutdown method
     }
     this.traceMap.clear();
+    await super.shutdown();
   }
 }

@@ -1,6 +1,5 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import { NOISE_SENSITIVITY_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
@@ -58,20 +57,22 @@ export function createNoiseSensitivityScorerLLM({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options: NoiseSensitivityOptions;
 }) {
   if (!options.baselineResponse || !options.noisyQuery) {
     throw new Error('Both baselineResponse and noisyQuery are required for Noise Sensitivity scoring');
   }
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
+    id: 'noise-sensitivity-scorer',
     name: 'Noise Sensitivity (LLM)',
     description: 'Evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information',
     judge: {
       model,
       instructions: NOISE_SENSITIVITY_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .analyze({
       description: 'Analyze the impact of noise on agent response quality',

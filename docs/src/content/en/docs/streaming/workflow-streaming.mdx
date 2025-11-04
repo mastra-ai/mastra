@@ -1,9 +1,7 @@
 ---
-title: "Workflow Streaming | Streaming | Mastra"
+title: "Workflow streaming | Streaming | Mastra Docs"
 description: "Learn how to use workflow streaming in Mastra, including handling workflow execution events, step streaming, and workflow integration with agents and tools."
 ---
-
-import { Callout } from "nextra/components";
 
 # Workflow streaming
 
@@ -12,17 +10,25 @@ Workflow streaming in Mastra enables workflows to send incremental results while
 Streams can be written to in two main ways:
 
 - **From within a workflow step**: every workflow step receives a `writer` argument, which is a writable stream you can use to push updates as execution progresses.
-- **From an agent stream**: you can also pipe an agent's `streamVNext` output directly into a workflow step's writer, making it easy to chain agent responses into workflow results without extra glue code.
+- **From an agent stream**: you can also pipe an agent's `stream` output directly into a workflow step's writer, making it easy to chain agent responses into workflow results without extra glue code.
 
 By combining writable workflow streams with agent streaming, you gain fine-grained control over how intermediate results flow through your system and into the user experience.
 
 ### Using the `writer` argument
 
+:::warning
+
+The writer is only available when using `streamVNext`.
+
+:::
+
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
 
-<Callout type="warning">
+:::warning
+
 You must `await` the call to `writer.write(...)` or else you will lock the stream and get a `WritableStream is locked` error.
-</Callout>
+
+:::
 
 ```typescript {5,8,15} showLineNumbers copy
 import { createStep } from "@mastra/core/workflows";
@@ -58,15 +64,38 @@ Events written to the stream are included in the emitted chunks. These chunks ca
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.streamVNext({
   inputData: {
-    value: "initial data"
-  }
+    value: "initial data",
+  },
 });
 
 for await (const chunk of stream) {
+  console.log(chunk);
+}
+
+if (result!.status === "suspended") {
+  // if the workflow is suspended, we can resume it with the resumeStreamVNext method
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: { value: "resume data" },
+  });
+
+  for await (const chunk of resumedStream) {
+    console.log(chunk);
+  }
+}
+```
+
+### Resuming an interrupted workflow stream
+
+If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStreamVNext` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
+
+```typescript showLineNumbers copy
+const newStream = await run.resumeStreamVNext();
+
+for await (const chunk of newStream) {
   console.log(chunk);
 }
 ```
@@ -81,11 +110,11 @@ import { z } from "zod";
 
 export const testStep = createStep({
   // ...
-  execute: async ({ inputData, mastra, writer  }) => {
-    const { city } = inputData
+  execute: async ({ inputData, mastra, writer }) => {
+    const { city } = inputData;
 
     const testAgent = mastra?.getAgent("testAgent");
-    const stream = await testAgent?.streamVNext(`What is the weather in ${city}$?`);
+    const stream = await testAgent?.stream(`What is the weather in ${city}$?`);
 
     await stream!.textStream.pipeTo(writer!);
 

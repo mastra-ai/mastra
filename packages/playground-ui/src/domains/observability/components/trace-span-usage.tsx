@@ -1,11 +1,30 @@
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
+import { AISpanRecord } from '@mastra/core/storage';
+
+// V5 format (AI SDK v5)
+type V5TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  totalTokens: number;
+};
+
+// Legacy format
+type LegacyTokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
+type TokenUsage = V5TokenUsage | LegacyTokenUsage;
 
 type TraceSpanUsageProps = {
-  traceUsage?: { [key: string]: any };
-  traceSpans?: any[];
+  traceUsage?: TokenUsage;
+  traceSpans?: AISpanRecord[];
   className?: string;
-  spanUsage?: { [key: string]: any };
+  spanUsage?: TokenUsage;
 };
 
 export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, className }: TraceSpanUsageProps) {
@@ -19,47 +38,88 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     return null;
   }
 
-  const generationSpans = traceSpans.filter(span => span.spanType === 'llm_generation');
+  const generationSpans = traceSpans.filter(span => span.spanType === 'model_generation');
+
+  // Determine if we're using v5 format (inputTokens/outputTokens) or legacy format (promptTokens/completionTokens)
+  const hasV5Format = generationSpans.some(
+    span => span.attributes?.usage?.inputTokens !== undefined || span.attributes?.usage?.outputTokens !== undefined,
+  );
+
   const tokensByProvider = generationSpans.reduce(
-    (acc, span) => {
+    (acc: Record<string, TokenUsage>, span: AISpanRecord) => {
       const spanUsage = span.attributes?.usage || {};
       const model = span?.attributes?.model || '';
       const provider = span?.attributes?.provider || '';
       const spanModelProvider = `${provider}${provider && model ? ' / ' : ''}${model}`;
 
       if (!acc?.[spanModelProvider]) {
-        acc[spanModelProvider] = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        if (hasV5Format) {
+          acc[spanModelProvider] = {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            reasoningTokens: 0,
+            cachedInputTokens: 0,
+          };
+        } else {
+          acc[spanModelProvider] = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        }
       }
 
-      acc[spanModelProvider].promptTokens += spanUsage.promptTokens || 0;
-      acc[spanModelProvider].completionTokens += spanUsage.completionTokens || 0;
-      acc[spanModelProvider].totalTokens += (spanUsage.promptTokens || 0) + (spanUsage.completionTokens || 0);
+      // Aggregate based on the format being used
+      if ('inputTokens' in acc[spanModelProvider] && hasV5Format) {
+        const inputTokens = spanUsage.inputTokens ?? 0;
+        const outputTokens = spanUsage.outputTokens ?? 0;
+        const reasoningTokens = spanUsage.reasoningTokens ?? 0;
+        const cachedInputTokens = spanUsage.cachedInputTokens ?? 0;
+        const v5Acc = acc[spanModelProvider];
+        v5Acc.inputTokens += inputTokens;
+        v5Acc.outputTokens += outputTokens;
+        v5Acc.reasoningTokens += reasoningTokens;
+        v5Acc.cachedInputTokens += cachedInputTokens;
+        v5Acc.totalTokens += spanUsage.totalTokens || inputTokens + outputTokens;
+      } else if ('promptTokens' in acc[spanModelProvider] && !hasV5Format) {
+        const promptTokens = spanUsage.promptTokens ?? 0;
+        const completionTokens = spanUsage.completionTokens ?? 0;
+        const legacyAcc = acc[spanModelProvider];
+        legacyAcc.promptTokens += promptTokens;
+        legacyAcc.completionTokens += completionTokens;
+        legacyAcc.totalTokens += spanUsage.totalTokens || promptTokens + completionTokens;
+      }
 
       return acc;
     },
-    {} as Record<string, { promptTokens: number; completionTokens: number; totalTokens: number }>,
+    {} as Record<string, TokenUsage>,
   );
 
-  const traceTokensBasedOnSpans: { promptTokens: number; completionTokens: number; totalTokens: number } = Object.keys(
-    tokensByProvider,
-  ).reduce(
+  const traceTokensBasedOnSpans = Object.keys(tokensByProvider).reduce(
     (acc, provider) => {
-      const { promptTokens, completionTokens, totalTokens } = tokensByProvider[provider];
-      acc.promptTokens += promptTokens;
-      acc.completionTokens += completionTokens;
-      acc.totalTokens += totalTokens;
+      const providerUsage = tokensByProvider[provider];
+      if (hasV5Format) {
+        const v5Usage = providerUsage as V5TokenUsage;
+        const v5Acc = acc as V5TokenUsage;
+        v5Acc.inputTokens = (v5Acc.inputTokens || 0) + v5Usage.inputTokens;
+        v5Acc.outputTokens = (v5Acc.outputTokens || 0) + v5Usage.outputTokens;
+        v5Acc.reasoningTokens = (v5Acc.reasoningTokens || 0) + (v5Usage?.reasoningTokens ?? 0);
+        v5Acc.cachedInputTokens = (v5Acc.cachedInputTokens || 0) + (v5Usage?.cachedInputTokens ?? 0);
+        v5Acc.totalTokens = (v5Acc.totalTokens || 0) + v5Usage.totalTokens;
+      } else {
+        const legacyUsage = providerUsage as LegacyTokenUsage;
+        const legacyAcc = acc as LegacyTokenUsage;
+        legacyAcc.promptTokens = (legacyAcc.promptTokens || 0) + legacyUsage.promptTokens;
+        legacyAcc.completionTokens = (legacyAcc.completionTokens || 0) + legacyUsage.completionTokens;
+        legacyAcc.totalTokens = (legacyAcc.totalTokens || 0) + legacyUsage.totalTokens;
+      }
       return acc;
     },
-    { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    hasV5Format
+      ? ({ inputTokens: 0, outputTokens: 0, totalTokens: 0, reasoningTokens: 0, cachedInputTokens: 0 } as V5TokenUsage)
+      : ({ promptTokens: 0, completionTokens: 0, totalTokens: 0 } as LegacyTokenUsage),
   );
 
   const tokensByProviderValid = JSON.stringify(traceUsage) === JSON.stringify(traceTokensBasedOnSpans);
 
-  const tokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
-    totalTokens: {
-      label: 'Total LLM Tokens',
-      icon: <CoinsIcon />,
-    },
+  const legacyTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
     promptTokens: {
       label: 'Prompt Tokens',
       icon: <ArrowRightIcon />,
@@ -70,26 +130,53 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     },
   };
 
-  const usageKeyOrder = ['totalTokens', 'promptTokens', 'completionTokens'];
+  const v5TokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
+    inputTokens: {
+      label: 'Input Tokens',
+      icon: <ArrowRightIcon />,
+    },
+    outputTokens: {
+      label: 'Output Tokens',
+      icon: <ArrowRightToLineIcon />,
+    },
+    reasoningTokens: {
+      label: 'Reasoning Tokens',
+      icon: <ArrowRightToLineIcon />,
+    },
+    cachedInputTokens: {
+      label: 'Cached Input Tokens',
+      icon: <ArrowRightToLineIcon />,
+    },
+  };
+  const commonTokenPresentations: Record<string, { label: string; icon: React.ReactNode }> = {
+    totalTokens: {
+      label: 'Total LLM Tokens',
+      icon: <CoinsIcon />,
+    },
+  };
+
+  let tokenPresentations = {
+    ...commonTokenPresentations,
+    ...v5TokenPresentations,
+    ...legacyTokenPresentations,
+  };
+
+  let usageKeyOrder = [];
+  if (hasV5Format) {
+    usageKeyOrder = ['totalTokens', 'inputTokens', 'outputTokens', 'reasoningTokens', 'cachedInputTokens'];
+  } else {
+    usageKeyOrder = ['totalTokens', 'promptTokens', 'completionTokens'];
+  }
 
   const usageAsArray = Object.entries(traceUsage || spanUsage || {})
     .map(([key, value]) => ({ key, value }))
     .sort((a, b) => usageKeyOrder.indexOf(a.key) - usageKeyOrder.indexOf(b.key));
 
   return (
-    <div
-      className={cn(
-        'grid gap-[1.5rem]',
-        {
-          'xl:grid-cols-3': usageAsArray.length === 3,
-          'xl:grid-cols-2': usageAsArray.length === 2,
-        },
-        className,
-      )}
-    >
+    <div className={cn('flex gap-[1.5rem] flex-wrap', className)}>
       {usageAsArray.map(({ key, value }) => (
         <div
-          className={cn('bg-white/5 p-[1rem] px-[1.25rem] rounded-lg text-[0.875rem]', {
+          className={cn('bg-white/5 p-[.75rem] px-[1rem] rounded-lg text-[0.875rem] flex-grow', {
             'min-h-[5.5rem]': traceUsage,
           })}
           key={key}
@@ -105,7 +192,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
             <b className="text-[1rem]">{value}</b>
           </div>
           {tokensByProviderValid && (
-            <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem] ">
+            <div className="text-[0.875rem] mt-[0.5rem] pl-[2rem]">
               {Object.entries(tokensByProvider).map(([provider, providerTokens]) => (
                 <dl
                   key={provider}

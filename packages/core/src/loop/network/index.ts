@@ -1,25 +1,26 @@
-import type { JSONSchema7 } from 'json-schema';
 import z from 'zod';
-import type { ZodSchema } from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
-import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
-import type { RuntimeContext } from '../../runtime-context';
-import type { OutputSchema } from '../../stream';
+import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { TracingContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
+import { ChunkFrom } from '../../stream';
+import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
-import { RESOURCE_TYPES } from '../types';
+import { PRIMITIVE_TYPES } from '../types';
 
-async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtimeContext: RuntimeContext }) {
-  const instructionsToUse = await agent.getInstructions({ runtimeContext: runtimeContext });
-  const agentsToUse = await agent.listAgents({ runtimeContext: runtimeContext });
-  const workflowsToUse = await agent.getWorkflows({ runtimeContext: runtimeContext });
-  const toolsToUse = await agent.getTools({ runtimeContext: runtimeContext });
-  const model = await agent.getModel({ runtimeContext: runtimeContext });
-  const memoryToUse = await agent.getMemory({ runtimeContext: runtimeContext });
+async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
+  const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
+  const agentsToUse = await agent.listAgents({ requestContext: requestContext });
+  const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
+  const toolsToUse = await agent.listTools({ requestContext: requestContext });
+  const model = await agent.getModel({ requestContext: requestContext });
+  const memoryToUse = await agent.getMemory({ requestContext: requestContext });
 
   const agentList = Object.entries(agentsToUse)
     .map(([name, agent]) => {
@@ -36,7 +37,8 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
     })
     .join('\n');
 
-  const toolList = Object.entries(toolsToUse)
+  const memoryTools = await memoryToUse?.listTools?.();
+  const toolList = Object.entries({ ...toolsToUse, ...memoryTools })
     .map(([name, tool]) => {
       return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
         zodToJsonSchema((tool as any).inputSchema || z.object({})),
@@ -45,12 +47,12 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
     .join('\n');
 
   const instructions = `
-          You are a router in a network of specialized AI agents. 
+          You are a router in a network of specialized AI agents.
           Your job is to decide which agent should handle each step of a task.
           If asking for completion of a task, make sure to follow system instructions closely.
 
-          Every step will result in a prompt message. It will be a JSON object with a "selectionReason" and "finalResult" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task. 
-            
+          Every step will result in a prompt message. It will be a JSON object with a "selectionReason" and "finalResult" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.
+
           ## System Instructions
           ${instructionsToUse}
           You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.
@@ -68,7 +70,8 @@ async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtim
         `;
 
   return new Agent({
-    name: 'routing-agent',
+    id: 'routing-agent',
+    name: 'Routing Agent',
     instructions,
     model: model,
     memory: memoryToUse,
@@ -106,78 +109,136 @@ export async function prepareMemoryStep({
   resourceId,
   messages,
   routingAgent,
-  runtimeContext,
+  requestContext,
   generateId,
+  tracingContext,
+  memoryConfig,
 }: {
   threadId: string;
   resourceId: string;
   messages: MessageListInput;
   routingAgent: Agent;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   generateId: () => string;
+  tracingContext?: TracingContext;
+  memoryConfig?: any;
 }) {
-  const memory = await routingAgent.getMemory({ runtimeContext });
+  const memory = await routingAgent.getMemory({ requestContext });
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
     thread = await memory?.createThread({
       threadId,
-      title: '',
+      title: `New Thread ${new Date().toISOString()}`,
       resourceId,
     });
   }
+  let userMessage: string | undefined;
+
+  // Parallelize async operations
+  const promises: Promise<any>[] = [];
+
   if (typeof messages === 'string') {
-    await memory?.saveMessages({
-      messages: [
-        {
-          id: generateId(),
-          type: 'text',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: messages }], format: 2 },
-          createdAt: new Date(),
-          threadId: thread?.id,
-          resourceId: thread?.resourceId,
-        },
-      ] as MastraMessageV2[],
-      format: 'v2',
-    });
+    userMessage = messages;
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: [
+            {
+              id: generateId(),
+              type: 'text',
+              role: 'user',
+              content: { parts: [{ type: 'text', text: messages }], format: 2 },
+              createdAt: new Date(),
+              threadId: thread?.id,
+              resourceId: thread?.resourceId,
+            },
+          ] as MastraDBMessage[],
+        }),
+      );
+    }
   } else {
     const messageList = new MessageList({
       threadId: thread?.id,
       resourceId: thread?.resourceId,
     });
     messageList.add(messages, 'user');
-    const messagesToSave = messageList.get.all.v2();
+    const messagesToSave = messageList.get.all.db();
 
-    await memory?.saveMessages({
-      messages: messagesToSave,
-      format: 'v2',
-    });
+    if (memory) {
+      promises.push(
+        memory.saveMessages({
+          messages: messagesToSave,
+        }),
+      );
+    }
+
+    // Get the user message for title generation
+    const uiMessages = messageList.get.all.ui();
+    const mostRecentUserMessage = routingAgent.getMostRecentUserMessage(uiMessages);
+    userMessage = mostRecentUserMessage?.content;
   }
+
+  // Add title generation to promises if needed (non-blocking)
+  if (thread?.title?.startsWith('New Thread') && memory) {
+    const config = memory.getMergedThreadConfig(memoryConfig || {});
+
+    const {
+      shouldGenerate,
+      model: titleModel,
+      instructions: titleInstructions,
+    } = routingAgent.resolveTitleGenerationConfig(config?.generateTitle);
+
+    if (shouldGenerate && userMessage) {
+      promises.push(
+        routingAgent
+          .genTitle(
+            userMessage,
+            requestContext,
+            tracingContext || { currentSpan: undefined },
+            titleModel,
+            titleInstructions,
+          )
+          .then(title => {
+            if (title) {
+              return memory.createThread({
+                threadId: thread.id,
+                resourceId: thread.resourceId,
+                memoryConfig,
+                title,
+                metadata: thread.metadata,
+              });
+            }
+          }),
+      );
+    }
+  }
+
+  await Promise.all(promises);
 
   return { thread };
 }
 
 export async function createNetworkLoop({
   networkName,
-  runtimeContext,
+  requestContext,
   runId,
   agent,
   generateId,
   routingAgentOptions,
 }: {
   networkName: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   runId: string;
   agent: Agent;
-  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'telemetry' | 'modelSettings'>;
+  routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
   generateId: () => string;
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
     inputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       result: z.string().optional(),
       iteration: z.number(),
       threadId: z.string().optional(),
@@ -187,8 +248,8 @@ export async function createNetworkLoop({
     }),
     outputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
       isComplete: z.boolean().optional(),
@@ -204,37 +265,38 @@ export async function createNetworkLoop({
         completionReason: z.string(),
       });
 
-      const routingAgent = await getRoutingAgent({ runtimeContext, agent });
+      const routingAgent = await getRoutingAgent({ requestContext, agent });
 
       let completionResult;
 
-      let iterationCount = inputData.iteration ? inputData.iteration + 1 : 0;
+      let iterationCount = (inputData.iteration ? inputData.iteration : -1) + 1;
 
       await writer.write({
         type: 'routing-agent-start',
         payload: {
+          agentId: routingAgent.id,
+          runId: runId,
           inputData: {
             ...inputData,
             iteration: iterationCount,
           },
         },
+        runId,
+        from: ChunkFrom.NETWORK,
       });
 
-      if (inputData.resourceType !== 'none' && inputData?.result) {
-        // Check if the task is complete
-        console.log('Input Data for decision making', inputData);
-
+      if (inputData.primitiveType !== 'none' && inputData?.result) {
         const completionPrompt = `
-                          The ${inputData.resourceType} ${inputData.resourceId} has contributed to the task.
-                          This is the result from the agent: ${inputData.result}
-  
+                          The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
+                          This is the result from the agent: ${typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result}
+
                           You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
                           Original task: ${inputData.task}.
 
                           When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
 
                           You must return this JSON shape.
-  
+
                           {
                               "isComplete": boolean,
                               "completionReason": string,
@@ -242,9 +304,11 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        completionResult = await routingAgent.generateVNext([{ role: 'assistant', content: completionPrompt }], {
-          output: completionSchema,
-          runtimeContext: runtimeContext,
+        const streamOptions = {
+          structuredOutput: {
+            schema: completionSchema,
+          },
+          requestContext: requestContext,
           maxSteps: 1,
           memory: {
             thread: initData?.threadId ?? runId,
@@ -252,30 +316,107 @@ export async function createNetworkLoop({
             readOnly: true,
           },
           ...routingAgentOptions,
+        };
+
+        // Try streaming with structured output
+        let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
+
+        let currentText = '';
+        let currentTextIdx = 0;
+        await writer.write({
+          type: 'routing-agent-text-start',
+          payload: {
+            runId: runId,
+          },
+          from: ChunkFrom.NETWORK,
+          runId,
         });
 
-        console.log('Completion Result', completionResult);
+        // Stream and check for errors
+        for await (const chunk of completionStream.objectStream) {
+          if (chunk?.finalResult) {
+            currentText = chunk.finalResult;
+          }
+
+          const currentSlice = currentText.slice(currentTextIdx);
+          if (chunk?.isComplete && currentSlice.length) {
+            await writer.write({
+              type: 'routing-agent-text-delta',
+              payload: {
+                text: currentSlice,
+              },
+              from: ChunkFrom.NETWORK,
+              runId,
+            });
+            currentTextIdx = currentText.length;
+          }
+        }
+
+        // If error detected, retry with JSON prompt injection fallback
+        // TODO ujpdate tryStreamWithJsonFallback to not await the result so we can re-use it here
+        if (completionStream.error) {
+          console.warn('Error detected in structured output stream. Attempting fallback with JSON prompt injection.');
+
+          // Reset text tracking for fallback
+          currentText = '';
+          currentTextIdx = 0;
+
+          // Create fallback stream with jsonPromptInjection
+          completionStream = await routingAgent.stream(completionPrompt, {
+            ...streamOptions,
+            structuredOutput: {
+              ...streamOptions.structuredOutput,
+              jsonPromptInjection: true,
+            },
+          });
+
+          // Stream from fallback
+          for await (const chunk of completionStream.objectStream) {
+            if (chunk?.finalResult) {
+              currentText = chunk.finalResult;
+            }
+
+            const currentSlice = currentText.slice(currentTextIdx);
+            if (chunk?.isComplete && currentSlice.length) {
+              await writer.write({
+                type: 'routing-agent-text-delta',
+                payload: {
+                  text: currentSlice,
+                },
+                from: ChunkFrom.NETWORK,
+                runId,
+              });
+              currentTextIdx = currentText.length;
+            }
+          }
+        }
+
+        completionResult = await completionStream.getFullOutput();
 
         if (completionResult?.object?.isComplete) {
           const endPayload = {
             task: inputData.task,
-            resourceId: '',
-            resourceType: 'none' as z.infer<typeof RESOURCE_TYPES>,
+            primitiveId: '',
+            primitiveType: 'none' as const,
             prompt: '',
             result: completionResult.object.finalResult,
             isComplete: true,
             selectionReason: completionResult.object.completionReason || '',
             iteration: iterationCount,
+            runId: runId,
           };
 
           await writer.write({
             type: 'routing-agent-end',
-            payload: endPayload,
+            payload: {
+              ...endPayload,
+              usage: await completionStream.usage,
+            },
+            from: ChunkFrom.NETWORK,
+            runId,
           });
 
-          console.log('Routing Complete', endPayload);
-
-          const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+          const memory = await agent.getMemory({ requestContext: requestContext });
           await memory?.saveMessages({
             messages: [
               {
@@ -292,53 +433,62 @@ export async function createNetworkLoop({
                   format: 2,
                 },
                 createdAt: new Date(),
-                threadId: initData.threadId || runId,
-                resourceId: initData.threadResourceId || networkName,
+                threadId: initData?.threadId || runId,
+                resourceId: initData?.threadResourceId || networkName,
               },
-            ] as MastraMessageV2[],
-            format: 'v2',
+            ] as MastraDBMessage[],
           });
 
           return endPayload;
         }
       }
 
-      console.log('Final Result', completionResult?.object);
-
       const prompt: MessageListInput = [
         {
           role: 'assistant',
           content: `
                     ${inputData.isOneOff ? 'You are executing just one primitive based on the user task. Make sure to pick the primitive that is the best suited to accomplish the whole task. Primitives that execute only part of the task should be avoided.' : 'You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.'}
-  
-                    The user has given you the following task: 
+
+                    The user has given you the following task:
                     ${inputData.task}
                     ${completionResult ? `\n\n${completionResult?.object?.finalResult}` : ''}
-  
-                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive.
-                    If you are calling the same agent again, make sure to adjust the prompt to be more specific.
-                    Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
-  
+
+                    # Rules:
+
+                    ## Agent:
+                    - prompt should be a text value, like you would call an LLM in a chat interface.
+                    - If you are calling the same agent again, make sure to adjust the prompt to be more specific.
+
+                    ## Workflow/Tool:
+                    - prompt should be a JSON value that corresponds to the input schema of the workflow or tool. The JSON value is stringified.
+                    - Make sure to use inputs corresponding to the input schema when calling a workflow or tool.
+
+                    DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with "isNetwork" true.
+
+                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return "none" for the primitiveId and "none" for the primitiveType.
+
                     {
-                        "resourceId": string,
-                        "resourceType": "agent" | "workflow" | "tool",
+                        "primitiveId": string,
+                        "primitiveType": "agent" | "workflow" | "tool",
                         "prompt": string,
                         "selectionReason": string
                     }
-  
+
                     The 'selectionReason' property should explain why you picked the primitive${inputData.verboseIntrospection ? ', as well as why the other primitives were not picked.' : '.'}
                     `,
         },
       ];
 
       const options = {
-        output: z.object({
-          resourceId: z.string(),
-          resourceType: RESOURCE_TYPES,
-          prompt: z.string(),
-          selectionReason: z.string(),
-        }),
-        runtimeContext: runtimeContext,
+        structuredOutput: {
+          schema: z.object({
+            primitiveId: z.string().describe('The id of the primitive to be called'),
+            primitiveType: PRIMITIVE_TYPES.describe('The type of the primitive to be called'),
+            prompt: z.string().describe('The json string or text value to be sent to the primitive'),
+            selectionReason: z.string().describe('The reason you picked the primitive'),
+          }),
+        },
+        requestContext: requestContext,
         maxSteps: 1,
         memory: {
           thread: initData?.threadId ?? runId,
@@ -348,24 +498,30 @@ export async function createNetworkLoop({
         ...routingAgentOptions,
       };
 
-      const result = await routingAgent.generateVNext(prompt, options);
+      const result = await tryGenerateWithJsonFallback(routingAgent, prompt, options);
 
       const object = result.object;
 
       const endPayload = {
         task: inputData.task,
         result: '',
-        resourceId: object.resourceId,
-        resourceType: object.resourceType,
+        primitiveId: object.primitiveId,
+        primitiveType: object.primitiveType,
         prompt: object.prompt,
-        isComplete: object.resourceId === 'none' && object.resourceType === 'none',
+        isComplete: object.primitiveId === 'none' && object.primitiveType === 'none',
         selectionReason: object.selectionReason,
         iteration: iterationCount,
+        runId: runId,
       };
 
       await writer.write({
         type: 'routing-agent-end',
-        payload: endPayload,
+        payload: {
+          ...endPayload,
+          usage: result.usage,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -376,8 +532,8 @@ export async function createNetworkLoop({
     id: 'agent-execution-step',
     inputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
       isComplete: z.boolean().optional(),
@@ -386,38 +542,47 @@ export async function createNetworkLoop({
     }),
     outputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       result: z.string(),
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      const agentsMap = await agent.listAgents({ runtimeContext });
+      const agentsMap = await agent.listAgents({ requestContext });
 
-      const agentId = inputData.resourceId;
+      const agentId = inputData.primitiveId;
 
-      const agentForStep = agentsMap[inputData.resourceId];
+      const agentForStep = agentsMap[agentId];
 
       if (!agentForStep) {
-        throw new Error(`Agent ${agentId} not found`);
+        const mastraError = new MastraError({
+          id: 'AGENT_NETWORK_AGENT_EXECUTION_STEP_INVALID_TASK_INPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.USER,
+          text: `Agent ${agentId} not found`,
+        });
+        // TODO pass agent logger in here
+        // logger.trackException(mastraError);
+        // logger.error(mastraError.toString());
+        throw mastraError;
       }
-
-      const runId = generateId();
 
       await writer.write({
         type: 'agent-execution-start',
         payload: {
-          agentId: inputData.resourceId,
+          agentId: inputData.primitiveId,
           args: inputData,
           runId,
         },
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
-      const result = await agentForStep.streamVNext(inputData.prompt, {
+      const result = await agentForStep.stream(inputData.prompt, {
         // resourceId: inputData.resourceId,
         // threadId: inputData.threadId,
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
         runId,
       });
 
@@ -425,10 +590,12 @@ export async function createNetworkLoop({
         await writer.write({
           type: `agent-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
+          from: ChunkFrom.NETWORK,
         });
       }
 
-      const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+      const memory = await agent.getMemory({ requestContext: requestContext });
 
       const initData = await getInitData();
       const messages = result.messageList.get.all.v1();
@@ -446,8 +613,8 @@ export async function createNetworkLoop({
                   text: JSON.stringify({
                     isNetwork: true,
                     selectionReason: inputData.selectionReason,
-                    resourceType: inputData.resourceType,
-                    resourceId: inputData.resourceId,
+                    primitiveType: inputData.primitiveType,
+                    primitiveId: inputData.primitiveId,
                     input: inputData.prompt,
                     finalResult: { text: await result.text, toolCalls: await result.toolCalls, messages },
                   }),
@@ -456,16 +623,15 @@ export async function createNetworkLoop({
               format: 2,
             },
             createdAt: new Date(),
-            threadId: initData.threadId || runId,
-            resourceId: initData.threadResourceId || networkName,
+            threadId: initData?.threadId || runId,
+            resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
         task: inputData.task,
-        agentId: inputData.resourceId,
+        agentId: inputData.primitiveId,
         result: await result.text,
         isComplete: false,
         iteration: inputData.iteration,
@@ -473,13 +639,18 @@ export async function createNetworkLoop({
 
       await writer.write({
         type: 'agent-execution-end',
-        payload: endPayload,
+        payload: {
+          ...endPayload,
+          usage: await result.usage,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return {
         task: inputData.task,
-        resourceId: inputData.resourceId,
-        resourceType: inputData.resourceType,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
         result: await result.text,
         isComplete: false,
         iteration: inputData.iteration,
@@ -491,8 +662,8 @@ export async function createNetworkLoop({
     id: 'workflow-execution-step',
     inputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
       isComplete: z.boolean().optional(),
@@ -501,58 +672,79 @@ export async function createNetworkLoop({
     }),
     outputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       result: z.string(),
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      const workflowsMap = await agent.getWorkflows({ runtimeContext: runtimeContext });
-      const wf = workflowsMap[inputData.resourceId];
+      const workflowsMap = await agent.listWorkflows({ requestContext: requestContext });
+      const workflowId = inputData.primitiveId;
+      const wf = workflowsMap[workflowId];
 
       if (!wf) {
-        throw new Error(`Workflow ${inputData.resourceId} not found`);
+        const mastraError = new MastraError({
+          id: 'AGENT_NETWORK_WORKFLOW_EXECUTION_STEP_INVALID_TASK_INPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.USER,
+          text: `Workflow ${workflowId} not found`,
+        });
+        // TODO pass agent logger in here
+        // logger.trackException(mastraError);
+        // logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       let input;
       try {
         input = JSON.parse(inputData.prompt);
       } catch (e: unknown) {
-        console.error(e);
-        throw new Error(`Invalid task input: ${inputData.task}`);
+        const mastraError = new MastraError(
+          {
+            id: 'WORKFLOW_EXECUTION_STEP_INVALID_TASK_INPUT',
+            domain: ErrorDomain.AGENT_NETWORK,
+            category: ErrorCategory.USER,
+            text: `Invalid task input: ${inputData.task}`,
+          },
+          e,
+        );
+
+        // TODO pass agent logger in here
+        // logger.trackException(mastraError);
+        // logger.error(mastraError.toString());
+        throw mastraError;
       }
 
-      const run = wf.createRun();
+      const run = await wf.createRun({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
-        runId: run.runId,
+        runId: runId,
       };
 
       await writer?.write({
         type: 'workflow-execution-start',
         payload: toolData,
+        from: ChunkFrom.NETWORK,
+        runId,
       });
-
-      // await emitter.emit('watch-v2', {
-      //     type: 'tool-call-streaming-start',
-      //     ...toolData,
-      // });
 
       const stream = run.streamVNext({
         inputData: input,
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
       });
 
       // let result: any;
       // let stepResults: Record<string, any> = {};
-      let chunks: any[] = [];
+      let chunks: ChunkType[] = [];
       for await (const chunk of stream) {
         chunks.push(chunk);
         await writer?.write({
           type: `workflow-execution-event-${chunk.type}`,
           payload: chunk,
+          runId: chunk.runId,
+          from: ChunkFrom.NETWORK,
         });
       }
 
@@ -566,8 +758,8 @@ export async function createNetworkLoop({
 
       const finalResult = JSON.stringify({
         isNetwork: true,
-        resourceType: inputData.resourceType,
-        resourceId: inputData.resourceId,
+        primitiveType: inputData.primitiveType,
+        primitiveId: inputData.primitiveId,
         selectionReason: inputData.selectionReason,
         input,
         finalResult: {
@@ -578,7 +770,7 @@ export async function createNetworkLoop({
         },
       });
 
-      const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+      const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData();
       await memory?.saveMessages({
         messages: [
@@ -588,25 +780,30 @@ export async function createNetworkLoop({
             role: 'assistant',
             content: { parts: [{ type: 'text', text: finalResult }], format: 2 },
             createdAt: new Date(),
-            threadId: initData.threadId || runId,
-            resourceId: initData.threadResourceId || networkName,
+            threadId: initData?.threadId || runId,
+            resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
         task: inputData.task,
-        resourceId: inputData.resourceId,
-        resourceType: inputData.resourceType,
+        primitiveId: inputData.primitiveId,
+        primitiveType: inputData.primitiveType,
         result: finalResult,
         isComplete: false,
         iteration: inputData.iteration,
+        name: wf.name,
       };
 
       await writer?.write({
         type: 'workflow-execution-end',
-        payload: endPayload,
+        payload: {
+          ...endPayload,
+          usage: await stream.usage,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -617,8 +814,8 @@ export async function createNetworkLoop({
     id: 'tool-execution-step',
     inputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
       isComplete: z.boolean().optional(),
@@ -627,30 +824,64 @@ export async function createNetworkLoop({
     }),
     outputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       result: z.string(),
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
     execute: async ({ inputData, getInitData, writer }) => {
-      const toolsMap = await agent.getTools({ runtimeContext });
-      const tool = toolsMap[inputData.resourceId];
+      const initData = await getInitData();
+
+      const agentTools = await agent.listTools({ requestContext });
+      const memory = await agent.getMemory({ requestContext });
+      const memoryTools = await memory?.listTools?.();
+      const toolsMap = { ...agentTools, ...memoryTools };
+
+      const toolId = inputData.primitiveId;
+      let tool = toolsMap[toolId];
 
       if (!tool) {
-        throw new Error(`Tool ${inputData.resourceId} not found`);
+        const mastraError = new MastraError({
+          id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.USER,
+          text: `Tool ${toolId} not found`,
+        });
+
+        // TODO pass agent logger in here
+        // logger.trackException(mastraError);
+        // logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       if (!tool.execute) {
-        throw new Error(`Tool ${inputData.resourceId} does not have an execute function`);
+        const mastraError = new MastraError({
+          id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.USER,
+          text: `Tool ${toolId} does not have an execute function`,
+        });
+        throw mastraError;
       }
 
       let inputDataToUse: any;
       try {
         inputDataToUse = JSON.parse(inputData.prompt);
       } catch (e: unknown) {
-        console.error(e);
-        throw new Error(`Invalid task input: ${inputData.task}`);
+        const mastraError = new MastraError(
+          {
+            id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
+            domain: ErrorDomain.AGENT_NETWORK,
+            category: ErrorCategory.USER,
+            text: `Invalid task input: ${inputData.task}`,
+          },
+          e,
+        );
+        // TODO pass agent logger in here
+        // logger.trackException(mastraError);
+        // logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       const toolCallId = generateId();
@@ -661,20 +892,23 @@ export async function createNetworkLoop({
           args: {
             ...inputData,
             args: inputDataToUse,
-            toolName: inputData.resourceId,
+            toolName: toolId,
             toolCallId,
           },
           runId,
         },
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
-      const finalResult: any = await tool.execute(
+      const finalResult = await tool.execute(
         {
-          runtimeContext,
+          requestContext,
           mastra: agent.getMastraInstance(),
-          resourceId: inputData.resourceId,
-          threadId: runId,
+          resourceId: initData.threadResourceId || networkName,
+          threadId: initData.threadId,
           runId,
+          memory,
           context: inputDataToUse,
           // TODO: Pass proper tracing context when network supports tracing
           tracingContext: { currentSpan: undefined },
@@ -683,8 +917,6 @@ export async function createNetworkLoop({
         { toolCallId, messages: [] },
       );
 
-      const memory = await agent.getMemory({ runtimeContext: runtimeContext });
-      const initData = await getInitData();
       await memory?.saveMessages({
         messages: [
           {
@@ -698,8 +930,8 @@ export async function createNetworkLoop({
                   text: JSON.stringify({
                     isNetwork: true,
                     selectionReason: inputData.selectionReason,
-                    resourceType: inputData.resourceType,
-                    resourceId: inputData.resourceId,
+                    primitiveType: inputData.primitiveType,
+                    primitiveId: toolId,
                     finalResult: { result: finalResult, toolCallId },
                     input: inputDataToUse,
                   }),
@@ -711,24 +943,25 @@ export async function createNetworkLoop({
             threadId: initData.threadId || runId,
             resourceId: initData.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
         task: inputData.task,
-        resourceId: inputData.resourceId,
-        resourceType: inputData.resourceType,
+        primitiveId: toolId,
+        primitiveType: inputData.primitiveType,
         result: finalResult,
         isComplete: false,
         iteration: inputData.iteration,
         toolCallId,
-        toolName: inputData.resourceId,
+        toolName: toolId,
       };
 
       await writer?.write({
         type: 'tool-execution-end',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -739,8 +972,8 @@ export async function createNetworkLoop({
     id: 'finish-step',
     inputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
       isComplete: z.boolean().optional(),
@@ -754,16 +987,25 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer }) => {
+      let endResult = inputData.result;
+
+      if (inputData.primitiveId === 'none' && inputData.primitiveType === 'none' && !inputData.result) {
+        endResult = inputData.selectionReason;
+      }
+
       const endPayload = {
         task: inputData.task,
-        result: inputData.result,
+        result: endResult,
         isComplete: !!inputData.isComplete,
         iteration: inputData.iteration,
+        runId: runId,
       };
 
       await writer?.write({
         type: 'network-execution-event-step-finish',
         payload: endPayload,
+        from: ChunkFrom.NETWORK,
+        runId,
       });
 
       return endPayload;
@@ -774,8 +1016,8 @@ export async function createNetworkLoop({
     id: 'Agent-Network-Outer-Workflow',
     inputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       result: z.string().optional(),
       iteration: z.number(),
       threadId: z.string().optional(),
@@ -785,8 +1027,8 @@ export async function createNetworkLoop({
     }),
     outputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
       isComplete: z.boolean().optional(),
@@ -796,15 +1038,18 @@ export async function createNetworkLoop({
       threadResourceId: z.string().optional(),
       isOneOff: z.boolean(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   });
 
   networkWorkflow
     .then(routingStep)
     .branch([
-      [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'agent', agentStep],
-      [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'workflow', workflowStep],
-      [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'tool', toolStep],
-      [async ({ inputData }) => inputData.isComplete, finishStep],
+      [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'agent', agentStep],
+      [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'workflow', workflowStep],
+      [async ({ inputData }) => !inputData.isComplete && inputData.primitiveType === 'tool', toolStep],
+      [async ({ inputData }) => !!inputData.isComplete, finishStep],
     ])
     .map({
       task: {
@@ -823,13 +1068,13 @@ export async function createNetworkLoop({
         step: [agentStep, workflowStep, toolStep, finishStep],
         path: 'result',
       },
-      resourceId: {
+      primitiveId: {
         step: [routingStep, agentStep, workflowStep, toolStep],
-        path: 'resourceId',
+        path: 'primitiveId',
       },
-      resourceType: {
+      primitiveType: {
         step: [routingStep, agentStep, workflowStep, toolStep],
-        path: 'resourceType',
+        path: 'primitiveType',
       },
       iteration: {
         step: [routingStep, agentStep, workflowStep, toolStep],
@@ -854,12 +1099,11 @@ export async function createNetworkLoop({
 }
 
 export async function networkLoop<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 >({
   networkName,
-  runtimeContext,
+  requestContext,
   runId,
   routingAgent,
   routingAgentOptions,
@@ -870,22 +1114,39 @@ export async function networkLoop<
   messages,
 }: {
   networkName: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   runId: string;
   routingAgent: Agent;
-  routingAgentOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>;
+  routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
   generateId: () => string;
   maxIterations: number;
   threadId?: string;
   resourceId?: string;
   messages: MessageListInput;
 }) {
+  // Validate that memory is available before starting the network
+  const memoryToUse = await routingAgent.getMemory({ requestContext });
+
+  if (!memoryToUse) {
+    throw new MastraError({
+      id: 'AGENT_NETWORK_MEMORY_REQUIRED',
+      domain: ErrorDomain.AGENT_NETWORK,
+      category: ErrorCategory.USER,
+      text: 'Memory is required for the agent network to function properly. Please configure memory for the agent.',
+      details: {
+        status: 400,
+      },
+    });
+  }
+
+  const { memory: routingAgentMemoryOptions, ...routingAgentOptionsWithoutMemory } = routingAgentOptions || {};
+
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
-    runtimeContext,
+    requestContext,
     runId,
     agent: routingAgent,
-    routingAgentOptions,
+    routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
   });
 
@@ -894,21 +1155,20 @@ export async function networkLoop<
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: networkWorkflow.outputSchema,
     execute: async ({ inputData, writer }) => {
-      if (maxIterations && inputData.iteration >= maxIterations) {
-        await writer?.write({
-          type: 'network-execution-event-finish',
-          payload: {
-            ...inputData,
-            completionReason: `Max iterations reached: ${maxIterations}`,
-          },
-        });
-        return {
-          ...inputData,
-          completionReason: `Max iterations reached: ${maxIterations}`,
-        };
-      }
+      const finalData = {
+        ...inputData,
+        ...(maxIterations && inputData.iteration >= maxIterations
+          ? { completionReason: `Max iterations reached: ${maxIterations}` }
+          : {}),
+      };
+      await writer?.write({
+        type: 'network-execution-event-finish',
+        payload: finalData,
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
 
-      return inputData;
+      return finalData;
     },
   });
 
@@ -917,8 +1177,8 @@ export async function networkLoop<
     inputSchema: z.object({
       iteration: z.number(),
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       result: z.string().optional(),
       threadId: z.string().optional(),
       threadResourceId: z.string().optional(),
@@ -927,14 +1187,17 @@ export async function networkLoop<
     }),
     outputSchema: z.object({
       task: z.string(),
-      resourceId: z.string(),
-      resourceType: RESOURCE_TYPES,
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
       prompt: z.string(),
       result: z.string(),
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
     }),
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+    },
   })
     .dountil(networkWorkflow, async ({ inputData }) => {
       return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);
@@ -942,17 +1205,19 @@ export async function networkLoop<
     .then(finalStep)
     .commit();
 
-  const run = await mainWorkflow.createRunAsync({
+  const run = await mainWorkflow.createRun({
     runId,
   });
 
   const { thread } = await prepareMemoryStep({
-    runtimeContext: runtimeContext,
+    requestContext: requestContext,
     threadId: threadId || run.runId,
     resourceId: resourceId || networkName,
     messages,
     routingAgent,
     generateId,
+    tracingContext: routingAgentOptions?.tracingContext,
+    memoryConfig: routingAgentMemoryOptions?.options,
   });
 
   const task = getLastMessage(messages);
@@ -963,15 +1228,15 @@ export async function networkLoop<
       return run.streamVNext({
         inputData: {
           task,
-          resourceId: '',
-          resourceType: 'none',
+          primitiveId: '',
+          primitiveType: 'none',
           iteration: 0,
           threadResourceId: thread?.resourceId,
           threadId: thread?.id,
           isOneOff: false,
           verboseIntrospection: true,
         },
-      });
+      }).fullStream;
     },
   });
 }

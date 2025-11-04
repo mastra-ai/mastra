@@ -10,7 +10,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
     "@types/node": "^20.17.57",

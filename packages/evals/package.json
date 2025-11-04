@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.13.6",
+  "version": "0.14.1",
   "description": "",
   "type": "module",
   "files": [
@@ -29,54 +29,14 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./judge": {
+    "./scorers/prebuilt": {
       "import": {
-        "types": "./dist/metrics/judge/index.d.ts",
-        "default": "./dist/metrics/judge/index.js"
+        "types": "./dist/scorers/prebuilt/index.d.ts",
+        "default": "./dist/scorers/prebuilt/index.js"
       },
       "require": {
-        "types": "./dist/metrics/judge/index.d.ts",
-        "default": "./dist/metrics/judge/index.cjs"
-      }
-    },
-    "./nlp": {
-      "import": {
-        "types": "./dist/metrics/nlp/index.d.ts",
-        "default": "./dist/metrics/nlp/index.js"
-      },
-      "require": {
-        "types": "./dist/metrics/nlp/index.d.ts",
-        "default": "./dist/metrics/nlp/index.cjs"
-      }
-    },
-    "./llm": {
-      "import": {
-        "types": "./dist/metrics/llm/index.d.ts",
-        "default": "./dist/metrics/llm/index.js"
-      },
-      "require": {
-        "types": "./dist/metrics/llm/index.d.ts",
-        "default": "./dist/metrics/llm/index.cjs"
-      }
-    },
-    "./scorers/llm": {
-      "import": {
-        "types": "./dist/scorers/llm/index.d.ts",
-        "default": "./dist/scorers/llm/index.js"
-      },
-      "require": {
-        "types": "./dist/scorers/llm/index.d.ts",
-        "default": "./dist/scorers/llm/index.cjs"
-      }
-    },
-    "./scorers/code": {
-      "import": {
-        "types": "./dist/scorers/code/index.d.ts",
-        "default": "./dist/scorers/code/index.js"
-      },
-      "require": {
-        "types": "./dist/scorers/code/index.d.ts",
-        "default": "./dist/scorers/code/index.cjs"
+        "types": "./dist/scorers/prebuilt/index.d.ts",
+        "default": "./dist/scorers/prebuilt/index.cjs"
       }
     },
     "./scorers/utils": {
@@ -104,13 +64,13 @@
   "dependencies": {
     "compromise": "^14.14.4",
     "difflib": "^0.2.4",
-    "fs-extra": "^11.3.1",
+    "fs-extra": "^11.3.2",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.15.3-0 <0.17.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "ai": "^4.0.0 || ^5.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
@@ -125,7 +85,7 @@
     "@types/string-similarity": "^4.0.2",
     "ai": "^4.3.19",
     "dotenv": "^17.0.0",
-    "eslint": "^9.30.1",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",

@@ -1,8 +1,9 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings } from 'ai';
+import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4/model';
+import type { ToolSet } from '@internal/ai-sdk-v4/tool';
+import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema, ZodTypeAny } from 'zod';
-import type { TracingContext, TracingOptions } from '../ai-tracing';
-import type { Metric } from '../eval';
+import type { ZodSchema } from 'zod';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -10,74 +11,183 @@ import type {
   DefaultLLMTextObjectOptions,
   DefaultLLMTextOptions,
   OutputType,
+  SystemMessage,
+  MastraModelConfig,
+  OpenAICompatibleConfig,
 } from '../llm';
+import type { ModelRouterModelId } from '../llm/model';
 import type {
   StreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback,
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
-import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { RequestContext } from '../request-context';
+import type { OutputSchema } from '../stream';
+import type { InferSchemaOutput } from '../stream/base/schema';
+import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import type { MessageList } from './message-list/index';
+import type { SaveQueueManager } from './save-queue';
 
-export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from 'ai';
+export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type { Message as AiMessageType } from '@internal/ai-sdk-v4/message';
+export type { LLMStepResult } from '../stream/types';
 
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
+/**
+ * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
+ * (e.g., google.tools.googleSearch()).
+ */
+export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
+
+export type AgentInstructions = SystemMessage;
+export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-type FallbackFields<S extends ZodTypeAny> =
+type FallbackFields<OUTPUT extends OutputSchema = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: z.infer<S> };
+  | { errorStrategy: 'fallback'; fallbackValue: InferSchemaOutput<OUTPUT> };
 
-export type StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny> = {
+export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Zod schema to validate the output against */
-  schema: S;
+  schema: OUTPUT;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraLanguageModel;
+  model?: MastraModelConfig;
 
   /**
    * Custom instructions for the structuring agent.
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
-} & FallbackFields<S>;
 
-export interface AgentConfig<
-  TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
-> {
-  id?: TAgentId;
-  name: TAgentId;
-  description?: string;
-  instructions: DynamicArgument<string>;
-  model: DynamicArgument<MastraLanguageModel>;
-  tools?: DynamicArgument<TTools>;
-  workflows?: DynamicArgument<Record<string, Workflow>>;
-  defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
-  defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
-  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
+  /**
+   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   */
+  jsonPromptInjection?: boolean;
+} & FallbackFields<OUTPUT>;
+
+export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
+  StructuredOutputOptions<OUTPUT>,
+  'model'
+> & { model?: ModelRouterModelId | OpenAICompatibleConfig };
+
+/**
+ * Provide options while creating an agent.
+ */
+export interface AgentCreateOptions {
+  tracingPolicy?: TracingPolicy;
+}
+
+// This is used in place of DynamicArgument so that model router IDE autocomplete works.
+// Without this TS doesn't understand the function/string union type from DynamicArgument
+type DynamicModel = ({
+  requestContext,
+  mastra,
+}: {
+  requestContext: RequestContext;
   mastra?: Mastra;
+}) => Promise<MastraModelConfig> | MastraModelConfig;
+
+type ModelWithRetries = {
+  id?: string;
+  model: MastraModelConfig | DynamicModel;
+  maxRetries?: number; //defaults to 0
+  enabled?: boolean; //defaults to true
+};
+
+export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
+  /**
+   * Identifier for the agent.
+   * @defaultValue Uses `name` if not provided.
+   */
+  id?: TAgentId;
+  /**
+   * Unique identifier for the agent.
+   */
+  name: TAgentId;
+  /**
+   * Description of the agent's purpose and capabilities.
+   */
+  description?: string;
+  /**
+   * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+   * array of system messages, or a function that returns any of these types dynamically.
+   */
+  instructions: DynamicAgentInstructions;
+  /**
+   * The language model used by the agent. Can be provided statically or resolved at runtime.
+   */
+  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
+  /**
+   * Maximum number of retries for model calls in case of failure.
+   * @defaultValue 0
+   */
+  maxRetries?: number;
+  /**
+   * Tools that the agent can access. Can be provided statically or resolved dynamically.
+   */
+  tools?: DynamicArgument<TTools>;
+  /**
+   * Workflows that the agent can execute. Can be static or dynamically resolved.
+   */
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  /**
+   * Default options used when calling `generate()`.
+   */
+  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions>;
+  /**
+   * Default options used when calling `stream()`.
+   */
+  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions>;
+  /**
+   * Default options used when calling `stream()` in vNext mode.
+   */
+  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
+  /**
+   * Reference to the Mastra runtime instance (injected automatically).
+   */
+  mastra?: Mastra;
+  /**
+   * Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.
+   */
   agents?: DynamicArgument<Record<string, Agent>>;
+  /**
+   * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
+   */
   scorers?: DynamicArgument<MastraScorers>;
-  evals?: TMetrics;
+
+  /**
+   * Memory module used for storing and retrieving stateful context.
+   */
   memory?: DynamicArgument<MastraMemory>;
+  /**
+   * Voice settings for speech input and output.
+   */
   voice?: CompositeVoice;
+  /**
+   * Input processors that can modify or validate messages before they are processed by the agent. These processors need to implement the `processInput` function.
+   */
   inputProcessors?: DynamicArgument<InputProcessor[]>;
+  /**
+   * Output processors that can modify or validate messages from the agent, before it is sent to the client. These processors need to implement either (or both) of the `processOutputResult` and `processOutputStream` functions.
+   */
   outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  /**
+   * Options to pass to the agent upon creation.
+   */
+  options?: AgentCreateOptions;
 }
 
 export type AgentMemoryOption = {
@@ -97,16 +207,12 @@ export type AgentGenerateOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
-  /**
-   * @deprecated Use the `memory` property instead for all memory-related options.
-   */
-  memoryOptions?: MemoryConfig;
   /** New memory options (preferred) */
   memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
@@ -119,17 +225,10 @@ export type AgentGenerateOptions<
   output?: OutputType | OUTPUT;
   /** Schema for structured output generation alongside tool calls. */
   experimental_output?: EXPERIMENTAL_OUTPUT;
-  /**
-   * Structured output configuration using StructuredOutputProcessor.
-   * This provides better DX than manually creating the processor.
-   */
-  structuredOutput?: EXPERIMENTAL_OUTPUT extends z.ZodTypeAny ? StructuredOutputOptions<EXPERIMENTAL_OUTPUT> : never;
   /** Controls how tools are selected during generation */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
-  /** Telemetry settings */
-  telemetry?: TelemetrySettings;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -147,6 +246,8 @@ export type AgentGenerateOptions<
   tracingContext?: TracingContext;
   /** AI tracing options for starting new traces */
   tracingOptions?: TracingOptions;
+  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
+  providerOptions?: ProviderOptions;
 } & (
   | {
       /**
@@ -181,7 +282,7 @@ export type AgentStreamOptions<
   EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
 > = {
   /** Optional instructions to override the agent's default instructions */
-  instructions?: string;
+  instructions?: SystemMessage;
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
@@ -209,10 +310,8 @@ export type AgentStreamOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Experimental schema for structured output */
   experimental_output?: EXPERIMENTAL_OUTPUT;
-  /** Telemetry settings */
-  telemetry?: TelemetrySettings;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /**
    * Whether to save messages incrementally on step finish
    * @default false
@@ -226,6 +325,8 @@ export type AgentStreamOptions<
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
+  providerOptions?: ProviderOptions;
 } & (
   | {
       /**
@@ -249,3 +350,23 @@ export type AgentStreamOptions<
     }
 ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
+
+export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
+
+export type AgentExecuteOnFinishOptions = {
+  runId: string;
+  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
+  thread: StorageThreadType | null | undefined;
+  readOnlyMemory?: boolean;
+  threadId?: string;
+  resourceId?: string;
+  requestContext: RequestContext;
+  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+  memoryConfig: MemoryConfig | undefined;
+  outputText: string;
+  messageList: MessageList;
+  threadExists: boolean;
+  structuredOutput?: boolean;
+  saveQueueManager: SaveQueueManager;
+  overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+};

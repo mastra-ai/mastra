@@ -1,15 +1,24 @@
-import { isAbortError } from '@ai-sdk/provider-utils';
-import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
+import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
+import { APICallError } from 'ai-v5';
+import type { ToolChoice, ToolSet } from 'ai-v5';
+import type { StructuredOutputOptions } from '../../../agent/types';
+import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
+import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
 import { AISDKV5InputStream } from './input';
-import { getModelSupport } from './model-supports';
 
-type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
+function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
+  const newObj = { ...obj };
+  for (const key of keys) {
+    delete newObj[key];
+  }
+  return newObj;
+}
+
+type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
   model: LanguageModelV2;
   providerOptions?: SharedV2ProviderOptions;
@@ -20,20 +29,19 @@ type ExecutionProps<OUTPUT extends OutputSchema | undefined = undefined> = {
     activeTools?: string[];
     abortSignal?: AbortSignal;
   };
-  modelStreamSpan: Span;
-  telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
-  modelSettings?: CallSettings;
-  onResult: (result: { warnings: any; request: any; rawResponse: any }) => void;
-  output?: OUTPUT;
+  modelSettings?: LoopOptions['modelSettings'];
+  onResult: OnResult;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /**
   Additional HTTP headers to be sent with the request.
   Only applicable for HTTP-based providers.
   */
   headers?: Record<string, string | undefined>;
+  shouldThrowError?: boolean;
 };
 
-export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
+export function execute<OUTPUT extends OutputSchema = undefined>({
   runId,
   model,
   providerOptions,
@@ -42,12 +50,11 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
   toolChoice,
   options,
   onResult,
-  modelStreamSpan,
-  telemetry_settings,
   includeRawChunks,
   modelSettings,
-  output,
+  structuredOutput,
   headers,
+  shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -60,44 +67,99 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
     activeTools: options?.activeTools,
   });
 
-  if (modelStreamSpan && toolsAndToolChoice?.tools?.length && telemetry_settings?.recordOutputs !== false) {
-    modelStreamSpan.setAttributes({
-      'stream.prompt.tools': toolsAndToolChoice?.tools?.map(tool => JSON.stringify(tool)),
-    });
-  }
+  const structuredOutputMode = structuredOutput?.schema
+    ? structuredOutput?.model
+      ? 'processor'
+      : 'direct'
+    : undefined;
 
-  const modelSupports = getModelSupport(model.modelId, model.provider);
-  const modelSupportsResponseFormat = modelSupports?.capabilities.responseFormat?.support === 'full';
-  const responseFormat = output ? getResponseFormat(output) : undefined;
+  const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
 
   let prompt = inputMessages;
-  if (output && responseFormat?.type === 'json' && !modelSupportsResponseFormat) {
+
+  // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
+  if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && structuredOutput?.jsonPromptInjection) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
       schema: responseFormat.schema,
     });
   }
 
+  // For processor mode (model provided for structuring agent), inject a custom prompt to inform the main agent about the structured output schema that the structuring agent will use
+  if (structuredOutputMode === 'processor' && responseFormat?.type === 'json' && responseFormat?.schema) {
+    // Add a system message to inform the main agent about what data it needs to generate
+    prompt = injectJsonInstructionIntoMessages({
+      messages: inputMessages,
+      schema: responseFormat.schema,
+      schemaPrefix: `Your response will be processed by another agent to extract structured data. Please ensure your response contains comprehensive information for all the following fields that will be extracted:\n`,
+      schemaSuffix: `\n\nYou don't need to format your response as JSON unless the user asks you to. Just ensure your natural language response includes relevant information for each field in the schema above.`,
+    });
+  }
+
+  /**
+   * Enable OpenAI's strict JSON schema mode to ensure schema compliance.
+   * Without this, OpenAI may omit required fields or violate type constraints.
+   * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
+   * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
+   */
+  const providerOptionsToUse =
+    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
+      ? {
+          ...(providerOptions ?? {}),
+          openai: {
+            strictJsonSchema: true,
+            ...(providerOptions?.openai ?? {}),
+          },
+        }
+      : providerOptions;
+
   const stream = v5.initialize({
     runId,
     onResult,
     createStream: async () => {
       try {
-        const stream = await model.doStream({
-          ...toolsAndToolChoice,
-          prompt,
-          providerOptions,
-          abortSignal: options?.abortSignal,
-          includeRawChunks,
-          responseFormat: modelSupportsResponseFormat ? responseFormat : undefined,
-          ...(modelSettings ?? {}),
-          headers,
-        });
-        return stream as any;
+        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers']);
+        const abortSignal = options?.abortSignal;
+
+        const pRetry = await import('p-retry');
+        return await pRetry.default(
+          async () => {
+            const streamResult = await model.doStream({
+              ...toolsAndToolChoice,
+              prompt,
+              providerOptions: providerOptionsToUse,
+              abortSignal,
+              includeRawChunks,
+              responseFormat:
+                structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection
+                  ? responseFormat
+                  : undefined,
+              ...filteredModelSettings,
+              headers,
+            });
+
+            // We have to cast this because doStream is missing the warnings property in its return type even though it exists
+            return streamResult as unknown as LanguageModelV2StreamResult;
+          },
+          {
+            retries: modelSettings?.maxRetries ?? 2,
+            signal: abortSignal,
+            shouldRetry(context) {
+              if (APICallError.isInstance(context.error)) {
+                return context.error.isRetryable;
+              }
+              return true;
+            },
+          },
+        );
       } catch (error) {
-        console.error('Error creating stream', error);
-        if (isAbortError(error) && options?.abortSignal?.aborted) {
-          console.log('Abort error', error);
+        const abortSignal = options?.abortSignal;
+        if (isAbortError(error) && abortSignal?.aborted) {
+          console.error('Abort error', error);
+        }
+
+        if (shouldThrowError) {
+          throw error;
         }
 
         return {
@@ -105,10 +167,7 @@ export function execute<OUTPUT extends OutputSchema | undefined = undefined>({
             start: async controller => {
               controller.enqueue({
                 type: 'error',
-                error: {
-                  message: error instanceof Error ? error.message : JSON.stringify(error),
-                  stack: error instanceof Error ? error.stack : undefined,
-                },
+                error,
               });
               controller.close();
             },

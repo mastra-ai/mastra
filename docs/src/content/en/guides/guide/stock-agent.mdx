@@ -1,10 +1,11 @@
 ---
-title: "Building an AI Stock Agent | Mastra Agents | Guides"
+title: "Guide: Building an AI Stock Agent | Mastra Agents | Guides"
 description: Guide on creating a simple stock agent in Mastra to fetch the last day's closing stock price for a given symbol.
 ---
 
-import { Steps } from "nextra/components";
-import YouTube from "@/components/youtube";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import YouTube from "@site/src/components/YouTube-player";
 
 # Building an AI Stock Agent
 
@@ -15,7 +16,7 @@ In this guide, you're going to create a simple agent that fetches the last day's
 ## Prerequisites
 
 - Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/docs/getting-started/model-providers)
+- An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Creating the Agent
@@ -24,15 +25,16 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 
 <Steps>
 
-### Define the Agent
+<StepItem>
 
 Create a new file `src/mastra/agents/stockAgent.ts` and define your agent:
 
-```ts copy filename="src/mastra/agents/stockAgent.ts"
+```ts copy title="src/mastra/agents/stockAgent.ts"
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -40,11 +42,13 @@ export const stockAgent = new Agent({
 });
 ```
 
-### Register the Agent with Mastra
+</StepItem>
+
+<StepItem>
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy filename="src/mastra/index.ts" {2, 5}
+```ts copy title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { stockAgent } from "./agents/stockAgent";
 
@@ -52,6 +56,8 @@ export const mastra = new Mastra({
   agents: { stockAgent },
 });
 ```
+
+</StepItem>
 
 </Steps>
 
@@ -61,11 +67,11 @@ So far the Stock Agent doesn't know anything about the current stock prices. To 
 
 <Steps>
 
-### Define the Tool
+<StepItem>
 
 Create a new file `src/mastra/tools/stockPrices.ts`. Inside, add a `stockPrices` tool that will fetch the last day's closing stock price for a given symbol:
 
-```ts filename="src/mastra/tools/stockPrices.ts"
+```ts title="src/mastra/tools/stockPrices.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -82,26 +88,29 @@ export const stockPrices = createTool({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  execute: async ({ context: { symbol } }) => {
-    console.log("Using tool to fetch stock price for", symbol);
+  execute: async (inputData) => {
+    console.log("Using tool to fetch stock price for", inputData.symbol);
     return {
-      symbol,
-      currentPrice: await getStockPrice(symbol),
+      symbol: inputData.symbol,
+      currentPrice: await getStockPrice(inputData.symbol),
     };
   },
 });
 ```
 
-### Add the Tool to the Stock Agent
+</StepItem>
+
+<StepItem>
 
 Inside `src/mastra/agents/stockAgent.ts` import your newly created `stockPrices` tool and add it to the agent.
 
-```ts copy filename="src/mastra/agents/stockAgent.ts" {3, 10-12}
+```ts copy title="src/mastra/agents/stockAgent.ts" {3, 10-12}
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
 
 export const stockAgent = new Agent({
+  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -112,6 +121,8 @@ export const stockAgent = new Agent({
 });
 ```
 
+</StepItem>
+
 </Steps>
 
 ## Running the Agent Server
@@ -120,7 +131,7 @@ Learn how to interact with your agent through Mastra's API.
 
 <Steps>
 
-### Using `mastra dev`
+<StepItem>
 
 You can run your agent as a service using the `mastra dev` command:
 
@@ -128,9 +139,11 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground.mdx) you can test your `stockAgent` and `stockPrices` tool through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
 
-### Accessing the Stock Agent API
+</StepItem>
+
+<StepItem>
 
 By default, `mastra dev` runs on `http://localhost:4111`. Your Stock agent will be available at:
 
@@ -138,7 +151,9 @@ By default, `mastra dev` runs on `http://localhost:4111`. Your Stock agent will 
 POST http://localhost:4111/api/agents/stockAgent/generate
 ```
 
-### Interacting with the Agent via `curl`
+</StepItem>
+
+<StepItem>
 
 You can interact with the agent using `curl` from the command line:
 
@@ -164,5 +179,7 @@ You should receive a JSON response similar to:
 ```
 
 This indicates that your agent successfully processed the request, used the `stockPrices` tool to fetch the stock price, and returned the result.
+
+</StepItem>
 
 </Steps>

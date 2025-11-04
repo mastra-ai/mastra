@@ -1,15 +1,13 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { StorageThreadType, MastraMessageV2 } from '@mastra/core/memory';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData } from '@mastra/core/evals';
+import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import type {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
   TABLE_TRACES,
   TABLE_RESOURCES,
   TABLE_NAMES,
-  EvalRow,
   StorageResourceType,
   TABLE_SCORERS,
   TABLE_AI_SPANS,
@@ -73,9 +71,8 @@ export function isWorkersConfig(config: CloudflareStoreConfig): config is Cloudf
 
 export type RecordTypes = {
   [TABLE_THREADS]: StorageThreadType;
-  [TABLE_MESSAGES]: MastraMessageV2;
+  [TABLE_MESSAGES]: MastraDBMessage;
   [TABLE_WORKFLOW_SNAPSHOT]: WorkflowRunState;
-  [TABLE_EVALS]: EvalRow;
   [TABLE_SCORERS]: ScoreRowData;
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;

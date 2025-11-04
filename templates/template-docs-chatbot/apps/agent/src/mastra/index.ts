@@ -32,4 +32,9 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
   }),
+  observability: {
+    default: {
+      enabled: true,
+    },
+  },
 });

@@ -3,7 +3,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
 import esmShim from '@rollup/plugin-esm-shim';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
 import { esbuild } from './plugins/esbuild';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
@@ -11,6 +11,7 @@ import { analyzeBundle } from './analyze';
 import { removeDeployer } from './plugins/remove-deployer';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
+import { slash } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
@@ -19,10 +20,17 @@ export async function getInputOptions(
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
-    enableEsmShim = true,
     isDev = false,
+    projectRoot,
     workspaceRoot = undefined,
-  }: { sourcemap?: boolean; enableEsmShim?: boolean; isDev?: boolean; workspaceRoot?: string } = {},
+    enableEsmShim = true,
+  }: {
+    sourcemap?: boolean;
+    isDev?: boolean;
+    workspaceRoot?: string;
+    projectRoot: string;
+    enableEsmShim?: boolean;
+  },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
     platform === 'node'
@@ -50,7 +58,7 @@ export async function getInputOptions(
 
   const externals = Array.from(externalsCopy);
 
-  const normalizedEntryFile = entryFile.replaceAll('\\', '/');
+  const normalizedEntryFile = slash(entryFile);
   return {
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     treeshake: 'smallest',
@@ -64,26 +72,20 @@ export async function getInputOptions(
             return null;
           }
 
-          const isInvalidChunk = analyzedBundleInfo.invalidChunks.has(analyzedBundleInfo.dependencies.get(id)!);
-          if (isInvalidChunk) {
+          const filename = analyzedBundleInfo.dependencies.get(id)!;
+          const absolutePath = join(workspaceRoot || projectRoot, filename);
+
+          // During `mastra dev` we want to keep deps as external
+          if (isDev) {
             return {
-              id,
+              id: process.platform === 'win32' ? pathToFileURL(absolutePath).href : absolutePath,
               external: true,
             };
           }
 
-          if (isDev && analyzedBundleInfo.workspaceMap.has(id) && workspaceRoot) {
-            const filename = analyzedBundleInfo.dependencies.get(id)!;
-            const resolvedPath = join(workspaceRoot, filename);
-
-            return {
-              id: resolvedPath,
-              external: true,
-            };
-          }
-
+          // For production builds return the absolute path as-is so Rollup can handle itself
           return {
-            id: '.mastra/.build/' + analyzedBundleInfo.dependencies.get(id)!,
+            id: absolutePath,
             external: false,
           };
         },
@@ -92,7 +94,7 @@ export async function getInputOptions(
         entries: [
           {
             find: /^\#server$/,
-            replacement: fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/'),
+            replacement: slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server'))),
           },
           {
             find: /^\@mastra\/server\/(.*)/,
@@ -124,7 +126,9 @@ export async function getInputOptions(
         platform,
         define: env,
       }),
-      optimizeLodashImports(),
+      optimizeLodashImports({
+        include: '**/*.{js,ts,mjs,cjs}',
+      }),
       commonjs({
         extensions: ['.js', '.ts'],
         transformMixedEsModules: true,

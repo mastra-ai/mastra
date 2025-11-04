@@ -21,7 +21,7 @@ observability/braintrust/
 
 ### 1. BraintrustExporter Class
 
-- Implements `AITracingExporter` interface from `@mastra/core/ai-tracing`
+- Implements `AITracingExporter` interface from `@mastra/core/observability`
 - Uses `startSpan()` and `startSpanWithParents()` methods from Braintrust SDK
 - Maintains internal span tracking similar to Langfuse implementation
 - Supports realtime and batch modes
@@ -44,8 +44,8 @@ const DEFAULT_SPAN_TYPE = 'task';
 
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
-  [AISpanType.LLM_GENERATION]: 'llm',
-  [AISpanType.LLM_CHUNK]: 'llm',
+  [AISpanType.MODEL_GENERATION]: 'llm',
+  [AISpanType.MODEL_CHUNK]: 'llm',
   [AISpanType.TOOL_CALL]: 'tool',
   [AISpanType.MCP_TOOL_CALL]: 'tool',
   [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',

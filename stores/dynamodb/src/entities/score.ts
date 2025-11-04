@@ -25,6 +25,10 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+    spanId: {
+      type: 'string',
+      required: false,
+    },
     runId: {
       type: 'string',
       required: true,
@@ -213,7 +217,7 @@ export const scoreEntity = new Entity({
         return value;
       },
     },
-    runtimeContext: {
+    requestContext: {
       type: 'string',
       required: false,
       set: (value?: Record<string, unknown> | string) => {
@@ -312,6 +316,11 @@ export const scoreEntity = new Entity({
       index: 'gsi6',
       pk: { field: 'gsi6pk', composite: ['entity', 'threadId'] },
       sk: { field: 'gsi6sk', composite: ['createdAt'] },
+    },
+    bySpan: {
+      index: 'gsi7',
+      pk: { field: 'gsi7pk', composite: ['entity', 'traceId', 'spanId'] },
+      sk: { field: 'gsi7sk', composite: ['createdAt'] },
     },
   },
 });

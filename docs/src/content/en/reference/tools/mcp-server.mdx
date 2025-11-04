@@ -1,5 +1,5 @@
 ---
-title: "Reference: MCPServer | Exposing Mastra Tools via MCP | Mastra Docs"
+title: "Reference: MCPServer | Tools & MCP | Mastra Docs"
 description: API Reference for MCPServer - A class for exposing Mastra tools and capabilities as a Model Context Protocol server.
 ---
 
@@ -24,6 +24,7 @@ import { z } from "zod";
 import { dataProcessingWorkflow } from "../workflows/dataProcessingWorkflow";
 
 const myAgent = new Agent({
+  id: "my-example-agent",
   name: "MyExampleAgent",
   description: "A generalist to help with basic questions."
   instructions: "You are a helpful assistant.",
@@ -34,7 +35,7 @@ const weatherTool = createTool({
   id: "getWeather",
   description: "Gets the current weather for a location.",
   inputSchema: z.object({ location: z.string() }),
-  execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+  execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
 });
 
 const server = new MCPServer({
@@ -86,7 +87,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       type: "Record<string, Workflow>",
       isOptional: true,
       description:
-        "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun().start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
+        "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
     },
     {
       name: "id",
@@ -165,7 +166,6 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-
   - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
   - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
   - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
@@ -383,12 +383,12 @@ import http from "http";
 
 const httpServer = http.createServer(async (req, res) => {
   await server.startHTTP({
-    url: new URL(req.url || '', 'http://localhost:1234'),
+    url: new URL(req.url || "", "http://localhost:1234"),
     httpPath: `/mcp`,
     req,
     res,
     options: {
-      sessionIdGenerator: undefined,
+      sessionIdGenerator: () => randomUUID(),
     },
   });
 });
@@ -398,37 +398,105 @@ httpServer.listen(PORT, () => {
 });
 ```
 
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+
+```typescript
+// Supabase Edge Function example
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { MCPServer } from "@mastra/mcp";
+// Note: You will need to convert req/res format from Deno to Node
+import { toReqRes, toFetchResponse } from "fetch-to-node";
+
+const server = new MCPServer({
+  name: "my-serverless-mcp",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+serve(async (req) => {
+  const url = new URL(req.url);
+  
+  if (url.pathname === "/mcp") {
+    // Convert Deno Request to Node.js-compatible format
+    const { req: nodeReq, res: nodeRes } = toReqRes(req);
+    
+    await server.startHTTP({
+      url,
+      httpPath: "/mcp",
+      req: nodeReq,
+      res: nodeRes,
+      options: {
+        serverless: true, // ← Enable stateless mode for serverless
+      },
+    });
+    
+    return toFetchResponse(nodeRes);
+  }
+  
+  return new Response("Not found", { status: 404 });
+});
+```
+
+:::info
+
+**When to use `serverless: true`**
+
+Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
+- Supabase Edge Functions
+- Cloudflare Workers
+- Vercel Edge Functions
+- Netlify Edge Functions
+- AWS Lambda
+- Deno Deploy
+
+Use the default session-based mode (without `serverless: true`) for:
+- Long-lived Node.js servers
+- Docker containers
+- Traditional hosting (VPS, dedicated servers)
+
+The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
+
+**Note:** The following MCP features require session state or persistent connections and will **not work** in serverless mode:
+- **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
+- **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
+- **Resource update notifications** - `resources.notifyUpdated()` requires active subscriptions and persistent connections to notify clients
+- **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
+
+These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
+
+:::
+
 Here are the details for the values needed by the `startHTTP` method:
 
 <PropertiesTable
   content={[
     {
-      name: 'url',
-      type: 'URL',
-      description: 'The web address the user is requesting.',
+      name: "url",
+      type: "URL",
+      description: "The web address the user is requesting.",
     },
     {
-      name: 'httpPath',
-      type: 'string',
+      name: "httpPath",
+      type: "string",
       description:
         "The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
     },
     {
-      name: 'req',
-      type: 'http.IncomingMessage',
-      description: 'The incoming request object from your web server.',
+      name: "req",
+      type: "http.IncomingMessage",
+      description: "The incoming request object from your web server.",
     },
     {
-      name: 'res',
-      type: 'http.ServerResponse',
+      name: "res",
+      type: "http.ServerResponse",
       description:
-        'The response object from your web server, used to send data back.',
+        "The response object from your web server, used to send data back.",
     },
     {
-      name: 'options',
-      type: 'StreamableHTTPServerTransportOptions',
+      name: "options",
+      type: "StreamableHTTPServerTransportOptions",
       description:
-        'Optional configuration for the HTTP transport. See the options table below for more details.',
+        "Optional configuration for the HTTP transport. See the options table below for more details.",
       optional: true,
     },
   ]}
@@ -439,30 +507,37 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 <PropertiesTable
   content={[
     {
-      name: 'sessionIdGenerator',
-      type: '(() => string) | undefined',
+      name: "serverless",
+      type: "boolean",
       description:
-        'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
-    },
-    {
-      name: 'onsessioninitialized',
-      type: '(sessionId: string) => void',
-      description:
-        'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
+        "If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.",
       optional: true,
     },
     {
-      name: 'enableJsonResponse',
-      type: 'boolean',
+      name: "sessionIdGenerator",
+      type: "(() => string) | undefined",
       description:
-        'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
+        "A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.",
+    },
+    {
+      name: "onsessioninitialized",
+      type: "(sessionId: string) => void",
+      description:
+        "A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.",
       optional: true,
     },
     {
-      name: 'eventStore',
-      type: 'EventStore',
+      name: "enableJsonResponse",
+      type: "boolean",
       description:
-        'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
+        "If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.",
+      optional: true,
+    },
+    {
+      name: "eventStore",
+      type: "EventStore",
+      description:
+        "An event store for message resumability. Providing this enables clients to reconnect and resume message streams.",
       optional: true,
     },
   ]}
@@ -752,13 +827,13 @@ const prompts: Prompt[] = [
   {
     name: "analyze-code",
     description: "Analyze code for improvements",
-    version: "v1"
+    version: "v1",
   },
   {
     name: "analyze-code",
     description: "Analyze code for improvements (new logic)",
-    version: "v2"
-  }
+    version: "v2",
+  },
 ];
 
 const myPromptHandlers: MCPServerPrompts = {
@@ -766,39 +841,46 @@ const myPromptHandlers: MCPServerPrompts = {
   getPromptMessages: async ({ name, version, args }) => {
     if (name === "analyze-code") {
       if (version === "v2") {
-        const prompt = prompts.find(p => p.name === name && p.version === "v2");
+        const prompt = prompts.find(
+          (p) => p.name === name && p.version === "v2",
+        );
         if (!prompt) throw new Error("Prompt version not found");
         return {
           prompt,
           messages: [
             {
               role: "user",
-              content: { type: "text", text: `Analyze this code with the new logic: ${args.code}` }
-            }
-          ]
+              content: {
+                type: "text",
+                text: `Analyze this code with the new logic: ${args.code}`,
+              },
+            },
+          ],
         };
       }
       // Default or v1
-      const prompt = prompts.find(p => p.name === name && p.version === "v1");
+      const prompt = prompts.find((p) => p.name === name && p.version === "v1");
       if (!prompt) throw new Error("Prompt version not found");
       return {
         prompt,
         messages: [
           {
             role: "user",
-            content: { type: "text", text: `Analyze this code: ${args.code}` }
-          }
-        ]
+            content: { type: "text", text: `Analyze this code: ${args.code}` },
+          },
+        ],
       };
     }
     throw new Error("Prompt not found");
-  }
+  },
 };
 
 const serverWithPrompts = new MCPServer({
   name: "Promptful Server",
   version: "1.0.0",
-  tools: { /* ... */ },
+  tools: {
+    /* ... */
+  },
   prompts: myPromptHandlers,
 });
 ```
@@ -839,37 +921,39 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
 
-The `MCPServer` class automatically includes elicitation capabilities. Tools receive an `options` parameter in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
+The `MCPServer` class automatically includes elicitation capabilities. Tools receive a `context.mcp` object in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
 
 ### Tool Execution Signature
 
-When tools are executed within an MCP server context, they receive an additional `options` parameter:
+When tools are executed within an MCP server context, they receive MCP-specific capabilities via the `context.mcp` object:
 
 ```typescript
-execute: async ({ context }, options) => {
-  // context contains the tool's input parameters
-  // options contains server capabilities like elicitation and authentication info
-  
+execute: async (inputData, context) => {
+  // input contains the tool's inputData parameters
+  // context.mcp contains server capabilities like elicitation and authentication info
+
   // Access authentication information (when available)
-  if (options.extra?.authInfo) {
-    console.log('Authenticated request from:', options.extra.authInfo.clientId);
+  if (context.mcp?.extra?.authInfo) {
+    console.log("Authenticated request from:", context.mcp.extra.authInfo.clientId);
   }
-  
+
   // Use elicitation capabilities
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: "Please provide information",
-    requestedSchema: { /* schema */ }
+    requestedSchema: {
+      /* schema */
+    },
   });
-  
+
   return result;
-}
+};
 ```
 
 ### How Elicitation Works
 
-A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the tool's execution options:
+A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the context parameter:
 
-1. The tool calls `options.elicitation.sendRequest()` with a message and schema
+1. The tool calls `context.mcp.elicitation.sendRequest()` with a message and schema
 2. The request is sent to the connected MCP client
 3. The client presents the request to the user (via UI, command line, etc.)
 4. The user provides input, declines, or cancels the request
@@ -893,51 +977,54 @@ const server = new MCPServer({
       id: "collectContactInfo",
       description: "Collects user contact information through elicitation",
       inputSchema: z.object({
-        reason: z.string().optional().describe("Reason for collecting contact info"),
+        reason: z
+          .string()
+          .optional()
+          .describe("Reason for collecting contact info"),
       }),
-      execute: async ({ context }, options) => {
-        const { reason } = context;
-        
+      execute: async (inputData, context) => {
+        const { reason } = inputData;
+
         // Log session info if available
-        console.log('Request from session:', options.extra?.sessionId);
+        console.log("Request from session:", context.mcp?.extra?.sessionId);
 
         try {
           // Request user input via elicitation
-          const result = await options.elicitation.sendRequest({
-            message: reason 
+          const result = await context.mcp.elicitation.sendRequest({
+            message: reason
               ? `Please provide your contact information. ${reason}`
-              : 'Please provide your contact information',
+              : "Please provide your contact information",
             requestedSchema: {
-              type: 'object',
+              type: "object",
               properties: {
                 name: {
-                  type: 'string',
-                  title: 'Full Name',
-                  description: 'Your full name',
+                  type: "string",
+                  title: "Full Name",
+                  description: "Your full name",
                 },
                 email: {
-                  type: 'string',
-                  title: 'Email Address', 
-                  description: 'Your email address',
-                  format: 'email',
+                  type: "string",
+                  title: "Email Address",
+                  description: "Your email address",
+                  format: "email",
                 },
                 phone: {
-                  type: 'string',
-                  title: 'Phone Number',
-                  description: 'Your phone number (optional)',
+                  type: "string",
+                  title: "Phone Number",
+                  description: "Your phone number (optional)",
                 },
               },
-              required: ['name', 'email'],
+              required: ["name", "email"],
             },
           });
 
           // Handle the user's response
-          if (result.action === 'accept') {
+          if (result.action === "accept") {
             return `Contact information collected: ${JSON.stringify(result.content, null, 2)}`;
-          } else if (result.action === 'decline') {
-            return 'Contact information collection was declined by the user.';
+          } else if (result.action === "decline") {
+            return "Contact information collection was declined by the user.";
           } else {
-            return 'Contact information collection was cancelled by the user.';
+            return "Contact information collection was cancelled by the user.";
           }
         } catch (error) {
           return `Error collecting contact information: ${error}`;
@@ -1011,16 +1098,16 @@ The elicitation functionality is available through the `options` parameter in to
 
 ```typescript
 // Within a tool's execute function
-execute: async ({ context }, options) => {
+execute: async (inputData, context) => {
   // Use elicitation for user input
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: string,           // Message to display to user
     requestedSchema: object    // JSON schema defining expected response structure
   }): Promise<ElicitResult>
-  
+
   // Access authentication info if needed
-  if (options.extra?.authInfo) {
-    // Use options.extra.authInfo.token, etc.
+  if (context.mcp?.extra?.authInfo) {
+    // Use context.mcp.extra.authInfo.token, etc.
   }
 }
 ```
@@ -1031,43 +1118,45 @@ The `ElicitResult` type:
 
 ```typescript
 type ElicitResult = {
-  action: 'accept' | 'decline' | 'cancel';
+  action: "accept" | "decline" | "cancel";
   content?: any; // Only present when action is 'accept'
-}
+};
 ```
 
 ## Authentication Context
 
-Tools can access request metadata via `options.extra` when using HTTP-based transports:
+Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports:
 
 ```typescript
-execute: async ({ context }, options) => {
-  if (!options.extra?.authInfo?.token) {
+execute: async (inputData, context) => {
+  if (!context.mcp?.extra?.authInfo?.token) {
     return "Authentication required";
   }
-  
+
   // Use the auth token
-  const response = await fetch('/api/data', {
-    headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
-    signal: options.extra.signal,
+  const response = await fetch("/api/data", {
+    headers: { Authorization: `Bearer ${context.mcp.extra.authInfo.token}` },
+    signal: context.mcp.extra.signal,
   });
-  
+
   return response.json();
-}
+};
 ```
 
 The `extra` object contains:
+
 - `authInfo`: Authentication info (when provided by server middleware)
-- `sessionId`: Session identifier  
+- `sessionId`: Session identifier
 - `signal`: AbortSignal for cancellation
 - `sendNotification`/`sendRequest`: MCP protocol functions
 
 > Note: To enable authentication, your HTTP server needs middleware that populates `req.auth` before calling `server.startHTTP()`. For example:
+>
 > ```typescript
 > httpServer.createServer((req, res) => {
 >   // Add auth middleware
 >   req.auth = validateAuthToken(req.headers.authorization);
->   
+>
 >   // Then pass to MCP server
 >   await server.startHTTP({ url, httpPath, req, res });
 > });

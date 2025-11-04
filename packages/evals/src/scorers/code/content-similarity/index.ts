@@ -1,5 +1,4 @@
-import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import stringSimilarity from 'string-similarity';
 
 interface ContentSimilarityOptions {
@@ -10,10 +9,11 @@ interface ContentSimilarityOptions {
 export function createContentSimilarityScorer(
   { ignoreCase, ignoreWhitespace }: ContentSimilarityOptions = { ignoreCase: true, ignoreWhitespace: true },
 ) {
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Completeness',
-    description:
-      'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
+  return createScorer({
+    id: 'content-similarity-scorer',
+    name: 'Content Similarity Scorer',
+    description: 'Calculates content similarity between input and output messages using string comparison algorithms.',
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       let processedInput = run.input?.inputMessages.map((i: { content: string }) => i.content).join(', ') || '';

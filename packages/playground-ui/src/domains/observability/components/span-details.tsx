@@ -1,17 +1,38 @@
-import { SideDialogCodeSection } from '@/components/ui/elements';
-import { AISpanRecord } from '@mastra/core';
+import { SideDialog } from '@/components/ui/elements';
+import { AISpanRecord } from '@mastra/core/storage';
+import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 
-export function SpanDetails({ span }: { span?: AISpanRecord }) {
+interface SpanDetailsProps {
+  span?: AISpanRecord;
+}
+
+export function SpanDetails({ span }: SpanDetailsProps) {
   if (!span) {
     return null;
   }
 
   return (
-    <div className="grid gap-[1.5rem] mb-[2rem]">
-      <SideDialogCodeSection title="Input" codeStr={JSON.stringify(span.input || null, null, 2)} />
-      <SideDialogCodeSection title="Output" codeStr={JSON.stringify(span.output || null, null, 2)} />
-      <SideDialogCodeSection title="Metadata" codeStr={JSON.stringify(span.metadata || null, null, 2)} />
-      <SideDialogCodeSection title="Attributes" codeStr={JSON.stringify(span.attributes || null, null, 2)} />
-    </div>
+    <>
+      <SideDialog.CodeSection
+        title="Input"
+        icon={<FileInputIcon />}
+        codeStr={JSON.stringify(span.input || null, null, 2)}
+      />
+      <SideDialog.CodeSection
+        title="Output"
+        icon={<FileOutputIcon />}
+        codeStr={JSON.stringify(span.output || null, null, 2)}
+      />
+      <SideDialog.CodeSection
+        title="Metadata"
+        icon={<BracesIcon />}
+        codeStr={JSON.stringify(span.metadata || null, null, 2)}
+      />
+      <SideDialog.CodeSection
+        title="Attributes"
+        icon={<BracesIcon />}
+        codeStr={JSON.stringify(span.attributes || null, null, 2)}
+      />
+    </>
   );
 }

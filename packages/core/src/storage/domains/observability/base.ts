@@ -1,7 +1,14 @@
-import type { TracingStrategy } from '../../../ai-tracing';
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { AISpanRecord, AITraceRecord, AITracesPaginatedArg, PaginationInfo } from '../../types';
+import type { TracingStrategy } from '../../../observability';
+import type {
+  AISpanRecord,
+  AITraceRecord,
+  AITracesPaginatedArg,
+  CreateAISpanRecord,
+  PaginationInfo,
+  UpdateAISpanRecord,
+} from '../../types';
 
 export class ObservabilityStorage extends MastraBase {
   constructor() {
@@ -28,7 +35,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Creates a single AI span record in the storage provider.
    */
-  createAISpan(_span: AISpanRecord): Promise<void> {
+  createAISpan(_span: CreateAISpanRecord): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_CREATE_AI_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -40,11 +47,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Updates a single AI span with partial data. Primarily used for realtime trace creation.
    */
-  updateAISpan(_params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
+  updateAISpan(_params: { spanId: string; traceId: string; updates: Partial<UpdateAISpanRecord> }): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_UPDATE_AI_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -80,7 +83,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Creates multiple AI spans in a single batch.
    */
-  batchCreateAISpans(_args: { records: AISpanRecord[] }): Promise<void> {
+  batchCreateAISpans(_args: { records: CreateAISpanRecord[] }): Promise<void> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_AI_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -96,7 +99,7 @@ export class ObservabilityStorage extends MastraBase {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+      updates: Partial<UpdateAISpanRecord>;
     }[];
   }): Promise<void> {
     throw new MastraError({

@@ -1,122 +1,133 @@
-import type { ReadableStream } from 'stream/web';
-import { TransformStream } from 'stream/web';
-import type { SharedV2ProviderMetadata, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import { consumeStream } from 'ai-v5';
-import type { FinishReason, TelemetrySettings } from 'ai-v5';
+import { EventEmitter } from 'events';
+import { ReadableStream, TransformStream } from 'stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
-import type { AIV5Type } from '../../agent/message-list/types';
-import { getValidTraceId } from '../../ai-tracing';
-import type { TracingContext } from '../../ai-tracing';
 import { MastraBase } from '../../base';
-import type { OutputProcessor } from '../../processors';
-import type { ProcessorRunnerMode, ProcessorState } from '../../processors/runner';
-import { ProcessorRunner } from '../../processors/runner';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
-import { DelayedPromise } from '../aisdk/v5/compat';
+import { getErrorFromUnknown } from '../../error/utils.js';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
+import { ProcessorState, ProcessorRunner } from '../../processors/runner';
+import type { WorkflowRunStatus } from '../../workflows';
+import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
 import { AISDKV5OutputStream } from '../aisdk/v5/output';
-import { reasoningDetailsFromMessages, transformSteps } from '../aisdk/v5/output-helpers';
-import type { BufferedByStep, ChunkType, StepBufferItem } from '../types';
+import type {
+  ChunkType,
+  LanguageModelUsage,
+  LLMStepResult,
+  MastraModelOutputOptions,
+  MastraOnFinishCallbackArgs,
+} from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
 
-export class JsonToSseTransformStream extends TransformStream<unknown, string> {
-  constructor() {
-    super({
-      transform(part, controller) {
-        controller.enqueue(`data: ${JSON.stringify(part)}\n\n`);
-      },
-      flush(controller) {
-        controller.enqueue('data: [DONE]\n\n');
-      },
-    });
-  }
+/**
+ * Helper function to create a destructurable version of MastraModelOutput.
+ * This wraps the output to ensure properties maintain their context when destructured.
+ */
+export function createDestructurableOutput<OUTPUT extends OutputSchema = undefined>(
+  output: MastraModelOutput<OUTPUT>,
+): MastraModelOutput<OUTPUT> {
+  return new Proxy(output, {
+    get(target, prop, _receiver) {
+      // Use target as receiver to preserve private member access
+      const originalValue = Reflect.get(target, prop, target);
+
+      // For methods, return bound version
+      if (typeof originalValue === 'function') {
+        return originalValue.bind(target);
+      }
+
+      // For everything else (including getters), return as-is
+      return originalValue;
+    },
+  }) as MastraModelOutput<OUTPUT>;
 }
 
-type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
-  runId: string;
-  rootSpan?: Span;
-  telemetry_settings?: TelemetrySettings;
-  toolCallStreaming?: boolean;
-  onFinish?: (event: Record<string, any>) => Promise<void> | void;
-  onStepFinish?: (event: Record<string, any>) => Promise<void> | void;
-  includeRawChunks?: boolean;
-  output?: OUTPUT;
-  outputProcessors?: OutputProcessor[];
-  outputProcessorRunnerMode?: ProcessorRunnerMode;
-  returnScorerData?: boolean;
-  tracingContext?: TracingContext;
-};
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
+  #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
-  #error: Error | string | { message: string; stack: string } | undefined;
+  #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
-  #bufferedSteps: StepBufferItem[] = [];
-  #bufferedReasoningDetails: Record<
-    string,
-    {
-      type: string;
-      text: string;
-      providerMetadata: SharedV2ProviderMetadata;
-    }
-  > = {};
-  #bufferedByStep: BufferedByStep = {
+  #bufferedChunks: ChunkType<OUTPUT>[] = [];
+  #streamFinished = false;
+  #emitter = new EventEmitter();
+  #bufferedSteps: LLMStepResult[] = [];
+  #bufferedReasoningDetails: Record<string, LLMStepResult['reasoning'][number]> = {};
+  #bufferedByStep: LLMStepResult = {
     text: '',
-    reasoning: '',
+    reasoning: [],
     sources: [],
     files: [],
     toolCalls: [],
     toolResults: [],
-    msgCount: 0,
+    dynamicToolCalls: [],
+    dynamicToolResults: [],
+    staticToolCalls: [],
+    staticToolResults: [],
+    content: [],
+    usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+    warnings: [],
+    request: {},
+    response: {
+      id: '',
+      timestamp: new Date(),
+      modelId: '',
+      messages: [],
+      uiMessages: [],
+    },
+    reasoningText: '',
+    providerMetadata: undefined,
+    finishReason: undefined,
   };
-  #bufferedText: string[] = [];
-  #bufferedTextChunks: Record<string, string[]> = {};
-  #bufferedSources: any[] = [];
-  #bufferedReasoning: string[] = [];
-  #bufferedFiles: any[] = [];
-  #toolCallArgsDeltas: Record<string, string[]> = {};
+  #bufferedText: LLMStepResult['text'][] = [];
+  #bufferedObject: InferSchemaOutput<OUTPUT> | undefined;
+  #bufferedTextChunks: Record<string, LLMStepResult['text'][]> = {};
+  #bufferedSources: LLMStepResult['sources'] = [];
+  #bufferedReasoning: LLMStepResult['reasoning'] = [];
+  #bufferedFiles: LLMStepResult['files'] = [];
+  #toolCallArgsDeltas: Record<string, LLMStepResult['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
-  #toolCalls: any[] = []; // TODO: add type
-  #toolResults: any[] = []; // TODO: add type
-  #warnings: LanguageModelV2CallWarning[] = [];
-  #finishReason: FinishReason | string | undefined;
-  #request: Record<string, any> | undefined;
-  #usageCount: Record<string, number> = {};
+  #toolCalls: LLMStepResult['toolCalls'] = [];
+  #toolResults: LLMStepResult['toolResults'] = [];
+  #warnings: LLMStepResult['warnings'] = [];
+  #finishReason: LLMStepResult['finishReason'] = undefined;
+  #request: LLMStepResult['request'] = {};
+  #usageCount: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
   #tripwire = false;
   #tripwireReason = '';
 
   #delayedPromises = {
+    suspendPayload: new DelayedPromise<any>(),
     object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
-    finishReason: new DelayedPromise<FinishReason | string | undefined>(),
-    usage: new DelayedPromise<Record<string, number>>(),
-    warnings: new DelayedPromise<LanguageModelV2CallWarning[]>(),
-    providerMetadata: new DelayedPromise<Record<string, any> | undefined>(),
-    response: new DelayedPromise<Record<string, any>>(), // TODO: add type
-    request: new DelayedPromise<Record<string, any>>(), // TODO: add type
-    text: new DelayedPromise<string>(),
-    reasoning: new DelayedPromise<string>(),
+    finishReason: new DelayedPromise<LLMStepResult['finishReason']>(),
+    usage: new DelayedPromise<LLMStepResult['usage']>(),
+    warnings: new DelayedPromise<LLMStepResult['warnings']>(),
+    providerMetadata: new DelayedPromise<LLMStepResult['providerMetadata']>(),
+    response: new DelayedPromise<LLMStepResult<OUTPUT>['response']>(),
+    request: new DelayedPromise<LLMStepResult['request']>(),
+    text: new DelayedPromise<LLMStepResult['text']>(),
+    reasoning: new DelayedPromise<LLMStepResult['reasoning']>(),
     reasoningText: new DelayedPromise<string | undefined>(),
-    sources: new DelayedPromise<any[]>(), // TODO: add type
-    files: new DelayedPromise<any[]>(), // TODO: add type
-    toolCalls: new DelayedPromise<any[]>(), // TODO: add type
-    toolResults: new DelayedPromise<any[]>(), // TODO: add type
-    steps: new DelayedPromise<StepBufferItem[]>(),
-    totalUsage: new DelayedPromise<Record<string, number>>(),
-    content: new DelayedPromise<AIV5Type.StepResult<any>['content']>(),
-    reasoningDetails: new DelayedPromise<
-      {
-        type: string;
-        text: string;
-        providerMetadata: SharedV2ProviderMetadata;
-      }[]
-    >(),
+    sources: new DelayedPromise<LLMStepResult['sources']>(),
+    files: new DelayedPromise<LLMStepResult['files']>(),
+    toolCalls: new DelayedPromise<LLMStepResult['toolCalls']>(),
+    toolResults: new DelayedPromise<LLMStepResult['toolResults']>(),
+    steps: new DelayedPromise<LLMStepResult[]>(),
+    totalUsage: new DelayedPromise<LLMStepResult['usage']>(),
+    content: new DelayedPromise<LLMStepResult['content']>(),
   };
 
-  #streamConsumed = false;
+  #consumptionStarted = false;
   #returnScorerData = false;
+  #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
+
+  #model: {
+    modelId: string | undefined;
+    provider: string | undefined;
+    version: 'v1' | 'v2';
+  };
 
   /**
    * Unique identifier for this execution run.
@@ -127,7 +138,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * The processor runner for this stream.
    */
   public processorRunner?: ProcessorRunner;
-  private outputProcessorRunnerMode: ProcessorRunnerMode = false;
   /**
    * The message list for this stream.
    */
@@ -144,6 +154,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList,
     options,
     messageId,
+    initialState,
   }: {
     model: {
       modelId: string | undefined;
@@ -154,13 +165,26 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList: MessageList;
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
+    initialState?: any;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
+    this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
+
+    this.#model = _model;
+
     this.messageId = messageId;
+
+    // Determine structured output mode:
+    // - 'direct': LLM generates JSON directly (no model provided), object transformers run in this stream
+    // - 'processor': StructuredOutputProcessor uses internal agent with provided model
+    // - undefined: No structured output
+    if (options.structuredOutput?.schema) {
+      this.#structuredOutputMode = options.structuredOutput.model ? 'processor' : 'direct';
+    }
+
     // Create processor runner if outputProcessors are provided
     if (options.outputProcessors?.length) {
       this.processorRunner = new ProcessorRunner({
@@ -171,10 +195,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       });
     }
 
-    if (options.outputProcessorRunnerMode) {
-      this.outputProcessorRunnerMode = options.outputProcessorRunnerMode;
-    }
-
     this.messageList = messageList;
 
     const self = this;
@@ -182,30 +202,81 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     // Apply output processors if they exist
     let processedStream = stream;
     const processorRunner = this.processorRunner;
-    if (processorRunner && options.outputProcessorRunnerMode === `stream`) {
-      const processorStates = new Map<string, ProcessorState>();
+    if (processorRunner && options.isLLMExecutionStep) {
+      // Use shared processor states if provided, otherwise create new ones
+      const processorStates = (options.processorStates || new Map<string, ProcessorState>()) as Map<
+        string,
+        ProcessorState<OUTPUT>
+      >;
+
       processedStream = stream.pipeThrough(
         new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
           async transform(chunk, controller) {
-            const {
-              part: processed,
-              blocked,
-              reason,
-            } = await processorRunner.processPart(chunk as any, processorStates);
-            if (blocked) {
-              // Emit a tripwire chunk so downstream knows about the abort
-              controller.enqueue({
-                type: 'tripwire',
-                payload: {
-                  tripwireReason: reason || 'Output processor blocked content',
-                },
-              } as ChunkType<OUTPUT>);
+            // Filter out intermediate finish chunks with 'tool-calls' reason
+            // These are internal signals that shouldn't reach output processors
+
+            if (chunk.type === 'finish' && chunk.payload?.stepResult?.reason === 'tool-calls') {
+              controller.enqueue(chunk);
               return;
-            }
-            if (processed) {
-              controller.enqueue(processed as ChunkType<OUTPUT>);
+            } else {
+              /**
+               * Add/update base stream controller to structured output processor state
+               * so it can be used to enqueue chunks into the main stream from the structuring agent stream.
+               * Need to update controller on each new LLM execution step since each step has its own TransformStream.
+               */
+              if (!processorStates.has(STRUCTURED_OUTPUT_PROCESSOR_NAME)) {
+                const processorIndex = processorRunner.outputProcessors.findIndex(
+                  p => p.name === STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                );
+                // Only create the state if the processor actually exists in the list
+                if (processorIndex !== -1) {
+                  const structuredOutputProcessorState = new ProcessorState<OUTPUT>({
+                    processorName: STRUCTURED_OUTPUT_PROCESSOR_NAME,
+                    tracingContext: options.tracingContext,
+                    processorIndex,
+                  });
+                  structuredOutputProcessorState.customState = { controller };
+                  processorStates.set(STRUCTURED_OUTPUT_PROCESSOR_NAME, structuredOutputProcessorState);
+                }
+              } else {
+                // Update controller for new LLM execution step
+                const structuredOutputProcessorState = processorStates.get(STRUCTURED_OUTPUT_PROCESSOR_NAME);
+                if (structuredOutputProcessorState) {
+                  structuredOutputProcessorState.customState.controller = controller;
+                }
+              }
+
+              const {
+                part: processed,
+                blocked,
+                reason,
+              } = await processorRunner.processPart(chunk, processorStates, options.tracingContext);
+              if (blocked) {
+                // Emit a tripwire chunk so downstream knows about the abort
+                controller.enqueue({
+                  type: 'tripwire',
+                  payload: {
+                    tripwireReason: reason || 'Output processor blocked content',
+                  },
+                } as ChunkType<OUTPUT>);
+                return;
+              }
+              if (processed) {
+                controller.enqueue(processed as ChunkType<OUTPUT>);
+              }
             }
           },
+        }),
+      );
+    }
+
+    // Only apply object transformer in 'direct' mode (LLM generates JSON directly)
+    // In 'processor' mode, the StructuredOutputProcessor handles object transformation
+    if (self.#structuredOutputMode === 'direct' && self.#options.isLLMExecutionStep) {
+      processedStream = processedStream.pipeThrough(
+        createObjectStreamTransformer({
+          structuredOutput: self.#options.structuredOutput,
+          logger: self.logger,
         }),
       );
     }
@@ -214,6 +285,23 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
           switch (chunk.type) {
+            case 'tool-call-suspended':
+            case 'tool-call-approval':
+              self.#status = 'suspended';
+              self.#delayedPromises.suspendPayload.resolve(chunk.payload);
+              break;
+            case 'raw':
+              if (!self.#options.includeRawChunks) {
+                return;
+              }
+              break;
+            case 'object-result':
+              self.#bufferedObject = chunk.object;
+              // Only resolve if not already rejected by validation error
+              if (self.#delayedPromises.object.status.type === 'pending') {
+                self.#delayedPromises.object.resolve(chunk.object);
+              }
+              break;
             case 'source':
               self.#bufferedSources.push(chunk);
               self.#bufferedByStep.sources.push(chunk);
@@ -245,37 +333,57 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             case 'reasoning-start':
               self.#bufferedReasoningDetails[chunk.payload.id] = {
                 type: 'reasoning',
-                text: '',
-                providerMetadata: chunk.payload.providerMetadata || {},
+                runId: chunk.runId,
+                from: chunk.from,
+                payload: {
+                  id: chunk.payload.id,
+                  providerMetadata: chunk.payload.providerMetadata,
+                  text: '',
+                },
               };
               break;
             case 'reasoning-delta': {
-              self.#bufferedReasoning.push(chunk.payload.text);
-              self.#bufferedByStep.reasoning += chunk.payload.text;
+              self.#bufferedReasoning.push({
+                type: 'reasoning',
+                runId: chunk.runId,
+                from: chunk.from,
+                payload: chunk.payload,
+              });
+              self.#bufferedByStep.reasoning.push({
+                type: 'reasoning',
+                runId: chunk.runId,
+                from: chunk.from,
+                payload: chunk.payload,
+              });
 
               const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
               if (bufferedReasoning) {
-                bufferedReasoning.text += chunk.payload.text;
+                bufferedReasoning.payload.text += chunk.payload.text;
                 if (chunk.payload.providerMetadata) {
-                  bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
+                  bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
                 }
               }
-
               break;
             }
+
             case 'reasoning-end': {
               const bufferedReasoning = self.#bufferedReasoningDetails[chunk.payload.id];
               if (chunk.payload.providerMetadata && bufferedReasoning) {
-                bufferedReasoning.providerMetadata = chunk.payload.providerMetadata;
+                bufferedReasoning.payload.providerMetadata = chunk.payload.providerMetadata;
               }
               break;
             }
             case 'tool-call':
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
-              if (chunk.payload?.output?.from === 'AGENT' && chunk.payload?.output?.type === 'finish') {
-                const finishPayload = chunk.payload?.output.payload;
-                self.updateUsageCount(finishPayload.usage);
+              const toolCallPayload = chunk.payload;
+              // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
+              if (toolCallPayload?.output?.from === 'AGENT' && toolCallPayload?.output?.type === 'finish') {
+                // @ts-ignore TODO: What does this mean??? Why is there a nested output, what is the type supposed to be
+                const finishPayload = toolCallPayload.output.payload;
+                if (finishPayload?.usage) {
+                  self.updateUsageCount(finishPayload.usage);
+                }
               }
               break;
             case 'tool-result':
@@ -283,7 +391,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#bufferedByStep.toolResults.push(chunk);
               break;
             case 'step-finish': {
-              self.updateUsageCount(chunk.payload.output.usage as Record<string, number>);
+              self.updateUsageCount(chunk.payload.output.usage);
               // chunk.payload.totalUsage = self.totalUsage;
               self.#warnings = chunk.payload.stepResult.warnings || [];
 
@@ -291,46 +399,89 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 self.#request = chunk.payload.metadata.request;
               }
 
-              const reasoningDetails = reasoningDetailsFromMessages(
-                chunk.payload.messages.all.slice(self.#bufferedByStep.msgCount),
-              );
-
               const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
-              const stepResult: StepBufferItem = {
+              const stepResult: LLMStepResult = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
-                text: self.#bufferedByStep.text,
-                reasoning: self.#bufferedByStep.reasoning || undefined,
                 sources: self.#bufferedByStep.sources,
                 files: self.#bufferedByStep.files,
                 toolCalls: self.#bufferedByStep.toolCalls,
                 toolResults: self.#bufferedByStep.toolResults,
-                warnings: self.#warnings,
-                reasoningDetails: reasoningDetails,
-                providerMetadata: providerMetadata,
-                experimental_providerMetadata: providerMetadata,
-                isContinued: chunk.payload.stepResult.isContinued,
-                logprobs: chunk.payload.stepResult.logprobs,
+
+                content: messageList.get.response.aiV5.modelContent(-1),
+                text: self.#bufferedByStep.text,
+                reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
+                reasoning: Object.values(self.#bufferedReasoningDetails),
+                get staticToolCalls() {
+                  return self.#bufferedByStep.toolCalls.filter(
+                    part => part.type === 'tool-call' && part.payload?.dynamic === false,
+                  );
+                },
+                get dynamicToolCalls() {
+                  return self.#bufferedByStep.toolCalls.filter(
+                    part => part.type === 'tool-call' && part.payload?.dynamic === true,
+                  );
+                },
+                get staticToolResults() {
+                  return self.#bufferedByStep.toolResults.filter(
+                    part => part.type === 'tool-result' && part.payload?.dynamic === false,
+                  );
+                },
+                get dynamicToolResults() {
+                  return self.#bufferedByStep.toolResults.filter(
+                    part => part.type === 'tool-result' && part.payload?.dynamic === true,
+                  );
+                },
                 finishReason: chunk.payload.stepResult.reason,
-                response: { ...otherMetadata, messages: chunk.payload.messages.nonUser } as any,
-                request: request,
                 usage: chunk.payload.output.usage,
-                // TODO: need to be able to pass a step id into this fn to get the content for a specific step id
-                content: messageList.get.response.aiV5.stepContent(),
+                warnings: self.#warnings,
+                request: request || {},
+                response: {
+                  id: chunk.payload.id || '',
+                  timestamp: (chunk.payload.metadata?.timestamp as Date) || new Date(),
+                  modelId:
+                    (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
+                  ...otherMetadata,
+                  messages: chunk.payload.messages?.nonUser || [],
+                  // We have to cast this until messageList can take generics also and type metadata, it was too
+                  // complicated to do this in this PR, it will require a much bigger change.
+                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                },
+                providerMetadata: providerMetadata,
               };
 
-              await options?.onStepFinish?.(stepResult);
+              await options?.onStepFinish?.({
+                ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
+                ...stepResult,
+              });
 
               self.#bufferedSteps.push(stepResult);
 
               self.#bufferedByStep = {
                 text: '',
-                reasoning: '',
+                reasoning: [],
                 sources: [],
                 files: [],
                 toolCalls: [],
                 toolResults: [],
-                msgCount: chunk.payload.messages.all.length,
+                dynamicToolCalls: [],
+                dynamicToolResults: [],
+                staticToolCalls: [],
+                staticToolResults: [],
+                content: [],
+                usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+                warnings: [],
+                request: {},
+                response: {
+                  id: '',
+                  timestamp: new Date(),
+                  modelId: '',
+                  messages: [],
+                  uiMessages: [],
+                },
+                reasoningText: '',
+                providerMetadata: undefined,
+                finishReason: undefined,
               };
 
               break;
@@ -340,6 +491,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#tripwire = true;
               self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
               self.#finishReason = 'other';
+              // Mark stream as finished for EventEmitter
+              self.#streamFinished = true;
 
               // Resolve all delayed promises before terminating
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
@@ -348,9 +501,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(undefined);
-              self.#delayedPromises.response.resolve({});
+              self.#delayedPromises.response.resolve({} as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve({});
-              self.#delayedPromises.reasoning.resolve('');
+              self.#delayedPromises.reasoning.resolve([]);
               self.#delayedPromises.reasoningText.resolve(undefined);
               self.#delayedPromises.sources.resolve([]);
               self.#delayedPromises.files.resolve([]);
@@ -359,55 +512,69 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.steps.resolve(self.#bufferedSteps);
               self.#delayedPromises.totalUsage.resolve(self.#usageCount);
               self.#delayedPromises.content.resolve([]);
-              self.#delayedPromises.reasoningDetails.resolve([]);
 
+              // Emit the tripwire chunk for listeners
+              self.#emitChunk(chunk);
               // Pass the tripwire chunk through
               controller.enqueue(chunk);
+              // Emit finish event for EventEmitter streams (since flush won't be called on terminate)
+              self.#emitter.emit('finish');
               // Terminate the stream
               controller.terminate();
               return;
             case 'finish':
+              self.#status = 'success';
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
               }
 
-              let response = {};
+              // Add structured output to the latest assistant message metadata
+              if (self.#bufferedObject !== undefined) {
+                const responseMessages = messageList.get.response.db();
+                const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
+                if (lastAssistantMessage) {
+                  if (!lastAssistantMessage.content.metadata) {
+                    lastAssistantMessage.content.metadata = {};
+                  }
+                  lastAssistantMessage.content.metadata.structuredOutput = self.#bufferedObject;
+                }
+              }
+
+              let response: LLMStepResult<OUTPUT>['response'] = {};
               if (chunk.payload.metadata) {
                 const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
                 response = {
                   ...otherMetadata,
                   messages: messageList.get.response.aiV5.model(),
-                  uiMessages: messageList.get.response.aiV5.ui(),
+                  uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
               }
 
               this.populateUsageCount(chunk.payload.output.usage as Record<string, number>);
 
-              chunk.payload.output.usage = self.#usageCount as any;
+              chunk.payload.output.usage = {
+                inputTokens: self.#usageCount.inputTokens ?? 0,
+                outputTokens: self.#usageCount.outputTokens ?? 0,
+                totalTokens: self.#usageCount.totalTokens ?? 0,
+                ...(self.#usageCount.reasoningTokens !== undefined && {
+                  reasoningTokens: self.#usageCount.reasoningTokens,
+                }),
+                ...(self.#usageCount.cachedInputTokens !== undefined && {
+                  cachedInputTokens: self.#usageCount.cachedInputTokens,
+                }),
+              };
 
               try {
-                if (self.processorRunner && self.outputProcessorRunnerMode === `result`) {
-                  self.messageList = await self.processorRunner.runOutputProcessors(self.messageList);
+                if (self.processorRunner && !self.#options.isLLMExecutionStep) {
+                  self.messageList = await self.processorRunner.runOutputProcessors(
+                    self.messageList,
+                    options.tracingContext,
+                  );
                   const outputText = self.messageList.get.response.aiV4
                     .core()
                     .map(m => MessageList.coreContentToString(m.content))
                     .join('\n');
-
-                  const messages = self.messageList.get.response.v2();
-                  const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                  );
-
-                  if (
-                    messagesWithStructuredData[0] &&
-                    messagesWithStructuredData[0].content.metadata?.structuredOutput
-                  ) {
-                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                  } else if (!self.#options.output) {
-                    self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                  }
 
                   self.#delayedPromises.text.resolve(outputText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
@@ -418,31 +585,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     response = {
                       ...otherMetadata,
                       messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui(),
+                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
                 } else {
                   const textContent = self.#bufferedText.join('');
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
-
-                  // Check for structuredOutput in metadata (from output processors in stream mode)
-                  const messages = self.messageList.get.response.v2();
-                  const messagesWithStructuredData = messages.filter(
-                    msg => msg.content.metadata && (msg.content.metadata as any).structuredOutput,
-                  );
-
-                  if (
-                    messagesWithStructuredData[0] &&
-                    // this is to make typescript happy
-                    messagesWithStructuredData[0].content.metadata?.structuredOutput
-                  ) {
-                    const structuredOutput = messagesWithStructuredData[0].content.metadata.structuredOutput;
-                    self.#delayedPromises.object.resolve(structuredOutput as InferSchemaOutput<OUTPUT>);
-                  } else if (!self.#options.output && self.#delayedPromises.object.status.type !== 'resolved') {
-                    // Resolve object promise to avoid hanging
-                    self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-                  }
                 }
               } catch (error) {
                 if (error instanceof TripWire) {
@@ -451,23 +600,30 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.finishReason.resolve('other');
                   self.#delayedPromises.text.resolve('');
                 } else {
-                  self.#error = error instanceof Error ? error.message : String(error);
+                  self.#error = getErrorFromUnknown(error, {
+                    fallbackMessage: 'Unknown error in stream',
+                  });
                   self.#delayedPromises.finishReason.resolve('error');
                   self.#delayedPromises.text.resolve('');
                 }
-                self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                if (self.#delayedPromises.object.status.type !== 'resolved') {
+                  self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+                }
               }
 
               // Resolve all delayed promises with final values
               self.#delayedPromises.usage.resolve(self.#usageCount);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
-              self.#delayedPromises.response.resolve(response);
+              self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
               self.#delayedPromises.request.resolve(self.#request || {});
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
-              self.#delayedPromises.reasoning.resolve(self.#bufferedReasoning.join(''));
-              const reasoningText = self.#bufferedReasoning.length > 0 ? self.#bufferedReasoning.join('') : undefined;
+              const reasoningText =
+                self.#bufferedReasoning.length > 0
+                  ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
+                  : undefined;
               self.#delayedPromises.reasoningText.resolve(reasoningText);
+              self.#delayedPromises.reasoning.resolve(Object.values(self.#bufferedReasoningDetails || {}));
               self.#delayedPromises.sources.resolve(self.#bufferedSources);
               self.#delayedPromises.files.resolve(self.#bufferedFiles);
               self.#delayedPromises.toolCalls.resolve(self.#toolCalls);
@@ -475,133 +631,101 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.steps.resolve(self.#bufferedSteps);
               self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
               self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
-              self.#delayedPromises.reasoningDetails.resolve(Object.values(self.#bufferedReasoningDetails || {}));
+              self.#delayedPromises.suspendPayload.resolve(undefined);
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
               if (baseFinishStep) {
-                const { stepType: _stepType, isContinued: _isContinued } = baseFinishStep;
-
-                const onFinishPayload = {
+                const onFinishPayload: MastraOnFinishCallbackArgs<OUTPUT> = {
+                  // StepResult properties from baseFinishStep
+                  providerMetadata: baseFinishStep.providerMetadata,
                   text: baseFinishStep.text,
                   warnings: baseFinishStep.warnings ?? [],
                   finishReason: chunk.payload.stepResult.reason,
-                  // TODO: we should add handling for step IDs in message list so you can retrieve step content by step id. And on finish should the content here be from all steps?
                   content: messageList.get.response.aiV5.stepContent(),
                   request: await self.request,
                   error: self.error,
-                  reasoning: await self.aisdk.v5.reasoning,
-                  reasoningText: await self.aisdk.v5.reasoningText,
-                  sources: await self.aisdk.v5.sources,
-                  files: await self.aisdk.v5.files,
-                  steps: transformSteps({ steps: self.#bufferedSteps }),
-                  response: { ...(await self.response), messages: messageList.get.response.aiV5.model() },
+                  reasoning: await self.reasoning,
+                  reasoningText: await self.reasoningText,
+                  sources: await self.sources,
+                  files: await self.files,
+                  steps: self.#bufferedSteps,
+                  response: {
+                    ...(await self.response),
+                    ...baseFinishStep.response,
+                    messages: messageList.get.response.aiV5.model(),
+                  },
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
-                  toolCalls: await self.aisdk.v5.toolCalls,
-                  toolResults: await self.aisdk.v5.toolResults,
-                  staticToolCalls: (await self.aisdk.v5.toolCalls).filter(
-                    (toolCall: any) => toolCall.dynamic === false,
+                  toolCalls: await self.toolCalls,
+                  toolResults: await self.toolResults,
+                  staticToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === false),
+                  staticToolResults: (await self.toolResults).filter(
+                    toolResult => toolResult?.payload?.dynamic === false,
                   ),
-                  staticToolResults: (await self.aisdk.v5.toolResults).filter(
-                    (toolResult: any) => toolResult.dynamic === false,
+                  dynamicToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === true),
+                  dynamicToolResults: (await self.toolResults).filter(
+                    toolResult => toolResult?.payload?.dynamic === true,
                   ),
-                  dynamicToolCalls: (await self.aisdk.v5.toolCalls).filter(
-                    (toolCall: any) => toolCall.dynamic === true,
-                  ),
-                  dynamicToolResults: (await self.aisdk.v5.toolResults).filter(
-                    (toolResult: any) => toolResult.dynamic === true,
-                  ),
+                  // Custom properties (not part of standard callback)
+                  ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
                   object:
-                    self.#delayedPromises.object.status.type === 'resolved'
-                      ? self.#delayedPromises.object.status.value
-                      : self.#options.output && baseFinishStep.text
-                        ? (() => {
-                            try {
-                              return JSON.parse(baseFinishStep.text);
-                            } catch {
-                              return undefined;
-                            }
-                          })()
-                        : undefined,
+                    self.#delayedPromises.object.status.type === 'rejected'
+                      ? undefined
+                      : self.#delayedPromises.object.status.type === 'resolved'
+                        ? self.#delayedPromises.object.status.value
+                        : self.#structuredOutputMode === 'direct' && baseFinishStep.text
+                          ? (() => {
+                              try {
+                                return JSON.parse(baseFinishStep.text);
+                              } catch {
+                                return undefined;
+                              }
+                            })()
+                          : undefined,
                 };
 
                 await options?.onFinish?.(onFinishPayload);
               }
-
-              if (options?.rootSpan) {
-                options.rootSpan.setAttributes({
-                  ...(baseFinishStep?.usage?.reasoningTokens
-                    ? {
-                        'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.totalTokens
-                    ? {
-                        'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.inputTokens
-                    ? {
-                        'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.outputTokens
-                    ? {
-                        'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.cachedInputTokens
-                    ? {
-                        'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.providerMetadata
-                    ? { 'stream.response.providerMetadata': JSON.stringify(baseFinishStep?.providerMetadata) }
-                    : {}),
-                  ...(baseFinishStep?.finishReason
-                    ? { 'stream.response.finishReason': baseFinishStep?.finishReason }
-                    : {}),
-                  ...(options?.telemetry_settings?.recordOutputs !== false
-                    ? { 'stream.response.text': baseFinishStep?.text }
-                    : {}),
-                  ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
-                    ? {
-                        'stream.response.toolCalls': JSON.stringify(
-                          baseFinishStep?.toolCalls?.map(chunk => {
-                            return {
-                              type: 'tool-call',
-                              toolCallId: chunk.payload.toolCallId,
-                              args: chunk.payload.args,
-                              toolName: chunk.payload.toolName,
-                            };
-                          }),
-                        ),
-                      }
-                    : {}),
-                });
-
-                options.rootSpan.end();
-              }
-
               break;
 
             case 'error':
-              self.#error = chunk.payload.error as any;
+              const error = getErrorFromUnknown(chunk.payload.error, {
+                fallbackMessage: 'Unknown error chunk in stream',
+              });
+              self.#error = error;
+              self.#status = 'failed';
+              self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
-              // Reject all delayed promises on error
-              const error =
-                typeof self.#error === 'object' ? new Error(self.#error.message) : new Error(String(self.#error));
-
-              Object.values(self.#delayedPromises).forEach(promise => promise.reject(error));
+              Object.values(self.#delayedPromises).forEach(promise => {
+                if (promise.status.type === 'pending') {
+                  promise.reject(self.#error);
+                }
+              });
 
               break;
           }
-
+          self.#emitChunk(chunk);
           controller.enqueue(chunk);
+        },
+        flush: () => {
+          if (self.#delayedPromises.object.status.type === 'pending') {
+            // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
+            self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
+          }
+          // If stream ends without proper finish/error chunks, reject unresolved promises
+          // This must be in the final transformer flush to ensure
+          // all of the delayed promises had a chance to resolve or reject already
+          // Avoids promises hanging forever
+          Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
+            if (promise.status.type === 'pending') {
+              promise.reject(new Error(`promise '${key}' was not resolved or rejected when stream finished`));
+            }
+          });
+
+          // Emit finish event for EventEmitter streams
+          self.#streamFinished = true;
+          self.#emitter.emit('finish');
         },
       }),
     );
@@ -611,13 +735,18 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       messageList,
       options: {
         toolCallStreaming: options?.toolCallStreaming,
-        output: options?.output,
+        structuredOutput: options?.structuredOutput,
+        tracingContext: options?.tracingContext,
       },
     });
+
+    if (initialState) {
+      this.deserializeState(initialState);
+    }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
-    if (!this.#streamConsumed) {
+    if (!this.#consumptionStarted) {
       void this.consumeStream();
     }
     return promise.promise;
@@ -631,18 +760,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   /**
-   * Resolves to complete reasoning text for models that support reasoning.
+   * Resolves to reasoning parts array for models that support reasoning.
    */
   get reasoning() {
     return this.#getDelayedPromise(this.#delayedPromises.reasoning);
   }
 
+  /**
+   * Resolves to complete reasoning text for models that support reasoning.
+   */
   get reasoningText() {
     return this.#getDelayedPromise(this.#delayedPromises.reasoningText);
-  }
-
-  get reasoningDetails() {
-    return this.#getDelayedPromise(this.#delayedPromises.reasoningDetails);
   }
 
   get sources() {
@@ -657,49 +785,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#getDelayedPromise(this.#delayedPromises.steps);
   }
 
-  teeStream() {
-    const [stream1, stream2] = this.#baseStream.tee();
-    this.#baseStream = stream2;
-    return stream1;
+  get suspendPayload() {
+    return this.#getDelayedPromise(this.#delayedPromises.suspendPayload);
   }
 
   /**
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
-    const self = this;
-
-    let fullStream = this.teeStream();
-
-    return fullStream
-      .pipeThrough(
-        createObjectStreamTransformer({
-          schema: self.#options.output,
-          onFinish: data => self.#delayedPromises.object.resolve(data),
-        }),
-      )
-      .pipeThrough(
-        new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-          transform(chunk, controller) {
-            if (chunk.type === 'raw' && !self.#options.includeRawChunks) {
-              return;
-            }
-
-            controller.enqueue(chunk);
-          },
-          flush: () => {
-            // If stream ends without proper finish/error chunks, reject unresolved promises
-            // This must be in the final transformer in the fullStream pipeline
-            // to ensure all of the delayed promises had a chance to resolve or reject already
-            // Avoids promises hanging forever
-            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
-              if (promise.status.type === 'pending') {
-                promise.reject(new Error(`Stream ${key} terminated unexpectedly`));
-              }
-            });
-          },
-        }),
-      );
+    return this.#createEventedStream();
   }
 
   /**
@@ -761,49 +855,66 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /**
    * Resolves to an error if an error occurred during streaming.
    */
-  get error(): Error | string | { message: string; stack: string } | undefined {
-    if (typeof this.#error === 'object') {
-      const error = new Error(this.#error.message);
-      error.stack = this.#error.stack;
-      return error;
-    }
-
+  get error(): Error | undefined {
     return this.#error;
   }
 
-  updateUsageCount(usage: Record<string, number>) {
+  updateUsageCount(usage: Partial<LanguageModelUsage>) {
     if (!usage) {
       return;
     }
 
-    for (const [key, value] of Object.entries(usage)) {
-      this.#usageCount[key] = (this.#usageCount[key] ?? 0) + (value ?? 0);
+    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    if (usage.inputTokens !== undefined) {
+      this.#usageCount.inputTokens = (this.#usageCount.inputTokens ?? 0) + usage.inputTokens;
+    }
+    if (usage.outputTokens !== undefined) {
+      this.#usageCount.outputTokens = (this.#usageCount.outputTokens ?? 0) + usage.outputTokens;
+    }
+    if (usage.totalTokens !== undefined) {
+      this.#usageCount.totalTokens = (this.#usageCount.totalTokens ?? 0) + usage.totalTokens;
+    }
+    if (usage.reasoningTokens !== undefined) {
+      this.#usageCount.reasoningTokens = (this.#usageCount.reasoningTokens ?? 0) + usage.reasoningTokens;
+    }
+    if (usage.cachedInputTokens !== undefined) {
+      this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
     }
   }
 
-  populateUsageCount(usage: Record<string, number>) {
+  populateUsageCount(usage: Partial<LanguageModelUsage>) {
     if (!usage) {
       return;
     }
 
-    for (const [key, value] of Object.entries(usage)) {
-      if (!this.#usageCount[key]) {
-        this.#usageCount[key] = value;
-      }
+    // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    if (usage.inputTokens !== undefined && this.#usageCount.inputTokens === undefined) {
+      this.#usageCount.inputTokens = usage.inputTokens;
+    }
+    if (usage.outputTokens !== undefined && this.#usageCount.outputTokens === undefined) {
+      this.#usageCount.outputTokens = usage.outputTokens;
+    }
+    if (usage.totalTokens !== undefined && this.#usageCount.totalTokens === undefined) {
+      this.#usageCount.totalTokens = usage.totalTokens;
+    }
+    if (usage.reasoningTokens !== undefined && this.#usageCount.reasoningTokens === undefined) {
+      this.#usageCount.reasoningTokens = usage.reasoningTokens;
+    }
+    if (usage.cachedInputTokens !== undefined && this.#usageCount.cachedInputTokens === undefined) {
+      this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
     }
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    this.#streamConsumed = true;
+    if (this.#consumptionStarted) {
+      return;
+    }
+
+    this.#consumptionStarted = true;
+
     try {
       await consumeStream({
-        stream: this.fullStream.pipeThrough(
-          new TransformStream({
-            transform(chunk, controller) {
-              controller.enqueue(chunk);
-            },
-          }),
-        ) as any,
+        stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: options?.onError,
       });
     } catch (error) {
@@ -816,7 +927,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    */
   async getFullOutput() {
     await this.consumeStream({
-      onError: (error: any) => {
+      onError: (error: unknown) => {
         console.error(error);
         throw error;
       },
@@ -910,8 +1021,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
-   *   output: z.object({ name: z.string(), age: z.number() })
+   * const stream = await agent.stream("Extract data", {
+   *   structuredOutput: {
+   *     schema: z.object({ name: z.string(), age: z.number() }),
+   *     model: 'gpt-4o-mini' // optional to use a model for structuring json output
+   *   }
    * });
    * // partial json chunks
    * for await (const data of stream.objectStream) {
@@ -920,7 +1034,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * ```
    */
   get objectStream() {
-    return this.fullStream.pipeThrough(
+    return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, PartialSchemaOutput<OUTPUT>>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
@@ -937,7 +1051,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   get elementStream(): ReadableStream<InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never> {
     let publishedElements = 0;
 
-    return this.fullStream.pipeThrough(
+    return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, InferSchemaOutput<OUTPUT> extends Array<infer T> ? T : never>({
         transform(chunk, controller) {
           if (chunk.type === 'object') {
@@ -957,13 +1071,16 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    * Stream of only text content, filtering out metadata and other chunk types.
    */
   get textStream() {
-    const self = this;
-    const outputSchema = getTransformedSchema(self.#options.output);
-    if (outputSchema?.outputFormat === 'array') {
-      return this.fullStream.pipeThrough(createJsonTextStreamTransformer(self.#options.output));
+    if (this.#structuredOutputMode === 'direct') {
+      const outputSchema = getTransformedSchema(this.#options.structuredOutput?.schema);
+      if (outputSchema?.outputFormat === 'array') {
+        return this.#createEventedStream().pipeThrough(
+          createJsonTextStreamTransformer(this.#options.structuredOutput?.schema),
+        );
+      }
     }
 
-    return this.teeStream().pipeThrough(
+    return this.#createEventedStream().pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, string>({
         transform(chunk, controller) {
           if (chunk.type === 'text-delta') {
@@ -979,15 +1096,22 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    *
    * @example
    * ```typescript
-   * const stream = await agent.streamVNext("Extract data", {
-   *   output: z.object({ name: z.string(), age: z.number() })
+   * const stream = await agent.stream("Extract data", {
+   *   structuredOutput: {
+   *     schema: z.object({ name: z.string(), age: z.number() }),
+   *     model: 'gpt-4o-mini' // optionally use a model for structuring json output
+   *   }
    * });
    * // final validated json
    * const data = await stream.object // { name: 'John', age: 30 }
    * ```
    */
   get object() {
-    if (!this.processorRunner && !this.#options.output) {
+    if (
+      !this.processorRunner &&
+      !this.#options.structuredOutput?.schema &&
+      this.#delayedPromises.object.status.type === 'pending'
+    ) {
       this.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
     }
 
@@ -1008,6 +1132,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   _getImmediateText() {
     return this.#bufferedText.join('');
   }
+
+  /** @internal */
+  _getImmediateObject() {
+    return this.#bufferedObject;
+  }
   /** @internal */
   _getImmediateUsage() {
     return this.#usageCount;
@@ -1020,17 +1149,129 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   _getImmediateFinishReason() {
     return this.#finishReason;
   }
+  /** @internal  */
+  _getBaseStream() {
+    return this.#baseStream;
+  }
 
-  #getTotalUsage() {
-    let total = 0;
-    for (const [key, value] of Object.entries(this.#usageCount)) {
-      if (key !== 'totalTokens' && value && !key.startsWith('cached')) {
-        total += value;
-      }
+  #getTotalUsage(): LanguageModelUsage {
+    let total = this.#usageCount.totalTokens;
+
+    if (total === undefined) {
+      const input = this.#usageCount.inputTokens ?? 0;
+      const output = this.#usageCount.outputTokens ?? 0;
+      const reasoning = this.#usageCount.reasoningTokens ?? 0;
+      total = input + output + reasoning;
     }
+
     return {
-      ...this.#usageCount,
+      inputTokens: this.#usageCount.inputTokens,
+      outputTokens: this.#usageCount.outputTokens,
       totalTokens: total,
+      reasoningTokens: this.#usageCount.reasoningTokens,
+      cachedInputTokens: this.#usageCount.cachedInputTokens,
     };
+  }
+
+  #emitChunk(chunk: ChunkType<OUTPUT>) {
+    this.#bufferedChunks.push(chunk); // add to bufferedChunks for replay in new streams
+    this.#emitter.emit('chunk', chunk); // emit chunk for existing listener streams
+  }
+
+  #createEventedStream() {
+    const self = this;
+
+    return new ReadableStream<ChunkType<OUTPUT>>({
+      start(controller) {
+        // Replay existing buffered chunks
+        self.#bufferedChunks.forEach(chunk => {
+          controller.enqueue(chunk);
+        });
+
+        // If stream already finished, close immediately
+        if (self.#streamFinished) {
+          controller.close();
+          return;
+        }
+
+        // Listen for new chunks and stream finish
+        const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
+          controller.enqueue(chunk);
+        };
+
+        const finishHandler = () => {
+          self.#emitter.off('chunk', chunkHandler);
+          self.#emitter.off('finish', finishHandler);
+          controller.close();
+        };
+
+        self.#emitter.on('chunk', chunkHandler);
+        self.#emitter.on('finish', finishHandler);
+      },
+
+      pull(_controller) {
+        // Only start consumption when someone is actively reading the stream
+        if (!self.#consumptionStarted) {
+          void self.consumeStream();
+        }
+      },
+
+      cancel() {
+        // Stream was cancelled, clean up
+        self.#emitter.removeAllListeners();
+      },
+    });
+  }
+
+  get status() {
+    return this.#status;
+  }
+
+  serializeState() {
+    return {
+      status: this.#status,
+      bufferedSteps: this.#bufferedSteps,
+      bufferedReasoningDetails: this.#bufferedReasoningDetails,
+      bufferedByStep: this.#bufferedByStep,
+      bufferedText: this.#bufferedText,
+      bufferedTextChunks: this.#bufferedTextChunks,
+      bufferedSources: this.#bufferedSources,
+      bufferedReasoning: this.#bufferedReasoning,
+      bufferedFiles: this.#bufferedFiles,
+      toolCallArgsDeltas: this.#toolCallArgsDeltas,
+      toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
+      toolCalls: this.#toolCalls,
+      toolResults: this.#toolResults,
+      warnings: this.#warnings,
+      finishReason: this.#finishReason,
+      request: this.#request,
+      usageCount: this.#usageCount,
+      tripwire: this.#tripwire,
+      tripwireReason: this.#tripwireReason,
+      messageList: this.messageList.serialize(),
+    };
+  }
+
+  deserializeState(state: any) {
+    this.#status = state.status;
+    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
+    this.#bufferedByStep = state.bufferedByStep;
+    this.#bufferedText = state.bufferedText;
+    this.#bufferedTextChunks = state.bufferedTextChunks;
+    this.#bufferedSources = state.bufferedSources;
+    this.#bufferedReasoning = state.bufferedReasoning;
+    this.#bufferedFiles = state.bufferedFiles;
+    this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
+    this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
+    this.#toolCalls = state.toolCalls;
+    this.#toolResults = state.toolResults;
+    this.#warnings = state.warnings;
+    this.#finishReason = state.finishReason;
+    this.#request = state.request;
+    this.#usageCount = state.usageCount;
+    this.#tripwire = state.tripwire;
+    this.#tripwireReason = state.tripwireReason;
+    this.messageList = this.messageList.deserialize(state.messageList);
   }
 }

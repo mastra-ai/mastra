@@ -25,14 +25,12 @@ export type DefaultNode = Node<
 >;
 
 export interface WorkflowDefaultNodeProps {
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
   onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
   parentWorkflowName?: string;
 }
 
 export function WorkflowDefaultNode({
   data,
-  onShowTrace,
   parentWorkflowName,
   onSendEvent,
 }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
@@ -48,6 +46,9 @@ export function WorkflowDefaultNode({
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
 
       <div
+        data-workflow-node
+        data-workflow-step-status={step?.status ?? 'idle'}
+        data-testid="workflow-default-node"
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
           step?.status === 'success' && 'bg-accent1Darker',
@@ -103,7 +104,6 @@ export function WorkflowDefaultNode({
           error={step?.error}
           mapConfig={mapConfig}
           event={step?.status === 'waiting' ? event : undefined}
-          onShowTrace={runId && onShowTrace ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
           runId={runId}
           onSendEvent={onSendEvent}
           status={step?.status}

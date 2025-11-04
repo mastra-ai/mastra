@@ -1,3 +1,4 @@
+import type { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -10,26 +11,27 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { OutputSchema, MastraModelOutput } from '@mastra/core/stream';
 import type { Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodType, ZodSchema } from 'zod';
-
+import type { ZodType } from 'zod';
 import type {
-  GenerateParams,
+  GenerateLegacyParams,
   GetAgentResponse,
-  GetEvalsByAgentIdResponse,
   GetToolResponse,
   ClientOptions,
   StreamParams,
+  StreamLegacyParams,
   UpdateModelParams,
-  StreamVNextParams,
+  UpdateModelInModelListParams,
+  ReorderModelListParams,
   NetworkStreamParams,
 } from '../types';
 
-import { parseClientRuntimeContext, runtimeContextQueryString } from '../utils';
+import { parseClientRequestContext, requestContextQueryString } from '../utils';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -38,19 +40,17 @@ import { BaseResource } from './base';
 async function executeToolCallAndRespond({
   response,
   params,
-  runId,
   resourceId,
   threadId,
-  runtimeContext,
+  requestContext,
   respondFn,
 }: {
-  params: StreamVNextParams<any, any>;
+  params: StreamParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
-  runId?: string;
   resourceId?: string;
   threadId?: string;
-  runtimeContext?: RuntimeContext<any>;
-  respondFn: Agent['generateVNext'];
+  requestContext?: RequestContext<any>;
+  respondFn: Agent['generate'];
 }) {
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
@@ -68,27 +68,22 @@ async function executeToolCallAndRespond({
       const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(
-          {
-            context: toolCall?.args,
-            runId,
-            resourceId,
-            threadId,
-            runtimeContext: runtimeContext as RuntimeContext,
-            tracingContext: { currentSpan: undefined },
-          },
-          {
+        const result = await clientTool.execute(toolCall?.args, {
+          requestContext: requestContext as RequestContext,
+          tracingContext: { currentSpan: undefined },
+          agent: {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
             toolCallId: toolCall?.toolCallId,
+            suspend: async () => {},
+            threadId,
+            resourceId,
           },
-        );
+        });
 
+        // Build updated messages from the response, adding the tool result
+        // Do NOT re-include the original user message to avoid storage duplicates
         const updatedMessages = [
-          {
-            role: 'user',
-            content: params.messages,
-          },
-          ...(response.response as unknown as { messages: CoreMessage[] }).messages,
+          ...(response.response.messages || []),
           {
             role: 'tool',
             content: [
@@ -160,24 +155,24 @@ export class AgentVoice extends BaseResource {
 
   /**
    * Get available speakers for the agent's voice provider
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing list of available speakers
    */
   getSpeakers(
-    runtimeContext?: RuntimeContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
-    return this.request(`/api/agents/${this.agentId}/voice/speakers${runtimeContextQueryString(runtimeContext)}`);
+    return this.request(`/api/agents/${this.agentId}/voice/speakers${requestContextQueryString(requestContext)}`);
   }
 
   /**
    * Get the listener configuration for the agent's voice provider
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
-  getListener(runtimeContext?: RuntimeContext | Record<string, any>): Promise<{ enabled: boolean }> {
-    return this.request(`/api/agents/${this.agentId}/voice/listener${runtimeContextQueryString(runtimeContext)}`);
+  getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
+    return this.request(`/api/agents/${this.agentId}/voice/listener${requestContextQueryString(requestContext)}`);
   }
 }
 
@@ -194,36 +189,18 @@ export class Agent extends BaseResource {
 
   /**
    * Retrieves details about the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing agent details including model and instructions
    */
-  details(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetAgentResponse> {
-    return this.request(`/api/agents/${this.agentId}${runtimeContextQueryString(runtimeContext)}`);
+  details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
+    return this.request(`/api/agents/${this.agentId}${requestContextQueryString(requestContext)}`);
   }
 
-  /**
-   * Generates a response from the agent
-   * @param params - Generation parameters including prompt
-   * @returns Promise containing the generated response
-   */
-  async generate(
-    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
-  ): Promise<GenerateReturn<any, undefined, undefined>>;
-  async generate<Output extends JSONSchema7 | ZodType>(
-    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
-  ): Promise<GenerateReturn<any, Output, undefined>>;
-  async generate<StructuredOutput extends JSONSchema7 | ZodType>(
-    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
-  ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
-  async generate<
-    Output extends JSONSchema7 | ZodType | undefined = undefined,
-    StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
-    console.warn(
-      "Deprecation NOTICE:\Generate method will switch to use generateVNext implementation September 23rd, 2025. Please use generateLegacy if you don't want to upgrade just yet.",
-    );
-    // @ts-expect-error - generic type issues
-    return this.generateLegacy(params);
+  enhanceInstructions(instructions: string, comment: string): Promise<{ explanation: string; new_prompt: string }> {
+    return this.request(`/api/agents/${this.agentId}/instructions/enhance`, {
+      method: 'POST',
+      body: { instructions, comment },
+    });
   }
 
   /**
@@ -232,27 +209,27 @@ export class Agent extends BaseResource {
    * @returns Promise containing the generated response
    */
   async generateLegacy(
-    params: GenerateParams<undefined> & { output?: never; experimental_output?: never },
+    params: GenerateLegacyParams<undefined> & { output?: never; experimental_output?: never },
   ): Promise<GenerateReturn<any, undefined, undefined>>;
   async generateLegacy<Output extends JSONSchema7 | ZodType>(
-    params: GenerateParams<Output> & { output: Output; experimental_output?: never },
+    params: GenerateLegacyParams<Output> & { output: Output; experimental_output?: never },
   ): Promise<GenerateReturn<any, Output, undefined>>;
   async generateLegacy<StructuredOutput extends JSONSchema7 | ZodType>(
-    params: GenerateParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
+    params: GenerateLegacyParams<StructuredOutput> & { output?: never; experimental_output: StructuredOutput },
   ): Promise<GenerateReturn<any, undefined, StructuredOutput>>;
   async generateLegacy<
     Output extends JSONSchema7 | ZodType | undefined = undefined,
     StructuredOutput extends JSONSchema7 | ZodType | undefined = undefined,
-  >(params: GenerateParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
+  >(params: GenerateLegacyParams<Output>): Promise<GenerateReturn<any, Output, StructuredOutput>> {
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as GenerateParams;
+    const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
       `/api/agents/${this.agentId}/generate-legacy`,
@@ -278,26 +255,21 @@ export class Agent extends BaseResource {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(
-            {
-              context: toolCall?.args,
-              runId,
-              resourceId,
-              threadId,
-              runtimeContext: runtimeContext as RuntimeContext,
-              tracingContext: { currentSpan: undefined },
-            },
-            {
+          const result = await clientTool.execute(toolCall?.args, {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            agent: {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
             },
-          );
+          });
 
+          // Build updated messages from the response, adding the tool result
+          // Do NOT re-include the original user message to avoid storage duplicates
           const updatedMessages = [
-            {
-              role: 'user',
-              content: params.messages,
-            },
             ...(response.response as unknown as { messages: CoreMessage[] }).messages,
             {
               role: 'tool',
@@ -323,27 +295,20 @@ export class Agent extends BaseResource {
     return response;
   }
 
-  async generateVNext<
-    T extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
   // Backward compatibility overload
-  async generateVNext<
-    T extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(params: StreamVNextParams<T, STRUCTURED_OUTPUT>): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<
-    T extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messagesOrParams: MessageListInput | StreamVNextParams<T, STRUCTURED_OUTPUT>,
-    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
+  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+  async generate<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
+  ): Promise<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>> {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<T, STRUCTURED_OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -352,12 +317,11 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<T, STRUCTURED_OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
     const processedParams = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
         ? {
@@ -367,10 +331,10 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, runtimeContext } = processedParams as StreamVNextParams;
+    const { resourceId, threadId, requestContext } = processedParams as StreamParams;
 
-    const response = await this.request<ReturnType<MastraModelOutput['getFullOutput']>>(
-      `/api/agents/${this.agentId}/generate/vnext`,
+    const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
+      `/api/agents/${this.agentId}/generate`,
       {
         method: 'POST',
         body: processedParams,
@@ -381,12 +345,11 @@ export class Agent extends BaseResource {
       return executeToolCallAndRespond({
         response,
         params,
-        runId,
         resourceId,
         threadId,
-        runtimeContext: runtimeContext as RuntimeContext<any>,
-        respondFn: this.generateVNext.bind(this),
-      }) as unknown as Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
+        requestContext: requestContext as RequestContext<any>,
+        respondFn: this.generate.bind(this),
+      }) as unknown as Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
     }
 
     return response;
@@ -491,7 +454,7 @@ export class Agent extends BaseResource {
     }
 
     await processDataStream({
-      stream,
+      stream: stream as ReadableStream<Uint8Array>,
       onTextPart(value) {
         if (currentTextPart == null) {
           currentTextPart = {
@@ -742,26 +705,8 @@ export class Agent extends BaseResource {
    * @param params - Stream parameters including prompt
    * @returns Promise containing the enhanced Response object with processDataStream method
    */
-  async stream<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
-  ): Promise<
-    Response & {
-      processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
-    }
-  > {
-    console.warn(
-      "Deprecation NOTICE:\nStream method will switch to use streamVNext implementation September 23rd, 2025. Please use streamLegacy if you don't want to upgrade just yet.",
-    );
-    return this.streamLegacy(params);
-  }
-
-  /**
-   * Streams a response from the agent
-   * @param params - Stream parameters including prompt
-   * @returns Promise containing the enhanced Response object with processDataStream method
-   */
   async streamLegacy<T extends JSONSchema7 | ZodType | undefined = undefined>(
-    params: StreamParams<T>,
+    params: StreamLegacyParams<T>,
   ): Promise<
     Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
@@ -771,7 +716,7 @@ export class Agent extends BaseResource {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
     };
 
@@ -779,7 +724,7 @@ export class Agent extends BaseResource {
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, writable);
+    const response = await this.processStreamResponseLegacy(processedParams, writable);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -793,7 +738,7 @@ export class Agent extends BaseResource {
     // Add the processDataStream method to the response
     streamResponse.processDataStream = async (options = {}) => {
       await processDataStream({
-        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        stream: streamResponse.body as unknown as globalThis.ReadableStream<Uint8Array>,
         ...options,
       });
     };
@@ -905,6 +850,16 @@ export class Agent extends BaseResource {
       // but this is completely wrong and this fn is probably broken. Remove ":any" and you'll see a bunch of type errors
       onChunk: async (chunk: any) => {
         switch (chunk.type) {
+          case 'tripwire': {
+            message.parts.push({
+              type: 'text',
+              text: chunk.payload.tripwireReason,
+            });
+
+            execUpdate();
+            break;
+          }
+
           case 'step-start': {
             // keep message id stable when we are updating an existing message:
             if (!replaceLastMessage) {
@@ -1109,7 +1064,10 @@ export class Agent extends BaseResource {
           }
 
           case 'error': {
-            throw new Error(chunk.payload.error);
+            throw getErrorFromUnknown(chunk.payload.error, {
+              fallbackMessage: 'Unknown error in stream',
+              supportSerialization: false,
+            });
           }
 
           case 'data': {
@@ -1145,8 +1103,8 @@ export class Agent extends BaseResource {
     onFinish?.({ message, finishReason, usage });
   }
 
-  async processStreamResponse_vNext(processedParams: any, writable: any) {
-    const response: Response = await this.request(`/api/agents/${this.agentId}/stream/vnext`, {
+  async processStreamResponse(processedParams: any, writable: any, route: string = 'stream') {
+    const response: Response = await this.request(`/api/agents/${this.agentId}/${route}`, {
       method: 'POST',
       body: processedParams,
       stream: true,
@@ -1164,24 +1122,25 @@ export class Agent extends BaseResource {
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
       // Pipe one branch to the writable stream without holding a persistent lock
+
       streamForWritable
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
+              let writer;
+
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
+                writer = writable.getWriter();
                 const text = new TextDecoder().decode(chunk);
-                if (text.includes('[DONE]')) {
-                  return;
-                }
+                const lines = text.split('\n\n');
+                const readableLines = lines.filter(line => line !== '[DONE]').join('\n\n');
+
+                await writer.write(new TextEncoder().encode(readableLines));
               } catch {
-                // If decoding fails, fall back to writing raw chunk
-              }
-              const writer = writable.getWriter();
-              try {
-                await writer.write(chunk);
+                await writer?.write(chunk);
               } finally {
-                writer.releaseLock();
+                writer?.releaseLock();
               }
             },
           }),
@@ -1195,7 +1154,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse_vNext({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1214,25 +1173,24 @@ export class Agent extends BaseResource {
               toolCalls.push(toolCall);
             }
 
+            let shouldExecuteClientTool = false;
             // Handle tool calls if needed
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    runtimeContext: processedParams.runtimeContext as RuntimeContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                  },
-                  {
+                shouldExecuteClientTool = true;
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessageRaw = messages[messages.length - 1];
                 const lastMessage: UIMessage | undefined =
@@ -1260,16 +1218,13 @@ export class Agent extends BaseResource {
                   toolInvocation.result = result;
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
+                // Build updated messages for the recursive call
+                // Do NOT re-include the original messages to avoid storage duplicates
                 const updatedMessages =
-                  lastMessage != null
-                    ? [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage]
-                    : [...messageArray, ...messages];
+                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
                 // Recursively call stream with updated messages
-                this.processStreamResponse_vNext(
+                this.processStreamResponse(
                   {
                     ...processedParams,
                     messages: updatedMessages,
@@ -1279,6 +1234,12 @@ export class Agent extends BaseResource {
                   console.error('Error processing stream response:', error);
                 });
               }
+            }
+
+            if (!shouldExecuteClientTool) {
+              setTimeout(() => {
+                writable.close();
+              }, 0);
             }
           } else {
             setTimeout(() => {
@@ -1341,13 +1302,9 @@ export class Agent extends BaseResource {
 
     return streamResponse;
   }
-
-  async streamVNext<
-    T extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1358,11 +1315,8 @@ export class Agent extends BaseResource {
     }
   >;
   // Backward compatibility overload
-  async streamVNext<
-    T extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    params: StreamVNextParams<T, STRUCTURED_OUTPUT>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    params: StreamParams<OUTPUT>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1372,12 +1326,9 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   >;
-  async streamVNext<
-    T extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    messagesOrParams: MessageListInput | StreamVNextParams<T, STRUCTURED_OUTPUT>,
-    options?: Omit<StreamVNextParams<T, STRUCTURED_OUTPUT>, 'messages'>,
+  async stream<OUTPUT extends OutputSchema = undefined>(
+    messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
+    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
   ): Promise<
     Response & {
       processDataStream: ({
@@ -1388,7 +1339,7 @@ export class Agent extends BaseResource {
     }
   > {
     // Handle both new signature (messages, options) and old signature (single param object)
-    let params: StreamVNextParams<T, STRUCTURED_OUTPUT>;
+    let params: StreamParams<OUTPUT>;
     if (typeof messagesOrParams === 'object' && 'messages' in messagesOrParams) {
       // Old signature: single parameter object
       params = messagesOrParams;
@@ -1397,17 +1348,16 @@ export class Agent extends BaseResource {
       params = {
         messages: messagesOrParams as MessageListInput,
         ...options,
-      } as StreamVNextParams<T, STRUCTURED_OUTPUT>;
+      } as StreamParams<OUTPUT>;
     }
-    const processedParams = {
+    const processedParams: StreamParams<OUTPUT> = {
       ...params,
-      output: params.output ? zodToJsonSchema(params.output) : undefined,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
       clientTools: processClientTools(params.clientTools),
       structuredOutput: params.structuredOutput
         ? {
             ...params.structuredOutput,
-            schema: zodToJsonSchema(params.structuredOutput.schema),
+            schema: zodToJsonSchema(params.structuredOutput.schema) as OUTPUT,
           }
         : undefined,
     };
@@ -1416,7 +1366,93 @@ export class Agent extends BaseResource {
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse_vNext(processedParams, writable);
+    const response = await this.processStreamResponse(processedParams, writable);
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async approveToolCall(params: { runId: string; toolCallId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    // Create a readable stream that will handle the response processing
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+
+    // Start processing the response in the background
+    const response = await this.processStreamResponse(params, writable, 'approve-tool-call');
+
+    // Create a new response with the readable stream
+    const streamResponse = new Response(readable, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }) as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    // Add the processDataStream method to the response
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  async declineToolCall(params: { runId: string; toolCallId: string }): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    // Create a readable stream that will handle the response processing
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+
+    // Start processing the response in the background
+    const response = await this.processStreamResponse(params, writable, 'decline-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1449,7 +1485,7 @@ export class Agent extends BaseResource {
   /**
    * Processes the stream response and handles tool calls
    */
-  private async processStreamResponse(processedParams: any, writable: WritableStream<Uint8Array>) {
+  private async processStreamResponseLegacy(processedParams: any, writable: WritableStream<Uint8Array>) {
     const response: Response & {
       processDataStream: (options?: Omit<Parameters<typeof processDataStream>[0], 'stream'>) => Promise<void>;
     } = await this.request(`/api/agents/${this.agentId}/stream-legacy`, {
@@ -1480,7 +1516,7 @@ export class Agent extends BaseResource {
 
       // Process the other branch for chat response handling
       this.processChatResponse({
-        stream: streamForProcessing,
+        stream: streamForProcessing as unknown as ReadableStream<Uint8Array>,
         update: ({ message }) => {
           const existingIndex = messages.findIndex(m => m.id === message.id);
 
@@ -1503,21 +1539,18 @@ export class Agent extends BaseResource {
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    runtimeContext: processedParams.runtimeContext as RuntimeContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                  },
-                  {
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
 
@@ -1561,15 +1594,11 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
-                // Convert messages to the correct format for the recursive call
-                const originalMessages = processedParams.messages;
-                const messageArray = Array.isArray(originalMessages) ? originalMessages : [originalMessages];
-
                 // Recursively call stream with updated messages
-                this.processStreamResponse(
+                this.processStreamResponseLegacy(
                   {
                     ...processedParams,
-                    messages: [...messageArray, ...messages.filter(m => m.id !== lastMessage.id), lastMessage],
+                    messages: [...messages.filter(m => m.id !== lastMessage.id), lastMessage],
                   },
                   writable,
                 ).catch(error => {
@@ -1598,11 +1627,11 @@ export class Agent extends BaseResource {
   /**
    * Gets details about a specific tool available to the agent
    * @param toolId - ID of the tool to retrieve
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing tool details
    */
-  getTool(toolId: string, runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetToolResponse> {
-    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${runtimeContextQueryString(runtimeContext)}`);
+  getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
+    return this.request(`/api/agents/${this.agentId}/tools/${toolId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -1613,11 +1642,11 @@ export class Agent extends BaseResource {
    */
   executeTool(
     toolId: string,
-    params: { data: any; runtimeContext?: RuntimeContext | Record<string, any> },
+    params: { data: any; requestContext?: RequestContext | Record<string, any> },
   ): Promise<any> {
     const body = {
       data: params.data,
-      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      requestContext: parseClientRequestContext(params.requestContext),
     };
     return this.request(`/api/agents/${this.agentId}/tools/${toolId}/execute`, {
       method: 'POST',
@@ -1626,29 +1655,46 @@ export class Agent extends BaseResource {
   }
 
   /**
-   * Retrieves evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @returns Promise containing agent evaluations
-   */
-  evals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/ci${runtimeContextQueryString(runtimeContext)}`);
-  }
-
-  /**
-   * Retrieves live evaluation results for the agent
-   * @param runtimeContext - Optional runtime context to pass as query parameter
-   * @returns Promise containing live agent evaluations
-   */
-  liveEvals(runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetEvalsByAgentIdResponse> {
-    return this.request(`/api/agents/${this.agentId}/evals/live${runtimeContextQueryString(runtimeContext)}`);
-  }
-  /**
    * Updates the model for the agent
    * @param params - Parameters for updating the model
    * @returns Promise containing the updated model
    */
   updateModel(params: UpdateModelParams): Promise<{ message: string }> {
     return this.request(`/api/agents/${this.agentId}/model`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Resets the agent's model to the original model that was set during construction
+   * @returns Promise containing a success message
+   */
+  resetModel(): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/model/reset`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Updates the model for the agent in the model list
+   * @param params - Parameters for updating the model
+   * @returns Promise containing the updated model
+   */
+  updateModelInModelList({ modelConfigId, ...params }: UpdateModelInModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/${modelConfigId}`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Reorders the models for the agent
+   * @param params - Parameters for reordering the model list
+   * @returns Promise containing the updated model list
+   */
+  reorderModelList(params: ReorderModelListParams): Promise<{ message: string }> {
+    return this.request(`/api/agents/${this.agentId}/models/reorder`, {
       method: 'POST',
       body: params,
     });

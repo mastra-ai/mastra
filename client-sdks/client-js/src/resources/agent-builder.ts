@@ -1,7 +1,7 @@
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import type { ClientOptions } from '../types';
-import { parseClientRuntimeContext } from '../utils';
+import { parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
 const RECORD_SEPARATOR = '\x1E';
@@ -9,8 +9,8 @@ const RECORD_SEPARATOR = '\x1E';
 export interface AgentBuilderActionRequest {
   /** Input data specific to the workflow type */
   inputData: any;
-  /** Runtime context for the action execution */
-  runtimeContext?: RuntimeContext;
+  /** Request context for the action execution */
+  requestContext?: RequestContext;
 }
 
 export interface AgentBuilderActionResult {
@@ -66,6 +66,42 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
+   * Creates a transform stream that parses binary chunks into JSON records.
+   */
+  private createRecordParserTransform(): TransformStream<ArrayBuffer, { type: string; payload: any }> {
+    let failedChunk: string | undefined = undefined;
+
+    return new TransformStream<ArrayBuffer, { type: string; payload: any }>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+              try {
+                const parsedChunk = JSON.parse(newChunk);
+                controller.enqueue(parsedChunk);
+                failedChunk = undefined;
+              } catch {
+                failedChunk = newChunk;
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+  }
+
+  /**
    * Creates a new agent builder action run and returns the runId.
    * This calls `/api/agent-builder/:actionId/create-run`.
    */
@@ -83,15 +119,6 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Creates a new workflow run (alias for createRun)
-   * @param params - Optional object containing the optional runId
-   * @returns Promise containing the runId of the created run
-   */
-  createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
-    return this.createRun(params);
-  }
-
-  /**
    * Starts agent builder action asynchronously and waits for completion.
    * This calls `/api/agent-builder/:actionId/start-async`.
    */
@@ -101,13 +128,13 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...actionParams } = params;
+    const requestContext = parseClientRequestContext(params.requestContext);
+    const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/start-async${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const result = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, runtimeContext },
+      body: { ...actionParams, requestContext },
     });
 
     return this.transformWorkflowResult(result);
@@ -121,13 +148,13 @@ export class AgentBuilder extends BaseResource {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...actionParams } = params;
+    const requestContext = parseClientRequestContext(params.requestContext);
+    const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/start?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
-      body: { ...actionParams, runtimeContext },
+      body: { ...actionParams, requestContext },
     });
   }
 
@@ -137,22 +164,22 @@ export class AgentBuilder extends BaseResource {
    */
   async resume(
     params: {
-      step: string | string[];
+      step?: string | string[];
       resumeData?: unknown;
-      runtimeContext?: RuntimeContext;
+      requestContext?: RequestContext;
     },
     runId: string,
   ): Promise<{ message: string }> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...resumeParams } = params;
+    const requestContext = parseClientRequestContext(params.requestContext);
+    const { requestContext: _, ...resumeParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/resume?${searchParams.toString()}`;
     return this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, runtimeContext },
+      body: { ...resumeParams, requestContext },
     });
   }
 
@@ -162,22 +189,22 @@ export class AgentBuilder extends BaseResource {
    */
   async resumeAsync(
     params: {
-      step: string | string[];
+      step?: string | string[];
       resumeData?: unknown;
-      runtimeContext?: RuntimeContext;
+      requestContext?: RequestContext;
     },
     runId: string,
   ): Promise<AgentBuilderActionResult> {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', runId);
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...resumeParams } = params;
+    const requestContext = parseClientRequestContext(params.requestContext);
+    const { requestContext: _, ...resumeParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/resume-async?${searchParams.toString()}`;
     const result = await this.request(url, {
       method: 'POST',
-      body: { ...resumeParams, runtimeContext },
+      body: { ...resumeParams, requestContext },
     });
 
     return this.transformWorkflowResult(result);
@@ -266,13 +293,13 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...actionParams } = params;
+    const requestContext = parseClientRequestContext(params.requestContext);
+    const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/stream${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, runtimeContext },
+      body: { ...actionParams, requestContext },
       stream: true,
     });
 
@@ -284,39 +311,7 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -329,13 +324,13 @@ export class AgentBuilder extends BaseResource {
       searchParams.set('runId', runId);
     }
 
-    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
-    const { runtimeContext: _, ...actionParams } = params;
+    const requestContext = parseClientRequestContext(params.requestContext);
+    const { requestContext: _, ...actionParams } = params;
 
     const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     const response: Response = await this.request(url, {
       method: 'POST',
-      body: { ...actionParams, runtimeContext },
+      body: { ...actionParams, requestContext },
       stream: true,
     });
 
@@ -347,73 +342,120 @@ export class AgentBuilder extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    let failedChunk: string | undefined = undefined;
-
-    const transformStream = new TransformStream<ArrayBuffer, { type: string; payload: any }>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(transformStream);
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
-   * Watches an existing agent builder action run by runId.
-   * This is used for hot reload recovery - it loads the existing run state
-   * and streams any remaining progress.
-   * This calls `/api/agent-builder/:actionId/watch`.
+   * Observes an existing agent builder action run stream.
+   * Replays cached execution from the beginning, then continues with live stream.
+   * This is the recommended method for recovery after page refresh/hot reload.
+   * This calls `/api/agent-builder/:actionId/observe` (which delegates to observeStreamVNext).
    */
-  async watch(
-    { runId, eventType }: { runId: string; eventType?: 'watch' | 'watch-v2' },
-    onRecord: (record: { type: string; payload: any }) => void,
-  ) {
-    const url = `/api/agent-builder/${this.actionId}/watch?runId=${runId}${eventType ? `&eventType=${eventType}` : ''}`;
+  async observeStream(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const url = `/api/agent-builder/${this.actionId}/observe?${searchParams.toString()}`;
     const response: Response = await this.request(url, {
-      method: 'GET',
+      method: 'POST',
       stream: true,
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to watch agent builder action: ${response.statusText}`);
+      throw new Error(`Failed to observe agent builder action stream: ${response.statusText}`);
     }
 
     if (!response.body) {
       throw new Error('Response body is null');
     }
 
-    // Use the exact same stream processing as workflows
-    for await (const record of this.streamProcessor(response.body)) {
-      if (typeof record === 'string') {
-        onRecord(JSON.parse(record));
-      } else {
-        onRecord(record);
-      }
+    return response.body.pipeThrough(this.createRecordParserTransform());
+  }
+
+  /**
+   * Observes an existing agent builder action run stream using VNext streaming API.
+   * Replays cached execution from the beginning, then continues with live stream.
+   * This calls `/api/agent-builder/:actionId/observe-streamVNext`.
+   */
+  async observeStreamVNext(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const url = `/api/agent-builder/${this.actionId}/observe-streamVNext?${searchParams.toString()}`;
+    const response: Response = await this.request(url, {
+      method: 'POST',
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe agent builder action stream VNext: ${response.statusText}`);
     }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return response.body.pipeThrough(this.createRecordParserTransform());
+  }
+
+  /**
+   * Observes an existing agent builder action run stream using legacy streaming API.
+   * Replays cached execution from the beginning, then continues with live stream.
+   * This calls `/api/agent-builder/:actionId/observe-stream-legacy`.
+   */
+  async observeStreamLegacy(params: { runId: string }) {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const url = `/api/agent-builder/${this.actionId}/observe-stream-legacy?${searchParams.toString()}`;
+    const response: Response = await this.request(url, {
+      method: 'POST',
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to observe agent builder action stream legacy: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return response.body.pipeThrough(this.createRecordParserTransform());
+  }
+
+  /**
+   * Resumes a suspended agent builder action and streams the results.
+   * This calls `/api/agent-builder/:actionId/resume-stream`.
+   */
+  async resumeStream(params: {
+    runId: string;
+    step: string | string[];
+    resumeData?: unknown;
+    requestContext?: RequestContext;
+  }): Promise<ReadableStream> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('runId', params.runId);
+
+    const requestContext = parseClientRequestContext(params.requestContext);
+    const { runId: _, requestContext: __, ...resumeParams } = params;
+
+    const url = `/api/agent-builder/${this.actionId}/resume-stream?${searchParams.toString()}`;
+    const response: Response = await this.request(url, {
+      method: 'POST',
+      body: { ...resumeParams, requestContext },
+      stream: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to resume agent builder action stream: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return response.body.pipeThrough(this.createRecordParserTransform());
   }
 
   /**
@@ -440,7 +482,7 @@ export class AgentBuilder extends BaseResource {
    * Gets all runs for this agent builder action.
    * This calls `/api/agent-builder/:actionId/runs`.
    */
-  async runs(params?: { fromDate?: Date; toDate?: Date; limit?: number; offset?: number; resourceId?: string }) {
+  async runs(params?: { fromDate?: Date; toDate?: Date; perPage?: number; page?: number; resourceId?: string }) {
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());
@@ -448,11 +490,11 @@ export class AgentBuilder extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit !== undefined) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
     }
-    if (params?.offset !== undefined) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);

@@ -17,22 +17,20 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
-    "@composio/core": "^0.1.51",
-    "@composio/mastra": "^0.1.49",
-    "@mastra/core": "^0.16.3",
-    "@mastra/fastembed": "^0.10.5",
-    "@mastra/libsql": "^0.14.1",
-    "@mastra/loggers": "^0.10.11",
-    "@mastra/mcp": "^0.12.0",
-    "@mastra/memory": "^0.15.1",
-    "@openrouter/ai-sdk-provider": "^0.7.5",
-    "hono": "^4.9.6",
+    "@composio/core": "^0.1.55",
+    "@composio/mastra": "^0.1.56",
+    "@mastra/core": "^0.23.1",
+    "@mastra/fastembed": "^0.10.6",
+    "@mastra/libsql": "^0.16.1",
+    "@mastra/loggers": "^0.10.18",
+    "@mastra/mcp": "^0.14.1",
+    "@mastra/memory": "^0.15.9",
+    "hono": "^4.9.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "mastra": "^0.12.3",
+    "mastra": "^0.17.5",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"
   }

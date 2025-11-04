@@ -71,6 +71,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
     });
 
     const miniAgent = new Agent({
+      id: 'question-extractor',
       model: this.llm,
       name: 'question-extractor',
       instructions:
@@ -79,10 +80,10 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
 
     let questionsText = '';
     if (this.llm.specificationVersion === 'v2') {
-      const result = await miniAgent.generateVNext([{ role: 'user', content: prompt }], { format: 'mastra' });
+      const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
       questionsText = result.text;
     } else {
-      const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
+      const result = await miniAgent.generateLegacy([{ role: 'user', content: prompt }]);
       questionsText = result.text;
     }
 

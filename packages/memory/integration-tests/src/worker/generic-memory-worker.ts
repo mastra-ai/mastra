@@ -1,8 +1,8 @@
 import { parentPort, workerData } from 'worker_threads';
-import type { MastraMessageV2, SharedMemoryConfig } from '@mastra/core/memory';
+import type { MastraDBMessage, SharedMemoryConfig } from '@mastra/core/memory';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { PostgresConfig } from '@mastra/pg';
+import type { PostgresStoreConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import { mockEmbedder } from './mock-embedder.js';
 
@@ -18,13 +18,13 @@ enum StorageType {
 }
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
-  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  storageConfigForWorker: LibSQLConfig | PostgresStoreConfig | UpstashConfig;
   vectorConfigForWorker?: LibSQLVectorConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
 interface MessageToProcess {
-  originalMessage: MastraMessageV2;
+  originalMessage: MastraDBMessage;
 }
 
 interface WorkerData {
@@ -55,7 +55,7 @@ async function initializeAndRun() {
         break;
       case 'pg':
         const { PostgresStore, PgVector } = await import('@mastra/pg');
-        store = new PostgresStore(storageConfig as PostgresConfig);
+        store = new PostgresStore(storageConfig as PostgresStoreConfig);
         vector = new PgVector({ connectionString: (storageConfig as { connectionString: string }).connectionString });
         break;
       default:
@@ -66,7 +66,7 @@ async function initializeAndRun() {
       storage: store,
       vector,
       embedder: mockEmbedder,
-      options: memoryOptions || { threads: { generateTitle: false } },
+      options: memoryOptions || { generateTitle: false },
     });
 
     for (const msgData of messages) {

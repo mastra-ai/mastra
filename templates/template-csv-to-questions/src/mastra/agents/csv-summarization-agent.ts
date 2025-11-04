@@ -11,6 +11,7 @@ const memory = new Memory({
 });
 
 export const csvSummarizationAgent = new Agent({
+  id: 'csv-summarization-agent',
   name: 'CSV Summarization Agent',
   description: 'An agent that summarizes and analyzes CSV data using a large context window model',
   instructions: `

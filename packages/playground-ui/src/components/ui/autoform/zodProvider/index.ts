@@ -1,13 +1,15 @@
 import { ParsedField, ParsedSchema, SchemaValidation } from '@autoform/core';
-import { getDefaultValueInZodStack, getFieldConfigInZodStack, ZodProvider } from '@autoform/zod/v4';
+import { getFieldConfigInZodStack, ZodProvider } from '@autoform/zod/v4';
 import { z } from 'zod';
 import { z as zV3 } from 'zod/v3';
 import { inferFieldType } from './field-type-inference';
+import { getDefaultValues, getDefaultValueInZodStack } from './default-values';
+import { removeEmptyValues } from '../utils';
 
 function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   const baseSchema = getBaseSchema(schema);
   const fieldConfig = getFieldConfigInZodStack(schema);
-  const type = inferFieldType(baseSchema, fieldConfig);
+  let type = inferFieldType(baseSchema, fieldConfig);
   const defaultValue = getDefaultValueInZodStack(schema);
 
   // Enums
@@ -27,13 +29,36 @@ function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   if (baseSchema instanceof zV3.ZodObject || baseSchema instanceof z.ZodObject) {
     subSchema = Object.entries(baseSchema.shape).map(([key, field]) => parseField(key, field as z.ZodTypeAny));
   }
+  if (baseSchema instanceof zV3.ZodUnion || baseSchema instanceof z.ZodUnion) {
+    subSchema = Object.entries((baseSchema.def as any).options).map(([key, field]: [string, unknown]) => {
+      return parseField(key, field as unknown as z.ZodTypeAny);
+    });
+  }
   if (baseSchema instanceof zV3.ZodIntersection || baseSchema instanceof z.ZodIntersection) {
-    const subSchemaLeft = Object.entries(baseSchema._def.left.shape).map(([key, field]) =>
-      parseField(key, field as z.ZodTypeAny),
-    );
-    const subSchemaRight = Object.entries(baseSchema._def.right.shape).map(([key, field]) =>
-      parseField(key, field as z.ZodTypeAny),
-    );
+    const leftSchema = 'left' in baseSchema.def ? baseSchema.def.left : null;
+    const rightSchema = 'right' in baseSchema.def ? baseSchema.def.right : null;
+    let subSchemaRight: ParsedField[] = [];
+    let subSchemaLeft: ParsedField[] = [];
+    if (leftSchema) {
+      if ('shape' in leftSchema && leftSchema.shape) {
+        subSchemaLeft = Object.entries(leftSchema.shape).map(([key, field]) => parseField(key, field as z.ZodTypeAny));
+      } else {
+        const leftChild = parseField(key, leftSchema as z.ZodTypeAny);
+        subSchemaLeft = leftChild.schema ?? [leftChild];
+        type = leftChild.type;
+      }
+    }
+    if (rightSchema) {
+      if ('shape' in rightSchema && rightSchema.shape) {
+        subSchemaRight = Object.entries(rightSchema.shape).map(([key, field]) =>
+          parseField(key, field as z.ZodTypeAny),
+        );
+      } else {
+        const rightChild = parseField(key, rightSchema as z.ZodTypeAny);
+        subSchemaRight = rightChild.schema ?? [rightChild];
+        type = rightChild.type;
+      }
+    }
     subSchema = [...subSchemaLeft, ...subSchemaRight];
   }
   if (baseSchema instanceof zV3.ZodArray || baseSchema instanceof z.ZodArray) {
@@ -41,13 +66,25 @@ function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
     subSchema = [parseField('0', baseSchema._zod.def.element)];
   }
 
+  const isLiteral = baseSchema instanceof z.ZodLiteral;
+  const literalValues = isLiteral ? baseSchema._zod.def.values : undefined;
+
   return {
     key,
     type,
     required: !schema.optional(),
     default: defaultValue,
     description: baseSchema.description,
-    fieldConfig,
+    fieldConfig:
+      isLiteral || Object.keys(fieldConfig ?? {})?.length > 0
+        ? {
+            ...fieldConfig,
+            customData: {
+              ...(fieldConfig?.customData ?? {}),
+              ...(isLiteral ? { isLiteral, literalValues } : {}),
+            },
+          }
+        : undefined,
     options: optionValues,
     schema: subSchema,
   };
@@ -78,8 +115,13 @@ export class CustomZodProvider<T extends z.ZodObject> extends ZodProvider<T> {
     this._schema = schema;
   }
 
+  getDefaultValues(): z.core.output<T> {
+    return getDefaultValues(this._schema) as z.core.output<T>;
+  }
+
   validateSchema(values: z.core.output<T>): SchemaValidation {
-    const result = super.validateSchema(values);
+    const cleanedValues = removeEmptyValues(values);
+    const result = super.validateSchema(cleanedValues as z.core.output<T>);
     return result;
   }
 

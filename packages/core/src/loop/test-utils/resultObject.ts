@@ -2,36 +2,28 @@ import { tool } from 'ai-v5';
 import { convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import {
-  createTestModel,
+  createTestModels,
   defaultSettings,
   mockDate,
   modelWithFiles,
   modelWithReasoning,
   modelWithSources,
   testUsage,
+  createMessageListWithUserMessage,
 } from './utils';
 
 export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.warnings', () => {
     it('should resolve with warnings', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           warnings: [{ type: 'other', message: 'test-warning' }],
         }),
-        messageList,
+        messageList: createMessageListWithUserMessage(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -42,18 +34,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.usage', () => {
     it('should resolve with token usage', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -65,37 +48,29 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
           ]),
         }),
-        messageList,
+        messageList: createMessageListWithUserMessage(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
 
       expect(await result.usage).toMatchInlineSnapshot(`
-            {
-              "cachedInputTokens": undefined,
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "reasoningTokens": undefined,
-              "totalTokens": 13,
-            }
-          `);
+        {
+          "inputTokens": 3,
+          "outputTokens": 10,
+          "totalTokens": 13,
+        }
+      `);
     });
   });
 
   describe('result.finishReason', () => {
     it('should resolve with finish reason', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -108,6 +83,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -118,18 +94,11 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.providerMetadata', () => {
     it('should resolve with provider metadata', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'text-start', id: '1' },
             { type: 'text-delta', id: '1', delta: 'Hello' },
@@ -145,6 +114,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]),
         }),
         messageList,
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -157,13 +127,14 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.response.messages', () => {
     it.todo('should contain reasoning', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
-        model: modelWithReasoning,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -233,18 +204,11 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.request', () => {
     it('should resolve with response information', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -263,6 +227,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           ]),
           request: { body: 'test body' },
         }),
+        agentId: 'agent-id',
         messageList,
       });
 
@@ -276,11 +241,11 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.response', () => {
     it('should resolve with response information', async () => {
-      const messageList = new MessageList();
+      const messageList = createMessageListWithUserMessage();
 
       const result = loopFn({
         runId,
-        model: createTestModel({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -323,13 +288,17 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             },
           ],
           "modelId": "mock-model-id",
+          "modelMetadata": {
+            "modelId": "mock-model-id",
+            "modelProvider": "mock-provider",
+            "modelVersion": "v2",
+          },
           "timestamp": 1970-01-01T00:00:00.000Z,
           "uiMessages": [
             {
               "id": "msg-0",
               "metadata": {
-                "__originalContent": "Hello",
-                "createdAt": ${mockDate.toISOString()},
+                "createdAt": 2024-01-01T00:00:00.001Z,
               },
               "parts": [
                 {
@@ -349,9 +318,10 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should resolve with full text', async () => {
       const result = loopFn({
         runId,
-        model: createTestModel(),
-        messageList: new MessageList(),
+        models: createTestModels(),
+        messageList: createMessageListWithUserMessage(),
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -364,9 +334,10 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain reasoning text from model response', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
-        model: modelWithReasoning,
+        messageList: createMessageListWithUserMessage(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -379,8 +350,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain reasoning from model response', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
-        model: modelWithReasoning,
+        messageList: createMessageListWithUserMessage(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         ...defaultSettings(),
       });
 
@@ -394,8 +365,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain sources', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
-        model: modelWithSources,
+        messageList: createMessageListWithUserMessage(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
@@ -409,8 +380,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should contain files', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
-        model: modelWithFiles,
+        messageList: createMessageListWithUserMessage(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
       });
 
@@ -424,14 +395,14 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it.todo('should add the reasoning from the model response to the step result', async () => {
       const result = loopFn({
         runId,
-        model: modelWithReasoning,
-        messageList: new MessageList(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
+        messageList: createMessageListWithUserMessage(),
         ...defaultSettings(),
       });
 
       await result.aisdk.v5.consumeStream();
 
-      const steps = result.aisdk.v5.steps;
+      const steps = await result.aisdk.v5.steps;
       // console.log('test-steps', JSON.stringify(steps, null, 2));
 
       expect(steps).toMatchInlineSnapshot(`
@@ -551,6 +522,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     },
                   ],
                   "modelId": "mock-model-id",
+                  "modelProvider": "mock-provider",
+                  "modelVersion": "v2",
                   "timestamp": 1970-01-01T00:00:00.000Z,
                 },
                 "usage": {
@@ -569,14 +542,14 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it.todo('should add the sources from the model response to the step result', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
-        model: modelWithSources,
+        messageList: createMessageListWithUserMessage(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         ...defaultSettings(),
       });
 
       await result.aisdk.v5.consumeStream();
 
-      expect(result.aisdk.v5.steps).toMatchInlineSnapshot(`
+      expect(await result.aisdk.v5.steps).toMatchInlineSnapshot(`
         [
           DefaultStepResult {
             "content": [
@@ -629,6 +602,8 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
               "modelId": "mock-model-id",
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
             },
             "usage": {
@@ -647,9 +622,10 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     it('should add the files from the model response to the step result', async () => {
       const result = loopFn({
         runId,
-        messageList: new MessageList(),
-        model: modelWithFiles,
+        messageList: createMessageListWithUserMessage(),
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
         ...defaultSettings(),
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -658,7 +634,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       expect(steps).toMatchInlineSnapshot(`
         [
-          DefaultStepResult {
+          {
             "content": [
               {
                 "file": DefaultGeneratedFileWithType {
@@ -683,8 +659,34 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "type": "file",
               },
             ],
+            "dynamicToolCalls": [],
+            "dynamicToolResults": [],
+            "files": [
+              {
+                "from": "AGENT",
+                "payload": {
+                  "base64": "Hello World",
+                  "data": "Hello World",
+                  "mimeType": "text/plain",
+                },
+                "runId": "test-run-id",
+                "type": "file",
+              },
+              {
+                "from": "AGENT",
+                "payload": {
+                  "base64": "QkFVRw==",
+                  "data": "QkFVRw==",
+                  "mimeType": "image/jpeg",
+                },
+                "runId": "test-run-id",
+                "type": "file",
+              },
+            ],
             "finishReason": "stop",
             "providerMetadata": undefined,
+            "reasoning": [],
+            "reasoningText": "",
             "request": {},
             "response": {
               "headers": undefined,
@@ -713,13 +715,52 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
               "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
+              "modelProvider": "mock-provider",
+              "modelVersion": "v2",
               "timestamp": 1970-01-01T00:00:00.000Z,
+              "uiMessages": [
+                {
+                  "id": "msg-0",
+                  "metadata": {
+                    "createdAt": 2024-01-01T00:00:00.003Z,
+                  },
+                  "parts": [
+                    {
+                      "mediaType": "text/plain",
+                      "providerMetadata": undefined,
+                      "type": "file",
+                      "url": "data:text/plain;base64,Hello World",
+                    },
+                    {
+                      "text": "Hello!",
+                      "type": "text",
+                    },
+                    {
+                      "mediaType": "image/jpeg",
+                      "providerMetadata": undefined,
+                      "type": "file",
+                      "url": "data:image/jpeg;base64,QkFVRw==",
+                    },
+                  ],
+                  "role": "assistant",
+                },
+              ],
             },
+            "sources": [],
+            "staticToolCalls": [],
+            "staticToolResults": [],
+            "stepType": "initial",
+            "text": "Hello!",
+            "toolCalls": [],
+            "toolResults": [],
             "usage": {
-              "cachedInputTokens": undefined,
               "inputTokens": 3,
               "outputTokens": 10,
-              "reasoningTokens": undefined,
               "totalTokens": 13,
             },
             "warnings": [],
@@ -731,19 +772,10 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.toolCalls', () => {
     it('should resolve with tool calls', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
-        messageList,
-        model: createTestModel({
+        messageList: createMessageListWithUserMessage(),
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',
@@ -763,6 +795,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             inputSchema: z.object({ value: z.string() }),
           }),
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();
@@ -786,19 +819,10 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
   describe('result.toolResults', () => {
     it('should resolve with tool results', async () => {
-      const messageList = new MessageList();
-      messageList.add(
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'test-input' }],
-        },
-        'input',
-      );
-
       const result = loopFn({
         runId,
-        messageList,
-        model: createTestModel({
+        messageList: createMessageListWithUserMessage(),
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',
@@ -819,6 +843,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             execute: async ({ value }: { value: string }) => `${value}-result`,
           },
         },
+        agentId: 'agent-id',
       });
 
       await result.aisdk.v5.consumeStream();

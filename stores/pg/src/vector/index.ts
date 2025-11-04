@@ -13,9 +13,11 @@ import type {
   UpdateVectorParams,
 } from '@mastra/core/vector';
 import { Mutex } from 'async-mutex';
-import pg from 'pg';
+import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
+import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -65,58 +67,77 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private setupSchemaPromise: Promise<void> | null = null;
   private installVectorExtensionPromise: Promise<void> | null = null;
   private vectorExtensionInstalled: boolean | undefined = undefined;
+  private vectorExtensionSchema: string | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
+  private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor({
-    connectionString,
-    schemaName,
-    pgPoolOptions,
-  }: {
-    connectionString: string;
-    schemaName?: string;
-    pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-  }) {
+  constructor(config: PgVectorConfig) {
     try {
-      if (!connectionString || connectionString.trim() === '') {
-        throw new Error(
-          'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
-        );
-      }
+      validateConfig('PgVector', config);
       super();
 
-      this.schema = schemaName;
+      this.schema = config.schemaName;
 
-      const basePool = new pg.Pool({
-        connectionString,
-        max: 20, // Maximum number of clients in the pool
-        idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
-        connectionTimeoutMillis: 2000, // Fail fast if can't connect
-        ...pgPoolOptions,
-      });
+      let poolConfig: pg.PoolConfig;
 
-      const telemetry = this.__getTelemetry();
+      if (isConnectionStringConfig(config)) {
+        poolConfig = {
+          connectionString: config.connectionString,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        };
+      } else if (isCloudSqlConfig(config)) {
+        poolConfig = {
+          ...config,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        } as pg.PoolConfig;
+      } else if (isHostConfig(config)) {
+        poolConfig = {
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        };
+      } else {
+        throw new Error('PgVector: invalid configuration provided');
+      }
 
-      this.pool =
-        telemetry?.traceClass(basePool, {
-          spanNamePrefix: 'pg-vector',
-          attributes: {
-            'vector.type': 'postgres',
-          },
-        }) ?? basePool;
+      this.pool = new pg.Pool(poolConfig);
 
-      void (async () => {
-        // warm the created indexes cache so we don't need to check if indexes exist every time
-        const existingIndexes = await this.listIndexes();
-        void existingIndexes.map(async indexName => {
-          const info = await this.getIndexInfo({ indexName });
-          const key = await this.getIndexCacheKey({
-            indexName,
-            metric: info.metric,
-            dimension: info.dimension,
-            type: info.type,
-          });
-          this.createdIndexes.set(indexName, key);
-        });
+      // Warm the created indexes cache in background so we don't need to check if indexes exist every time
+      // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
+      this.cacheWarmupPromise = (async () => {
+        try {
+          const existingIndexes = await this.listIndexes();
+          await Promise.all(
+            existingIndexes.map(async indexName => {
+              const info = await this.getIndexInfo({ indexName });
+              const key = await this.getIndexCacheKey({
+                indexName,
+                metric: info.metric,
+                dimension: info.dimension,
+                type: info.type,
+              });
+              this.createdIndexes.set(indexName, key);
+            }),
+          );
+        } catch (error) {
+          // Don't throw - cache warming is optional optimization
+          // If it fails (e.g., pool closed early), just log and continue
+          this.logger?.debug('Cache warming skipped or failed', { error });
+        }
       })();
     } catch (error) {
       throw new MastraError(
@@ -125,7 +146,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            schemaName: schemaName ?? '',
+            schemaName: 'schemaName' in config ? (config.schemaName ?? '') : '',
           },
         },
         error,
@@ -136,6 +157,55 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private getMutexByName(indexName: string) {
     if (!this.mutexesByName.has(indexName)) this.mutexesByName.set(indexName, new Mutex());
     return this.mutexesByName.get(indexName)!;
+  }
+
+  /**
+   * Detects which schema contains the vector extension
+   */
+  private async detectVectorExtensionSchema(client: pg.PoolClient): Promise<string | null> {
+    try {
+      const result = await client.query(`
+        SELECT n.nspname as schema_name
+        FROM pg_extension e
+        JOIN pg_namespace n ON e.extnamespace = n.oid
+        WHERE e.extname = 'vector'
+        LIMIT 1;
+      `);
+
+      if (result.rows.length > 0) {
+        this.vectorExtensionSchema = result.rows[0].schema_name;
+        this.logger.debug('Vector extension found in schema', { schema: this.vectorExtensionSchema });
+        return this.vectorExtensionSchema;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.debug('Could not detect vector extension schema', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Gets the properly qualified vector type name
+   */
+  private getVectorTypeName(): string {
+    // If we know where the extension is, use that
+    if (this.vectorExtensionSchema) {
+      // If it's in pg_catalog, return vector
+      if (this.vectorExtensionSchema === 'pg_catalog') {
+        return 'vector';
+      }
+      // If it's in the current schema, return vector
+      if (this.vectorExtensionSchema === (this.schema || 'public')) {
+        return 'vector';
+      }
+      // Otherwise, qualify it with the schema where vector extension is installed
+      const validatedSchema = parseSqlIdentifier(this.vectorExtensionSchema, 'vector extension schema');
+      return `${validatedSchema}.vector`;
+    }
+
+    // Fallback to unqualified (will use search_path)
+    return 'vector';
   }
 
   private getTableName(indexName: string) {
@@ -222,11 +292,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       const { tableName } = this.getTableName(indexName);
 
+      // Get the properly qualified vector type
+      const vectorType = this.getVectorTypeName();
+
       const query = `
         WITH vector_scores AS (
           SELECT
             vector_id as id,
-            1 - (embedding <=> '${vectorStr}'::vector) as score,
+            1 - (embedding <=> '${vectorStr}'::${vectorType}) as score,
             metadata
             ${includeVector ? ', embedding' : ''}
           FROM ${tableName}
@@ -275,13 +348,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       await client.query('BEGIN');
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
+      // Get the properly qualified vector type
+      const vectorType = this.getVectorTypeName();
+
       for (let i = 0; i < vectors.length; i++) {
         const query = `
           INSERT INTO ${tableName} (vector_id, embedding, metadata)
-          VALUES ($1, $2::vector, $3::jsonb)
+          VALUES ($1, $2::${vectorType}, $3::jsonb)
           ON CONFLICT (vector_id)
           DO UPDATE SET
-            embedding = $2::vector,
+            embedding = $2::${vectorType},
             metadata = $3::jsonb
           RETURNING embedding::text
         `;
@@ -362,7 +438,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           const schemaCheck = await client.query(
             `
             SELECT EXISTS (
-              SELECT 1 FROM information_schema.schemata 
+              SELECT 1 FROM information_schema.schemata
               WHERE schema_name = $1
             )
           `,
@@ -455,13 +531,27 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           // Setup schema if needed
           await this.setupSchema(client);
 
-          // Install vector extension first (needs to be in public schema)
+          // Install vector extension and detect where it is
           await this.installVectorExtension(client);
+
+          // Set search path to include both schemas if needed
+          if (
+            this.schema &&
+            this.vectorExtensionSchema &&
+            this.schema !== this.vectorExtensionSchema &&
+            this.vectorExtensionSchema !== 'pg_catalog'
+          ) {
+            await client.query(`SET search_path TO ${this.getSchemaName()}, "${this.vectorExtensionSchema}"`);
+          }
+
+          // Use the properly qualified vector type
+          const vectorType = this.getVectorTypeName();
+
           await client.query(`
           CREATE TABLE IF NOT EXISTS ${tableName} (
             id SERIAL PRIMARY KEY,
             vector_id TEXT UNIQUE NOT NULL,
-            embedding vector(${dimension}),
+            embedding ${vectorType}(${dimension}),
             metadata JSONB DEFAULT '{}'::jsonb
           );
         `);
@@ -521,13 +611,78 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     const mutex = this.getMutexByName(`build-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
+      // Check if the index config is empty
+      const isConfigEmpty =
+        !indexConfig ||
+        Object.keys(indexConfig).length === 0 ||
+        (!indexConfig.type && !indexConfig.ivf && !indexConfig.hnsw);
+      // Determine index type - use defaults if no config provided
+      const indexType = isConfigEmpty ? 'ivfflat' : indexConfig.type || 'ivfflat';
+
       const { tableName, vectorIndexName } = this.getTableName(indexName);
 
-      if (this.createdIndexes.has(indexName)) {
+      // Try to get existing index info to check if configuration has changed
+      let existingIndexInfo: PGIndexStats | null = null;
+      let dimension = 0;
+      try {
+        existingIndexInfo = await this.getIndexInfo({ indexName });
+        dimension = existingIndexInfo.dimension;
+
+        if (isConfigEmpty && existingIndexInfo.metric === metric) {
+          if (existingIndexInfo.type === 'flat') {
+            // No index exists - create the default ivfflat
+            this.logger?.debug(`No index exists for ${vectorIndexName}, will create default ivfflat index`);
+          } else {
+            // Preserve existing non-flat index
+            this.logger?.debug(
+              `Index ${vectorIndexName} already exists (type: ${existingIndexInfo.type}, metric: ${existingIndexInfo.metric}), preserving existing configuration`,
+            );
+            const cacheKey = await this.getIndexCacheKey({
+              indexName,
+              dimension,
+              type: existingIndexInfo.type,
+              metric: existingIndexInfo.metric,
+            });
+            this.createdIndexes.set(indexName, cacheKey);
+            return;
+          }
+        }
+
+        // If config was empty but metric didn't match, OR config was provided, check for changes
+        let configMatches = existingIndexInfo.metric === metric && existingIndexInfo.type === indexType;
+        if (indexType === 'hnsw') {
+          configMatches =
+            configMatches &&
+            existingIndexInfo.config.m === (indexConfig.hnsw?.m ?? 8) &&
+            existingIndexInfo.config.efConstruction === (indexConfig.hnsw?.efConstruction ?? 32);
+        } else if (indexType === 'flat') {
+          configMatches = configMatches && existingIndexInfo.type === 'flat';
+        } else if (indexType === 'ivfflat' && indexConfig.ivf?.lists) {
+          configMatches = configMatches && existingIndexInfo.config.lists === indexConfig.ivf?.lists;
+        }
+
+        if (configMatches) {
+          this.logger?.debug(`Index ${vectorIndexName} already exists with same configuration, skipping recreation`);
+          // Update cache with the existing configuration
+          const cacheKey = await this.getIndexCacheKey({
+            indexName,
+            dimension,
+            type: existingIndexInfo.type,
+            metric: existingIndexInfo.metric,
+          });
+          this.createdIndexes.set(indexName, cacheKey);
+          return;
+        }
+
+        // Configuration changed, need to rebuild
+        this.logger?.info(`Index ${vectorIndexName} configuration changed, rebuilding index`);
         await client.query(`DROP INDEX IF EXISTS ${vectorIndexName}`);
+        this.describeIndexCache.delete(indexName);
+      } catch {
+        this.logger?.debug(`Index ${indexName} doesn't exist yet, will create it`);
       }
 
-      if (indexConfig.type === 'flat') {
+      if (indexType === 'flat') {
         this.describeIndexCache.delete(indexName);
         return;
       }
@@ -536,13 +691,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         metric === 'cosine' ? 'vector_cosine_ops' : metric === 'euclidean' ? 'vector_l2_ops' : 'vector_ip_ops';
 
       let indexSQL: string;
-      if (indexConfig.type === 'hnsw') {
+      if (indexType === 'hnsw') {
         const m = indexConfig.hnsw?.m ?? 8;
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 
         indexSQL = `
-          CREATE INDEX IF NOT EXISTS ${vectorIndexName} 
-          ON ${tableName} 
+          CREATE INDEX IF NOT EXISTS ${vectorIndexName}
+          ON ${tableName}
           USING hnsw (embedding ${metricOp})
           WITH (
             m = ${m},
@@ -579,45 +734,69 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     if (!this.installVectorExtensionPromise) {
       this.installVectorExtensionPromise = (async () => {
         try {
-          // First check if extension is already installed
-          const extensionCheck = await client.query(`
-            SELECT EXISTS (
-              SELECT 1 FROM pg_extension WHERE extname = 'vector'
-            );
-          `);
+          // First, detect if and where the extension is already installed
+          const existingSchema = await this.detectVectorExtensionSchema(client);
 
-          this.vectorExtensionInstalled = extensionCheck.rows[0].exists;
+          if (existingSchema) {
+            this.vectorExtensionInstalled = true;
+            this.vectorExtensionSchema = existingSchema;
+            this.logger.info(`Vector extension already installed in schema: ${existingSchema}`);
+            return;
+          }
 
-          if (!this.vectorExtensionInstalled) {
-            try {
-              await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-              this.vectorExtensionInstalled = true;
-              this.logger.info('Vector extension installed successfully');
-            } catch {
-              this.logger.warn(
-                'Could not install vector extension. This requires superuser privileges. ' +
-                  'If the extension is already installed globally, you can ignore this warning.',
-              );
-              // Don't set vectorExtensionInstalled to false here since we're not sure if it failed
-              // due to permissions or if it's already installed globally
+          // Try to install the extension
+          try {
+            // First try to install in the custom schema if provided
+            if (this.schema && this.schema !== 'public') {
+              try {
+                await client.query(`CREATE EXTENSION IF NOT EXISTS vector SCHEMA ${this.getSchemaName()}`);
+                this.vectorExtensionInstalled = true;
+                this.vectorExtensionSchema = this.schema;
+                this.logger.info(`Vector extension installed in schema: ${this.schema}`);
+                return;
+              } catch (schemaError) {
+                this.logger.debug(`Could not install vector extension in schema ${this.schema}, trying public schema`, {
+                  error: schemaError,
+                });
+              }
             }
-          } else {
-            this.logger.debug('Vector extension already installed, skipping installation');
+
+            // Fall back to installing in public schema (or default)
+            await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+
+            // Detect where it was actually installed
+            const installedSchema = await this.detectVectorExtensionSchema(client);
+            if (installedSchema) {
+              this.vectorExtensionInstalled = true;
+              this.vectorExtensionSchema = installedSchema;
+              this.logger.info(`Vector extension installed in schema: ${installedSchema}`);
+            }
+          } catch (error) {
+            this.logger.warn(
+              'Could not install vector extension. This requires superuser privileges. ' +
+                'If the extension is already installed, you can ignore this warning.',
+              { error },
+            );
+
+            // Even if installation failed, check if it exists somewhere
+            const existingSchema = await this.detectVectorExtensionSchema(client);
+            if (existingSchema) {
+              this.vectorExtensionInstalled = true;
+              this.vectorExtensionSchema = existingSchema;
+              this.logger.info(`Vector extension found in schema: ${existingSchema}`);
+            }
           }
         } catch (error) {
-          this.logger.error('Error checking vector extension status', { error });
-          // Reset both the promise and the flag so we can retry
+          this.logger.error('Error setting up vector extension', { error });
           this.vectorExtensionInstalled = undefined;
           this.installVectorExtensionPromise = null;
-          throw error; // Re-throw so caller knows it failed
+          throw error;
         } finally {
-          // Clear the promise after completion (success or failure)
           this.installVectorExtensionPromise = null;
         }
       })();
     }
 
-    // Wait for the installation process to complete
     await this.installVectorExtensionPromise;
   }
 
@@ -840,6 +1019,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   async disconnect() {
+    // Wait for cache warmup to complete before closing pool
+    // This prevents "Cannot use a pool after calling end on the pool" errors
+    if (this.cacheWarmupPromise) {
+      try {
+        await this.cacheWarmupPromise;
+      } catch {
+        // Ignore errors - we're shutting down anyway
+      }
+    }
+
     await this.pool.end();
   }
 
@@ -865,8 +1054,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       let values = [id];
       let valueIndex = 2;
 
+      // Get the properly qualified vector type
+      const vectorType = this.getVectorTypeName();
+
       if (update.vector) {
-        updateParts.push(`embedding = $${valueIndex}::vector`);
+        updateParts.push(`embedding = $${valueIndex}::${vectorType}`);
         values.push(`[${update.vector.join(',')}]`);
         valueIndex++;
       }

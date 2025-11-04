@@ -210,7 +210,7 @@ export class SessionManager {
    */
   private log(message: string, ...args: unknown[]): void {
     if (this.debug) {
-      console.log(`[SessionManager] ${message}`, ...args);
+      console.info(`[SessionManager] ${message}`, ...args);
     }
   }
 }

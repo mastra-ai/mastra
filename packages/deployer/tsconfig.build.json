@@ -5,5 +5,5 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "**/*.test.ts", "src/**/*.mock.ts"]
+  "exclude": ["node_modules", "**/*.test.ts", "src/**/*.mock.ts", "**/*.test.ts", "**/__fixtures__/"]
 }

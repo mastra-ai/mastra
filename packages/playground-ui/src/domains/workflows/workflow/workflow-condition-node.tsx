@@ -45,6 +45,9 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
 
       <div
+        data-workflow-node
+        data-workflow-step-status={previousStep?.status}
+        data-testid="workflow-condition-node"
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
           previousStep?.status === 'success' && nextStep && 'bg-accent1Darker',

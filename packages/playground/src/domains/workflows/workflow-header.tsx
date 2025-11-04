@@ -1,16 +1,25 @@
 import { Link } from 'react-router';
 
-import { Crumb, Header, HeaderGroup, Button, Breadcrumb, HeaderAction, Icon, ApiIcon } from '@mastra/playground-ui';
+import {
+  Crumb,
+  Header,
+  HeaderGroup,
+  Button,
+  Breadcrumb,
+  HeaderAction,
+  Icon,
+  ApiIcon,
+  WorkflowIcon,
+  DocsIcon,
+} from '@mastra/playground-ui';
 
 export function WorkflowHeader({
   workflowName,
   workflowId,
-  isLegacy,
   runId,
 }: {
   workflowName: string;
   workflowId: string;
-  isLegacy?: boolean;
   runId?: string;
 }) {
   return (
@@ -18,9 +27,12 @@ export function WorkflowHeader({
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/workflows`}>
+            <Icon>
+              <WorkflowIcon />
+            </Icon>
             Workflows
           </Crumb>
-          <Crumb as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}`} isCurrent={!runId}>
+          <Crumb as={Link} to={`/workflows/${workflowId}`} isCurrent={!runId}>
             {workflowName}
           </Crumb>
 
@@ -32,10 +44,10 @@ export function WorkflowHeader({
         </Breadcrumb>
 
         <HeaderGroup>
-          <Button as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/graph`}>
+          <Button as={Link} to={`/workflows/${workflowId}/graph`}>
             Graph
           </Button>
-          <Button as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/traces`}>
+          <Button as={Link} to={`/observability?entity=${workflowName}`}>
             Traces
           </Button>
         </HeaderGroup>
@@ -46,6 +58,13 @@ export function WorkflowHeader({
               <ApiIcon />
             </Icon>
             API endpoints
+          </Button>
+
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
+            <Icon>
+              <DocsIcon />
+            </Icon>
+            Workflows documentation
           </Button>
         </HeaderAction>
       </Header>

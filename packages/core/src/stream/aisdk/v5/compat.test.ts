@@ -5,7 +5,7 @@ describe('convertFullStreamChunkToUIMessageStream', () => {
   it('should convert tool-output part into UI message with correct format', () => {
     // Arrange: Create a tool-output part with sample data
     const toolOutput = {
-      type: 'tool-output',
+      type: 'tool-output' as const,
       toolCallId: 'test-tool-123',
       output: {
         content: 'Sample tool output content',
@@ -27,7 +27,6 @@ describe('convertFullStreamChunkToUIMessageStream', () => {
     // Assert: Verify the transformation
     expect(result).toBeDefined();
     expect(result).toEqual({
-      id: 'test-tool-123',
       content: 'Sample tool output content',
       timestamp: 1234567890,
       metadata: {

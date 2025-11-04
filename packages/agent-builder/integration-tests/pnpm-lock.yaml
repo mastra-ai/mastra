@@ -21,9 +21,6 @@ importers:
       '@mastra/agent-builder':
         specifier: link:..
         version: link:..
-      '@mastra/core':
-        specifier: link:../../core
-        version: link:../../core
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
@@ -31,6 +28,9 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
     devDependencies:
+      '@mastra/core':
+        specifier: link:../../core
+        version: link:../../core
       '@mastra/libsql':
         specifier: link:../../../stores/libsql
         version: link:../../../stores/libsql

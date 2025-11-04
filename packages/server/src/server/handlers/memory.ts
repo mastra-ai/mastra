@@ -1,6 +1,8 @@
-import type { RuntimeContext } from '@mastra/core/di';
+import { convertMessages } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
+import type { StorageListMessagesInput, StorageOrderBy } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -12,49 +14,61 @@ interface MemoryContext extends Context {
   agentId?: string;
   resourceId?: string;
   threadId?: string;
-  networkId?: string;
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
 }
 
 async function getMemoryFromContext({
   mastra,
   agentId,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'>): Promise<
-  MastraMemory | null | undefined
-> {
-  const agent = agentId ? mastra.getAgent(agentId) : null;
-  if (agentId && !agent) {
-    throw new HTTPException(404, { message: 'Agent not found' });
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'>): Promise<MastraMemory | null | undefined> {
+  const logger = mastra.getLogger();
+  let agent;
+  if (agentId) {
+    try {
+      agent = mastra.getAgent(agentId);
+    } catch (error) {
+      logger.debug('Error getting agent from mastra, searching agents for agent', error);
+    }
   }
+  if (agentId && !agent) {
+    logger.debug('Agent not found, searching agents for agent', { agentId });
+    const agents = mastra.listAgents();
+    if (Object.keys(agents || {}).length) {
+      for (const [_, ag] of Object.entries(agents)) {
+        try {
+          const agents = await ag.listAgents();
 
-  const network = networkId ? mastra.vnext_getNetwork(networkId) : null;
+          if (agents[agentId]) {
+            agent = agents[agentId];
+            break;
+          }
+        } catch (error) {
+          logger.debug('Error getting agent from agent', error);
+        }
+      }
+    }
 
-  if (networkId && !network) {
-    throw new HTTPException(404, { message: 'Network not found' });
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
   }
 
   if (agent) {
-    return (await agent?.getMemory()) || mastra.getMemory();
+    return await agent?.getMemory({
+      requestContext: requestContext ?? new RequestContext(),
+    });
   }
-
-  if (network) {
-    return (await network?.getMemory({ runtimeContext })) || mastra.getMemory();
-  }
-
-  return mastra.getMemory();
 }
 
 // Memory handlers
 export async function getMemoryStatusHandler({
   mastra,
   agentId,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'>) {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'>) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
     if (!memory) {
       return { result: false };
@@ -69,11 +83,10 @@ export async function getMemoryStatusHandler({
 export async function getMemoryConfigHandler({
   mastra,
   agentId,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'>) {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'>) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -88,51 +101,21 @@ export async function getMemoryConfigHandler({
   }
 }
 
-export async function getThreadsHandler({
+export async function listThreadsHandler({
   mastra,
   agentId,
   resourceId,
-  networkId,
-  runtimeContext,
-  orderBy,
-  sortDirection,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & ThreadSortOptions) {
-  try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
-
-    if (!memory) {
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
-    }
-
-    validateBody({ resourceId });
-
-    const threads = await memory.getThreadsByResourceId({
-      resourceId: resourceId!,
-      orderBy,
-      sortDirection,
-    });
-    return threads;
-  } catch (error) {
-    return handleError(error, 'Error getting threads');
-  }
-}
-
-export async function getThreadsPaginatedHandler({
-  mastra,
-  agentId,
-  resourceId,
-  networkId,
-  runtimeContext,
+  requestContext,
   page,
   perPage,
   orderBy,
-  sortDirection,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'requestContext'> & {
   page: number;
-  perPage: number;
-} & ThreadSortOptions) {
+  perPage: number | false;
+  orderBy?: StorageOrderBy;
+}) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -140,16 +123,15 @@ export async function getThreadsPaginatedHandler({
 
     validateBody({ resourceId });
 
-    const result = await memory.getThreadsByResourceIdPaginated({
+    const result = await memory.listThreadsByResourceId({
       resourceId: resourceId!,
       page,
       perPage,
       orderBy,
-      sortDirection,
     });
     return result;
   } catch (error) {
-    return handleError(error, 'Error getting paginated threads');
+    return handleError(error, 'Error listing threads');
   }
 }
 
@@ -157,13 +139,12 @@ export async function getThreadByIdHandler({
   mastra,
   agentId,
   threadId,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'>) {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'>) {
   try {
     validateBody({ threadId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
@@ -183,15 +164,14 @@ export async function saveMessagesHandler({
   mastra,
   agentId,
   body,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> & {
   body: {
     messages: Parameters<MastraMemory['saveMessages']>[0]['messages'];
   };
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -230,13 +210,12 @@ export async function createThreadHandler({
   mastra,
   agentId,
   body,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> & {
   body?: Omit<Parameters<MastraMemory['createThread']>[0], 'resourceId'> & { resourceId?: string };
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -261,13 +240,12 @@ export async function updateThreadHandler({
   agentId,
   threadId,
   body,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
   body?: Parameters<MastraMemory['saveThread']>[0]['thread'];
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
     if (!body) {
       throw new HTTPException(400, { message: 'Body is required' });
@@ -307,13 +285,12 @@ export async function deleteThreadHandler({
   mastra,
   agentId,
   threadId,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'>) {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'>) {
   try {
     validateBody({ threadId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
@@ -330,13 +307,16 @@ export async function deleteThreadHandler({
   }
 }
 
-export async function getMessagesPaginatedHandler({
+export async function listMessagesHandler({
   mastra,
   threadId,
   resourceId,
-  selectBy,
-  format,
-}: StorageGetMessagesArg & Pick<MemoryContext, 'mastra'>) {
+  perPage,
+  page,
+  orderBy,
+  include,
+  filter,
+}: Pick<MemoryContext, 'mastra'> & StorageListMessagesInput) {
   try {
     validateBody({ threadId });
 
@@ -352,7 +332,15 @@ export async function getMessagesPaginatedHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await storage.getMessagesPaginated({ threadId: threadId!, resourceId, selectBy, format });
+    const result = await storage.listMessages({
+      threadId: threadId!,
+      resourceId,
+      perPage,
+      page,
+      orderBy,
+      include,
+      filter,
+    });
     return result;
   } catch (error) {
     return handleError(error, 'Error getting messages');
@@ -364,9 +352,8 @@ export async function getMessagesHandler({
   agentId,
   threadId,
   limit,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
   limit?: number;
 }) {
   if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
@@ -375,22 +362,27 @@ export async function getMessagesHandler({
   try {
     validateBody({ threadId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    const thread = await memory.getThreadById({ threadId: threadId! });
+    if (!threadId) {
+      throw new HTTPException(400, { message: 'No threadId found' });
+    }
+
+    const thread = await memory.getThreadById({ threadId: threadId });
     if (!thread) {
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
     const result = await memory.query({
-      threadId: threadId!,
+      threadId: threadId,
       ...(limit && { selectBy: { last: limit } }),
     });
-    return { messages: result.messages, uiMessages: result.uiMessages };
+    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
+    return { messages: result.messages, uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
@@ -406,15 +398,14 @@ export async function getWorkingMemoryHandler({
   agentId,
   threadId,
   resourceId,
-  networkId,
-  runtimeContext,
+  requestContext,
   memoryConfig,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
   resourceId?: Parameters<MastraMemory['getWorkingMemory']>[0]['resourceId'];
   memoryConfig?: Parameters<MastraMemory['getWorkingMemory']>[0]['memoryConfig'];
 }) {
   try {
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     validateBody({ threadId });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -428,7 +419,7 @@ export async function getWorkingMemoryHandler({
         : template;
     const workingMemory = await memory.getWorkingMemory({ threadId: threadId!, resourceId, memoryConfig });
     const config = memory.getMergedThreadConfig(memoryConfig || {});
-    const source = config.workingMemory?.scope === 'resource' && resourceId ? 'resource' : 'thread';
+    const source = config.workingMemory?.scope !== 'thread' && resourceId ? 'resource' : 'thread';
     return { workingMemory, source, workingMemoryTemplate, threadExists };
   } catch (error) {
     return handleError(error, 'Error getting working memory');
@@ -445,14 +436,13 @@ export async function updateWorkingMemoryHandler({
   agentId,
   threadId,
   body,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'networkId' | 'runtimeContext'> & {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
   body: Omit<Parameters<MastraMemory['updateWorkingMemory']>[0], 'threadId'>;
 }) {
   try {
     validateBody({ threadId });
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     const { resourceId, memoryConfig, workingMemory } = body;
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
@@ -499,9 +489,8 @@ export async function deleteMessagesHandler({
   mastra,
   agentId,
   messageIds,
-  networkId,
-  runtimeContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> & {
   messageIds: string | string[] | { id: string } | { id: string }[];
 }) {
   try {
@@ -509,7 +498,7 @@ export async function deleteMessagesHandler({
       throw new HTTPException(400, { message: 'messageIds is required' });
     }
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
@@ -536,10 +525,9 @@ export async function searchMemoryHandler({
   resourceId,
   threadId,
   limit = 20,
-  networkId,
-  runtimeContext,
+  requestContext,
   memoryConfig,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'networkId' | 'runtimeContext'> & {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> & {
   searchQuery: string;
   resourceId: string;
   threadId?: string;
@@ -549,7 +537,7 @@ export async function searchMemoryHandler({
   try {
     validateBody({ searchQuery, resourceId });
 
-    const memory = await getMemoryFromContext({ mastra, agentId, networkId, runtimeContext });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
@@ -557,7 +545,8 @@ export async function searchMemoryHandler({
     // Get memory configuration first to check scope
     const config = memory.getMergedThreadConfig(memoryConfig || {});
     const hasSemanticRecall = !!config?.semanticRecall;
-    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
+    const resourceScope =
+      typeof config?.semanticRecall === 'object' ? config?.semanticRecall?.scope !== 'thread' : true;
 
     // Only validate thread ownership if we're in thread scope
     if (threadId && !resourceScope) {
@@ -571,7 +560,6 @@ export async function searchMemoryHandler({
     }
 
     const searchResults: SearchResult[] = [];
-    const messageMap = new Map<string, boolean>(); // For deduplication
 
     // If threadId is provided and scope is thread-based, check if the thread exists
     if (threadId && !resourceScope) {
@@ -582,152 +570,115 @@ export async function searchMemoryHandler({
           results: [],
           count: 0,
           query: searchQuery,
-          searchScope: 'thread',
+          searchScope: resourceScope ? 'resource' : 'thread',
           searchType: hasSemanticRecall ? 'semantic' : 'text',
         };
       }
     }
 
-    // If resource scope is enabled or no threadId provided, search across all threads
-    if (!threadId || resourceScope) {
-      // Search across all threads for this resource
-      const threads = await memory.getThreadsByResourceId({ resourceId });
+    // If no threadId provided, get one from the resource
+    if (!threadId) {
+      const { threads } = await memory.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: 1,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
 
-      // If no threads exist yet, return empty results
       if (threads.length === 0) {
         return {
           results: [],
           count: 0,
           query: searchQuery,
-          searchScope: 'resource',
+          searchScope: resourceScope ? 'resource' : 'thread',
           searchType: hasSemanticRecall ? 'semantic' : 'text',
         };
       }
 
-      for (const thread of threads) {
-        // Use rememberMessages for semantic search
-        const result = await memory.rememberMessages({
-          threadId: thread.id,
-          resourceId,
-          vectorMessageSearch: searchQuery,
-          config,
-        });
+      // Use first thread - Memory class will handle scope internally
+      threadId = threads[0]!.id;
+    }
 
-        // Get thread messages for context
-        const threadMessages = (await memory.query({ threadId: thread.id })).uiMessages;
+    const beforeRange =
+      typeof config.semanticRecall === `boolean`
+        ? 2
+        : typeof config.semanticRecall?.messageRange === `number`
+          ? config.semanticRecall.messageRange
+          : config.semanticRecall?.messageRange.before || 2;
+    const afterRange =
+      typeof config.semanticRecall === `boolean`
+        ? 2
+        : typeof config.semanticRecall?.messageRange === `number`
+          ? config.semanticRecall.messageRange
+          : config.semanticRecall?.messageRange.after || 2;
 
-        // Process results
-        result.messagesV2.forEach(msg => {
-          if (messageMap.has(msg.id)) return;
-          messageMap.set(msg.id, true);
+    if (resourceScope && config.semanticRecall) {
+      config.semanticRecall =
+        typeof config.semanticRecall === `boolean`
+          ? // make message range 0 so we can highlight the matches in search, message range will include other messages, not the matching ones
+            // and we add prev/next messages in a special section on each message anyway
+            { messageRange: 0, topK: 2, scope: 'resource' }
+          : { ...config.semanticRecall, messageRange: 0 };
+    }
 
-          const content =
-            msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+    // Single call to rememberMessages - just like the agent does
+    // The Memory class handles scope (thread vs resource) internally
+    const result = await memory.rememberMessages({
+      threadId,
+      resourceId,
+      vectorMessageSearch: searchQuery,
+      config,
+    });
 
-          if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
-            return;
-          }
+    // Get all threads to build context and show which thread each message is from
+    // Fetch threads by IDs from the actual messages to avoid truncation
+    const threadIds = Array.from(
+      new Set(result.messages.map((m: MastraDBMessage) => m.threadId || threadId!).filter(Boolean)),
+    );
+    const fetched = await Promise.all(threadIds.map((id: string) => memory.getThreadById({ threadId: id })));
+    const threadMap = new Map(fetched.filter(Boolean).map(t => [t!.id, t!]));
 
-          const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
+    // Process each message in the results
+    for (const msg of result.messages) {
+      const content =
+        typeof msg.content.content === `string`
+          ? msg.content.content
+          : msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') || '';
 
-          const searchResult: SearchResult = {
-            id: msg.id,
-            role: msg.role,
-            content,
-            createdAt: msg.createdAt,
-            threadId: msg.threadId || thread.id,
-            threadTitle: thread.title || msg.threadId || thread.id,
-          };
+      const msgThreadId = msg.threadId || threadId;
+      const thread = threadMap.get(msgThreadId);
 
-          if (messageIndex !== -1) {
-            searchResult.context = {
-              before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
-                id: m.id,
-                role: m.role,
-                content: m.content,
-                createdAt: m.createdAt || new Date(),
-              })),
-              after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
-                id: m.id,
-                role: m.role,
-                content: m.content,
-                createdAt: m.createdAt || new Date(),
-              })),
-            };
-          }
+      // Get thread messages for context
+      const threadMessages = (await memory.query({ threadId: msgThreadId })).messages;
+      const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
 
-          searchResults.push(searchResult);
-        });
-      }
-    } else if (threadId) {
-      // Search in specific thread only
-      const thread = await memory.getThreadById({ threadId });
-      if (!thread) {
-        // Thread doesn't exist yet - return empty results
-        return {
-          results: [],
-          count: 0,
-          query: searchQuery,
-          searchScope: 'thread',
-          searchType: hasSemanticRecall ? 'semantic' : 'text',
+      const searchResult: SearchResult = {
+        id: msg.id,
+        role: msg.role,
+        content,
+        createdAt: msg.createdAt,
+        threadId: msgThreadId,
+        threadTitle: thread?.title || msgThreadId,
+      };
+
+      if (messageIndex !== -1) {
+        searchResult.context = {
+          before: threadMessages.slice(Math.max(0, messageIndex - beforeRange), messageIndex).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt || new Date(),
+          })),
+          after: threadMessages.slice(messageIndex + 1, messageIndex + afterRange + 1).map(m => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            createdAt: m.createdAt || new Date(),
+          })),
         };
       }
 
-      const result = await memory.rememberMessages({
-        threadId,
-        resourceId,
-        vectorMessageSearch: searchQuery,
-        config,
-      });
-
-      const threadMessages = (await memory.query({ threadId })).uiMessages;
-
-      result.messagesV2.forEach(msg => {
-        // Skip duplicates
-        if (messageMap.has(msg.id)) return;
-        messageMap.set(msg.id, true);
-
-        // Extract content
-        const content =
-          msg.content.content || msg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
-
-        // If not using semantic recall, filter by text search
-        if (!hasSemanticRecall && !content.toLowerCase().includes(searchQuery.toLowerCase())) {
-          return;
-        }
-
-        // Find message index for context
-        const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
-
-        const searchResult: SearchResult = {
-          id: msg.id,
-          role: msg.role,
-          content,
-          createdAt: msg.createdAt,
-          threadId: threadId,
-          threadTitle: thread?.title || threadId,
-        };
-
-        // Add context if found
-        if (messageIndex !== -1) {
-          searchResult.context = {
-            before: threadMessages.slice(Math.max(0, messageIndex - 2), messageIndex).map(m => ({
-              id: m.id,
-              role: m.role,
-              content: m.content,
-              createdAt: m.createdAt || new Date(),
-            })),
-            after: threadMessages.slice(messageIndex + 1, messageIndex + 3).map(m => ({
-              id: m.id,
-              role: m.role,
-              content: m.content,
-              createdAt: m.createdAt || new Date(),
-            })),
-          };
-        }
-
-        searchResults.push(searchResult);
-      });
+      searchResults.push(searchResult);
     }
 
     // Sort by date (newest first) and limit

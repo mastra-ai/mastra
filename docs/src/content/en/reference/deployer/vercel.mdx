@@ -1,20 +1,46 @@
 ---
-title: "Vercel Deployer"
+title: "Reference: VercelDeployer | Deployer | Mastra Docs"
 description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
 ---
 
 # VercelDeployer
 
-The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Vercel specific functionality.
+The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Vercel specific functionality.
 
 ## Usage example
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
   // ...
-  deployer: new VercelDeployer()
+  deployer: new VercelDeployer(),
+});
+```
+
+## Constructor options
+
+The deployer supports a small set of high‑value overrides that are written to the Vercel Output API function config (`.vc-config.json`):
+
+- `maxDuration?: number` — Function execution timeout (in seconds)
+- `memory?: number` — Function memory (in MB)
+- `regions?: string[]` — Regions to deploy the function (e.g. `['sfo1','iad1']`)
+
+These options are merged into `.vercel/output/functions/index.func/.vc-config.json` while preserving default fields (`handler`, `launcherType`, `runtime`, `shouldAddHelpers`).
+
+### Example with overrides
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer({
+    maxDuration: 600,
+    memory: 1536,
+    regions: ["sfo1", "iad1"],
+  }),
 });
 ```

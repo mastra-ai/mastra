@@ -1,0 +1,63 @@
+{
+  "name": "@mastra/langsmith",
+  "version": "0.0.6",
+  "description": "Langsmith observability provider for Mastra - includes AI tracing and future observability features",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "lint": "eslint ."
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "langsmith": ">=0.3.72",
+    "@mastra/observability": "workspace:*"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai": "^2.0.35",
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@microsoft/api-extractor": "^7.52.8",
+    "@types/node": "^20.19.0",
+    "dotenv": "^17.2.2",
+    "eslint": "^9.37.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "zod": "^3.25.76"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "observability/langsmith"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
+}

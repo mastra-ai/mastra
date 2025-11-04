@@ -7,11 +7,9 @@ import type {
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
-import type { AISDKV5OutputStream, MastraModelOutput, OutputSchema } from '@mastra/core/stream';
+import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
-import type { JSONSchema7 } from 'ai';
-import type { ZodSchema } from 'zod';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
@@ -33,7 +31,7 @@ import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
 // - Block: removing files, downgrading deps, changing TS target/module, modifying CI/CD secrets
 //
 // Usage with Mastra templates (see https://mastra.ai/api/templates.json):
-//   const run = await agentBuilderTemplateWorkflow.createRunAsync();
+//   const run = await agentBuilderTemplateWorkflow.createRun();
 //   const result = await run.start({
 //     inputData: {
 //       repo: 'https://github.com/mastra-ai/template-pdf-questions',
@@ -63,7 +61,7 @@ export class AgentBuilder extends Agent {
       model: config.model,
       tools: async () => {
         return {
-          ...(await AgentBuilderDefaults.getToolsForMode(config.projectPath, config.mode)),
+          ...(await AgentBuilderDefaults.listToolsForMode(config.projectPath, config.mode)),
           ...(config.tools || {}),
         };
       },
@@ -87,13 +85,13 @@ export class AgentBuilder extends Agent {
    * Enhanced generate method with AgentBuilder-specific configuration
    * Overrides the base Agent generate method to provide additional project context
    */
-  generate: Agent['generate'] = async (
+  generateLegacy: Agent['generateLegacy'] = async (
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     generateOptions: (GenerateAgentOptions & AgentGenerateOptions<any, any>) | undefined = {},
   ): Promise<any> => {
     const { maxSteps, ...baseOptions } = generateOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: generateOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: generateOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -115,20 +113,20 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.generate(messages, enhancedOptions);
+    return super.generateLegacy(messages, enhancedOptions);
   };
 
   /**
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  stream: Agent['stream'] = async (
+  streamLegacy: Agent['streamLegacy'] = async (
     messages: string | string[] | CoreMessage[] | AiMessageType[],
     streamOptions: (GenerateAgentOptions & AgentStreamOptions<any, any>) | undefined = {},
   ): Promise<any> => {
     const { maxSteps, ...baseOptions } = streamOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -149,24 +147,20 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.stream(messages, enhancedOptions);
+    return super.streamLegacy(messages, enhancedOptions);
   };
 
   /**
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  async streamVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-  >(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    streamOptions?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
     const { ...baseOptions } = streamOptions || {};
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -187,24 +181,16 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.streamVNext(messages, enhancedOptions);
+    return super.stream(messages, enhancedOptions);
   }
 
-  async generateVNext<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    STRUCTURED_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' = 'mastra',
-  >(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, STRUCTURED_OUTPUT, FORMAT>,
-  ): Promise<
-    FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
-  > {
+    options?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const { ...baseOptions } = options || {};
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: options?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: options?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -225,6 +211,6 @@ export class AgentBuilder extends Agent {
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.generateVNext(messages, enhancedOptions);
+    return super.generate(messages, enhancedOptions);
   }
 }
