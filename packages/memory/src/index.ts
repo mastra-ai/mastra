@@ -13,6 +13,7 @@ import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
   StorageListMessagesInput,
+  StorageOrderBy,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -222,8 +223,9 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
+    orderBy?: StorageOrderBy;
   }): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, vectorMessageSearch, config } = args;
+    const { threadId, resourceId, vectorMessageSearch, config, orderBy } = args;
 
     const threadConfig = this.getMergedThreadConfig(config || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, threadConfig);
@@ -232,12 +234,18 @@ export class Memory extends MastraMemory {
       return { messages: [] };
     }
 
+    // When lastMessages is set, we want the most recent N messages, so use DESC ordering
+    // Storage will fetch the LAST N messages and return them in ASC order (oldest first)
+    const effectiveOrderBy =
+      orderBy || (threadConfig.lastMessages ? { field: 'createdAt' as const, direction: 'DESC' as const } : undefined);
+
     const messagesResult = await this.query({
       resourceId,
       threadId,
       perPage: threadConfig.lastMessages,
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       threadConfig: config,
+      orderBy: effectiveOrderBy,
     });
 
     // Always return mastra-db format (V2) in object wrapper for consistency

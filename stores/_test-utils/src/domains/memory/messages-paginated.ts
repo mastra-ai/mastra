@@ -386,6 +386,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const { messages: result } = await storage.listMessages({
         threadId: thread.id,
         perPage: 2,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
         include: [
           {
             id: messages[4]!.id, // 'E' from thread-bar

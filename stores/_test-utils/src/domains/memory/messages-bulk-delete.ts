@@ -143,7 +143,11 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       await storage.saveMessages({ messages });
 
       // Verify all 100 messages were saved
-      const { messages: allMessages } = await storage.listMessages({ threadId: thread.id, perPage: 100 });
+      const { messages: allMessages } = await storage.listMessages({
+        threadId: thread.id,
+        perPage: 100,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
 
       // Delete the most recent 50 messages (indices 50-99)
       const messagesToDelete = allMessages.slice(50).map(msg => msg.id);
@@ -154,6 +158,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       const { messages: remainingMessages } = await storage.listMessages({
         threadId: thread.id,
         perPage: 100,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       expect(remainingMessages).toHaveLength(50);
 
