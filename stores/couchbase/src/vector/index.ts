@@ -222,9 +222,11 @@ export class CouchbaseVector extends MastraVector {
           embedding: vector,
           metadata: metadataObj,
         };
-        // If metadata has a text field, save it as content
+        // If metadata has a text field, save it as content in parts array format
         if (metadataObj.text) {
-          record.content = metadataObj.text;
+          record.content = {
+            parts: [{ type: 'text', text: metadataObj.text }],
+          };
         }
         return record;
       });
