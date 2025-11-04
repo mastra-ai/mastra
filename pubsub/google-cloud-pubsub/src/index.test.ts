@@ -6911,15 +6911,15 @@ describe.sequential(
     });
 
     describe.sequential('Run count', () => {
-      it('runCount property should increment the run count when a step is executed multiple times', async () => {
+      it('retryCount property should increment the run count when a step is executed multiple times', async () => {
         const repeatingStep = createStep({
           id: 'repeatingStep',
           inputSchema: z.object({}),
           outputSchema: z.object({
             count: z.number(),
           }),
-          execute: async ({ runCount }) => {
-            return { count: runCount };
+          execute: async ({ retryCount }) => {
+            return { count: retryCount };
           },
         });
 
@@ -6954,8 +6954,8 @@ describe.sequential(
           outputSchema: z.object({
             count: z.number(),
           }),
-          execute: async ({ runCount }) => {
-            return { count: runCount };
+          execute: async ({ retryCount }) => {
+            return { count: retryCount };
           },
         });
 
@@ -6965,8 +6965,8 @@ describe.sequential(
           outputSchema: z.object({
             count: z.number(),
           }),
-          execute: async ({ runCount }) => {
-            return { count: runCount };
+          execute: async ({ retryCount }) => {
+            return { count: retryCount };
           },
         });
 
@@ -7000,8 +7000,8 @@ describe.sequential(
       });
 
       it('runCount should exist and equal zero for the first run', async () => {
-        const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
-          return { count: runCount };
+        const mockExec = vi.fn().mockImplementation(async ({ retryCount }) => {
+          return { count: retryCount };
         });
         const step = createStep({
           id: 'step',

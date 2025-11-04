@@ -3532,29 +3532,6 @@ describe('Workflow', () => {
       );
     });
 
-    it('should throw deprecation error when using createRun', () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
-      const step1 = createStep({
-        id: 'step1',
-        execute,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-        }),
-        steps: [step1],
-      });
-
-      workflow.then(step1).commit();
-
-      expect(() => workflow.createRun()).toThrowError('createRun() has been deprecated');
-    });
-
     it('should execute a single step workflow successfully', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
@@ -13827,47 +13804,6 @@ describe('Workflow', () => {
   });
 
   describe('Run count', () => {
-    it('runCount property should increment the run count when a step is executed multiple times', async () => {
-      const repeatingStep = createStep({
-        id: 'repeatingStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({
-          count: z.number(),
-        }),
-        execute: async ({ runCount, retryCount }) => {
-          expect(retryCount).toBe(runCount);
-          return { count: runCount };
-        },
-      });
-
-      const repeatingStepWithRetryCount = createStep({
-        id: 'repeatingStepWithRetryCount',
-        inputSchema: repeatingStep.outputSchema,
-        outputSchema: z.object({
-          count: z.number(),
-        }),
-        execute: async ({ retryCount, runCount }) => {
-          expect(retryCount).toBe(runCount);
-          return { count: retryCount };
-        },
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: repeatingStep.outputSchema,
-      })
-        .dountil(repeatingStep, async ({ inputData }) => inputData.count === 3)
-        .dountil(repeatingStepWithRetryCount, async ({ inputData }) => inputData.count === 3)
-        .commit();
-
-      const run = await workflow.createRun();
-      const result = await run.start({ inputData: {} });
-
-      expect(result.status).toBe('success');
-      expect(result.steps.repeatingStep).toHaveProperty('output', { count: 3 });
-    });
-
     it('multiple steps should have different run counts', async () => {
       const step1 = createStep({
         id: 'step1',
@@ -13875,8 +13811,8 @@ describe('Workflow', () => {
         outputSchema: z.object({
           count: z.number(),
         }),
-        execute: async ({ runCount }) => {
-          return { count: runCount };
+        execute: async ({ retryCount }) => {
+          return { count: retryCount };
         },
       });
 
