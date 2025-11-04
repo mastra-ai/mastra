@@ -129,44 +129,6 @@ export const createToolInvocation = ({
   };
 };
 
-export const createUIMessage = ({
-  content,
-  role,
-  id = 'test-message',
-  toolInvocations = [],
-}: {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  toolInvocations?: Array<{
-    toolCallId: string;
-    toolName: string;
-    args: Record<string, any>;
-    result: Record<string, any>;
-    state: any;
-  }>;
-}): MastraDBMessage => {
-  return {
-    id,
-    role,
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: content }],
-      content,
-      ...(toolInvocations.length > 0 && {
-        toolInvocations: toolInvocations.map(ti => ({
-          toolCallId: ti.toolCallId,
-          toolName: ti.toolName,
-          args: ti.args,
-          result: ti.result,
-          state: ti.state,
-        })),
-      }),
-    },
-    createdAt: new Date(),
-  };
-};
-
 /**
  * Helper function to create MastraDBMessage objects for tests
  * Supports optional tool invocations for testing tool call scenarios
