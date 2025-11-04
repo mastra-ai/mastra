@@ -22,7 +22,8 @@ const voice = new OpenAIVoice();
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
   voice,
@@ -110,7 +111,8 @@ const voice = new OpenAIRealtimeVoice({
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  name: "Agent",
+  id: "speech-to-speech-agent",
+  name: "Speech-to-Speech Agent",
   instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
   model: openai("gpt-4o"),
   tools: {
@@ -175,7 +177,7 @@ import { createReadStream } from "fs";
 import { Agent } from "@mastra/core/agent";
 import { CompositeVoice } from "@mastra/core/voice";
 import { OpenAIVoice } from "@mastra/voice-openai";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { openai } from "@ai-sdk/openai";
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
@@ -206,14 +208,15 @@ export const convertToText = async (
 
   const chunks: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    input.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    input.on("error", reject);
-    input.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    inputData.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    inputData.on("error", reject);
+    inputData.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
   });
 };
 
 export const hybridVoiceAgent = new Agent({
-  name: "hybrid-voice-agent",
+  id: "hybrid-voice-agent",
+  name: "Hybrid Voice Agent",
   model: openai("gpt-4o"),
   instructions: "You can speak and listen using different providers.",
   voice: new CompositeVoice({
@@ -223,7 +226,8 @@ export const hybridVoiceAgent = new Agent({
 });
 
 export const unifiedVoiceAgent = new Agent({
-  name: "unified-voice-agent",
+  id: "unified-voice-agent",
+  name: "Unified Voice Agent",
   instructions: "You are an agent with both STT and TTS capabilities.",
   model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
@@ -268,7 +272,8 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { openai } from "@ai-sdk/openai";
 
 export const agent = new Agent({
-  name: "Agent",
+  id: "voice-agent",
+  name: "Voice Agent",
   instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
   model: openai("gpt-4o"),
 

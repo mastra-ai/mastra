@@ -38,7 +38,8 @@ import { openai } from "@ai-sdk/openai";
 import { UpstashStore } from "@mastra/upstash";
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
+  id: "upstash-agent",
+  name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
@@ -74,7 +75,8 @@ import { UpstashStore, UpstashVector } from "@mastra/upstash";
 import { fastembed } from "@mastra/fastembed";
 
 export const upstashAgent = new Agent({
-  name: "upstash-agent",
+  id: "upstash-agent",
+  name: "Upstash Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),

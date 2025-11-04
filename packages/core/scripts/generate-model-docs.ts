@@ -2,9 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
-import type { ProviderConfig } from '../src/index.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
-import { generateProviderOptionsSection } from './generate-provider-options-docs.js';
+import type { ProviderConfig } from '../src/llm';
+import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
+import { generateProviderOptionsSection } from './generate-provider-options-docs';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -267,10 +267,11 @@ ${provider.apiKeyEnvVar}=your-api-key
 \`\`\`
 
 \`\`\`typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "${provider.id}/${provider.models[0]}"
 });
@@ -308,6 +309,7 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 
 \`\`\`typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {${
     provider.url
@@ -328,7 +330,8 @@ const agent = new Agent({
 
 \`\`\`typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
@@ -494,10 +497,11 @@ ${introText}
 ## Usage
 
 \`\`\`typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "${gatewayName}/${providers[0]?.models[0] || 'model-name'}"
 });
@@ -567,10 +571,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
 <Tabs>
   <TabItem value="OpenAI" label="OpenAI">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openai/gpt-5"
     })
@@ -578,10 +583,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="Anthropic" label="Anthropic">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "anthropic/claude-4-5-sonnet"
     })
@@ -589,10 +595,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="Google Gemini" label="Google Gemini">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "google/gemini-2.5-flash"
     })
@@ -600,10 +607,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="xAI" label="xAI">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "xai/grok-4"
     })
@@ -611,10 +619,11 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
   </TabItem>
   <TabItem value="OpenRouter" label="OpenRouter">
     \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
@@ -694,11 +703,11 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
 
 :::info
 
-In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
+In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
 
 :::
 
@@ -708,18 +717,20 @@ In development, we auto-refresh your local model list every hour, ensuring your 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
 \`\`\`typescript showLineNumbers
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
-  name: "document-processor",
+  id: "document-processor",
+  name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
   model: "openai/gpt-4o-mini"
 })
 
 // Use a powerful reasoning model for complex analysis
 const reasoningAgent = new Agent({
-  name: "reasoning-agent",
+  id: "reasoning-agent",
+  name: "Reasoning Agent",
   instructions: "Analyze data and provide strategic recommendations",
   model: "anthropic/claude-opus-4-1"
 })
@@ -730,7 +741,8 @@ Since models are just strings, you can select them dynamically based on [request
 
 \`\`\`typescript showLineNumbers
 const agent = new Agent({
-  name: "dynamic-assistant",
+  id: "dynamic-assistant",
+  name: "Dynamic Assistant",
   model: ({ requestContext }) => {
     const provider = requestContext.get("provider-id");
     const model = requestContext.get("model-id");
@@ -752,6 +764,8 @@ Different model providers expose their own configuration options. With OpenAI, y
 \`\`\`typescript showLineNumbers
 // Agent level (apply to all future messages)
 const planner = new Agent({
+  id: "planner",
+  name: "Planner",
   instructions: {
     role: "system",
     content: "You are a helpful assistant.",
@@ -784,7 +798,8 @@ If you need to specify custom headers, such as an organization ID or other provi
 
 \`\`\`typescript showLineNumbers
 const agent = new Agent({
-  name: "custom-agent",
+  id: "custom-agent",
+  name: "Custom Agent",
   model: {
     id: "openai/gpt-4-turbo",
     apiKey: process.env.OPENAI_API_KEY,
@@ -807,10 +822,11 @@ Relying on a single model creates a single point of failure for your application
 
 
 \`\`\`typescript showLineNumbers
-import { Agent } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'resilient-assistant',
+  id: 'resilient-assistant',
+  name: 'Resilient Assistant',
   instructions: 'You are a helpful assistant.',
   model: [
     {
@@ -839,10 +855,11 @@ Mastra supports AI SDK provider modules, should you need to use them directly.
 
 \`\`\`typescript showLineNumbers
 import { groq } from '@ai-sdk/groq';
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   model: groq('gemma2-9b-it')
 })
 \`\`\`

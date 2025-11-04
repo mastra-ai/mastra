@@ -13,8 +13,8 @@ export const pageActTool = createTool({
     success: z.boolean(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    return await performWebAction(context.url, context.action);
+  execute: async input => {
+    return await performWebAction(input.url, input.action);
   },
 });
 

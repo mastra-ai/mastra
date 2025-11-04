@@ -10,7 +10,7 @@ The `.start()` method starts a workflow run with input data, allowing you to exe
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -127,7 +127,7 @@ const result = await run.start({
 ```typescript showLineNumbers copy
 import { RequestContext } from "@mastra/core/request-context";
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const requestContext = new RequestContext();
 requestContext.set("variable", false);
@@ -143,4 +143,4 @@ const result = await run.start({
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](../workflow-methods/create-run)
+- [Workflow.createRun()](../workflow-methods/create-run)

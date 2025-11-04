@@ -1,9 +1,9 @@
-import type { MastraMessageContentV2, MastraMessageV2 } from '../agent';
+import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
 import type { TracingStrategy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { MastraMessageV1, StorageThreadType } from '../memory/types';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
+import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
 import {
@@ -24,7 +24,6 @@ import type {
   StorageGetMessagesArg,
   StorageResourceType,
   StoragePagination,
-  ThreadSortOptions,
   WorkflowRun,
   WorkflowRuns,
   AISpanRecord,
@@ -61,6 +60,40 @@ export function serializeDate(date: Date | string | undefined): string | undefin
   return dateObj?.toISOString();
 }
 
+/**
+ * Normalizes perPage input for pagination queries.
+ *
+ * @param perPageInput - The raw perPage value from the user
+ * @param defaultValue - The default perPage value to use when undefined (typically 40 for messages, 100 for threads)
+ * @returns A numeric perPage value suitable for queries (false becomes MAX_SAFE_INTEGER, negative values fall back to default)
+ */
+export function normalizePerPage(perPageInput: number | false | undefined, defaultValue: number): number {
+  if (perPageInput === false) {
+    return Number.MAX_SAFE_INTEGER; // Get all results
+  } else if (perPageInput === 0) {
+    return 0; // Return zero results
+  } else if (typeof perPageInput === 'number' && perPageInput > 0) {
+    return perPageInput; // Valid positive number
+  }
+  // For undefined, negative, or other invalid values, use default
+  return defaultValue;
+}
+
+/**
+ * Preserves the original perPage value for API responses.
+ * When perPageInput is false, returns false; otherwise returns the normalized numeric value.
+ *
+ * @param perPageInput - The raw perPage value from the user
+ * @param normalizedValue - The normalized numeric value from normalizePerPage
+ * @returns The value to include in the response (preserves false when input was false)
+ */
+export function preservePerPageForResponse(
+  perPageInput: number | false | undefined,
+  normalizedValue: number,
+): number | false {
+  return perPageInput === false ? false : normalizedValue;
+}
+
 export function resolveMessageLimit({
   last,
   defaultLimit,
@@ -94,7 +127,7 @@ export abstract class MastraStorage extends MastraBase {
     deleteMessages: boolean;
     aiTracing?: boolean;
     indexManagement?: boolean;
-    getScoresBySpan?: boolean;
+    listScoresBySpan?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -104,7 +137,7 @@ export abstract class MastraStorage extends MastraBase {
       deleteMessages: false,
       aiTracing: false,
       indexManagement: false,
-      getScoresBySpan: false,
+      listScoresBySpan: false,
     };
   }
 
@@ -196,12 +229,6 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
-  abstract getThreadsByResourceId({
-    resourceId,
-    orderBy,
-    sortDirection,
-  }: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]>;
-
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
   abstract updateThread({
@@ -244,14 +271,9 @@ export abstract class MastraStorage extends MastraBase {
     );
   }
 
-  abstract getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  abstract getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]>;
+  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
+
+  abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
 
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     if (this.stores?.memory) {
@@ -291,9 +313,10 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<MastraMessageV2[]> {
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (this.stores?.memory) {
-      return this.stores.memory.listMessagesById({ messageIds });
+      const result = await this.stores.memory.listMessagesById({ messageIds });
+      return result;
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_LIST_MESSAGES_BY_ID_NOT_SUPPORTED',
@@ -303,19 +326,12 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
-  abstract saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  abstract saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  abstract saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
-
   abstract updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
-  }): Promise<MastraMessageV2[]>;
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: Partial<MastraMessageContentV2>;
+    })[];
+  }): Promise<MastraDBMessage[]>;
 
   async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
@@ -481,12 +497,12 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }>;
 
-  abstract getScoresByScorerId({
+  abstract listScoresByScorerId({
     scorerId,
-    pagination,
+    source,
     entityId,
     entityType,
-    source,
+    pagination,
   }: {
     scorerId: string;
     pagination: StoragePagination;
@@ -495,7 +511,7 @@ export abstract class MastraStorage extends MastraBase {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByRunId({
+  abstract listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -503,7 +519,7 @@ export abstract class MastraStorage extends MastraBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByEntityId({
+  abstract listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -513,7 +529,7 @@ export abstract class MastraStorage extends MastraBase {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination: _pagination,
@@ -532,17 +548,7 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 
-  abstract getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
-
-  abstract getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
+  abstract getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
 
   /**
    * OBSERVABILITY

@@ -1,4 +1,4 @@
-import type { SystemMessage } from '@mastra/core';
+import type { SystemMessage } from '@mastra/core/llm';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
@@ -74,7 +74,6 @@ export class WorkflowRegistry {
         workflow.__registerPrimitives({
           logger: mastra.getLogger(),
           storage: mastra.getStorage(),
-          memory: mastra.getMemory(),
           agents: mastra.listAgents(),
           tts: mastra.getTTS(),
           vectors: mastra.getVectors(),

@@ -1,9 +1,10 @@
-import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
-export type MastraMessageV2WithTypedContent = Omit<MastraMessageV2, 'content'> & { content: MastraMessageContentV2 };
+import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
+
+export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import type {
   PaginationInfo,
   StorageColumn,
@@ -13,7 +14,6 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
-  ThreadSortOptions,
   StorageDomains,
   AISpanRecord,
   AITraceRecord,
@@ -159,7 +159,7 @@ export class MSSQLStore extends MastraStorage {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
-    getScoresBySpan: boolean;
+    listScoresBySpan: boolean;
     aiTracing: boolean;
     indexManagement: boolean;
   } {
@@ -169,7 +169,7 @@ export class MSSQLStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
-      getScoresBySpan: true,
+      listScoresBySpan: true,
       aiTracing: true,
       indexManagement: true,
     };
@@ -225,23 +225,6 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.memory.getThreadById({ threadId });
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId(args);
-  }
-
-  public async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    return this.stores.memory.getThreadsByResourceIdPaginated(args);
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     return this.stores.memory.saveThread({ thread });
   }
@@ -265,43 +248,35 @@ export class MSSQLStore extends MastraStorage {
   /**
    * @deprecated use getMessagesPaginated instead
    */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages(args);
   }
 
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
+  }
+
   public async getMessagesPaginated(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessagesPaginated(args);
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
 
   async updateMessages({
     messages,
   }: {
-    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: {
         metadata?: MastraMessageContentV2['metadata'];
         content?: MastraMessageContentV2['content'];
       };
     })[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages({ messages });
   }
 
@@ -394,11 +369,11 @@ export class MSSQLStore extends MastraStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, perPage, page, resourceId });
   }
 
   async getWorkflowRunById({
@@ -500,7 +475,7 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id: _id });
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId: _scorerId,
     pagination: _pagination,
     entityId: _entityId,
@@ -513,7 +488,7 @@ export class MSSQLStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({
+    return this.stores.scores.listScoresByScorerId({
       scorerId: _scorerId,
       pagination: _pagination,
       entityId: _entityId,
@@ -526,17 +501,17 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.scores.saveScore(_score);
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId: _runId,
     pagination: _pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByRunId({ runId: _runId, pagination: _pagination });
+    return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId: _entityId,
     entityType: _entityType,
     pagination: _pagination,
@@ -545,14 +520,14 @@ export class MSSQLStore extends MastraStorage {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByEntityId({
+    return this.stores.scores.listScoresByEntityId({
       entityId: _entityId,
       entityType: _entityType,
       pagination: _pagination,
     });
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination: _pagination,
@@ -561,6 +536,6 @@ export class MSSQLStore extends MastraStorage {
     spanId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination: _pagination });
+    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination: _pagination });
   }
 }

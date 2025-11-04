@@ -1,5 +1,4 @@
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MastraMessageV2 } from '../../memory';
@@ -98,19 +97,18 @@ function uiMessageTest(version: 'v1' | 'v2') {
         });
       }
       // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'support-thread',
         resourceId: 'customer-12345',
-        format: 'v2',
         selectBy: {
           last: 10,
         },
       });
 
-      expect(savedMessages.length).toBeGreaterThan(0);
+      expect(result.messages.length).toBeGreaterThan(0);
 
       // Find the user message
-      const userMessage = savedMessages.find(m => m.role === 'user');
+      const userMessage = result.messages.find(m => m.role === 'user');
       expect(userMessage).toBeDefined();
 
       // Check that metadata was preserved in v2 format
@@ -179,19 +177,18 @@ function uiMessageTest(version: 'v1' | 'v2') {
       expect(finalText).toBe('Response acknowledging metadata');
 
       // Verify messages were saved with metadata
-      const savedMessages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'mobile-thread',
         resourceId: 'user-mobile',
-        format: 'v2',
         selectBy: {
           last: 10,
         },
       });
 
-      expect(savedMessages.length).toBeGreaterThan(0);
+      expect(result.messages.length).toBeGreaterThan(0);
 
       // Find the user message
-      const userMessage = savedMessages.find(m => m.role === 'user');
+      const userMessage = result.messages.find(m => m.role === 'user');
       expect(userMessage).toBeDefined();
 
       // Check that metadata was preserved
@@ -260,19 +257,18 @@ function uiMessageTest(version: 'v1' | 'v2') {
         });
       }
       // Verify messages were saved correctly
-      const savedMessages = await mockMemory.getMessages({
+      const result = await mockMemory.getMessages({
         threadId: 'mixed-thread',
         resourceId: 'mixed-user',
-        format: 'v2',
         selectBy: {
           last: 10,
         },
       });
 
-      expect(savedMessages.length).toBeGreaterThan(0);
+      expect(result.messages.length).toBeGreaterThan(0);
 
       // Find messages and check metadata
-      const messagesAsV2 = savedMessages as MastraMessageV2[];
+      const messagesAsV2 = result.messages as MastraMessageV2[];
       const firstUserMessage = messagesAsV2.find(
         m =>
           m.role === 'user' &&

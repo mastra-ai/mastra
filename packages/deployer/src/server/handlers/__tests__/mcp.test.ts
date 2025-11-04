@@ -1,6 +1,6 @@
 // packages/deployer/src/server/handlers/__tests__/mcp.test.ts
 
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 // Consolidate imports from @mastra/core/mcp
 import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';

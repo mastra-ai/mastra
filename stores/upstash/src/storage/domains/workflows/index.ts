@@ -1,7 +1,7 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey } from '../utils';
@@ -196,11 +196,23 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
+      if (page !== undefined && page < 0) {
+        throw new MastraError(
+          {
+            id: 'UPSTASH_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
       if (workflowName && resourceId) {
@@ -252,15 +264,17 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const total = runs.length;
 
       // Apply pagination if requested
-      if (limit !== undefined && offset !== undefined) {
-        runs = runs.slice(offset, offset + limit);
+      if (perPage !== undefined && page !== undefined) {
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page * normalizedPerPage;
+        runs = runs.slice(offset, offset + normalizedPerPage);
       }
 
       return { runs, total };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_UPSTASH_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

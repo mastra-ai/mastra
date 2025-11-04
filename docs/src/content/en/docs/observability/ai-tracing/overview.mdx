@@ -79,7 +79,7 @@ Exporters determine where your AI trace data is sent and how it's stored. Choosi
 
 Mastra provides two built-in exporters that work out of the box:
 
-- **[Default](/docs/observability/ai-tracing/exporters/default)** - Persists traces to local storage for viewing in the Playground
+- **[Default](/docs/observability/ai-tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
 - **[Cloud](/docs/observability/ai-tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
 
 ### External Exporters
@@ -316,9 +316,9 @@ observability: {
 }
 ```
 
-#### Maintaining Playground and Cloud Access
+#### Maintaining Studio and Cloud Access
 
-When creating a custom config with external exporters, you might lose access to Mastra Playground and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
+When creating a custom config with external exporters, you might lose access to Studio and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
 
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 import { DefaultExporter, CloudExporter } from "@mastra/core/ai-tracing";
@@ -336,7 +336,7 @@ export const mastra = new Mastra({
             endpoint: process.env.PHOENIX_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
-          new DefaultExporter(), // Keep Playground access
+          new DefaultExporter(), // Keep Studio access
           new CloudExporter(), // Keep Cloud access
         ],
       },
@@ -348,7 +348,7 @@ export const mastra = new Mastra({
 This configuration sends traces to all three destinations simultaneously:
 
 - **Arize Phoenix/AX** for external observability
-- **DefaultExporter** for local Playground access
+- **DefaultExporter** for Studio
 - **CloudExporter** for Mastra Cloud dashboard
 
 :::info
@@ -509,17 +509,17 @@ Child spans allow you to track fine-grained operations within your workflow step
 Create child spans inside a tool call or workflow step to track specific operations:
 
 ```ts showLineNumbers copy
-execute: async ({ input, tracingContext }) => {
+execute: async ({ inputData, tracingContext }) => {
   // Create another child span for the main database operation
   const querySpan = tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
-    input: { query: input.query },
+    input: { query: inputData.query },
     metadata: { database: "production" },
   });
 
   try {
-    const results = await db.query(input.query);
+    const results = await db.query(inputData.query);
     querySpan?.end({
       output: results.data,
       metadata: {
@@ -620,7 +620,7 @@ Workflow executions also return trace IDs:
 
 ```ts showLineNumbers copy
 // Create a workflow run
-const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("myWorkflow").createRun();
 
 // Start the workflow
 const result = await run.start({
@@ -643,7 +643,7 @@ console.log("Trace ID:", finalState.traceId);
 
 Once you have a trace ID, you can:
 
-1. **Look up traces in Mastra Playground**: Navigate to the traces view and search by ID
+1. **Look up traces in Studio**: Navigate to the traces view and search by ID
 2. **Query traces in external platforms**: Use the ID in Langfuse, Braintrust, or your observability platform
 3. **Correlate with logs**: Include the trace ID in your application logs for cross-referencing
 4. **Share for debugging**: Provide trace IDs to support teams or developers for investigation
@@ -701,7 +701,7 @@ Workflows support the same pattern for trace propagation:
 
 ```ts showLineNumbers copy
 const workflow = mastra.getWorkflow("data-pipeline");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: { data: "..." },
@@ -778,7 +778,7 @@ Mastra automatically creates spans for:
 
 Traces are available in multiple locations:
 
-- **Mastra Playground** - Local development environment
+- **Studio** - Local development environment
 - **Mastra Cloud** - Production monitoring dashboard
 - **Arize Phoenix / Arize AX** - When using Arize exporter
 - **Braintrust Console** - When using Braintrust exporter

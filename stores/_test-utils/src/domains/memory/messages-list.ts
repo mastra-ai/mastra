@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import type { MastraStorage } from '@mastra/core/storage';
-import type { MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
   describe('listMessages', () => {
     let thread: StorageThreadType;
     let thread2: StorageThreadType;
-    let messages: MastraMessageV2[];
+    let messages: MastraDBMessage[];
 
     beforeEach(async () => {
       // Create test threads
@@ -58,7 +58,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages, format: 'v2' });
+      await storage.saveMessages({ messages });
     });
 
     it('should list all messages for a thread without pagination', async () => {
@@ -68,14 +68,14 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
-      expect(result.messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should list messages with pagination', async () => {
       const page1 = await storage.listMessages({
         threadId: thread.id,
-        limit: 2,
-        offset: 0,
+        perPage: 2,
+        page: 0,
       });
 
       expect(page1.messages).toHaveLength(2);
@@ -86,8 +86,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       const page2 = await storage.listMessages({
         threadId: thread.id,
-        limit: 2,
-        offset: 2,
+        perPage: 2,
+        page: 1,
       });
 
       expect(page2.messages).toHaveLength(2);
@@ -97,8 +97,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       const page3 = await storage.listMessages({
         threadId: thread.id,
-        limit: 2,
-        offset: 4,
+        perPage: 2,
+        page: 2,
       });
 
       expect(page3.messages).toHaveLength(1);
@@ -114,7 +114,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         content: { content: 'Different Resource' },
         createdAt: new Date(),
       });
-      await storage.saveMessages({ messages: [differentResourceMessage], format: 'v2' });
+      await storage.saveMessages({ messages: [differentResourceMessage] });
 
       const result = await storage.listMessages({
         threadId: thread.id,
@@ -151,7 +151,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+      await storage.saveMessages({ messages: dateMessages });
 
       const result = await storage.listMessages({
         threadId: dateThread.id,
@@ -175,7 +175,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 1, 2, 3 are already in the paginated set
       expect(result.messages).toHaveLength(5);
       expect(result.messages.map((m: any) => m.content.content)).toContain('Message 1');
@@ -194,7 +194,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
       expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
@@ -214,7 +214,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         ],
       });
 
-      // Default pagination applies (limit: 40), so we get all 5 messages from thread
+      // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
       expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
@@ -325,8 +325,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           },
         ],
         orderBy: { field: 'createdAt', direction: 'ASC' },
-        limit: 3,
-        offset: 0,
+        perPage: 3,
+        page: 0,
       });
 
       // Pagination gets first 3 (1,2,3) + include adds remaining (4,5)
@@ -340,7 +340,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         threadId: thread.id,
       });
 
-      expect(result.messages.every(MessageList.isMastraMessageV2)).toBe(true);
+      expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
     });
 
     it('should handle include with threadId parameter', async () => {
@@ -374,14 +374,14 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       );
 
-      await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+      await storage.saveMessages({ messages: dateMessages });
 
       // Get messages from the last 5 seconds, paginated
       const cutoffDate = new Date(now.getTime() + 5000);
       const result = await storage.listMessages({
         threadId: dateThread.id,
-        limit: 3,
-        offset: 0,
+        perPage: 3,
+        page: 0,
         filter: {
           dateRange: { start: cutoffDate },
         },
@@ -392,11 +392,11 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages.every(m => new Date(m.createdAt) >= cutoffDate)).toBe(true);
     });
 
-    describe('limit parameter', () => {
-      it('should use limit to restrict number of messages returned', async () => {
+    describe('perPage and page parameters', () => {
+      it('should use perPage to restrict number of messages returned', async () => {
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: 3,
+          perPage: 3,
         });
 
         expect(result.messages).toHaveLength(3);
@@ -406,7 +406,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.hasMore).toBe(true);
       });
 
-      it('should return ALL messages when limit is false', async () => {
+      it('should return ALL messages when perPage is false', async () => {
         // Create more messages to test the "get all" functionality
         const manyMessages = Array.from({ length: 50 }, (_, i) =>
           createSampleMessageV2({
@@ -416,11 +416,11 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(Date.now() + 10000 + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: manyMessages, format: 'v2' });
+        await storage.saveMessages({ messages: manyMessages });
 
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: false,
+          perPage: false,
         });
 
         expect(result.messages).toHaveLength(55); // 5 original + 50 extra
@@ -429,11 +429,11 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.perPage).toBeGreaterThanOrEqual(55); // Should be a very large number
       });
 
-      it('should use offset to skip messages', async () => {
+      it('should use page to skip messages', async () => {
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: 2,
-          offset: 2, // Skip first 2 messages
+          perPage: 2,
+          page: 1, // Skip first page (first 2 messages)
         });
 
         expect(result.messages).toHaveLength(2);
@@ -441,27 +441,27 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.hasMore).toBe(true);
       });
 
-      it('should handle offset with limit for pagination', async () => {
-        // Page 1 (messages 0-1)
-        const page0 = await storage.listMessages({ threadId: thread.id, limit: 2, offset: 0 });
+      it('should handle page with perPage for pagination', async () => {
+        // Page 0 (messages 0-1)
+        const page0 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 0 });
         expect(page0.messages).toHaveLength(2);
         expect(page0.hasMore).toBe(true);
 
-        // Page 2 (messages 2-3)
-        const page1 = await storage.listMessages({ threadId: thread.id, limit: 2, offset: 2 });
+        // Page 1 (messages 2-3)
+        const page1 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 1 });
         expect(page1.messages).toHaveLength(2);
         expect(page1.hasMore).toBe(true);
 
-        // Page 3 (message 4)
-        const page2 = await storage.listMessages({ threadId: thread.id, limit: 2, offset: 4 });
+        // Page 2 (message 4)
+        const page2 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 2 });
         expect(page2.messages).toHaveLength(1);
         expect(page2.hasMore).toBe(false);
       });
 
-      it('should work with limit and include parameter', async () => {
+      it('should work with perPage and include parameter', async () => {
         const result = await storage.listMessages({
           threadId: thread.id,
-          limit: 2,
+          perPage: 2,
           orderBy: { field: 'createdAt', direction: 'ASC' },
           include: [
             {
@@ -476,7 +476,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
       });
 
-      it('should work with limit and date range', async () => {
+      it('should work with perPage and date range', async () => {
         const dateThread = createSampleThread();
         await storage.saveThread({ thread: dateThread });
 
@@ -488,12 +488,12 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(now.getTime() + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: dateMessages, format: 'v2' });
+        await storage.saveMessages({ messages: dateMessages });
 
         const cutoffDate = new Date(now.getTime() + 4000);
         const result = await storage.listMessages({
           threadId: dateThread.id,
-          limit: 3,
+          perPage: 3,
           filter: {
             dateRange: { start: cutoffDate },
           },
@@ -505,7 +505,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages.every(m => new Date(m.createdAt) >= cutoffDate)).toBe(true);
       });
 
-      it('should handle limit with resourceId filter', async () => {
+      it('should handle perPage with resourceId filter', async () => {
         // Add messages with different resourceId
         const otherMessages = Array.from({ length: 3 }, (_, i) =>
           createSampleMessageV2({
@@ -516,35 +516,36 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           }),
         );
 
-        await storage.saveMessages({ messages: otherMessages, format: 'v2' });
+        await storage.saveMessages({ messages: otherMessages });
 
         const result = await storage.listMessages({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          limit: 3,
+          perPage: 3,
         });
 
         expect(result.messages).toHaveLength(3);
         expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
       });
 
-      it('should handle invalid limit values gracefully', async () => {
-        // Test limit: 0 - should return zero results
+      it('should handle invalid perPage values gracefully', async () => {
+        // Test perPage: 0 - should return zero results
         const result0 = await storage.listMessages({
           threadId: thread.id,
-          limit: 0,
+          perPage: 0,
         });
         expect(result0.messages).toHaveLength(0);
         expect(result0.total).toBe(5); // Total should still reflect actual count
         expect(result0.perPage).toBe(0);
 
-        // Test negative limit - should fall back to default behavior
+        // Test negative perPage - should fall back to default behavior (40)
         const resultNeg = await storage.listMessages({
           threadId: thread.id,
-          limit: -5,
+          perPage: -5,
         });
-        // Should fall back to default behavior
+        // Should fall back to default perPage (40) and return all 5 available messages
         expect(resultNeg.messages).toHaveLength(5);
+        expect(resultNeg.perPage).toBe(40); // Verify fallback to default value
       });
     });
   });

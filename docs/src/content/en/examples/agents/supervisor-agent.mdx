@@ -32,7 +32,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const copywriterAgent = new Agent({
-  name: "copywriter-agent",
+  id: "copywriter-agent",
+  name: "Copywriter Agent",
   instructions: "You are a copywriter agent that writes blog post copy.",
   model: openai("gpt-4o"),
 });
@@ -77,7 +78,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const editorAgent = new Agent({
-  name: "Editor",
+  id: "editor-agent",
+  name: "Editor Agent",
   instructions: "You are an editor agent that edits blog post copy.",
   model: openai("gpt-4o-mini"),
 });
@@ -127,7 +129,8 @@ import { copywriterTool } from "../tools/example-copywriter-tool";
 import { editorTool } from "../tools/example-editor-tool";
 
 export const publisherAgent = new Agent({
-  name: "publisherAgent",
+  id: "publisher-agent",
+  name: "Publisher Agent",
   instructions:
     "You are a publisher agent that first calls the copywriter agent to write blog post copy about a specific topic and then calls the editor agent to edit the copy. Just return the final edited copy.",
   model: openai("gpt-4o-mini"),
@@ -140,7 +143,7 @@ export const publisherAgent = new Agent({
 All three agents are registered in the main Mastra instance so they can be accessed by each other.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { publisherAgent } from "./agents/example-publisher-agent";
 import { copywriterAgent } from "./agents/example-copywriter-agent";

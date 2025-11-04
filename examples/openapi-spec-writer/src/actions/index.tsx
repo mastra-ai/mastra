@@ -26,7 +26,7 @@ export async function generateOpenApiSpec({
   try {
     const openApiSpecGenWorkflow = await mastra
       .getWorkflow("openApiSpecGenWorkflow")
-      .createRunAsync();
+      .createRun();
     const res = await openApiSpecGenWorkflow.start({
       triggerData: {
         url,
@@ -65,7 +65,7 @@ export async function makeMastraPR({
   try {
     const makePRToMastraWorkflow = await mastra
       .getWorkflow("makePRToMastraWorkflow")
-      .createRunAsync();
+      .createRun();
     const res = await makePRToMastraWorkflow.start({
       triggerData: {
         integration_name: integrationName,

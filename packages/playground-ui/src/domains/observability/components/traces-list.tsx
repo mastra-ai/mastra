@@ -1,5 +1,5 @@
 import { EntryList, getShortId } from '@/components/ui/elements';
-import { AISpanRecord } from '@mastra/core';
+import { AISpanRecord } from '@mastra/core/storage';
 import { format, isToday } from 'date-fns';
 
 export const tracesListColumns = [

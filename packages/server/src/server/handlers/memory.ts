@@ -1,7 +1,8 @@
 import { convertMessages } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
-import type { StorageGetMessagesArg, ThreadSortOptions } from '@mastra/core/storage';
+import type { StorageGetMessagesArg, StorageOrderBy } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
@@ -54,14 +55,10 @@ async function getMemoryFromContext({
   }
 
   if (agent) {
-    return (
-      (await agent?.getMemory({
-        requestContext: requestContext ?? new RequestContext(),
-      })) || mastra.getMemory()
-    );
+    return await agent?.getMemory({
+      requestContext: requestContext ?? new RequestContext(),
+    });
   }
-
-  return mastra.getMemory();
 }
 
 // Memory handlers
@@ -109,14 +106,14 @@ export async function listThreadsHandler({
   agentId,
   resourceId,
   requestContext,
-  offset,
-  limit,
+  page,
+  perPage,
   orderBy,
-  sortDirection,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'resourceId' | 'requestContext'> & {
-  offset: number;
-  limit: number;
-} & ThreadSortOptions) {
+  page: number;
+  perPage: number;
+  orderBy?: StorageOrderBy;
+}) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
@@ -128,10 +125,9 @@ export async function listThreadsHandler({
 
     const result = await memory.listThreadsByResourceId({
       resourceId: resourceId!,
-      offset,
-      limit,
+      page,
+      perPage,
       orderBy,
-      sortDirection,
     });
     return result;
   } catch (error) {
@@ -361,17 +357,21 @@ export async function getMessagesHandler({
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    const thread = await memory.getThreadById({ threadId: threadId! });
+    if (!threadId) {
+      throw new HTTPException(400, { message: 'No threadId found' });
+    }
+
+    const thread = await memory.getThreadById({ threadId: threadId });
     if (!thread) {
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
     const result = await memory.query({
-      threadId: threadId!,
+      threadId: threadId,
       ...(limit && { selectBy: { last: limit } }),
     });
-    const uiMessages = convertMessages(result.messagesV2).to('AIV5.UI');
-    return { messages: result.messages, uiMessages, legacyMessages: result.uiMessages };
+    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
+    return { messages: result.messages, uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
@@ -567,7 +567,12 @@ export async function searchMemoryHandler({
 
     // If no threadId provided, get one from the resource
     if (!threadId) {
-      const threads = await memory.getThreadsByResourceId({ resourceId });
+      const { threads } = await memory.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: 1,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
 
       if (threads.length === 0) {
         return {
@@ -615,11 +620,15 @@ export async function searchMemoryHandler({
     });
 
     // Get all threads to build context and show which thread each message is from
-    const threads = await memory.getThreadsByResourceId({ resourceId });
-    const threadMap = new Map(threads.map(t => [t.id, t]));
+    // Fetch threads by IDs from the actual messages to avoid truncation
+    const threadIds = Array.from(
+      new Set(result.messages.map((m: MastraDBMessage) => m.threadId || threadId!).filter(Boolean)),
+    );
+    const fetched = await Promise.all(threadIds.map((id: string) => memory.getThreadById({ threadId: id })));
+    const threadMap = new Map(fetched.filter(Boolean).map(t => [t!.id, t!]));
 
     // Process each message in the results
-    for (const msg of result.messagesV2) {
+    for (const msg of result.messages) {
       const content =
         typeof msg.content.content === `string`
           ? msg.content.content
@@ -629,7 +638,7 @@ export async function searchMemoryHandler({
       const thread = threadMap.get(msgThreadId);
 
       // Get thread messages for context
-      const threadMessages = (await memory.query({ threadId: msgThreadId })).uiMessages;
+      const threadMessages = (await memory.query({ threadId: msgThreadId })).messages;
       const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
 
       const searchResult: SearchResult = {

@@ -39,9 +39,9 @@ export const weatherTool = createTool({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async ({ context: { city } }) => {
-    console.log("Using tool to fetch weather information for", city);
-    return await getWeatherInfo(city);
+  execute: async (inputData) => {
+    console.log("Using tool to fetch weather information for", inputData.city);
+    return await getWeatherInfo(inputData.city);
   },
 });
 ```
@@ -83,6 +83,6 @@ export const testTool = createTool({
 
 > See [Request Context](/docs/server-db/request-context) for more information.
 
-## Testing with Mastra Playground
+## Testing with Studio
 
-Use the Mastra [Playground](/docs/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
+Use [Studio](/docs/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
