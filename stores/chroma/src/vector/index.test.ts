@@ -1563,7 +1563,7 @@ describe('ChromaVector Integration Tests', () => {
 
 // Metadata filtering tests for Memory system
 describe('Chroma Metadata Filtering', () => {
-  const chromaVector = new ChromaVector();
+  const chromaVector = new ChromaVector({ id: 'chroma-metadata-filter-test' });
 
   createVectorTestSuite({
     vector: chromaVector,
