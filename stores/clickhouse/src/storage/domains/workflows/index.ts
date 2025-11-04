@@ -172,6 +172,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     page,
     perPage,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -180,6 +181,11 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       if (workflowName) {
         conditions.push(`workflow_name = {var_workflow_name:String}`);
         values.var_workflow_name = workflowName;
+      }
+
+      if (status) {
+        conditions.push(`snapshot LIKE {var_status:String}`);
+        values.var_status = `%"status":"${status}","value"%`;
       }
 
       if (resourceId) {

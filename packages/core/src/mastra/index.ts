@@ -875,6 +875,15 @@ export class Mastra<
     return workflow;
   }
 
+  public listRunningWorkflowRuns() {
+    const storage = this.#storage;
+    if (!storage) {
+      this.#logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
+      return { runs: [], total: 0 };
+    }
+    return storage?.listWorkflowRuns({ status: 'running' });
+  }
+
   /**
    * Returns all registered scorers as a record keyed by their IDs.
    *

@@ -12,7 +12,7 @@ import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import { AISpanType, getOrCreateSpan } from '../observability';
-import type { WorkflowRun } from '../storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -1064,6 +1064,7 @@ export class Workflow<
           value: {},
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
           resumeLabels: {},
@@ -1244,13 +1245,7 @@ export class Workflow<
     return res.status === 'success' ? res.result : undefined;
   }
 
-  async listWorkflowRuns(args?: {
-    fromDate?: Date;
-    toDate?: Date;
-    perPage?: number | false;
-    page?: number;
-    resourceId?: string;
-  }) {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
@@ -1258,6 +1253,11 @@ export class Workflow<
     }
 
     return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+  }
+
+  async listRunningWorkflowRuns() {
+    const workflowRuns = await this.listWorkflowRuns({ status: 'running' });
+    return workflowRuns;
   }
 
   async getWorkflowRunById(runId: string) {
@@ -1366,6 +1366,7 @@ export class Workflow<
       error: (snapshot as WorkflowRunState).error,
       payload: (snapshot as WorkflowRunState).context?.input,
       steps: fullSteps as any,
+      activeStepsPath: (snapshot as WorkflowRunState).activeStepsPath,
     };
   }
 }

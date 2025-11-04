@@ -179,6 +179,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     page,
     perPage,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
@@ -186,6 +187,10 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       const countBuilder = createSqlBuilder().count().from(fullTableName);
 
       if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
+      if (status) {
+        builder.whereAnd('snapshot LIKE ?', `%"status":"${status}","value"%`);
+        countBuilder.whereAnd('snapshot LIKE ?', `%"status":"${status}","value"%`);
+      }
       if (resourceId) {
         const hasResourceId = await this.operations.hasColumn(fullTableName, 'resourceId');
         if (hasResourceId) {

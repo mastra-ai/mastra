@@ -130,13 +130,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
+        activeStepsPath: {},
         serializedStepGraph: workflow.serializedStepGraph,
         timestamp: Date.now(),
         runId,
-        status: 'running',
         context: stepResults ?? {
           input: prevResult?.status === 'success' ? prevResult.output : undefined,
         },
+        status: 'running',
         value: {},
       },
     });

@@ -212,6 +212,7 @@ export class InngestRun<
         snapshot: {
           ...snapshot,
           status: 'canceled' as any,
+          value: snapshot.value,
         },
       });
     }
@@ -254,14 +255,15 @@ export class InngestRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         activePaths: [],
         suspendedPaths: {},
+        activeStepsPath: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 
@@ -701,6 +703,7 @@ export class InngestWorkflow<
           value: {},
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           waitingPaths: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
@@ -1935,14 +1938,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resourceId,
           snapshot: {
             runId,
+            status: workflowStatus,
             value: executionContext.state,
             context: stepResults as any,
-            activePaths: [],
+            activePaths: executionContext.executionPath,
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             waitingPaths: {},
             serializedStepGraph,
-            status: workflowStatus,
             result,
             error,
             // @ts-ignore

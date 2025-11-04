@@ -1,6 +1,6 @@
 import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
 import type { AISpanType } from '../observability';
-import type { WorkflowRunState } from '../workflows';
+import type { WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
   page: number;
@@ -109,6 +109,7 @@ export type StorageListWorkflowRunsInput = {
    */
   page?: number;
   resourceId?: string;
+  status?: WorkflowRunStatus;
 };
 
 export type StorageListThreadsByResourceIdInput = {

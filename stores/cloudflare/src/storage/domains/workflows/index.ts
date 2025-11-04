@@ -173,6 +173,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     resourceId,
     fromDate,
     toDate,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       if (page < 0 || !Number.isInteger(page)) {
@@ -212,12 +213,13 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         try {
           // Additional check: if resourceId filter is provided but key doesn't have resourceId, skip
           if (resourceId && !keyResourceId) continue;
+          const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
+          if (status && snapshotData.status !== status) continue;
           // Filter by fromDate/toDate
           const createdAt = ensureDate(data.createdAt);
           if (fromDate && createdAt && createdAt < fromDate) continue;
           if (toDate && createdAt && createdAt > toDate) continue;
           // Parse the snapshot from JSON string if needed
-          const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
           const resourceIdToUse = keyResourceId || data.resourceId;
           const run = this.parseWorkflowRun({
             ...data,

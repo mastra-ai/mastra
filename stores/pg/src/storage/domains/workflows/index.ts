@@ -206,6 +206,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     perPage,
     page,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -215,6 +216,12 @@ export class WorkflowsPG extends WorkflowsStorage {
       if (workflowName) {
         conditions.push(`workflow_name = $${paramIndex}`);
         values.push(workflowName);
+        paramIndex++;
+      }
+
+      if (status) {
+        conditions.push(`snapshot LIKE $${paramIndex}`);
+        values.push(`%"status":"${status}","value"%`); //this is a hack to make sure it matches the workflow status and not a step status, status is always just before value in the snapshot
         paramIndex++;
       }
 

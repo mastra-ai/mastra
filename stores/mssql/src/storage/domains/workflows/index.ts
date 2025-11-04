@@ -79,13 +79,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = {
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           timestamp: Date.now(),
           suspendedPaths: {},
           resumeLabels: {},
           serializedStepGraph: [],
+          status: 'pending',
           value: {},
           waitingPaths: {},
-          status: 'pending',
           runId: runId,
           requestContext: {},
         } as WorkflowRunState;
@@ -370,6 +371,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     page,
     perPage,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -378,6 +380,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       if (workflowName) {
         conditions.push(`[workflow_name] = @workflowName`);
         paramMap['workflowName'] = workflowName;
+      }
+
+      if (status) {
+        conditions.push(`[snapshot] LIKE @status`);
+        paramMap['status'] = `%"status":"${status}","value"%`; //this is a hack to make sure it matches the workflow status and not a step status, status is always just before value in the snapshot
       }
 
       if (resourceId) {

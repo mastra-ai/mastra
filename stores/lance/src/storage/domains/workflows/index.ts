@@ -189,6 +189,10 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
       }
 
+      if (args?.status) {
+        conditions.push(`\`snapshot\` LIKE '%"status":"${args.status}","value"%'`);
+      }
+
       if (args?.resourceId) {
         conditions.push(`\`resourceId\` = '${args.resourceId}'`);
       }

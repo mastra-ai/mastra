@@ -203,6 +203,12 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         if (pageResults.data && pageResults.data.length > 0) {
           let pageFilteredData: WorkflowSnapshotDBItem[] = pageResults.data;
 
+          if (args?.status) {
+            pageFilteredData = pageFilteredData.filter((snapshot: WorkflowSnapshotDBItem) => {
+              return snapshot.snapshot.status === args.status;
+            });
+          }
+
           // Apply date filters if specified
           if (args?.fromDate || args?.toDate) {
             pageFilteredData = pageFilteredData.filter((snapshot: WorkflowSnapshotDBItem) => {

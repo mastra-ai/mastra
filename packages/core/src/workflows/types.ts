@@ -165,6 +165,7 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 
 export interface WorkflowState {
   status: WorkflowRunStatus;
+  activeStepsPath: Record<string, number[]>;
   steps: Record<
     string,
     {
@@ -194,7 +195,8 @@ export interface WorkflowRunState {
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
-  activePaths: Array<unknown>;
+  activePaths: Array<number>;
+  activeStepsPath: Record<string, number[]>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

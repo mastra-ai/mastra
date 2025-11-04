@@ -37,6 +37,7 @@ export type ExecutionContext = {
   workflowId: string;
   runId: string;
   executionPath: number[];
+  activeStepsPath: Record<string, number[]>;
   foreachIndex?: number;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
@@ -234,6 +235,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         workflowId,
         runId,
         executionPath: [i],
+        activeStepsPath: {},
         suspendedPaths: {},
         resumeLabels: {},
         retryConfig: { attempts, delay },
@@ -722,6 +724,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...(iterationCount ? { metadata: { iterationCount } } : {}),
     };
 
+    executionContext.activeStepsPath[step.id] = executionContext.executionPath;
+
     const stepAISpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: AISpanType.WORKFLOW_STEP,
@@ -911,6 +915,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
     }
 
+    delete executionContext.activeStepsPath[step.id];
+
     if (!skipEmits) {
       if (execResults.status === 'suspended') {
         await emitter.emit('watch', {
@@ -1077,18 +1083,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     const prevOutput = this.getStepOutput(stepResults, prevStep);
-    for (const step of entry.steps) {
-      if (step.type === 'step') {
-        const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
-        const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
-        stepResults[step.step.id] = {
-          ...stepResults[step.step.id],
-          status: 'running',
-          ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
-          ...(startTime ? { startedAt: startTime } : {}),
-          ...(resumeTime ? { resumedAt: resumeTime } : {}),
-        } as StepResult<any, any, any, any>;
-      }
+    for (const [stepIndex, step] of entry.steps.entries()) {
+      const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
+      const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
+      stepResults[step.step.id] = {
+        ...stepResults[step.step.id],
+        status: 'running',
+        ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
+        ...(startTime ? { startedAt: startTime } : {}),
+        ...(resumeTime ? { resumedAt: resumeTime } : {}),
+      } as StepResult<any, any, any, any>;
+      executionContext.activeStepsPath[step.step.id] = [...executionContext.executionPath, stepIndex];
     }
 
     let execResults: any;
@@ -1104,6 +1109,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           serializedStepGraph,
           resume,
           executionContext: {
+            activeStepsPath: executionContext.activeStepsPath,
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, i],
@@ -1337,6 +1343,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, index],
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
@@ -1845,7 +1852,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         status: workflowStatus,
         value: executionContext.state,
         context: stepResults as any,
-        activePaths: [],
+        activePaths: executionContext.executionPath,
+        activeStepsPath: executionContext.activeStepsPath,
         serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
         waitingPaths: {},
@@ -1941,7 +1949,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           suspendedPaths: executionContext.suspendedPaths,
           resumeLabels: executionContext.resumeLabels,
           retryConfig: executionContext.retryConfig,
-
+          activeStepsPath: executionContext.activeStepsPath,
           state: executionContext.state,
         },
         tracingContext,

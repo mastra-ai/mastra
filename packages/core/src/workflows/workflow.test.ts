@@ -3950,6 +3950,14 @@ describe('Workflow', () => {
           allStepsPresentThroughout = false;
           break;
         }
+        const runningSteps = Object.keys(currentResult.steps).filter(
+          stepName => currentResult.steps[stepName]?.status === 'running',
+        );
+        const runningStepIsInActiveStepsPath = runningSteps.every(stepName => currentResult.activeStepsPath[stepName]);
+
+        expect(runningStepIsInActiveStepsPath).toBe(true);
+
+        expect(runningSteps.length).toBe(Object.keys(currentResult.activeStepsPath).length);
 
         pollResults.push({
           status: currentResult.status,

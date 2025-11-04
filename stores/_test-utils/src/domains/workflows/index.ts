@@ -61,6 +61,25 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       expect(snapshot.context?.[stepId1]?.status).toBe('completed');
     });
 
+    it('filters by status', async () => {
+      const workflowName1 = 'filter_test_1';
+      const workflowName2 = 'filter_test_2';
+
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
+
+      await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+      const { runs, total } = await storage.listWorkflowRuns({ status: 'success' });
+      expect(runs).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = runs[0]!.snapshot as WorkflowRunState;
+      expect(snapshot.status).toBe('success');
+    });
+
     it('filters by date range', async () => {
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);

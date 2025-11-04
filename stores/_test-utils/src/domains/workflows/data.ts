@@ -15,6 +15,7 @@ export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) =
   const timestamp = createdAt || new Date();
   const snapshot = {
     result: { success: true },
+    status: status as WorkflowRunState['status'],
     value: {},
     context: {
       [stepId]: {
@@ -33,7 +34,7 @@ export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) =
     waitingPaths: {},
     runId,
     timestamp: timestamp.getTime(),
-    status: status as WorkflowRunState['status'],
+    activeStepsPath: {},
   } as WorkflowRunState;
   return { snapshot, runId, stepId };
 };

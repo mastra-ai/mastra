@@ -380,6 +380,7 @@ export class EventedWorkflow<
           context: {},
           activePaths: [],
           serializedStepGraph: this.serializedStepGraph,
+          activeStepsPath: {},
           suspendedPaths: {},
           resumeLabels: {},
           waitingPaths: {},
@@ -448,15 +449,16 @@ export class EventedRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         requestContext: Object.fromEntries(requestContext.entries()),
         activePaths: [],
+        activeStepsPath: {},
         suspendedPaths: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 

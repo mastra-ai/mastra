@@ -274,6 +274,7 @@ export class CloudflareStore extends MastraStorage {
     resourceId,
     fromDate,
     toDate,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns({
       workflowName,
@@ -282,6 +283,7 @@ export class CloudflareStore extends MastraStorage {
       resourceId,
       fromDate,
       toDate,
+      status,
     });
   }
 
