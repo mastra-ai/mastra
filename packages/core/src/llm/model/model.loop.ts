@@ -159,6 +159,7 @@ export class MastraLLMVNext extends MastraBase {
     _internal,
     agentId,
     toolCallId,
+    toolConcurrency,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -222,6 +223,7 @@ export class MastraLLMVNext extends MastraBase {
         modelSpanTracker,
         requireToolApproval,
         agentId,
+        toolConcurrency,
         options: {
           ...options,
           onStepFinish: async props => {

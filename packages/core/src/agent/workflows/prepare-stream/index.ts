@@ -44,6 +44,7 @@ interface CreatePrepareStreamWorkflowOptions<
   };
   agentId: string;
   toolCallId?: string;
+  toolConcurrency?: number;
 }
 
 export function createPrepareStreamWorkflow<
@@ -68,6 +69,7 @@ export function createPrepareStreamWorkflow<
   resumeContext,
   agentId,
   toolCallId,
+  toolConcurrency
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -105,6 +107,7 @@ export function createPrepareStreamWorkflow<
     resumeContext,
     agentId,
     toolCallId,
+    toolConcurrency,
   });
 
   const mapResultsStep = createMapResultsStep({

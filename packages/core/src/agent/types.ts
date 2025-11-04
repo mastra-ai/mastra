@@ -88,6 +88,11 @@ export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = un
  */
 export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
+  /**
+   * Maximum number of tool calls that can execute concurrently.
+   * @defaultValue 10
+   */
+  toolConcurrency?: number;
 }
 
 // This is used in place of DynamicArgument so that model router IDE autocomplete works.
