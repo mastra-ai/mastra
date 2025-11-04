@@ -1,5 +1,5 @@
-import type { TracingStrategy } from '@mastra/core/ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { TracingStrategy } from '@mastra/core/observability';
 import { ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type {
   AISpanRecord,

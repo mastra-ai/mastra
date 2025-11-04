@@ -6,8 +6,6 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
-import { AISpanType, getOrCreateSpan } from '../ai-tracing';
-import type { TracingContext, TracingProperties } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
@@ -28,6 +26,8 @@ import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
+import type { TracingContext, TracingProperties } from '../observability';
+import { AISpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext } from '../request-context';
@@ -2305,6 +2305,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingOptions: options.tracingOptions,
       tracingContext: options.tracingContext,
       requestContext,
+      mastra: this.#mastra,
     });
 
     const memory = await this.getMemory({ requestContext });
