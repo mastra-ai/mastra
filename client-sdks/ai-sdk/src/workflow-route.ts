@@ -9,6 +9,7 @@ type WorkflowRouteBody = {
   resumeData?: Record<string, any>;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  step?: string;
 };
 
 export type WorkflowRouteOptions =
