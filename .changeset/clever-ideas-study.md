@@ -17,15 +17,36 @@
 '@mastra/longmemeval': major
 ---
 
-**BREAKING:** Remove `getMessagesPaginated()` in favor of `listMessages()` API
+**BREAKING:** Remove `getMessagesPaginated()` and add `perPage: false` support
 
-The deprecated `getMessagesPaginated` method has been removed from all storage implementations. Use `listMessages()` instead, which provides better pagination support with `perPage: false` for fetching all records and improved filtering options.
+Removes deprecated `getMessagesPaginated()` method. The `listMessages()` API and score handlers now support `perPage: false` to fetch all records without pagination limits.
 
-**BREAKING:** Stricter `threadId` validation in `listMessages()`
+**Storage changes:**
+- `StoragePagination.perPage` type changed from `number` to `number | false`
+- All storage implementations support `perPage: false`:
+  - Memory: `listMessages()`
+  - Scores: `listScoresBySpan()`, `listScoresByRunId()`, `listScoresByExecutionId()`
+- HTTP query parser accepts `"false"` string (e.g., `?perPage=false`)
 
-The new `listMessages()` method validates that `threadId` is a non-empty, non-whitespace string and throws an error if validation fails. Previously, `getMessagesPaginated()` would silently return empty results for empty or whitespace-only `threadId` values.
+**Memory changes:**
+- `memory.query()` parameter type changed from `StorageGetMessagesArg` to `StorageListMessagesInput`
+- Uses flat parameters (`page`, `perPage`, `include`, `filter`, `vectorSearchString`) instead of `selectBy` object
 
-Migration:
-- Replace `getMessagesPaginated({ threadId, selectBy: { pagination: { page, perPage } } })` with `listMessages({ threadId, page, perPage })`
-- Client SDK: Replace `thread.getMessagesPaginated()` with `thread.listMessages()`
-- Ensure all `threadId` values passed to `listMessages()` are non-empty strings (trim whitespace before calling if needed)
+**Stricter validation:**
+- `listMessages()` requires non-empty, non-whitespace `threadId` (throws error instead of returning empty results)
+
+**Migration:**
+```typescript
+// Storage/Memory: Replace getMessagesPaginated with listMessages
+- storage.getMessagesPaginated({ threadId, selectBy: { pagination: { page: 0, perPage: 20 } } })
++ storage.listMessages({ threadId, page: 0, perPage: 20 })
++ storage.listMessages({ threadId, page: 0, perPage: false })  // Fetch all
+
+// Memory: Replace selectBy with flat parameters
+- memory.query({ threadId, selectBy: { last: 20, include: [...] } })
++ memory.query({ threadId, perPage: 20, include: [...] })
+
+// Client SDK
+- thread.getMessagesPaginated({ selectBy: { pagination: { page: 0 } } })
++ thread.listMessages({ page: 0, perPage: 20 })
+```

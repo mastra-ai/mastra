@@ -147,7 +147,7 @@ export class ScoresStorageD1 extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
@@ -230,7 +230,7 @@ export class ScoresStorageD1 extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
@@ -300,7 +300,7 @@ export class ScoresStorageD1 extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
@@ -375,7 +375,7 @@ export class ScoresStorageD1 extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);

@@ -248,7 +248,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const query: any = { scorerId };
@@ -323,7 +323,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const collection = await this.operations.getCollection(TABLE_SCORERS);
@@ -386,7 +386,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const collection = await this.operations.getCollection(TABLE_SCORERS);
@@ -449,7 +449,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const query = { traceId, spanId };

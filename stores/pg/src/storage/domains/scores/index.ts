@@ -121,7 +121,7 @@ export class ScoresPG extends ScoresStorage {
           scores: [],
         };
       }
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
@@ -248,7 +248,7 @@ export class ScoresPG extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
@@ -305,7 +305,7 @@ export class ScoresPG extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
@@ -353,7 +353,7 @@ export class ScoresPG extends ScoresStorage {
 
       const total = Number(countSQLResult?.count ?? 0);
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;

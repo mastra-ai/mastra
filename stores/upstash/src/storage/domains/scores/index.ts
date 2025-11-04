@@ -1,14 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import {
-  calculatePagination,
-  normalizePerPage,
-  ScoresStorage,
-  TABLE_SCORERS,
-  type PaginationInfo,
-  type StoragePagination,
-} from '@mastra/core/storage';
+import { calculatePagination, normalizePerPage, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import type { StoreOperationsUpstash } from '../operations';
 import { processRecord } from '../utils';
@@ -103,7 +97,17 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
     // Filter out nulls and by scorerId
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => {
         if (!row || typeof row !== 'object') return false;
         if (row.scorerId !== scorerId) return false;
@@ -112,7 +116,7 @@ export class ScoresUpstash extends ScoresStorage {
         if (source && row.source !== source) return false;
         return true;
       });
-    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
     const total = filtered.length;
@@ -184,10 +188,20 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
     // Filter out nulls and by runId
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => !!row && typeof row === 'object' && row.runId === runId);
     const total = filtered.length;
-    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
     const paged = filtered.slice(start, end);
@@ -229,7 +243,17 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
 
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => {
         if (!row || typeof row !== 'object') return false;
         if (row.entityId !== entityId) return false;
@@ -237,7 +261,7 @@ export class ScoresUpstash extends ScoresStorage {
         return true;
       });
     const total = filtered.length;
-    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
     const paged = filtered.slice(start, end);
@@ -279,7 +303,17 @@ export class ScoresUpstash extends ScoresStorage {
     const results = await pipeline.exec();
     // Filter out nulls and by traceId and spanId
     const filtered = results
-      .map((row: any) => row as Record<string, any> | null)
+      .map((raw: any) => {
+        if (!raw) return null;
+        if (typeof raw === 'string') {
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        return raw as Record<string, any>;
+      })
       .filter((row): row is Record<string, any> => {
         if (!row || typeof row !== 'object') return false;
         if (row.traceId !== traceId) return false;
@@ -287,7 +321,7 @@ export class ScoresUpstash extends ScoresStorage {
         return true;
       });
     const total = filtered.length;
-    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+    const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
     const paged = filtered.slice(start, end);

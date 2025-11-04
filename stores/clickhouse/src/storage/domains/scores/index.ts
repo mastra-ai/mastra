@@ -162,7 +162,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
@@ -264,7 +264,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
@@ -349,7 +349,7 @@ export class ScoresStorageClickhouse extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
@@ -434,12 +434,10 @@ export class ScoresStorageClickhouse extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
-
-      // Fetch one extra row to detect if there are more results (only when perPage is a number)
-      const limitValue = perPageInput === false ? total : perPage + 1;
 
       const result = await this.client.query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
@@ -459,16 +457,14 @@ export class ScoresStorageClickhouse extends ScoresStorage {
       });
 
       const rows = await result.json();
-      const transformedRows = Array.isArray(rows) ? rows.map(row => this.transformScoreRow(row)) : [];
-      const hasMore = perPageInput === false ? false : transformedRows.length > perPage;
-      const scores = hasMore ? transformedRows.slice(0, perPage) : transformedRows;
+      const scores = Array.isArray(rows) ? rows.map(row => this.transformScoreRow(row)) : [];
 
       return {
         pagination: {
           total,
           page,
           perPage: perPageForResponse,
-          hasMore,
+          hasMore: end < total,
         },
         scores,
       };

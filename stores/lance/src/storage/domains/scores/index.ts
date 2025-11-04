@@ -109,7 +109,7 @@ export class StoreScoresLance extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const table = await this.client.openTable(TABLE_SCORERS);
@@ -185,7 +185,7 @@ export class StoreScoresLance extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const table = await this.client.openTable(TABLE_SCORERS);
@@ -243,7 +243,7 @@ export class StoreScoresLance extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const table = await this.client.openTable(TABLE_SCORERS);
@@ -304,7 +304,7 @@ export class StoreScoresLance extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const table = await this.client.openTable(TABLE_SCORERS);

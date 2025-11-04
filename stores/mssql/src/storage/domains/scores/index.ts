@@ -203,7 +203,7 @@ export class ScoresMSSQL extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
@@ -272,7 +272,7 @@ export class ScoresMSSQL extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
@@ -340,7 +340,7 @@ export class ScoresMSSQL extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
@@ -410,7 +410,7 @@ export class ScoresMSSQL extends ScoresStorage {
         };
       }
 
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;

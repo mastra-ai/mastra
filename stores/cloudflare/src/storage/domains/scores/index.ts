@@ -162,7 +162,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       });
 
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const total = scores.length;
@@ -220,7 +220,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       });
 
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const total = scores.length;
@@ -280,7 +280,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       });
 
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const total = scores.length;
@@ -340,7 +340,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       });
 
       const { page, perPage: perPageInput } = pagination;
-      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const total = scores.length;
