@@ -338,9 +338,7 @@ describe('Working Memory Tests', () => {
       const history = await memory.query({
         threadId: thread.id,
         resourceId,
-        selectBy: {
-          last: 20,
-        },
+        perPage: 20,
       });
 
       const memoryArgs: string[] = [];

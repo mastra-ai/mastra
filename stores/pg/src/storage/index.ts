@@ -235,7 +235,7 @@ export class PostgresStore extends MastraStorage {
   }
 
   /**
-   * @deprecated use getMessagesPaginated instead
+   * @deprecated use listMessages instead
    */
   public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.getMessages(args);
@@ -243,12 +243,6 @@ export class PostgresStore extends MastraStorage {
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

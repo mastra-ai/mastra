@@ -1,10 +1,10 @@
-import type { AISpanType } from '../ai-tracing';
 import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { AISpanType } from '../observability';
 import type { WorkflowRunState } from '../workflows';
 
 export type StoragePagination = {
   page: number;
-  perPage: number;
+  perPage: number | false;
 };
 
 export interface StorageColumn {

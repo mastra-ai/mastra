@@ -25,7 +25,6 @@ import {
   testUsage2,
   createMessageListWithUserMessage,
 } from './utils';
-import { ModelSpanTracker } from '../../ai-tracing';
 
 export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('options.abortSignal', () => {
@@ -34,7 +33,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const abortController = new AbortController();
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
-      const modelSpanTracker = new ModelSpanTracker();
 
       const result = loopFn({
         runId,
@@ -64,7 +62,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           abortSignal: abortController.signal,
         },
         agentId: 'agent-id',
-        modelSpanTracker,
       });
 
       await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
@@ -80,7 +77,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           writableStream: expect.any(Object),
           resumeData: undefined,
           suspend: expect.any(Function),
-          tracingContext: expect.any(Object),
         },
       );
     });
