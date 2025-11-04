@@ -162,8 +162,8 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  limit?: number;
-  offset?: number;
+  perPage?: number;
+  page?: number;
   resourceId?: string;
 }
 
@@ -260,8 +260,8 @@ export type CreateMemoryThreadResponse = StorageThreadType;
 export interface ListMemoryThreadsParams {
   resourceId: string;
   agentId: string;
-  offset?: number;
-  limit?: number;
+  page?: number;
+  perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
   sortDirection?: 'ASC' | 'DESC';
   requestContext?: RequestContext | Record<string, any>;

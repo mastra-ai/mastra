@@ -13,8 +13,8 @@ import type {
   AnyExportedAISpan,
   ModelGenerationAttributes,
   ToolCallAttributes,
-} from '@mastra/core/ai-tracing';
-import { AISpanType, AITracingEventType } from '@mastra/core/ai-tracing';
+} from '@mastra/core/observability';
+import { AISpanType, AITracingEventType } from '@mastra/core/observability';
 import { Langfuse } from 'langfuse';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LangfuseExporter } from './ai-tracing';

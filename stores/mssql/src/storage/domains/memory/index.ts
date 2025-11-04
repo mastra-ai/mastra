@@ -4,6 +4,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
+  normalizePerPage,
+  preservePerPageForResponse,
   resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -106,10 +108,11 @@ export class MemoryMSSQL extends MemoryStorage {
   public async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset = 0, limit: limitInput, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+    const perPage = normalizePerPage(perPageInput, 100);
+    const offset = page * perPage;
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
-      const limit = limitInput !== undefined ? limitInput : 100;
       const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
@@ -122,8 +125,8 @@ export class MemoryMSSQL extends MemoryStorage {
         return {
           threads: [],
           total: 0,
-          page: 0,
-          perPage: limit,
+          page,
+          perPage: preservePerPageForResponse(perPageInput, perPage),
           hasMore: false,
         };
       }
@@ -133,7 +136,7 @@ export class MemoryMSSQL extends MemoryStorage {
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
-      dataRequest.input('perPage', limit);
+      dataRequest.input('perPage', perPage);
       dataRequest.input('offset', offset);
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
@@ -147,9 +150,9 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         threads,
         total,
-        page: limit > 0 ? Math.floor(offset / limit) : 0,
-        perPage: limit,
-        hasMore: offset + threads.length < total,
+        page,
+        perPage: preservePerPageForResponse(perPageInput, perPage),
+        hasMore: offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -159,7 +162,7 @@ export class MemoryMSSQL extends MemoryStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             resourceId,
-            page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
+            page,
           },
         },
         error,
@@ -169,8 +172,8 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         threads: [],
         total: 0,
-        page: limitInput && limitInput > 0 ? Math.floor(offset / limitInput) : 0,
-        perPage: limitInput || 100,
+        page,
+        perPage,
         hasMore: false,
       };
     }
@@ -552,7 +555,7 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    const { threadId, resourceId, include, filter, limit, offset = 0, orderBy } = args;
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
     if (!threadId.trim()) {
       throw new MastraError(
@@ -566,24 +569,11 @@ export class MemoryMSSQL extends MemoryStorage {
       );
     }
 
-    try {
-      // Determine how many results to return
-      // Default pagination is always 40 unless explicitly specified
-      let perPage = 40;
-      if (limit !== undefined) {
-        if (limit === false) {
-          // limit: false means get ALL messages
-          perPage = Number.MAX_SAFE_INTEGER;
-        } else if (limit === 0) {
-          // limit: 0 means return zero results
-          perPage = 0;
-        } else if (typeof limit === 'number' && limit > 0) {
-          perPage = limit;
-        }
-      }
+    const perPage = normalizePerPage(perPageInput, 40);
+    const responsePerPage = preservePerPageForResponse(perPageInput, perPage);
 
-      // Convert offset to page for pagination metadata
-      const page = perPage === 0 ? 0 : Math.floor(offset / perPage);
+    try {
+      const offset = page * perPage;
 
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy);
@@ -675,17 +665,16 @@ export class MemoryMSSQL extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = limit === false ? false : allThreadMessagesReturned ? false : offset + rows.length < total;
+      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + rows.length < total;
 
       return {
         messages: finalMessages,
         total,
         page,
-        perPage,
+        perPage: responsePerPage,
         hasMore,
       };
     } catch (error) {
-      const errorPerPage = limit === false ? Number.MAX_SAFE_INTEGER : limit === 0 ? 0 : limit || 40;
       const mastraError = new MastraError(
         {
           id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_MESSAGES_FAILED',
@@ -703,8 +692,8 @@ export class MemoryMSSQL extends MemoryStorage {
       return {
         messages: [],
         total: 0,
-        page: errorPerPage === 0 ? 0 : Math.floor(offset / errorPerPage),
-        perPage: errorPerPage,
+        page,
+        perPage: responsePerPage,
         hasMore: false,
       };
     }

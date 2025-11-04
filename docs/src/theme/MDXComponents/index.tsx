@@ -50,6 +50,7 @@ const MDXComponents: MDXComponentsObject = {
   h5: (props: ComponentProps<"h5">) => <MDXHeading as="h5" {...props} />,
   h6: (props: ComponentProps<"h6">) => <MDXHeading as="h6" {...props} />,
   admonition: Admonition,
+  Callout: Admonition,
   mermaid: Mermaid,
   GithubLink,
   NetlifyLogo,

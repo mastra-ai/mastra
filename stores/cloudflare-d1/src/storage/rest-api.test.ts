@@ -297,7 +297,7 @@ describe.skip('D1Store REST API', () => {
       await store.saveThread({ thread: thread2 });
 
       const { threads } = await retryUntil(
-        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, limit: 10, offset: 0 }),
+        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, perPage: 10, page: 0 }),
         result => result?.threads?.length === 2,
       );
       expect(threads?.length).toBe(2);
@@ -985,7 +985,7 @@ describe.skip('D1Store REST API', () => {
       await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await store.listWorkflowRuns({ limit: 2, offset: 0 });
+      const page1 = await store.listWorkflowRuns({ perPage: 2, page: 0 });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
@@ -996,7 +996,7 @@ describe.skip('D1Store REST API', () => {
       checkWorkflowSnapshot(secondSnapshot, stepId2, 'failed');
 
       // Get second page
-      const page2 = await store.listWorkflowRuns({ limit: 2, offset: 2 });
+      const page2 = await store.listWorkflowRuns({ perPage: 2, page: 1 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
@@ -1271,7 +1271,7 @@ describe.skip('D1Store REST API', () => {
 
       // Should be able to retrieve thread
       const { threads } = await retryUntil(
-        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 }),
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
         result => result?.threads?.length === 1,
       );
       expect(threads?.length).toBe(1);
@@ -1352,7 +1352,7 @@ describe.skip('D1Store REST API', () => {
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
-      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 });
+      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 });
       expect(threads?.length).toBe(0);
     });
   });

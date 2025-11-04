@@ -2,7 +2,7 @@
  * Custom OpenTelemetry span that preserves Mastra's trace and span IDs
  */
 
-import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
+import type { AnyExportedAISpan } from '@mastra/core/observability';
 import { SpanStatusCode, TraceFlags } from '@opentelemetry/api';
 import type { SpanKind, SpanContext, SpanStatus, Attributes, Link } from '@opentelemetry/api';
 import type { InstrumentationScope } from '@opentelemetry/core';

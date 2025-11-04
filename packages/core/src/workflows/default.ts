@@ -1,15 +1,16 @@
 import { randomUUID } from 'crypto';
-import type { AISpan, TracingContext } from '../ai-tracing';
-import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
 import type { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { MastraScorers } from '../evals';
 import { runScorer } from '../evals/hooks';
+import { AISpanType, wrapMastra } from '../observability';
+import type { AISpan, TracingContext } from '../observability';
 import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
+import { selectFields } from '../utils';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -455,7 +456,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         setState: (state: any) => {
           executionContext.state = state;
         },
-        runCount: -1,
         retryCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
@@ -562,7 +562,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         setState: (state: any) => {
           executionContext.state = state;
         },
-        runCount: -1,
         retryCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
@@ -800,7 +799,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           setState: (state: any) => {
             executionContext.state = state;
           },
-          runCount: retryCount,
           retryCount,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           tracingContext: { currentSpan: stepAISpan },
@@ -1242,7 +1240,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   setState: (state: any) => {
                     executionContext.state = state;
                   },
-                  runCount: -1,
                   retryCount: -1,
                   tracingContext: {
                     currentSpan: evalSpan,
@@ -1517,7 +1514,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             setState: (state: any) => {
               executionContext.state = state;
             },
-            runCount: -1,
             retryCount: -1,
             tracingContext: {
               currentSpan: evalSpan,

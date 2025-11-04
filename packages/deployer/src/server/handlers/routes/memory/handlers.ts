@@ -24,7 +24,7 @@ import {
 import type { Context } from 'hono';
 
 import { handleError } from '../../error';
-import { parseLimit } from '../../utils/query-parsers';
+import { parseLimit, parsePage, parsePerPage } from '../../utils/query-parsers';
 
 // Memory handlers
 export async function getMemoryStatusHandler(c: Context) {
@@ -68,8 +68,8 @@ export async function listThreadsHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const resourceId = c.req.query('resourceId');
-    const offset = parseInt(c.req.query('offset') || '0', 10);
-    const limit = parseInt(c.req.query('limit') || '100', 10);
+    const page = parsePage(c.req.query('page'));
+    const perPage = parsePerPage(c.req.query('perPage'));
     const field = c.req.query('orderBy') as ThreadOrderBy | undefined;
     const direction = c.req.query('sortDirection') as ThreadSortDirection | undefined;
     const requestContext = c.get('requestContext');
@@ -95,8 +95,8 @@ export async function listThreadsHandler(c: Context) {
       mastra,
       agentId,
       resourceId,
-      offset,
-      limit,
+      page,
+      perPage,
       orderBy,
       requestContext,
     });

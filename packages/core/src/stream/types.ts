@@ -12,7 +12,7 @@ import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { TracingContext } from '../ai-tracing/types';
+import type { TracingContext } from '../observability';
 import type { OutputProcessor } from '../processors';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';

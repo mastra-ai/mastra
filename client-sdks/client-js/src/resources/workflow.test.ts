@@ -37,36 +37,36 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('returns runId when creating new run', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     expect(run.runId).toBe('r-123');
   });
 
   it('starts workflow run synchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const startRes = await run.start({ inputData: { a: 1 } });
     expect(startRes).toEqual({ message: 'started' });
   });
 
   it('starts workflow run asynchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const startAsyncRes = await run.startAsync({ inputData: { a: 1 } });
     expect(startAsyncRes).toEqual({ result: 'started-async' });
   });
 
   it('resumes workflow run synchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const resumeRes = await run.resume({ step: 's1' });
     expect(resumeRes).toEqual({ message: 'resumed' });
   });
 
   it('resumes workflow run asynchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const resumeAsyncRes = await run.resumeAsync({ step: 's1' });
     expect(resumeAsyncRes).toEqual({ result: 'resumed-async' });
   });
 
   it('streams workflow execution as parsed objects', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const stream = await run.stream({ inputData: { x: 1 } });
     const reader = (stream as ReadableStream<any>).getReader();
     const records: any[] = [];
@@ -87,7 +87,7 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('starts workflow run synchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { foo: 'bar' } };
     const result = await run.start({ inputData: { a: 1 }, tracingOptions });
     expect(result).toEqual({ message: 'started' });
@@ -100,7 +100,7 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('starts workflow run asynchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { traceId: 't-1' } };
     const result = await run.startAsync({ inputData: { a: 1 }, tracingOptions });
     expect(result).toEqual({ result: 'started-async' });
@@ -113,7 +113,7 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('resumes workflow run synchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { resume: true } };
     const result = await run.resume({ step: 's1', tracingOptions });
     expect(result).toEqual({ message: 'resumed' });
@@ -126,7 +126,7 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('resumes workflow run asynchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { async: true } };
     const result = await run.resumeAsync({ step: 's1', tracingOptions });
     expect(result).toEqual({ result: 'resumed-async' });

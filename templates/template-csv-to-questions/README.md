@@ -104,7 +104,7 @@ const questions = await generateQuestions(summary); // Much better!
 ```typescript
 import { mastra } from './src/mastra/index';
 
-const run = await mastra.getWorkflow('csvToQuestionsWorkflow').createRunAsync();
+const run = await mastra.getWorkflow('csvToQuestionsWorkflow').createRun();
 
 // Using a CSV URL
 const result = await run.start({
