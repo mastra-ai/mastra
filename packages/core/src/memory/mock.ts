@@ -3,7 +3,6 @@ import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
 import type {
-  StorageGetMessagesArg,
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
@@ -25,7 +24,7 @@ export class MockMemory extends MastraMemory {
     return this.storage.saveThread({ thread });
   }
 
-  async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
+  async getMessages(args: StorageListMessagesInput): Promise<{ messages: MastraDBMessage[] }> {
     return this.storage.getMessages(args);
   }
 
