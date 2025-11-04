@@ -724,8 +724,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           toDateTime64(createdAt, 3) as createdAt,
           toDateTime64(updatedAt, 3) as updatedAt
         FROM "${TABLE_THREADS}"
-        FINAL
-        WHERE id = {var_id:String}`,
+        WHERE id = {var_id:String}
+        ORDER BY updatedAt DESC
+        LIMIT 1`,
         query_params: { var_id: threadId },
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -774,6 +775,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
+      // ClickHouse's ReplacingMergeTree may create duplicate rows until background merges run
+      // We handle this by always querying for the newest row (ORDER BY updatedAt DESC LIMIT 1)
       await this.client.insert({
         table: TABLE_THREADS,
         values: [
@@ -933,9 +936,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      // Get total count - use FINAL to deduplicate ReplacingMergeTree rows
+      // Get total count - count distinct thread IDs to handle duplicates
       const countResult = await this.client.query({
-        query: `SELECT count() as total FROM ${TABLE_THREADS} FINAL WHERE resourceId = {resourceId:String}`,
+        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
         query_params: { resourceId },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
@@ -957,18 +960,30 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         };
       }
 
-      // Get paginated threads with dynamic sorting - use FINAL to deduplicate ReplacingMergeTree rows
+      // Get paginated threads - get newest version of each thread by using row number
       const dataResult = await this.client.query({
         query: `
+              WITH ranked_threads AS (
+                SELECT
+                  id,
+                  resourceId,
+                  title,
+                  metadata,
+                  toDateTime64(createdAt, 3) as createdAt,
+                  toDateTime64(updatedAt, 3) as updatedAt,
+                  ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
+                FROM ${TABLE_THREADS}
+                WHERE resourceId = {resourceId:String}
+              )
               SELECT
                 id,
                 resourceId,
                 title,
                 metadata,
-                toDateTime64(createdAt, 3) as createdAt,
-                toDateTime64(updatedAt, 3) as updatedAt
-              FROM ${TABLE_THREADS} FINAL
-              WHERE resourceId = {resourceId:String}
+                createdAt,
+                updatedAt
+              FROM ranked_threads
+              WHERE row_num = 1
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
