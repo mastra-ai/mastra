@@ -64,3 +64,21 @@ interface Options {
 // Spreading
 const options = { requestContext, other: 'value' };
 await agent.generate('test', { ...options });
+
+const mastra = new Mastra({
+  server: {
+    middleware: [
+      {
+        handler: async (c, next) => {
+          const requestContext = c.get('requestContext');
+          const userId = 'unique-user-id';
+
+          requestContext.set('userId', userId);
+
+          return next();
+        },
+        path: '/api/*',
+      },
+    ],
+  },
+});
