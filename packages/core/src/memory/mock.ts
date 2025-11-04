@@ -47,11 +47,11 @@ export class MockMemory extends MastraMemory {
     config?: MemoryConfig;
   }): Promise<{ messages: MastraDBMessage[] }> {
     // Query all messages from storage and return them
-    const getMessagesArgs: StorageListMessagesInput = { threadId: args.threadId };
+    const listMessagesArgs: StorageListMessagesInput = { threadId: args.threadId };
     if (args.resourceId !== undefined) {
-      getMessagesArgs.resourceId = args.resourceId;
+      listMessagesArgs.resourceId = args.resourceId;
     }
-    const result = await this.storage.listMessages(getMessagesArgs);
+    const result = await this.storage.listMessages(listMessagesArgs);
     return { messages: result.messages };
   }
 

@@ -7,7 +7,6 @@ import {
   deleteThreadHandler,
   getMemoryStatusHandler,
   getMemoryConfigHandler,
-  getMessagesHandler,
   listMessagesHandler,
   getThreadByIdHandler,
   listThreadsHandler,
@@ -143,14 +142,17 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
   router.get(
     '/network/threads/:threadId/messages',
     describeRoute({
-      description: 'Get messages for a thread',
+      description: 'Get paginated messages for a thread',
       tags: ['networkMemory'],
       parameters: [
         {
           name: 'threadId',
           in: 'path',
           required: true,
-          schema: { type: 'string' },
+          description: 'The unique identifier of the thread',
+          schema: {
+            type: 'string',
+          },
         },
         {
           name: 'networkId',
@@ -159,20 +161,76 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           schema: { type: 'string' },
         },
         {
-          name: 'limit',
+          name: 'resourceId',
           in: 'query',
           required: false,
-          schema: { type: 'number' },
-          description: 'Limit the number of messages to retrieve (default: 40)',
+          description: 'Filter messages by resource ID',
+          schema: {
+            type: 'string',
+          },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          description: 'Zero-indexed page number for pagination (default: 0)',
+          schema: {
+            type: 'integer',
+            minimum: 0,
+            default: 0,
+          },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          description: 'Number of items per page, or "false" to fetch all records (default: 40)',
+          schema: {
+            oneOf: [
+              { type: 'integer', minimum: 0 },
+              { type: 'boolean', enum: [false] },
+            ],
+            default: 40,
+          },
+        },
+        {
+          name: 'orderBy',
+          in: 'query',
+          required: false,
+          description: 'JSON string specifying sort order',
+          schema: {
+            type: 'string',
+            example: '{"field":"createdAt","direction":"DESC"}',
+          },
+        },
+        {
+          name: 'include',
+          in: 'query',
+          required: false,
+          description: 'JSON string specifying messages to include with context',
+          schema: {
+            type: 'string',
+            example: '[{"id":"msg-123","withPreviousMessages":5,"withNextMessages":3}]',
+          },
+        },
+        {
+          name: 'filter',
+          in: 'query',
+          required: false,
+          description: 'JSON string specifying filter criteria',
+          schema: {
+            type: 'string',
+            example: '{"dateRange":{"start":"2024-01-01T00:00:00Z","end":"2024-12-31T23:59:59Z"}}',
+          },
         },
       ],
       responses: {
         200: {
-          description: 'List of messages',
+          description: 'Paginated list of messages with metadata',
         },
       },
     }),
-    getMessagesHandler,
+    listMessagesHandler,
   );
 
   router.post(
@@ -640,51 +698,6 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
 
   router.get(
     '/threads/:threadId/messages',
-    async (c, next) => {
-      c.header('Deprecation', 'true');
-      c.header(
-        'Warning',
-        '299 - "This endpoint is deprecated, use /api/memory/threads/:threadId/messages/paginated instead"',
-      );
-      c.header('Link', '</api/memory/threads/:threadId/messages/paginated>; rel="successor-version"');
-      return next();
-    },
-    describeRoute({
-      description: 'Get messages for a thread',
-      tags: ['memory'],
-      parameters: [
-        {
-          name: 'threadId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'agentId',
-          in: 'query',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'limit',
-          in: 'query',
-          required: false,
-          schema: { type: 'number' },
-          description: 'Limit the number of messages to retrieve (default: 40)',
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of messages',
-        },
-      },
-    }),
-    getMessagesHandler,
-  );
-
-  // @TODO: Temporary api as we inform users that we are deprecating the original /api/memory/threads/:threadId/messages api.
-  router.get(
-    '/threads/:threadId/messages/paginated',
     describeRoute({
       description: 'Get paginated messages for a thread',
       tags: ['memory'],

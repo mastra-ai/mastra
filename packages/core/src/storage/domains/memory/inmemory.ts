@@ -318,17 +318,13 @@ export class InMemoryMemory extends MemoryStorage {
     } satisfies MastraDBMessage;
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    this.logger.debug(`MockStore: getMessagesById called`);
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    this.logger.debug(`MockStore: listMessagesById called`);
 
     const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
 
     const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
     return { messages: list.get.all.db() };
-  }
-
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.getMessagesById({ messageIds });
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

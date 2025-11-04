@@ -347,47 +347,6 @@ export async function listMessagesHandler({
   }
 }
 
-export async function getMessagesHandler({
-  mastra,
-  agentId,
-  threadId,
-  limit,
-  requestContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
-  limit?: number;
-}) {
-  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
-    throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
-  }
-  try {
-    validateBody({ threadId });
-
-    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
-
-    if (!memory) {
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
-    }
-
-    if (!threadId) {
-      throw new HTTPException(400, { message: 'No threadId found' });
-    }
-
-    const thread = await memory.getThreadById({ threadId: threadId });
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
-
-    const result = await memory.query({
-      threadId: threadId,
-      ...(limit && { selectBy: { last: limit } }),
-    });
-    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
-    return { messages: result.messages, uiMessages };
-  } catch (error) {
-    return handleError(error, 'Error getting messages');
-  }
-}
-
 /**
  * Handler to get the working memory for a thread (optionally resource-scoped).
  * @returns workingMemory - the working memory for the thread

@@ -282,23 +282,21 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
       const { messages: crossThreadMessages } = await storage.listMessages({
         threadId: thread.id,
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[1]!.id,
-              threadId: thread.id,
-              withNextMessages: 2,
-              withPreviousMessages: 2,
-            },
-            {
-              id: messages[4]!.id,
-              threadId: thread2.id,
-              withPreviousMessages: 2,
-              withNextMessages: 2,
-            },
-          ],
-        },
+        perPage: 0,
+        include: [
+          {
+            id: messages[1]!.id,
+            threadId: thread.id,
+            withNextMessages: 2,
+            withPreviousMessages: 2,
+          },
+          {
+            id: messages[4]!.id,
+            threadId: thread2.id,
+            withPreviousMessages: 2,
+            withNextMessages: 2,
+          },
+        ],
       });
 
       expect(crossThreadMessages).toHaveLength(6);
@@ -307,17 +305,15 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
       const { messages: crossThreadMessages2 } = await storage.listMessages({
         threadId: thread.id,
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[4]!.id,
-              threadId: thread2.id,
-              withPreviousMessages: 1,
-              withNextMessages: 30,
-            },
-          ],
-        },
+        perPage: 0,
+        include: [
+          {
+            id: messages[4]!.id,
+            threadId: thread2.id,
+            withPreviousMessages: 1,
+            withNextMessages: 30,
+          },
+        ],
       });
 
       expect(crossThreadMessages2).toHaveLength(3);
@@ -326,17 +322,15 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
       const { messages: crossThreadMessages3 } = await storage.listMessages({
         threadId: thread2.id,
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[1]!.id,
-              threadId: thread.id,
-              withNextMessages: 1,
-              withPreviousMessages: 1,
-            },
-          ],
-        },
+        perPage: 0,
+        include: [
+          {
+            id: messages[1]!.id,
+            threadId: thread.id,
+            withNextMessages: 1,
+            withPreviousMessages: 1,
+          },
+        ],
       });
 
       expect(crossThreadMessages3).toHaveLength(3);

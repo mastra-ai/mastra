@@ -14,7 +14,6 @@ import {
   createThreadHandler as getOriginalCreateThreadHandler,
   updateThreadHandler as getOriginalUpdateThreadHandler,
   deleteThreadHandler as getOriginalDeleteThreadHandler,
-  getMessagesHandler as getOriginalGetMessagesHandler,
   listMessagesHandler as getOriginalListMessagesHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
@@ -220,28 +219,6 @@ export async function deleteThreadHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error deleting thread');
-  }
-}
-
-export async function getMessagesHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const agentId = c.req.query('agentId');
-    const threadId = c.req.param('threadId');
-    const limit = parseLimit(c.req.query('limit'));
-    const requestContext = c.get('requestContext');
-
-    const result = await getOriginalGetMessagesHandler({
-      mastra,
-      agentId,
-      threadId,
-      limit,
-      requestContext,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error getting messages');
   }
 }
 
