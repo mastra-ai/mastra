@@ -20,6 +20,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./init": {
+      "import": {
+        "types": "./dist/init.d.ts",
+        "default": "./dist/init.js"
+      },
+      "require": {
+        "types": "./dist/init.d.ts",
+        "default": "./dist/init.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

@@ -1,7 +1,7 @@
 {
-  "name": "@observability/_test-utils",
+  "name": "@observability/_test-without-config",
   "version": "0.0.1",
-  "description": "Test utilities for observability exporters",
+  "description": "Tests observability init without an observability config",
   "type": "module",
   "private": true,
   "files": [],
@@ -9,7 +9,8 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "@mastra/observability": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.18.1-0 <2.0.0-0"

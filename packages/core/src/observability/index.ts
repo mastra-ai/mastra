@@ -23,19 +23,15 @@ export function getObservabilityInit(): InitObservabilityFunction | undefined {
 }
 
 export function initObservability(options: InitObservabilityOptions): ObservabilityEntrypoint {
-  if (!options.config) {
+  const init = getObservabilityInit();
+  if (!init) {
+    options.logger?.warn?.(
+      '[Mastra Observability] Observability config provided but no init registered. ' +
+        "To enable observability install '@mastra/observability' and " +
+        "import '@mastra/observability/init' at startup. Falling back to No-Op.",
+    );
     return new NoOpEntrypoint();
   } else {
-    const init = getObservabilityInit();
-    if (!init) {
-      options.logger?.warn?.(
-        '[Mastra Observability] Observability config provided but no init registered. ' +
-          "To enable observability install '@mastra/observability' and " +
-          "import '@mastra/observability/init' at startup. Falling back to No-Op.",
-      );
-      return new NoOpEntrypoint();
-    } else {
-      return init(options);
-    }
+    return init(options);
   }
 }

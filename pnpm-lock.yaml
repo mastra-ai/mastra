@@ -777,6 +777,24 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
 
+  observability/_test-without-config:
+    devDependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
+
+  observability/_test-without-init:
+    devDependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
+
   observability/arize:
     dependencies:
       '@arizeai/openinference-genai':
