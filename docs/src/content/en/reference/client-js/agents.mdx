@@ -15,6 +15,8 @@ Retrieve a list of all available agents:
 const agents = await mastraClient.listAgents();
 ```
 
+Returns a record of agent IDs to their serialized agent configurations. See the [Agent class reference](/reference/agents/agent) for details on agent properties.
+
 ## Working with a Specific Agent
 
 Get an instance of a specific agent:
@@ -32,6 +34,8 @@ Retrieve detailed information about an agent:
 ```typescript
 const details = await agent.details();
 ```
+
+Returns the serialized agent configuration. See the [Agent class reference](/reference/agents/agent) for details on agent properties.
 
 ### Generate Response
 

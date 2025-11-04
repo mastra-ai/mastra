@@ -111,6 +111,21 @@ export class MemoryPG extends MemoryStorage {
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+
+    // Validate page parameter
+    if (page < 0) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PG_STORE_INVALID_PAGE',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Page number must be non-negative',
+        details: {
+          resourceId,
+          page,
+        },
+      });
+    }
+
     const { field, direction } = this.parseOrderBy(orderBy);
     const perPage = normalizePerPage(perPageInput, 100);
     try {
@@ -542,6 +557,20 @@ export class MemoryPG extends MemoryStorage {
         },
         new Error('threadId must be a non-empty string'),
       );
+    }
+
+    // Validate page parameter
+    if (page < 0) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_PG_STORE_INVALID_PAGE',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Page number must be non-negative',
+        details: {
+          threadId,
+          page,
+        },
+      });
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
