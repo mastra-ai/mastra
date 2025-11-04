@@ -1,0 +1,78 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* =====================================================================
+   COLOR MAPPING: Docusaurus → Nextra (globals.css)
+   =====================================================================
+
+   This mapping shows how Docusaurus variables correspond to the
+   Nextra docs colors from globals.css
+
+   LIGHT MODE MAPPINGS:
+   =====================================================================
+
+   GREEN ACCENTS:
+   --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
+   --mastra-green-accent-2       → --light-green-accent-2: hsla(125, 66%, 50%, 1)
+   --mastra-green-muted          → --light-green-muted: #84d291
+   --mastra-green-code           → --light-green-code: #177326
+   --ifm-color-primary           → --light-green-accent: #0d8020
+
+   TEXT COLORS (darkest to lightest):
+   --mastra-text-primary         → --light-color-text-6: #0a0a0a
+   --mastra-text-secondary       → --light-color-text-5: #141414
+   --mastra-text-tertiary        → --light-color-text-4: #5f5f5f
+   --mastra-text-quaternary      → --light-color-text-3: #7f7e7e
+   --mastra-text-muted           → --light-color-text-2: #8f8f8f
+   --mastra-text-muted-2         → --light-color-text-1: #929292
+
+   SURFACE/BACKGROUND COLORS:
+   --ifm-background-color        → --light-color-surface-15: #fafafa
+   --mastra-surface-1            → --light-color-surface-1: #f0f0f0
+   --mastra-surface-2            → --light-color-surface-2: #f2f2f2
+   --mastra-surface-3            → --light-color-surface-3: #ededed
+   --mastra-surface-4            → --light-color-surface-4: #ebebeb
+   --mastra-surface-5            → --light-color-surface-5: hsla(0, 0%, 88%, 0.9)
+
+   BORDER COLORS:
+   --border                      → --light-border-muted: #ccc
+   --border-subtle               → --border: hsla(0, 0%, 80%, 1)
+   --border-code                 → --light-border-code: #b8b8b8
+   --border-secondary            → --border-2: hsla(0, 0%, 72%, 1)
+
+   =====================================================================
+
+   DARK MODE MAPPINGS:
+   =====================================================================
+
+   GREEN ACCENTS:
+   --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
+   --mastra-green-accent-2       → hsla(125, 66%, 50%, 1)
+   --ifm-color-primary           → hsl(143, 97%, 54%)
+
+   TEXT COLORS (lightest to darkest):
+   --mastra-text-primary         → --color-primary: #ffffff
+   --mastra-text-secondary       → --color-el-4: #e6e6e6
+   --mastra-text-tertiary        → --color-el-3: #939393
+   --mastra-text-quaternary      → --color-el-2: #707070
+
+   SURFACE/BACKGROUND COLORS:
+   --ifm-background-color        → --primary-bg: #050505
+   --ifm-background-surface      → --secondary-bg: #121212
+   --ifm-code-background         → --tertiary-bg: #171717
+   --mastra-surface-1            → --color-surface-3: hsla(0, 0%, 8%, 1)
+   --mastra-surface-2            → --color-surface-4: hsla(0, 0%, 10%, 1)
+   --mastra-surface-3            → #121212
+   --mastra-surface-4            → #171717
+   --mastra-surface-5            → --color-surface-5: hsla(0, 0%, 18%, 0.9)
+
+   BORDER COLORS:
+   --mastra-border               → --border: #343434
+   --mastra-border-subtle        → --color-borders-1: hsla(0, 0%, 19%, 1)
+   --mastra-border-code          → --color-borders-2: hsla(0, 0%, 26%, 1)
+
+   =====================================================================
+*/

@@ -12,7 +12,7 @@ import "dotenv/config";
 const config = {
   title: "Mastra Documentation",
   tagline: "TypeScript agent framework",
-  favicon: "favicon.ico",
+  favicon: "/favicon.ico",
 
   // Set the production url of your site here
   url: "https://mastra.ai",
@@ -66,21 +66,13 @@ const config = {
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
   },
 
-  // Preconnect to Google Fonts
   headTags: [
+    // Block Google Fonts using Content Security Policy
     {
-      tagName: "link",
+      tagName: "meta",
       attributes: {
-        rel: "preconnect",
-        href: "https://fonts.googleapis.com",
-      },
-    },
-    {
-      tagName: "link",
-      attributes: {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossorigin: "anonymous",
+        "http-equiv": "Content-Security-Policy",
+        content: "font-src 'self' data:;",
       },
     },
   ],
