@@ -6,8 +6,10 @@ import { toAISdkV5Stream } from './convert-streams';
 
 type WorkflowRouteBody = {
   inputData?: Record<string, any>;
+  resumeData?: Record<string, any>;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  step?: string;
 };
 
 export type WorkflowRouteOptions =
@@ -64,7 +66,7 @@ export function workflowRoute({
       },
     },
     handler: async c => {
-      const { inputData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
+      const { inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
       const mastra = c.get('mastra');
 
       let workflowToUse: string | undefined = workflow;
@@ -90,7 +92,8 @@ export function workflowRoute({
       }
 
       const run = await workflowObj.createRun();
-      const stream = run.streamVNext({ inputData, ...rest });
+
+      const stream = resumeData ? run.resumeStream({ resumeData, ...rest }) : run.stream({ inputData, ...rest });
 
       const uiMessageStream = createUIMessageStream({
         execute: async ({ writer }) => {
