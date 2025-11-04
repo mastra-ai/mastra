@@ -4,6 +4,7 @@ packages:
   - stores/*
   - voice/*
   - workflows/*
+  - server-adapters/*
   - pubsub/*
   - client-sdks/*
   - integrations/*

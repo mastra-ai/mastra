@@ -40,6 +40,16 @@
         "default": "./dist/server/handlers/*.cjs"
       }
     },
+    "./server-adapter": {
+      "import": {
+        "types": "./dist/server/server-adapter/index.d.ts",
+        "default": "./dist/server/server-adapter/index.js"
+      },
+      "require": {
+        "types": "./dist/server/server-adapter/index.d.ts",
+        "default": "./dist/server/server-adapter/index.cjs"
+      }
+    },
     "./a2a/store": {
       "import": {
         "types": "./dist/server/a2a/store.d.ts",
