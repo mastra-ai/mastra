@@ -2,6 +2,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
 
+export * from './routes';
+
 export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
   protected mastra: Mastra;
 

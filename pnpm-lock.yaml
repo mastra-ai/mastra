@@ -2875,13 +2875,13 @@ importers:
         version: 5.2.0
       '@inngest/realtime':
         specifier: ^0.4.4
-        version: 0.4.4(encoding@0.1.13)(express@5.1.0)(hono@4.10.1)(react@19.2.0)(typescript@5.9.3)
+        version: 0.4.4(encoding@0.1.13)(express@5.1.0)(hono@4.10.4)(react@19.2.0)(typescript@5.9.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
       inngest:
         specifier: ^3.44.2
-        version: 3.44.3(encoding@0.1.13)(express@5.1.0)(hono@4.10.1)(typescript@5.9.3)(zod@3.25.76)
+        version: 3.44.3(encoding@0.1.13)(express@5.1.0)(hono@4.10.4)(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2968,6 +2968,67 @@ importers:
       express:
         specifier: ^5.1.0
         version: 5.1.0
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+
+  server-adapters/hono:
+    dependencies:
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+      '@types/express':
+        specifier: ^5.0.5
+        version: 5.0.5
+      express:
+        specifier: ^5.1.0
+        version: 5.1.0
+    devDependencies:
+      '@ai-sdk/openai':
+        specifier: ^2.0.62
+        version: 2.0.62(zod@3.25.76)
+      '@hono/node-server':
+        specifier: ^1.19.6
+        version: 1.19.6(hono@4.10.4)
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
+      '@internal/storage-test-utils':
+        specifier: workspace:*
+        version: link:../../stores/_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
+      '@types/node':
+        specifier: ^20.19.21
+        version: 20.19.23
+      eslint:
+        specifier: ^9.37.0
+        version: 9.38.0(jiti@2.6.1)
+      hono:
+        specifier: ^4.10.4
+        version: 4.10.4
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -6589,6 +6650,12 @@ packages:
 
   '@hono/node-server@1.19.5':
     resolution: {integrity: sha512-iBuhh+uaaggeAuf+TftcjZyWh2GEgZcVGXkNtskLVoWaXhnJtC5HLHrU8W1KHDoucqO1MswwglmkWLFyiDn4WQ==}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
+
+  '@hono/node-server@1.19.6':
+    resolution: {integrity: sha512-Shz/KjlIeAhfiuE93NDKVdZ7HdBVLQAfdbaXEaoAVO3ic9ibRSLGIQGkcBbFyuLr+7/1D5ZCINM8B+6IvXeMtw==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -12706,6 +12773,10 @@ packages:
 
   hono@4.10.1:
     resolution: {integrity: sha512-rpGNOfacO4WEPClfkEt1yfl8cbu10uB1lNpiI33AKoiAHwOS8lV748JiLx4b5ozO/u4qLjIvfpFsPXdY5Qjkmg==}
+    engines: {node: '>=16.9.0'}
+
+  hono@4.10.4:
+    resolution: {integrity: sha512-YG/fo7zlU3KwrBL5vDpWKisLYiM+nVstBQqfr7gCPbSYURnNEP9BDxEMz8KfsDR9JX0lJWDRNc6nXX31v7ZEyg==}
     engines: {node: '>=16.9.0'}
 
   hpagent@1.2.0:
@@ -19885,6 +19956,10 @@ snapshots:
     dependencies:
       hono: 4.10.1
 
+  '@hono/node-server@1.19.6(hono@4.10.4)':
+    dependencies:
+      hono: 4.10.4
+
   '@hono/swagger-ui@0.5.2(hono@4.10.1)':
     dependencies:
       hono: 4.10.1
@@ -19995,6 +20070,27 @@ snapshots:
       '@standard-schema/spec': 1.0.0
       debug: 4.4.3
       inngest: 3.44.3(encoding@0.1.13)(express@5.1.0)(hono@4.10.1)(typescript@5.9.3)(zod@3.25.76)
+      react: 19.2.0
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@sveltejs/kit'
+      - '@vercel/node'
+      - aws-lambda
+      - encoding
+      - express
+      - fastify
+      - h3
+      - hono
+      - koa
+      - next
+      - supports-color
+      - typescript
+
+  '@inngest/realtime@0.4.4(encoding@0.1.13)(express@5.1.0)(hono@4.10.4)(react@19.2.0)(typescript@5.9.3)':
+    dependencies:
+      '@standard-schema/spec': 1.0.0
+      debug: 4.4.3
+      inngest: 3.44.3(encoding@0.1.13)(express@5.1.0)(hono@4.10.4)(typescript@5.9.3)(zod@3.25.76)
       react: 19.2.0
       zod: 3.25.76
     transitivePeerDependencies:
@@ -20527,8 +20623,8 @@ snapshots:
       ai-v5: ai@5.0.76(zod@3.25.76)
       date-fns: 3.6.0
       dotenv: 16.6.1
-      hono: 4.10.1
-      hono-openapi: 0.4.8(hono@4.10.1)(openapi-types@12.1.3)(zod@3.25.76)
+      hono: 4.10.4
+      hono-openapi: 0.4.8(hono@4.10.4)(openapi-types@12.1.3)(zod@3.25.76)
       js-tiktoken: 1.0.21
       json-schema: 0.4.0
       json-schema-to-zod: 2.6.1
@@ -27412,7 +27508,17 @@ snapshots:
       hono: 4.10.1
       zod: 3.25.76
 
+  hono-openapi@0.4.8(hono@4.10.4)(openapi-types@12.1.3)(zod@3.25.76):
+    dependencies:
+      json-schema-walker: 2.0.0
+      openapi-types: 12.1.3
+    optionalDependencies:
+      hono: 4.10.4
+      zod: 3.25.76
+
   hono@4.10.1: {}
+
+  hono@4.10.4: {}
 
   hpagent@1.2.0: {}
 
@@ -27603,6 +27709,39 @@ snapshots:
     optionalDependencies:
       express: 5.1.0
       hono: 4.10.1
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
+  inngest@3.44.3(encoding@0.1.13)(express@5.1.0)(hono@4.10.4)(typescript@5.9.3)(zod@3.25.76):
+    dependencies:
+      '@bufbuild/protobuf': 2.10.0
+      '@inngest/ai': 0.1.7
+      '@jpwilliams/waitgroup': 2.1.1
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/auto-instrumentations-node': 0.56.1(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/context-async-hooks': 1.30.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-http': 0.57.2(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resources': 1.30.1(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-base': 1.30.1(@opentelemetry/api@1.9.0)
+      '@standard-schema/spec': 1.0.0
+      '@types/debug': 4.1.12
+      canonicalize: 1.0.8
+      chalk: 4.1.2
+      cross-fetch: 4.1.0(encoding@0.1.13)
+      debug: 4.4.3
+      hash.js: 1.1.7
+      json-stringify-safe: 5.0.1
+      ms: 2.1.3
+      serialize-error-cjs: 0.1.4
+      strip-ansi: 5.2.0
+      temporal-polyfill: 0.2.5
+      zod: 3.25.76
+    optionalDependencies:
+      express: 5.1.0
+      hono: 4.10.4
       typescript: 5.9.3
     transitivePeerDependencies:
       - encoding
