@@ -289,8 +289,10 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     it('Should be able to get lazy loaded tools', async () => {
       const agent = await fetch(`http://localhost:${port}/api/agents/test`);
       const agentJson = await agent.json();
+      console.log('Agent JSON:', JSON.stringify(agentJson, null, 2));
       const tools = agentJson.tools;
 
+      expect(tools).toBeDefined();
       expect(tools).toHaveProperty('weather_fetchWeather');
       expect(Object.keys(tools).length).toBe(5);
     });
