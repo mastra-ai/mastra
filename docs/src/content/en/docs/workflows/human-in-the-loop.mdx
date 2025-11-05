@@ -5,7 +5,7 @@ description: "Human-in-the-loop workflows in Mastra allow you to pause execution
 
 # Human-in-the-loop
 
-Some workflows need to pause for a human decision before continuing. When a workflow is [suspended](/docs/workflows/suspend-and-resume#pausing-a-workflow-with-suspend), feedback can be sent to the user, allowing them to review, approve, or modify the next step. The workflow [resumes](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume) only once input is received, making this pattern ideal for gated decisions, manual approvals, or any step requiring human oversight.
+Some workflows need to pause for a human decision before continuing. When a workflow is [suspended](/docs/workflows/suspend-and-resume#pausing-a-workflow-with-suspend), it can include a message explaining why it paused. The workflow [resumes](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume) only after input is received. You can use this approach for manual approvals, gated decisions, or any step that requires human oversight.
 
 ## Requesting human approval with `suspend()`
 
