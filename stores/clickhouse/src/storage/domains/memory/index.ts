@@ -23,6 +23,36 @@ import {
 import type { StoreOperationsClickhouse } from '../operations';
 import { transformRow, transformRows } from '../utils';
 
+/**
+ * Serialize metadata object to JSON string for storage in ClickHouse.
+ * Ensures we always store valid JSON, defaulting to '{}' for null/undefined.
+ */
+function serializeMetadata(metadata: Record<string, unknown> | undefined): string {
+  if (!metadata || Object.keys(metadata).length === 0) {
+    return '{}';
+  }
+  return JSON.stringify(metadata);
+}
+
+/**
+ * Parse metadata JSON string from ClickHouse back to object.
+ * Handles empty strings and malformed JSON gracefully.
+ */
+function parseMetadata(metadata: unknown): Record<string, unknown> {
+  if (!metadata) return {};
+  if (typeof metadata === 'object') return metadata as Record<string, unknown>;
+  if (typeof metadata !== 'string') return {};
+
+  const trimmed = metadata.trim();
+  if (trimmed === '' || trimmed === 'null') return {};
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return {};
+  }
+}
+
 export class MemoryStorageClickhouse extends MemoryStorage {
   protected client: ClickHouseClient;
   protected operations: StoreOperationsClickhouse;
@@ -682,11 +712,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             id: thread.id,
             resourceId: thread.resourceId,
             title: thread.title,
-            // Ensure metadata is always a valid JSON string, default to '{}'
-            metadata:
-              thread.metadata && typeof thread.metadata === 'object'
-                ? JSON.stringify(thread.metadata)
-                : thread.metadata || '{}',
+            metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt,
             updatedAt: new Date().toISOString(),
           })),
@@ -744,19 +770,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         return null;
       }
 
-      // Safely parse metadata, defaulting to {} for empty/invalid values
-      let parsedMetadata: Record<string, unknown> = {};
-      const metadataValue = thread.metadata as any;
-      if (typeof metadataValue === 'string') {
-        const trimmed = metadataValue.trim();
-        parsedMetadata = trimmed === '' ? {} : JSON.parse(trimmed);
-      } else if (metadataValue && typeof metadataValue === 'object') {
-        parsedMetadata = metadataValue;
-      }
-
       return {
         ...thread,
-        metadata: parsedMetadata,
+        metadata: parseMetadata(thread.metadata),
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
       };
@@ -782,11 +798,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         values: [
           {
             ...thread,
-            // Ensure metadata is always a valid JSON string, default to '{}'
-            metadata:
-              thread.metadata && typeof thread.metadata === 'object'
-                ? JSON.stringify(thread.metadata)
-                : thread.metadata || '{}',
+            metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt.toISOString(),
             updatedAt: thread.updatedAt.toISOString(),
           },
@@ -851,11 +863,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             id: updatedThread.id,
             resourceId: updatedThread.resourceId,
             title: updatedThread.title,
-            // Ensure metadata is always a valid JSON string, default to '{}'
-            metadata:
-              updatedThread.metadata && typeof updatedThread.metadata === 'object'
-                ? JSON.stringify(updatedThread.metadata)
-                : updatedThread.metadata || '{}',
+            metadata: serializeMetadata(updatedThread.metadata),
             createdAt: updatedThread.createdAt,
             updatedAt: updatedThread.updatedAt.toISOString(),
           },
@@ -1001,21 +1009,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const rows = await dataResult.json();
-      const threads = transformRows<StorageThreadType>(rows.data).map(thread => {
-        // Safely parse metadata, defaulting to {} for empty/invalid values
-        let parsedMetadata: Record<string, unknown> = {};
-        const metadataValue = thread.metadata as any;
-        if (typeof metadataValue === 'string') {
-          const trimmed = metadataValue.trim();
-          parsedMetadata = trimmed === '' ? {} : JSON.parse(trimmed);
-        } else if (metadataValue && typeof metadataValue === 'object') {
-          parsedMetadata = metadataValue;
-        }
-        return {
-          ...thread,
-          metadata: parsedMetadata,
-        };
-      });
+      const threads = transformRows<StorageThreadType>(rows.data).map(thread => ({
+        ...thread,
+        metadata: parseMetadata(thread.metadata),
+      }));
 
       return {
         threads,
@@ -1226,6 +1223,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             }
 
             if (needsRetry) {
+              console.info('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
               // Use DELETE + INSERT as fallback
               await this.client.command({
                 query: `DELETE FROM ${TABLE_MESSAGES} WHERE id = {messageId:String}`,
@@ -1333,13 +1331,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   id: existingThread.id,
                   resourceId: existingThread.resourceId,
                   title: existingThread.title,
-                  // Ensure metadata is always a valid JSON string, default to '{}'
                   metadata:
-                    existingThread.metadata && typeof existingThread.metadata === 'string'
-                      ? existingThread.metadata || '{}'
-                      : typeof existingThread.metadata === 'object'
-                        ? JSON.stringify(existingThread.metadata)
-                        : '{}',
+                    typeof existingThread.metadata === 'string'
+                      ? existingThread.metadata
+                      : serializeMetadata(existingThread.metadata as Record<string, unknown>),
                   createdAt: existingThread.createdAt,
                   updatedAt: now,
                 },
