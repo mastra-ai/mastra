@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import { convertMessages, type MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { StorageListMessagesInput, StorageOrderBy } from '@mastra/core/storage';
@@ -308,6 +308,7 @@ export async function deleteThreadHandler({
 
 export async function listMessagesHandler({
   mastra,
+  agentId,
   threadId,
   resourceId,
   perPage,
@@ -315,24 +316,29 @@ export async function listMessagesHandler({
   orderBy,
   include,
   filter,
-}: Pick<MemoryContext, 'mastra'> & StorageListMessagesInput) {
+  requestContext,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> &
+  Omit<StorageListMessagesInput, 'threadId'>) {
   try {
     validateBody({ threadId });
 
-    const storage = mastra.getStorage();
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
-    if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
+    if (!memory) {
+      throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    const thread = await storage.getThreadById({ threadId: threadId! });
+    if (!threadId) {
+      throw new HTTPException(400, { message: 'No threadId found' });
+    }
 
+    const thread = await memory.getThreadById({ threadId: threadId });
     if (!thread) {
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await storage.listMessages({
-      threadId: threadId!,
+    const result = await memory.recall({
+      threadId: threadId,
       resourceId,
       perPage,
       page,

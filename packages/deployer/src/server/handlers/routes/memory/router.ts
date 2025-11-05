@@ -161,6 +161,15 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           schema: { type: 'string' },
         },
         {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          description: 'The unique identifier of the agent',
+          schema: {
+            type: 'string',
+          },
+        },
+        {
           name: 'resourceId',
           in: 'query',
           required: false,
@@ -707,6 +716,15 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
           in: 'path',
           required: true,
           description: 'The unique identifier of the thread',
+          schema: {
+            type: 'string',
+          },
+        },
+        {
+          name: 'agentId',
+          in: 'query',
+          required: true,
+          description: 'The unique identifier of the agent',
           schema: {
             type: 'string',
           },
