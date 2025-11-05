@@ -1,15 +1,15 @@
-import type { AITracingEvent, AITracingExporter } from '@mastra/core/observability';
-import { AISpanType, SamplingStrategyType } from '@mastra/core/observability';
+import type { TracingEvent, ObservabilityExporter } from '@mastra/core/observability';
+import { SpanType, SamplingStrategyType } from '@mastra/core/observability';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DefaultAITracing } from '../tracers';
+import { DefaultObservabilityInstance } from '../instances';
 import { SensitiveDataFilter } from './sensitive-data-filter';
 
 // Test exporter for capturing events
-class TestExporter implements AITracingExporter {
+class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
-  events: AITracingEvent[] = [];
+  events: TracingEvent[] = [];
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
+  async exportTracingEvent(event: TracingEvent): Promise<void> {
     this.events.push(event);
   }
 
@@ -22,7 +22,7 @@ class TestExporter implements AITracingExporter {
   }
 }
 
-describe('AI Tracing', () => {
+describe('Tracing', () => {
   let testExporter: TestExporter;
 
   beforeEach(() => {
@@ -40,7 +40,7 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
@@ -54,7 +54,7 @@ describe('AI Tracing', () => {
             sessionId: 'session-789', // Should NOT be redacted (sessionId doesn't match sensitive patterns)
             normalField: 'visible-data', // Should NOT be redacted
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -85,7 +85,7 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_GENERATION,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
@@ -105,7 +105,7 @@ describe('AI Tracing', () => {
             monkey: 'business', // Should NOT be redacted (normalizes to "monkey", not "key")
             key: 'secret', // Should be redacted (normalizes to "key")
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -146,7 +146,7 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
@@ -157,7 +157,7 @@ describe('AI Tracing', () => {
             InternalId: 'should-be-hidden', // In custom list (case insensitive)
             publicData: 'visible-data',
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -183,7 +183,7 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_GENERATION,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
@@ -207,7 +207,7 @@ describe('AI Tracing', () => {
               { id: 2, password: 'array-password', value: 42 }, // Should redact 'password' in array
             ],
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -247,12 +247,12 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
           attributes: circularObj,
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -284,7 +284,7 @@ describe('AI Tracing', () => {
         const mockSpan = {
           id: 'test-span-1',
           name: 'test-span',
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           startTime: new Date(),
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
@@ -293,7 +293,7 @@ describe('AI Tracing', () => {
             sensitiveData: 'this-should-not-be-visible',
             problematicObject: problematic,
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -315,16 +315,16 @@ describe('AI Tracing', () => {
 
     describe('as part of the default config', () => {
       it('should automatically filter sensitive data in default tracing', () => {
-        const tracing = new DefaultAITracing({
+        const tracing = new DefaultObservabilityInstance({
           serviceName: 'test-tracing',
           name: 'test-instance',
           sampling: { type: SamplingStrategyType.ALWAYS },
           exporters: [testExporter],
-          processors: [new SensitiveDataFilter()],
+          spanOutputProcessors: [new SensitiveDataFilter()],
         });
 
         const span = tracing.startSpan({
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           name: 'test-agent',
           attributes: {
             agentId: 'agent-123',

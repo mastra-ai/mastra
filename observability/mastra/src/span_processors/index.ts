@@ -1,5 +1,5 @@
 /**
- * Mastra AI Span Processors
+ * Mastra Span Processors
  */
 
 export * from './sensitive-data-filter';

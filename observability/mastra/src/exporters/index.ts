@@ -1,5 +1,5 @@
 /**
- * Mastra AI Tracing Exporters
+ * Mastra Tracing Exporters
  */
 
 // Base exporter classes and types

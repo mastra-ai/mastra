@@ -1,4 +1,4 @@
-import type { AISpan, AISpanType, GetOrCreateSpanOptions } from './types';
+import type { Span, SpanType, GetOrCreateSpanOptions } from './types';
 
 /**
  * Creates or gets a child span from existing tracing context or starts a new trace.
@@ -7,9 +7,9 @@ import type { AISpan, AISpanType, GetOrCreateSpanOptions } from './types';
  * 2. New root spans (when no current span exists)
  *
  * @param options - Configuration object for span creation
- * @returns The created AI span or undefined if tracing is disabled
+ * @returns The created Span or undefined if tracing is disabled
  */
-export function getOrCreateSpan<T extends AISpanType>(options: GetOrCreateSpanOptions<T>): AISpan<T> | undefined {
+export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOptions<T>): Span<T> | undefined {
   const { type, attributes, tracingContext, requestContext, tracingOptions, ...rest } = options;
 
   const metadata = {
@@ -28,9 +28,9 @@ export function getOrCreateSpan<T extends AISpanType>(options: GetOrCreateSpanOp
   }
 
   // Otherwise, try to create a new root span
-  const aiTracing = options.mastra?.observability.getSelectedObservability({ requestContext });
+  const instance = options.mastra?.observability?.getSelectedInstance({ requestContext });
 
-  return aiTracing?.startSpan<T>({
+  return instance?.startSpan<T>({
     type,
     attributes,
     ...rest,

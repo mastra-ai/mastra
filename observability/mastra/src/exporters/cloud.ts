@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LogLevel } from '@mastra/core/logger';
-import { AITracingEventType } from '@mastra/core/observability';
-import type { AITracingEvent, AnyExportedAISpan } from '@mastra/core/observability';
+import { TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan } from '@mastra/core/observability';
 import { fetchWithRetry } from '@mastra/core/utils';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
@@ -13,7 +13,7 @@ export interface CloudExporterConfig extends BaseExporterConfig {
 
   // Cloud-specific configuration
   accessToken?: string; // Cloud access token (from env or config)
-  endpoint?: string; // Cloud AI tracing endpoint
+  endpoint?: string; // Cloud observability endpoint
 }
 
 interface MastraCloudBuffer {
@@ -41,7 +41,7 @@ interface MastraCloudSpanRecord {
 }
 
 export class CloudExporter extends BaseExporter {
-  name = 'mastra-cloud-ai-tracing-exporter';
+  name = 'mastra-cloud-observability-exporter';
 
   private config: Required<CloudExporterConfig>;
   private buffer: MastraCloudBuffer;
@@ -54,7 +54,7 @@ export class CloudExporter extends BaseExporter {
     if (!accessToken) {
       this.setDisabled(
         'MASTRA_CLOUD_ACCESS_TOKEN environment variable not set. ' +
-          '🚀 Sign up for Mastra Cloud at https://cloud.mastra.ai to see your AI traces online and obtain your access token.',
+          '🚀 Sign up for Mastra Cloud at https://cloud.mastra.ai to see your traces online and obtain your access token.',
       );
     }
 
@@ -77,9 +77,9 @@ export class CloudExporter extends BaseExporter {
     };
   }
 
-  protected async _exportEvent(event: AITracingEvent): Promise<void> {
-    // Cloud AI Observability only process SPAN_ENDED events
-    if (event.type !== AITracingEventType.SPAN_ENDED) {
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
+    // Cloud Observability only process SPAN_ENDED events
+    if (event.type !== TracingEventType.SPAN_ENDED) {
       return;
     }
 
@@ -96,7 +96,7 @@ export class CloudExporter extends BaseExporter {
     }
   }
 
-  private addToBuffer(event: AITracingEvent): void {
+  private addToBuffer(event: TracingEvent): void {
     // Set first event time if buffer is empty
     if (this.buffer.totalSize === 0) {
       this.buffer.firstEventTime = new Date();
@@ -107,7 +107,7 @@ export class CloudExporter extends BaseExporter {
     this.buffer.totalSize++;
   }
 
-  private formatSpan(span: AnyExportedAISpan): MastraCloudSpanRecord {
+  private formatSpan(span: AnyExportedSpan): MastraCloudSpanRecord {
     const spanRecord: MastraCloudSpanRecord = {
       traceId: span.traceId,
       spanId: span.id,
@@ -154,7 +154,7 @@ export class CloudExporter extends BaseExporter {
       this.flush().catch(error => {
         const mastraError = new MastraError(
           {
-            id: `CLOUD_AI_TRACING_FAILED_TO_SCHEDULE_FLUSH`,
+            id: `CLOUD_EXPORTER_FAILED_TO_SCHEDULE_FLUSH`,
             domain: ErrorDomain.MASTRA_OBSERVABILITY,
             category: ErrorCategory.USER,
           },
@@ -197,7 +197,7 @@ export class CloudExporter extends BaseExporter {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: `CLOUD_AI_TRACING_FAILED_TO_BATCH_UPLOAD`,
+          id: `CLOUD_EXPORTER_FAILED_TO_BATCH_UPLOAD`,
           domain: ErrorDomain.MASTRA_OBSERVABILITY,
           category: ErrorCategory.USER,
           details: {
@@ -258,7 +258,7 @@ export class CloudExporter extends BaseExporter {
       } catch (error) {
         const mastraError = new MastraError(
           {
-            id: `CLOUD_AI_TRACING_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
+            id: `CLOUD_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
             domain: ErrorDomain.MASTRA_OBSERVABILITY,
             category: ErrorCategory.USER,
             details: {
