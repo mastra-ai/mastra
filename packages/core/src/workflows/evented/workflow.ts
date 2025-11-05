@@ -15,6 +15,7 @@ import type {
   WorkflowResult,
   StepWithComponent,
   WorkflowStreamEvent,
+  WorkflowEngineType,
 } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -335,6 +336,7 @@ export class EventedWorkflow<
 > extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
   constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
     super(params);
+    this.engineType = 'evented';
   }
 
   __registerMastra(mastra: Mastra) {
@@ -358,6 +360,7 @@ export class EventedWorkflow<
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
+        workflowEngineType: this.engineType,
       });
 
     this.runs.set(runIdToUse, run);
@@ -417,6 +420,7 @@ export class EventedRun<
     cleanup?: () => void;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
+    workflowEngineType: WorkflowEngineType;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;

@@ -41,6 +41,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
     steps: string[];
     resumePayload: any;
   };
+  restart?: boolean;
   [EMITTER_SYMBOL]: Emitter;
   [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;

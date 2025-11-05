@@ -6,7 +6,7 @@ import type { Mastra } from '../mastra';
 import type { AISpan, AISpanType, TracingPolicy } from '../observability';
 import type { ChunkType } from '../stream/types';
 import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
-import type { StepFlowEntry } from '.';
+import type { RestartExecutionParams, StepFlowEntry } from '.';
 
 /**
  * Represents an execution graph for a workflow
@@ -57,6 +57,7 @@ export abstract class ExecutionEngine extends MastraBase {
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     initialState?: TState;
+    restart?: RestartExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;

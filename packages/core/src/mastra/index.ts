@@ -16,7 +16,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ObservabilityEntrypoint, ObservabilityRegistryConfig } from '../observability';
 import { initObservability } from '../observability';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage } from '../storage';
+import type { MastraStorage, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
@@ -875,13 +875,41 @@ export class Mastra<
     return workflow;
   }
 
-  public listRunningWorkflowRuns() {
+  public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
     const storage = this.#storage;
     if (!storage) {
-      this.#logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
+      this.#logger.debug('Cannot get active workflow runs. Mastra storage is not initialized');
       return { runs: [], total: 0 };
     }
-    return storage?.listWorkflowRuns({ status: 'running' });
+
+    // Get all workflows with default engine type
+    const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
+
+    // Collect all active runs for workflows with default engine type
+    const allRuns: WorkflowRuns['runs'] = [];
+    let allTotal = 0;
+
+    for (const workflow of defaultEngineWorkflows) {
+      const runningRuns = await workflow.listWorkflowRuns({ status: 'running' });
+      const waitingRuns = await workflow.listWorkflowRuns({ status: 'waiting' });
+
+      allRuns.push(...runningRuns.runs, ...waitingRuns.runs);
+      allTotal += runningRuns.total + waitingRuns.total;
+    }
+
+    return {
+      runs: allRuns,
+      total: allTotal,
+    };
+  }
+
+  public async restartAllActiveWorkflowRuns(): Promise<void> {
+    const activeRuns = await this.listActiveWorkflowRuns();
+    for (const runSnapshot of activeRuns.runs) {
+      const workflow = this.getWorkflowById(runSnapshot.workflowName);
+      const run = await workflow.createRun({ runId: runSnapshot.runId });
+      await run.restart();
+    }
   }
 
   /**

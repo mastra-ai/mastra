@@ -21,6 +21,7 @@ import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
+import type { RestartExecutionParams } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
 import type {
@@ -38,6 +39,7 @@ import type {
   StreamEvent,
   SubsetOf,
   WorkflowConfig,
+  WorkflowEngineType,
   WorkflowOptions,
   WorkflowResult,
   WorkflowRunState,
@@ -438,6 +440,8 @@ export class Workflow<
   public stateSchema?: TState;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
+  public engineType: WorkflowEngineType = 'default';
+  #nestedWorkflowInput?: z.infer<TInput>;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
@@ -493,6 +497,8 @@ export class Workflow<
     } else {
       this.executionEngine = executionEngine;
     }
+
+    this.engineType = 'default';
 
     this.#runs = new Map();
   }
@@ -1042,6 +1048,7 @@ export class Workflow<
         tracingPolicy: this.#options?.tracingPolicy,
         workflowSteps: this.steps,
         validateInputs: this.#options?.validateInputs,
+        workflowEngineType: this.engineType,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -1062,7 +1069,7 @@ export class Workflow<
           runId: runIdToUse,
           status: 'pending',
           value: {},
-          context: {},
+          context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
           activePaths: [],
           activeStepsPath: {},
           serializedStepGraph: this.serializedStepGraph,
@@ -1117,6 +1124,7 @@ export class Workflow<
     state,
     setState,
     suspend,
+    restart,
     resume,
     [EMITTER_SYMBOL]: emitter,
     mastra,
@@ -1137,6 +1145,7 @@ export class Workflow<
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
     suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
+    restart?: boolean;
     resume?: {
       steps: string[];
       resumePayload: any;
@@ -1177,6 +1186,10 @@ export class Workflow<
     // this check is for cases where you suspend/resume a nested workflow.
     // retryCount helps us know the step has been run at least once, which means it's running in a loop and should not be calling resume.
 
+    if (!restart && !isResume) {
+      this.#nestedWorkflowInput = inputData;
+    }
+
     const run = isResume ? await this.createRun({ runId: resume.runId }) : await this.createRun({ runId });
     const nestedAbortCb = () => {
       abort();
@@ -1195,23 +1208,25 @@ export class Workflow<
       requestContext.set('__mastraWorflowInputData', inputData);
     }
 
-    const res = isResume
-      ? await run.resume({
-          resumeData,
-          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
-          requestContext,
-          tracingContext,
-          outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume.label,
-        })
-      : await run.start({
-          inputData,
-          requestContext,
-          tracingContext,
-          writableStream: writer,
-          initialState: state,
-          outputOptions: { includeState: true, includeResumeLabels: true },
-        });
+    const res = restart
+      ? await run.restart({ requestContext, tracingContext, writableStream: writer })
+      : isResume
+        ? await run.resume({
+            resumeData,
+            step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
+            requestContext,
+            tracingContext,
+            outputOptions: { includeState: true, includeResumeLabels: true },
+            label: resume.label,
+          })
+        : await run.start({
+            inputData,
+            requestContext,
+            tracingContext,
+            writableStream: writer,
+            initialState: state,
+            outputOptions: { includeState: true, includeResumeLabels: true },
+          });
     unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -1253,11 +1268,6 @@ export class Workflow<
     }
 
     return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
-  }
-
-  async listRunningWorkflowRuns() {
-    const workflowRuns = await this.listWorkflowRuns({ status: 'running' });
-    return workflowRuns;
   }
 
   async getWorkflowRunById(runId: string) {
@@ -1450,6 +1460,8 @@ export class Run<
 
   readonly workflowRunStatus: WorkflowRunStatus;
 
+  readonly workflowEngineType: WorkflowEngineType;
+
   /**
    * The storage for this run
    */
@@ -1491,6 +1503,7 @@ export class Run<
     tracingPolicy?: TracingPolicy;
     workflowSteps: Record<string, StepWithComponent>;
     validateInputs?: boolean;
+    workflowEngineType: WorkflowEngineType;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -1508,6 +1521,7 @@ export class Run<
     this.validateInputs = params.validateInputs;
     this.stateSchema = params.stateSchema;
     this.workflowRunStatus = 'pending';
+    this.workflowEngineType = params.workflowEngineType;
   }
 
   public get abortController(): AbortController {
@@ -2195,6 +2209,21 @@ export class Run<
     return this._resume(params);
   }
 
+  /**
+   * Restarts the workflow execution that was previously active
+   * @returns A promise that resolves to the workflow output
+   */
+  async restart(
+    args: {
+      requestContext?: RequestContext;
+      writableStream?: WritableStream<ChunkType>;
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+    } = {},
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    return this._restart(args);
+  }
+
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.input<TResumeSchema>;
     step?:
@@ -2391,6 +2420,129 @@ export class Run<
 
       return result;
     });
+  }
+
+  protected async _restart({
+    requestContext,
+    writableStream,
+    tracingContext,
+    tracingOptions,
+  }: {
+    requestContext?: RequestContext;
+    writableStream?: WritableStream<ChunkType>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (this.workflowEngineType !== 'default') {
+      throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
+    }
+
+    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+
+    let nestedWorkflowPending = false;
+
+    if (!snapshot) {
+      throw new Error(`Snapshot not found for run ${this.runId}`);
+    }
+
+    if (snapshot.status !== 'running' && snapshot.status !== 'waiting') {
+      if (snapshot.status === 'pending' && !!snapshot.context.input) {
+        //possible the server died just before the nested workflow execution started.
+        //only nested workflows have input data in context when it's still pending
+        nestedWorkflowPending = true;
+      } else {
+        throw new Error('This workflow run was not active');
+      }
+    }
+
+    let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+
+    const firstEntry = this.executionGraph.steps[0]!;
+
+    if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+      nestedWorkflowActiveStepsPath = {
+        [firstEntry.step.id]: [0],
+      };
+    } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
+      nestedWorkflowActiveStepsPath = {
+        [firstEntry.id]: [0],
+      };
+    } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
+      nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
+        (acc, step) => {
+          acc[step.step.id] = [0];
+          return acc;
+        },
+        {} as Record<string, number[]>,
+      );
+    }
+    const restartData: RestartExecutionParams = {
+      activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
+      activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+      stepResults: snapshot.context,
+      state: snapshot.value,
+    };
+    const workflowAISpan = getOrCreateSpan({
+      type: AISpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      attributes: {
+        workflowId: this.workflowId,
+      },
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
+      },
+      tracingPolicy: this.tracingPolicy,
+      tracingOptions,
+      tracingContext,
+      requestContext,
+      mastra: this.#mastra,
+    });
+
+    const traceId = workflowAISpan?.externalTraceId;
+
+    const result = await this.executionEngine.execute<
+      z.infer<TState>,
+      z.infer<TInput>,
+      WorkflowResult<TState, TInput, TOutput, TSteps>
+    >({
+      workflowId: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      disableScorers: this.disableScorers,
+      graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      restart: restartData,
+      emitter: {
+        emit: async (event: string, data: any) => {
+          this.emitter.emit(event, data);
+        },
+        on: (event: string, callback: (data: any) => void) => {
+          this.emitter.on(event, callback);
+        },
+        off: (event: string, callback: (data: any) => void) => {
+          this.emitter.off(event, callback);
+        },
+        once: (event: string, callback: (data: any) => void) => {
+          this.emitter.once(event, callback);
+        },
+      },
+      retryConfig: this.retryConfig,
+      requestContext: requestContext ?? new RequestContext(),
+      abortController: this.abortController,
+      writableStream,
+      workflowAISpan,
+    });
+
+    if (result.status !== 'suspended') {
+      this.cleanup?.();
+    }
+
+    result.traceId = traceId;
+    return result;
   }
 
   /**

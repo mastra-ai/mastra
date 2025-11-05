@@ -9,6 +9,8 @@ import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
+export type WorkflowEngineType = 'default' | 'evented' | 'inngest';
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;

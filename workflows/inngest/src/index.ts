@@ -39,6 +39,7 @@ import type {
   SuspendOptions,
   WorkflowStreamEvent,
   AgentStepOptions,
+  WorkflowEngineType,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import { NonRetriableError, RetryAfterError } from 'inngest';
@@ -135,6 +136,7 @@ export class InngestRun<
       };
       cleanup?: () => void;
       workflowSteps: Record<string, StepWithComponent>;
+      workflowEngineType: WorkflowEngineType;
     },
     inngest: Inngest,
   ) {
@@ -592,6 +594,8 @@ export class InngestWorkflow<
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
 
+    this.engineType = 'inngest';
+
     const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
       ([_, value]) => value !== undefined,
     );
@@ -679,6 +683,7 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
           workflowSteps: this.steps,
+          workflowEngineType: this.engineType,
         },
         this.inngest,
       );
