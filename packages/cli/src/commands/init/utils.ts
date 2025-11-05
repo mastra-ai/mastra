@@ -84,6 +84,7 @@ import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
+import { Observability } from '@mastra/observability';
 
 export const weatherAgent = new Agent({
   id: 'weather-agent',
@@ -510,10 +511,10 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  observability: {
+  observability: new Observability({
     // Enables DefaultExporter and CloudExporter for tracing
     default: { enabled: true },
-  },
+    }),
 });
 `,
     );
