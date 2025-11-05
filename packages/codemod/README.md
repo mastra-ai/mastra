@@ -6,6 +6,12 @@ Codemods are transformations that run on your codebase programmatically, allowin
 
 ## Quick Start
 
+### Run Version-Specific Codemods
+
+```sh
+npx @mastra/codemod v1
+```
+
 ### Run Individual Codemods
 
 To run a specific codemod:
