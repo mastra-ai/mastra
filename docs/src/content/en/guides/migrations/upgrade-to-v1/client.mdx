@@ -5,9 +5,11 @@ description: "Learn how to migrate client SDK changes when upgrading to v1."
 
 # Client SDK
 
+Client SDK changes align with server-side API updates including renamed utilities, updated pagination, and type naming conventions.
+
 ## Changed
 
-### Changed: `RuntimeContext` utilities to `RequestContext`
+### `RuntimeContext` utilities to `RequestContext`
 
 Client SDK utility functions have been renamed from `RuntimeContext` to `RequestContext`. This change aligns with the global rename for clarity about request-specific context.
 
@@ -33,7 +35,7 @@ To migrate, update utility function imports and calls.
 + const qs = requestContextQueryString(context);
 ```
 
-### Changed: Pagination parameters from `offset/limit` to `page/perPage`
+### Pagination parameters from `offset/limit` to `page/perPage`
 
 All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
 
@@ -49,7 +51,7 @@ To migrate, update pagination parameters in all client SDK method calls.
   });
 ```
 
-### Changed: Client SDK types from `Get*` to `List*`
+### Client SDK types from `Get*` to `List*`
 
 Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.
 
@@ -68,7 +70,7 @@ To migrate, update type imports to use the new naming pattern.
 + } from '@mastra/client-js';
 ```
 
-### Changed: `getMemoryThread` parameter structure
+### `getMemoryThread` parameter structure
 
 The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
 
@@ -81,7 +83,7 @@ To migrate, update the method call with the new parameter structure. Check the u
 
 ## Removed
 
-### Removed: `toAISdkFormat` function
+### `toAISdkFormat` function
 
 The `toAISdkFormat()` function has been removed from `@mastra/ai-sdk`. This change provides clearer naming for stream conversion utilities.
 
@@ -94,7 +96,7 @@ To migrate, use `toAISdkStream()` instead.
 + const stream = toAISdkStream(agentStream, { from: 'agent' });
 ```
 
-### Removed: Network memory methods
+### Network memory methods
 
 Network memory methods have been removed from `@mastra/client-js`. The `NetworkMemoryThread` class and all network memory-related methods are no longer available. This change simplifies the memory API by removing specialized network memory functionality.
 
@@ -116,7 +118,7 @@ To migrate, use regular memory APIs instead of network memory.
 + const messages = await thread.listMessages();
 ```
 
-### Removed: Watch-related types
+### Watch-related types
 
 Watch-related types have been removed from `@mastra/client-js`. This includes `WorkflowWatchResult`, `WatchEvent`, and related types. This change reflects the removal of the watch API in favor of streaming.
 
@@ -139,7 +141,7 @@ To migrate, use workflow streaming APIs instead of watch.
 + }
 ```
 
-### Removed: Deprecated stream endpoints
+### Deprecated stream endpoints
 
 Some stream endpoints are deprecated and will be removed. The `/api/agents/:agentId/stream/vnext` endpoint returns 410 Gone, and `/api/agents/:agentId/stream/ui` is deprecated. This change consolidates on standard streaming endpoints.
 
@@ -159,7 +161,7 @@ To migrate, use the standard stream endpoint or `@mastra/ai-sdk` for UI message 
 + // Or use @mastra/ai-sdk for UI message transformations
 ```
 
-### Removed: Network memory API endpoints
+### Network memory API endpoints
 
 Network memory API endpoints have been removed including `/api/memory/network/*`. This change simplifies the memory API surface.
 
@@ -170,7 +172,7 @@ To migrate, use regular memory API endpoints.
 + const thread = await fetch('/api/memory/threads/thread-123');
 ```
 
-### Removed: Eval-related client SDK types
+### Eval-related client SDK types
 
 Several eval-related types have been removed from the client SDK including `GetEvalsByAgentIdResponse`, `GetTelemetryResponse`, and `GetTelemetryParams`. This change reflects the removal of legacy evals functionality.
 

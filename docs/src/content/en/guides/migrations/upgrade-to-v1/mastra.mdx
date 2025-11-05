@@ -5,9 +5,11 @@ description: "Learn how to migrate Mastra class changes when upgrading to v1."
 
 # Mastra Class
 
+The Mastra class has been restructured to restrict top-level imports and replace direct property access with getter methods.
+
 ## Changed
 
-### Changed: Top-level imports to subpath imports
+### Top-level imports to subpath imports
 
 The main `@mastra/core` index file now only exports `Mastra` and `Config`. All other exports have been moved to subpath imports. This change improves tree-shaking and reduces bundle size by allowing bundlers to eliminate unused code.
 
@@ -21,7 +23,7 @@ To migrate, update all imports from `@mastra/core` to use the appropriate subpat
 + import { createTool } from '@mastra/core/tools';
 ```
 
-### Changed: Direct property access to getter methods
+### Direct property access to getter methods
 
 Direct property access on the Mastra instance is deprecated. Methods like `mastra.logger`, `mastra.storage`, `mastra.agents`, etc. now show deprecation warnings and will be removed in a future version. This change provides better encapsulation and allows for dynamic configuration based on request context.
 
@@ -42,7 +44,7 @@ To migrate, replace direct property access with the corresponding getter methods
 + const memory = mastra.getMemory();
 ```
 
-### Changed: `experimental_auth` to `auth`
+### `experimental_auth` to `auth`
 
 The experimental auth configuration has been promoted to stable. This change reflects that the auth API is now stable and production-ready.
 
@@ -59,7 +61,7 @@ To migrate, rename the `experimental_auth` key to `auth` in your Mastra configur
 
 ## Removed
 
-### Removed: `memory` property from Mastra class
+### `memory` property from Mastra class
 
 The `memory` property has been removed from the Mastra class. Memory is now configured at the Agent level rather than globally.
 

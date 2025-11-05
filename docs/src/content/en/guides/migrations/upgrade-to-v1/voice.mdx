@@ -5,9 +5,11 @@ description: "Learn how to migrate voice package changes when upgrading to v1."
 
 # Voice Packages
 
+Voice packages have been renamed from speech to voice with updated class names and API methods.
+
 ## Changed
 
-### Changed: Class names from `*TTS` to `*Voice`
+### Class names from `*TTS` to `*Voice`
 
 TTS class names have been renamed to Voice classes. `MurfTTS`, `SpeechifyTTS`, and `PlayAITTS` are now `MurfVoice`, `SpeechifyVoice`, and `PlayAIVoice` respectively. This change aligns class names with the package rename.
 
@@ -25,7 +27,7 @@ To migrate, update class names in your code.
 + const voice = new MurfVoice({ apiKey: '...' });
 ```
 
-### Changed: `generate` and `stream` methods to `speak`
+### `generate` and `stream` methods to `speak`
 
 The `generate()` and `stream()` methods have been combined into a single `speak()` method. This change simplifies the voice API by consolidating speech generation methods.
 
@@ -37,7 +39,7 @@ To migrate, replace `generate()` and `stream()` calls with `speak()`.
 + await voice.speak('Hello');
 ```
 
-### Changed: `voices` method to `getSpeakers`
+### `voices` method to `getSpeakers`
 
 The `voices()` method has been renamed to `getSpeakers()`. This change provides clearer naming that better describes the method's purpose.
 
@@ -48,7 +50,7 @@ To migrate, rename method calls from `voices` to `getSpeakers`.
 + const speakers = await voice.getSpeakers();
 ```
 
-### Changed: Voice configuration property names
+### Voice configuration property names
 
 Voice configuration properties have been renamed for consistency. `speakProvider` is now `output`, `listenProvider` is now `input`, and `realtimeProvider` is now `realtime`. This change provides more intuitive property names.
 
@@ -69,7 +71,7 @@ To migrate, update configuration property names when configuring agents with voi
 
 ## Removed
 
-### Removed: TTS exports from `@mastra/core`
+### TTS exports from `@mastra/core`
 
 TTS exports have been removed from `@mastra/core`. All TTS functionality is now in dedicated voice packages. This change improves tree-shaking by removing voice-specific code from the core package.
 

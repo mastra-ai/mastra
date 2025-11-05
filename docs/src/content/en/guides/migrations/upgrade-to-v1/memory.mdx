@@ -5,9 +5,11 @@ description: "Learn how to migrate memory-related changes when upgrading to v1."
 
 # Memory
 
+Memory configuration now requires explicit parameters, and default settings have been updated for better performance and predictability.
+
 ## Changed
 
-### Changed: Required configuration parameters
+### Required configuration parameters
 
 The Memory constructor now requires `storage`, `vector`, and `embedder` parameters. These parameters no longer have defaults. This change makes dependencies explicit and prevents unexpected behavior from implicit defaults.
 
@@ -26,7 +28,7 @@ To migrate, explicitly provide `storage`, `vector`, and `embedder` when creating
   });
 ```
 
-### Changed: Default settings for semantic recall and last messages
+### Default settings for semantic recall and last messages
 
 Default settings have changed to more reasonable values based on usage patterns. The `lastMessages` default decreased from 40 to 10, `semanticRecall` is now disabled by default, and thread title generation is disabled by default. These changes improve performance and reduce unexpected LLM API calls.
 
@@ -49,7 +51,7 @@ To migrate, if you were relying on the old defaults, explicitly configure these 
   });
 ```
 
-### Changed: Default memory scope from `thread` to `resource`
+### Default memory scope from `thread` to `resource`
 
 The default scope for both working memory and semantic recall has changed from `'thread'` to `'resource'`. This change aligns with common use cases where applications want to remember user information across conversations. When semantic recall is enabled, it now defaults to searching across all user conversations rather than just the current thread.
 
@@ -74,7 +76,7 @@ To migrate, if you want to maintain the old behavior where memory is isolated pe
   });
 ```
 
-### Changed: Thread title generation location
+### Thread title generation location
 
 The `generateTitle` option has been moved from `threads.generateTitle` to the top-level of memory options. This change simplifies the API by moving the option to where it logically belongs.
 
@@ -94,7 +96,7 @@ To migrate, move `generateTitle` from the `threads` config to the top level of o
   });
 ```
 
-### Changed: Semantic recall default settings optimization
+### Semantic recall default settings optimization
 
 The default settings for semantic recall have been optimized based on RAG research. The `topK` increased from 2 to 4, and `messageRange` changed from `{before: 2, after: 2}` to `{before: 1, after: 1}`. These changes provide better accuracy while only slightly increasing message count.
 
@@ -114,7 +116,7 @@ To migrate, if you were relying on the previous defaults, explicitly set these v
   });
 ```
 
-### Changed: `Memory.query()` return format
+### `Memory.query()` return format
 
 The `Memory.query()` method now returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change simplifies the API and makes the return type more predictable.
 
@@ -127,7 +129,7 @@ To migrate, update code that expects the old return format to use the new format
 + const messages = result.messages;
 ```
 
-### Changed: `Memory.query()` parameter format
+### `Memory.query()` parameter format
 
 The `Memory.query()` method now uses `StorageListMessagesInput` format with pagination. This change aligns the memory query API with the storage pagination API.
 
@@ -144,7 +146,7 @@ To migrate, update query parameters to use the new pagination format.
   });
 ```
 
-### Changed: `MastraMessageV2` type renamed to `MastraDBMessage`
+### `MastraMessageV2` type renamed to `MastraDBMessage`
 
 The `MastraMessageV2` type has been renamed to `MastraDBMessage` for clarity. This change better describes the purpose of this type as the database message format.
 
@@ -157,7 +159,7 @@ To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
 + function yourCustomFunction(input: MastraDBMessage) {}
 ```
 
-### Changed: `rememberMessages` return format
+### `rememberMessages` return format
 
 The `rememberMessages` method now returns an object wrapper `{ messages }` for consistency between all memory methods. This change provides a consistent API across all memory operations.
 
@@ -170,7 +172,7 @@ To migrate, destructure the returned messages from the object wrapper.
 
 ## Removed
 
-### Removed: Working memory `text-stream` mode
+### Working memory `text-stream` mode
 
 Working memory `use: "text-stream"` option has been removed. Only `tool-call` mode is supported. This change simplifies the working memory API by removing the less reliable streaming mode.
 
@@ -191,7 +193,7 @@ To migrate, remove the `use: "text-stream"` option. Working memory will default 
   });
 ```
 
-### Removed: `format` parameter from memory methods
+### `format` parameter from memory methods
 
 The `format` parameter has been removed from all memory get methods. `MastraDBMessage` is now the default return format everywhere. AI SDK format conversion has moved to dedicated utility functions in `@mastra/ai-sdk/ui`. This change improves tree-shaking by moving UI-specific conversion code to a separate package.
 
@@ -209,7 +211,7 @@ To migrate, remove the `format` parameter and use conversion functions for AI SD
 + const uiMessages = toAISdkV5Messages(messages);
 ```
 
-### Removed: `MastraMessageV3` type
+### `MastraMessageV3` type
 
 The `MastraMessageV3` type and related conversion methods have been removed. Messages now convert directly between `MastraMessageV2` (now `MastraDBMessage`) and AI SDK v5 formats. This change simplifies the architecture by removing an intermediary format.
 
@@ -227,7 +229,7 @@ To migrate, use `MastraDBMessage` for storage or AI SDK v5 message formats direc
 + const modelMessages = messageList.get.all.aiV5.model();
 ```
 
-### Removed: `processors` config from Memory constructor
+### `processors` config from Memory constructor
 
 The `processors` config option in the Memory constructor has been deprecated and now throws an error. Processors should be configured at the Agent level instead. This change provides clearer configuration boundaries and better encapsulation.
 

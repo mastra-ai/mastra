@@ -5,9 +5,11 @@ description: "Learn how to migrate evals and scorers changes when upgrading to v
 
 # Evals & Scorers
 
+The evaluation API has been consolidated on the new scorers system with updated naming conventions and configuration requirements.
+
 ## Changed
 
-### Changed: `runExperiment` to `runEvals`
+### `runExperiment` to `runEvals`
 
 The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.
 
@@ -25,7 +27,7 @@ To migrate, update function calls from `runExperiment` to `runEvals`.
 + const result = await runEvals({ agent, scorer, inputs });
 ```
 
-### Changed: `getScorerByName` to `getScorerById`
+### `getScorerByName` to `getScorerById`
 
 The `getScorerByName()` method has been renamed to `getScorerById()`. Scorers now require an `id` field instead of `name`. This change aligns with the broader API pattern of using `id` for entity identification.
 
@@ -42,7 +44,7 @@ To migrate, update method calls and scorer configuration to use `id` instead of 
 + const scorer = mastra.getScorerById('helpfulness-scorer');
 ```
 
-### Changed: Scorer configuration from `name` to `id`
+### Scorer configuration from `name` to `id`
 
 Scorers now require an `id` field instead of `name`. The `name` field is now optional. This change provides consistency with other Mastra entities.
 
@@ -57,7 +59,7 @@ To migrate, update scorer definitions to use `id` as the required field.
   });
 ```
 
-### Changed: Storage score APIs to `listScoresBy*` pattern
+### Storage score APIs to `listScoresBy*` pattern
 
 Score storage APIs have been renamed to follow the `listScoresBy*` pattern. This change aligns with the broader storage API naming conventions.
 
@@ -75,7 +77,7 @@ To migrate, update score query methods to use the new naming pattern.
 // - listScoresBySpan
 ```
 
-### Changed: Processor interface requirements
+### Processor interface requirements
 
 Processors now require an `id` field instead of `name`. The `name` field is now optional. Message types have changed from `MastraMessageV2` to `MastraDBMessage`. This change provides consistency with scorer configuration and better type safety.
 
@@ -99,7 +101,7 @@ To migrate, update processor definitions to use `id` as the required field and u
 
 ## Removed
 
-### Removed: Legacy evals code
+### Legacy evals code
 
 Legacy evals code has been removed from `@mastra/core`. This includes legacy evaluation metrics, scorer/judge modules, and hook-based automatic evaluation code. This change simplifies the codebase by removing outdated evaluation approaches.
 
@@ -115,7 +117,7 @@ To migrate, use the new evals/scorers API in `@mastra/core/evals` or `@mastra/ev
 + });
 ```
 
-### Removed: Agent `TMetrics` generic parameter
+### Agent `TMetrics` generic parameter
 
 The `TMetrics` generic parameter has been removed from `AgentConfig` and the `Agent` constructor. Metrics/scorers are now configured using the scorers API instead of being part of the Agent type system. This change simplifies the Agent type signature.
 
@@ -128,7 +130,7 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
   });
 ```
 
-### Removed: Deprecated input processor exports
+### Deprecated input processor exports
 
 Deprecated input-processor exports have been removed from `@mastra/core`. This change consolidates processor types under the unified `Processor` interface.
 
@@ -139,7 +141,7 @@ To migrate, use the new `Processor` interface.
 + import type { Processor, InputProcessor } from '@mastra/core/processors';
 ```
 
-### Removed: Evals-related type exports
+### Evals-related type exports
 
 Several evals-related type exports have been removed including `DeprecatedOutputOptions`, `Metric`, and processor option types. These types are now internal or have been replaced by the new scorers API. This change reduces API surface area.
 

@@ -5,9 +5,11 @@ description: "Learn how to migrate storage-related changes when upgrading to v1.
 
 # Storage
 
+Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
+
 ## Changed
 
-### Changed: Pagination from `offset/limit` to `page/perPage`
+### Pagination from `offset/limit` to `page/perPage`
 
 All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`. This change provides a more intuitive pagination model that aligns with common web pagination patterns.
 
@@ -23,7 +25,7 @@ To migrate, update all pagination parameters from `offset/limit` to `page/perPag
   });
 ```
 
-### Changed: `getMessagesPaginated` to `listMessages`
+### `getMessagesPaginated` to `listMessages`
 
 The `getMessagesPaginated()` method has been replaced with `listMessages()`. The new method supports `perPage: false` to fetch all records without pagination. This change aligns with the `list*` naming convention and adds flexibility for fetching all records.
 
@@ -48,7 +50,7 @@ To migrate, rename the method and update pagination parameters. You can now use 
 + });
 ```
 
-### Changed: `getThreadsByResourceId` to `listThreadsByResourceId`
+### `getThreadsByResourceId` to `listThreadsByResourceId`
 
 The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
 
@@ -63,7 +65,7 @@ To migrate, rename the method call and update pagination parameters.
   });
 ```
 
-### Changed: `getWorkflowRuns` to `listWorkflowRuns`
+### `getWorkflowRuns` to `listWorkflowRuns`
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
 
@@ -79,7 +81,7 @@ To migrate, rename the method call and update pagination parameters.
   });
 ```
 
-### Changed: `getMessagesById` to `listMessagesById`
+### `getMessagesById` to `listMessagesById`
 
 The `getMessagesById()` method has been renamed to `listMessagesById()`. This change aligns with the convention that `list*` methods return collections.
 
@@ -92,7 +94,7 @@ To migrate, rename the method call.
   });
 ```
 
-### Changed: Storage `getMessages` and `saveMessages` signatures
+### Storage `getMessages` and `saveMessages` signatures
 
 The `getMessages()` and `saveMessages()` methods have changed signatures and return types. Format overloads have been removed, and the methods now always work with `MastraDBMessage`. This change simplifies the API by removing format variations.
 
@@ -112,7 +114,7 @@ To migrate, remove format parameters and update code to work with the consistent
 + const saved = result.messages; // MastraDBMessage[]
 ```
 
-### Changed: Vector store API from positional to named arguments
+### Vector store API from positional to named arguments
 
 All vector store methods now use named arguments instead of positional arguments. This change improves code readability and makes method signatures more maintainable.
 
@@ -141,7 +143,7 @@ To migrate, update all vector store method calls to use named arguments.
 + });
 ```
 
-### Changed: Vector store method renames
+### Vector store method renames
 
 The `updateIndexById` and `deleteIndexById` methods have been renamed to `updateVector` and `deleteVector` respectively. This change provides clearer naming that better describes the operations.
 
@@ -154,7 +156,7 @@ To migrate, rename the methods and use named arguments.
 + await vectorDB.deleteVector({ indexName, id });
 ```
 
-### Changed: PGVector constructor from connection string to object
+### PGVector constructor from connection string to object
 
 The PGVector constructor now requires object parameters instead of a connection string. This change provides a more consistent API across all storage adapters.
 
@@ -167,7 +169,7 @@ To migrate, pass the connection string as an object property.
 + });
 ```
 
-### Changed: PGVector `defineIndex` to `buildIndex`
+### PGVector `defineIndex` to `buildIndex`
 
 The `defineIndex()` method has been removed in favor of `buildIndex()`. This change provides clearer naming for the index building operation.
 
@@ -182,7 +184,7 @@ To migrate, rename the method and use named arguments.
 + });
 ```
 
-### Changed: PostgresStore `schema` to `schemaName`
+### PostgresStore `schema` to `schemaName`
 
 The `schema` parameter has been renamed to `schemaName` in the PostgresStore constructor. This change provides clearer naming to avoid confusion with database schema concepts.
 
@@ -196,7 +198,7 @@ To migrate, rename the parameter.
   });
 ```
 
-### Changed: Score storage methods to `listScoresBy*` pattern
+### Score storage methods to `listScoresBy*` pattern
 
 Score storage APIs have been renamed to follow the `listScoresBy*` pattern. This change provides consistency with the broader API naming conventions.
 
@@ -212,7 +214,7 @@ To migrate, update method names from `getScores` to `listScoresByScorerId` and r
 
 ## Removed
 
-### Removed: Non-paginated storage functions
+### Non-paginated storage functions
 
 Non-paginated storage functions have been removed in favor of paginated versions. All list operations now use pagination, though you can fetch all records with `perPage: false`. This change provides consistency across the API and prevents accidental loading of large datasets.
 
@@ -232,7 +234,7 @@ To migrate, use paginated methods. For fetching all records, use `perPage: false
 + });
 ```
 
-### Removed: `getTraces` and `getTracesPaginated`
+### `getTraces` and `getTracesPaginated`
 
 The `getTraces()` and `getTracesPaginated()` methods have been removed from storage. Traces are now handled through the observability package rather than core storage. This change provides better separation of concerns between core storage and observability features.
 
@@ -248,7 +250,7 @@ To migrate, use observability storage methods instead.
 + // Access traces through observability API
 ```
 
-### Removed: Evals test utilities
+### Evals test utilities
 
 Evals domain test utilities have been removed from `@internal/test-utils`. This change reflects the removal of legacy evals functionality.
 
@@ -261,7 +263,7 @@ To migrate, use storage APIs directly for testing instead of specialized evals t
 + // Use storage APIs directly for testing
 ```
 
-### Removed: TABLE_EVALS from MSSQL storage
+### TABLE_EVALS from MSSQL storage
 
 The `TABLE_EVALS` table has been removed from MSSQL storage implementations. This change reflects the removal of legacy evals functionality.
 

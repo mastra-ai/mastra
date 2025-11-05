@@ -5,9 +5,11 @@ description: "Learn how to migrate Agent class changes when upgrading to v1."
 
 # Agent Class
 
+The Agent class has been updated with reorganized voice methods, updated property access patterns, and streamlined streaming APIs.
+
 ## Changed
 
-### Changed: `RuntimeContext` to `RequestContext`
+### `RuntimeContext` to `RequestContext`
 
 The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.
 
@@ -26,7 +28,7 @@ To migrate, update all imports and parameter names from `RuntimeContext`/`runtim
 + await agent.generate(messages, { requestContext });
 ```
 
-### Changed: Direct property access to getter methods
+### Direct property access to getter methods
 
 Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. This change provides better encapsulation and consistency with the broader API design.
 
@@ -41,7 +43,7 @@ To migrate, replace property access with the corresponding getter methods.
 + const instructions = agent.getInstructions();
 ```
 
-### Changed: Voice methods moved to `agent.voice` namespace
+### Voice methods moved to `agent.voice` namespace
 
 Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.
 
@@ -56,7 +58,7 @@ To migrate, update voice method calls to use the `agent.voice` namespace.
 + const speakers = agent.voice.getSpeakers();
 ```
 
-### Changed: `agent.fetchMemory()` to `(await agent.getMemory()).query()`
+### `agent.fetchMemory()` to `(await agent.getMemory()).query()`
 
 The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
 
@@ -69,7 +71,7 @@ To migrate, replace `fetchMemory()` calls with the new API.
 + const messages = result.messages;
 ```
 
-### Changed: Processor method names from `get*` to `list*`
+### Processor method names from `get*` to `list*`
 
 Agent processor methods have been renamed from `get*` to `list*` pattern for consistency with the broader API. This change aligns with the convention that `list*` methods return collections.
 
@@ -82,7 +84,7 @@ To migrate, update processor method names and the parameter from `runtimeContext
 + const outputProcessors = await agent.listOutputProcessors(requestContext);
 ```
 
-### Changed: Default options method renames for AI SDK versions
+### Default options method renames for AI SDK versions
 
 Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
 
@@ -99,7 +101,7 @@ To migrate, update method names based on which AI SDK version you're using.
   const streamOptions = await agent.getDefaultStreamOptions();
 ```
 
-### Changed: `modelSettings.abortSignal` to top-level `abortSignal`
+### `modelSettings.abortSignal` to top-level `abortSignal`
 
 The `abortSignal` option has been moved from `modelSettings` to the top level of stream/generate options. This change provides a clearer separation between model-specific settings and execution control.
 
@@ -114,7 +116,7 @@ To migrate, move `abortSignal` from `modelSettings` to the top level.
   });
 ```
 
-### Changed: `output` to `structuredOutput.schema`
+### `output` to `structuredOutput.schema`
 
 The deprecated `output` and `experimental_output` options have been removed. This change consolidates on a single, stable API for structured output.
 
@@ -131,7 +133,7 @@ To migrate, update from `output` or `experimental_output` to `structuredOutput.s
 
 ## Removed
 
-### Removed: `generateVNext` and `streamVNext` methods
+### `generateVNext` and `streamVNext` methods
 
 The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
 
@@ -144,7 +146,7 @@ To migrate, use the standard `generate()` and `stream()` methods.
 + const stream = await agent.stream('Hello');
 ```
 
-### Removed: `format` parameter from `stream()` and `generate()`
+### `format` parameter from `stream()` and `generate()`
 
 The `format` parameter has been removed from `agent.stream()` and `agent.generate()` methods. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package. This change improves tree-shaking by moving AI SDK-specific code to a dedicated package.
 
@@ -161,7 +163,7 @@ To migrate, use the `toAISdkStream()` function from `@mastra/ai-sdk` for AI SDK 
 + const aiSdkStream = toAISdkStream(stream, { from: 'agent' });
 ```
 
-### Removed: `agent.toStep()` method
+### `agent.toStep()` method
 
 The `toStep()` method has been removed from the Agent class. Agents can now be added directly to workflow steps without explicit conversion.
 
@@ -178,7 +180,7 @@ To migrate, add agents directly to workflow steps. Workflows handle the transfor
 + });
 ```
 
-### Removed: `TMetrics` generic parameter from Agent
+### `TMetrics` generic parameter from Agent
 
 The `TMetrics` generic parameter has been removed from `AgentConfig` and the `Agent` constructor. Metrics/scorers are now configured using the scorers API instead of being part of the Agent type system.
 
@@ -191,7 +193,7 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
   });
 ```
 
-### Removed: `experimental_generateMessageId` option
+### `experimental_generateMessageId` option
 
 The `experimental_generateMessageId` option has been removed from agent generate/stream methods. Message IDs are now automatically generated internally.
 
