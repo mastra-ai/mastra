@@ -157,7 +157,7 @@ export class PostgresStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
-      aiTracing: true,
+      observabilityInstance: true,
       indexManagement: true,
       listScoresBySpan: true,
     };

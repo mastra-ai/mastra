@@ -352,7 +352,7 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span reference (undefined for root spans) */
   parent?: AnySpan;
   /** Pointer to the ObservabilityInstance instance */
-  aiTracing: ObservabilityInstance;
+  observabilityInstance: ObservabilityInstance;
   /** Trace-level state shared across all spans in this trace */
   traceState?: TraceState;
 

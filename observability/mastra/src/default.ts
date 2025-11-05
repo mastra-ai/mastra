@@ -104,10 +104,10 @@ export class DefaultObservability extends MastraBase implements Observability {
   }
 
   setLogger(options: { logger: IMastraLogger }): void {
+    super.__setLogger(options.logger);
     this.listInstances().forEach(instance => {
       instance.__setLogger(options.logger);
     });
-    return;
   }
 
   getSelectedInstance(options: ConfigSelectorOptions): ObservabilityInstance | undefined {

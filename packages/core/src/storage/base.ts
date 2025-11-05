@@ -117,7 +117,7 @@ export abstract class MastraStorage extends MastraBase {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
-    aiTracing?: boolean;
+    observabilityInstance?: boolean;
     indexManagement?: boolean;
     listScoresBySpan?: boolean;
   } {
@@ -127,7 +127,7 @@ export abstract class MastraStorage extends MastraBase {
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
-      aiTracing: false,
+      observabilityInstance: false,
       indexManagement: false,
       listScoresBySpan: false,
     };
@@ -356,7 +356,7 @@ export abstract class MastraStorage extends MastraBase {
       );
     }
 
-    if (this.supports.aiTracing) {
+    if (this.supports.observabilityInstance) {
       tableCreationTasks.push(
         this.createTable({
           tableName: TABLE_AI_SPANS,

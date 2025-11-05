@@ -54,7 +54,7 @@ describe('Tracing', () => {
             sessionId: 'session-789', // Should NOT be redacted (sessionId doesn't match sensitive patterns)
             normalField: 'visible-data', // Should NOT be redacted
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -105,7 +105,7 @@ describe('Tracing', () => {
             monkey: 'business', // Should NOT be redacted (normalizes to "monkey", not "key")
             key: 'secret', // Should be redacted (normalizes to "key")
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -157,7 +157,7 @@ describe('Tracing', () => {
             InternalId: 'should-be-hidden', // In custom list (case insensitive)
             publicData: 'visible-data',
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -207,7 +207,7 @@ describe('Tracing', () => {
               { id: 2, password: 'array-password', value: 42 }, // Should redact 'password' in array
             ],
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -252,7 +252,7 @@ describe('Tracing', () => {
           traceId: 'trace-123',
           trace: { traceId: 'trace-123' } as any,
           attributes: circularObj,
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},
@@ -293,7 +293,7 @@ describe('Tracing', () => {
             sensitiveData: 'this-should-not-be-visible',
             problematicObject: problematic,
           },
-          aiTracing: {} as any,
+          observabilityInstance: {} as any,
           end: () => {},
           error: () => {},
           update: () => {},

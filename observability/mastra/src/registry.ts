@@ -75,7 +75,15 @@ export class ObservabilityRegistry {
    * Unregister a tracing instance
    */
   unregister(name: string): boolean {
-    return this.#instances.delete(name);
+    const instance = this.#instances.get(name);
+    const deleted = this.#instances.delete(name);
+
+    if (deleted && instance === this.#defaultInstance) {
+      const next = this.#instances.values().next();
+      this.#defaultInstance = next.done ? undefined : next.value;
+    }
+
+    return deleted;
   }
 
   /**
@@ -86,6 +94,9 @@ export class ObservabilityRegistry {
 
     await Promise.allSettled(shutdownPromises);
     this.#instances.clear();
+    this.#instances.clear();
+    this.#defaultInstance = undefined;
+    this.#configSelector = undefined;
   }
 
   /**

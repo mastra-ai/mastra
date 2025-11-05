@@ -13,8 +13,8 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
 
-  constructor(options: CreateSpanOptions<TType>, aiTracing: ObservabilityInstance) {
-    super(options, aiTracing);
+  constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
+    super(options, observabilityInstance);
     this.id = generateSpanId();
 
     // Set trace ID based on context:

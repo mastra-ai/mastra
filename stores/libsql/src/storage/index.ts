@@ -114,7 +114,7 @@ export class LibSQLStore extends MastraStorage {
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
-      aiTracing: true,
+      observabilityInstance: true,
       listScoresBySpan: true,
     };
   }

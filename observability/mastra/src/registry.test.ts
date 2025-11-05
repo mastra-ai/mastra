@@ -264,7 +264,7 @@ describe('Observability Registry', () => {
             parent: options.parent,
             traceId: 'custom-trace-id',
             startTime: new Date(),
-            aiTracing: this,
+            observabilityInstance: this,
             isEvent: false,
             isValid: true,
             end: () => {},

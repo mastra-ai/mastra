@@ -46,13 +46,13 @@ class MockWorkflow {
 
 class MockSpan {
   constructor(public isNoOp = false) {}
-  aiTracing = { name: 'mock-tracing' };
+  observabilityInstance = { name: 'mock-tracing' };
   createChildSpan = vi.fn();
 }
 
 class NoOpSpan {
   constructor() {}
-  // No aiTracing property to simulate NoOp
+  // No observabilityInstance property to simulate NoOp
 }
 
 describe('Tracing Context Integration', () => {
@@ -278,7 +278,7 @@ describe('Tracing Context Integration', () => {
     it('should handle NoOp spans correctly', () => {
       // Test different ways a NoOp span might be identified
       const noOpSpan1 = new NoOpSpan();
-      const noOpSpan2 = { constructor: { name: 'NoOpSpan' }, aiTracing: null } as any;
+      const noOpSpan2 = { constructor: { name: 'NoOpSpan' }, observabilityInstance: null } as any;
       const noOpSpan3 = { __isNoOp: true } as any;
 
       const wrapped1 = wrapMastra(mockMastra as any, { currentSpan: noOpSpan1 as any });

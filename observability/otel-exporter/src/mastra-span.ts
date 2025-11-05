@@ -34,14 +34,14 @@ export class MastraReadableSpan implements ReadableSpan {
   readonly droppedLinksCount: number = 0;
 
   constructor(
-    Span: AnyExportedSpan,
+    span: AnyExportedSpan,
     attributes: Attributes,
     kind: SpanKind,
     parentSpanId?: string,
     resource?: Resource,
     instrumentationLibrary?: InstrumentationScope,
   ) {
-    this.name = Span.name;
+    this.name = span.name;
     this.kind = kind;
     this.attributes = attributes;
     this.parentSpanId = parentSpanId;
@@ -49,46 +49,46 @@ export class MastraReadableSpan implements ReadableSpan {
     this.events = [];
 
     // Convert JavaScript Date to hrtime format [seconds, nanoseconds]
-    this.startTime = this.dateToHrTime(Span.startTime);
-    this.endTime = Span.endTime ? this.dateToHrTime(Span.endTime) : this.startTime;
-    this.ended = !!Span.endTime;
+    this.startTime = this.dateToHrTime(span.startTime);
+    this.endTime = span.endTime ? this.dateToHrTime(span.endTime) : this.startTime;
+    this.ended = !!span.endTime;
 
     // Calculate duration
-    if (Span.endTime) {
-      const durationMs = Span.endTime.getTime() - Span.startTime.getTime();
+    if (span.endTime) {
+      const durationMs = span.endTime.getTime() - span.startTime.getTime();
       this.duration = [Math.floor(durationMs / 1000), (durationMs % 1000) * 1000000];
     } else {
       this.duration = [0, 0];
     }
 
     // Set status based on error info
-    if (Span.errorInfo) {
+    if (span.errorInfo) {
       this.status = {
         code: SpanStatusCode.ERROR,
-        message: Span.errorInfo.message,
+        message: span.errorInfo.message,
       };
 
       // Add error as event
       this.events.push({
         name: 'exception',
         attributes: {
-          'exception.message': Span.errorInfo.message,
+          'exception.message': span.errorInfo.message,
           'exception.type': 'Error',
-          ...(Span.errorInfo.details?.stack && {
-            'exception.stacktrace': Span.errorInfo.details.stack as string,
+          ...(span.errorInfo.details?.stack && {
+            'exception.stacktrace': span.errorInfo.details.stack as string,
           }),
         },
         time: this.startTime,
         droppedAttributesCount: 0,
       });
-    } else if (Span.endTime) {
+    } else if (span.endTime) {
       this.status = { code: SpanStatusCode.OK };
     } else {
       this.status = { code: SpanStatusCode.UNSET };
     }
 
     // Add instant event if needed
-    if (Span.isEvent) {
+    if (span.isEvent) {
       this.events.push({
         name: 'instant_event',
         attributes: {},
@@ -99,8 +99,8 @@ export class MastraReadableSpan implements ReadableSpan {
 
     // Create span context with Mastra's IDs
     this.spanContext = () => ({
-      traceId: Span.traceId,
-      spanId: Span.id,
+      traceId: span.traceId,
+      spanId: span.id,
       traceFlags: TraceFlags.SAMPLED,
       isRemote: false,
     });
@@ -108,7 +108,7 @@ export class MastraReadableSpan implements ReadableSpan {
     // Set parent span context if parent span ID is provided
     if (parentSpanId) {
       this.parentSpanContext = {
-        traceId: Span.traceId,
+        traceId: span.traceId,
         spanId: parentSpanId,
         traceFlags: TraceFlags.SAMPLED,
         isRemote: false,

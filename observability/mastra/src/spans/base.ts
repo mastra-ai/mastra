@@ -72,7 +72,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public endTime?: Date;
   public isEvent: boolean;
   public isInternal: boolean;
-  public aiTracing: ObservabilityInstance;
+  public observabilityInstance: ObservabilityInstance;
   public input?: any;
   public output?: any;
   public errorInfo?: {
@@ -87,14 +87,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
 
-  constructor(options: CreateSpanOptions<TType>, aiTracing: ObservabilityInstance) {
+  constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     this.name = options.name;
     this.type = options.type;
     this.attributes = deepClean(options.attributes) || ({} as SpanTypeMap[TType]);
     this.metadata = deepClean(options.metadata);
     this.parent = options.parent;
     this.startTime = new Date();
-    this.aiTracing = aiTracing;
+    this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
@@ -120,11 +120,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   createChildSpan(options: ChildSpanOptions<SpanType.MODEL_GENERATION>): AIModelGenerationSpan;
   createChildSpan<TChildType extends SpanType>(options: ChildSpanOptions<TChildType>): Span<TChildType> {
-    return this.aiTracing.startSpan<TChildType>({ ...options, parent: this, isEvent: false });
+    return this.observabilityInstance.startSpan<TChildType>({ ...options, parent: this, isEvent: false });
   }
 
   createEventSpan<TChildType extends SpanType>(options: ChildEventOptions<TChildType>): Span<TChildType> {
-    return this.aiTracing.startSpan<TChildType>({ ...options, parent: this, isEvent: true });
+    return this.observabilityInstance.startSpan<TChildType>({ ...options, parent: this, isEvent: true });
   }
 
   /**

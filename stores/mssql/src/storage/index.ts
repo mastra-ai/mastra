@@ -159,7 +159,7 @@ export class MSSQLStore extends MastraStorage {
     createTable: boolean;
     deleteMessages: boolean;
     listScoresBySpan: boolean;
-    aiTracing: boolean;
+    observabilityInstance: boolean;
     indexManagement: boolean;
   } {
     return {
@@ -169,7 +169,7 @@ export class MSSQLStore extends MastraStorage {
       createTable: true,
       deleteMessages: true,
       listScoresBySpan: true,
-      aiTracing: true,
+      observabilityInstance: true,
       indexManagement: true,
     };
   }

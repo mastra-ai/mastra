@@ -76,7 +76,7 @@ export class InMemoryStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
-      aiTracing: true,
+      observabilityInstance: true,
       indexManagement: false,
       listScoresBySpan: true,
     };

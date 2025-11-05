@@ -28,9 +28,9 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
   }
 
   // Otherwise, try to create a new root span
-  const aiTracing = options.mastra?.observability.getSelectedInstance({ requestContext });
+  const instance = options.mastra?.observability?.getSelectedInstance({ requestContext });
 
-  return aiTracing?.startSpan<T>({
+  return instance?.startSpan<T>({
     type,
     attributes,
     ...rest,

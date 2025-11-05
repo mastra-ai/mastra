@@ -169,7 +169,7 @@ export class OtelExporter extends BaseExporter {
       );
     }
 
-    // Store the resource in the genSpan converter
+    // Store the resource in the span converter
     this.spanConverter = new SpanConverter(resource);
 
     // Always use BatchSpanProcessor for production

@@ -16,8 +16,8 @@ export class NoOpSpan<TType extends SpanType = any> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
 
-  constructor(options: CreateSpanOptions<TType>, aiTracing: ObservabilityInstance) {
-    super(options, aiTracing);
+  constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
+    super(options, observabilityInstance);
     this.id = 'no-op';
     this.traceId = 'no-op-trace';
   }
