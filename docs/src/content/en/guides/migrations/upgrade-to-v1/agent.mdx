@@ -186,6 +186,16 @@ To migrate, use the standard `generate()` and `stream()` methods.
 + const stream = await agent.stream('Hello');
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-generate-stream-v-next .
+```
+
+:::
+
 ### `format` parameter from `stream()` and `generate()`
 
 The `format` parameter has been removed from `agent.stream()` and `agent.generate()` methods. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package. This change improves tree-shaking by moving AI SDK-specific code to a dedicated package.

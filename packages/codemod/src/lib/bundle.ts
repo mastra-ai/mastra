@@ -6,4 +6,5 @@ export const BUNDLE = [
   'v1/agent-property-access',
   'v1/agent-voice',
   'v1/agent-processor-methods',
+  'v1/agent-generate-stream-v-next',
 ];
