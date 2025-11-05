@@ -11,25 +11,22 @@ The evaluation API has been consolidated on the new scorers system with updated 
 
 ### `runExperiment` to `runEvals`
 
-The `runExperiment()` function has been renamed to `runEvals()`. Additionally, the parameter names have changed: `agent` is now `target`, `inputs` is now `data`, and `scorer` is now `scorers` (plural, accepts an array). This change provides clearer naming that better describes the evaluation functionality.
+The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.
 
-To migrate, update function calls from `runExperiment` to `runEvals` and update the parameter names.
+To migrate, update function calls from `runExperiment` to `runEvals`.
 
 ```diff
-  import { createScorer, runEvals } from '@mastra/core/evals';
-+ import { myAgent } from './agents/my-agent';
+- import { createScorer, runExperiment } from '@mastra/core/evals';
++ import { createScorer, runEvals } from '@mastra/core/evals';
+  import { myAgent } from './agents/my-agent';
 
   const scorer = createScorer({
     id: 'helpfulness-scorer',
     // ...
   });
 
-- const result = await runExperiment({ agent, scorer, inputs });
-+ const result = await runEvals({
-+   target: myAgent,
-+   scorers: [scorer],
-+   data: inputs
-+ });
+- const result = await runExperiment({ target: myAgent, scorers: [scorer], data: inputs });
++ const result = await runEvals({ target: myAgent, scorers: [scorer], data: inputs });
 ```
 
 ### `getScorerByName` to `getScorerById`
