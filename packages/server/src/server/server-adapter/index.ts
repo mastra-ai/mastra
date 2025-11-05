@@ -11,6 +11,7 @@ import {
   listWorkflowsHandler,
   streamWorkflowHandler,
 } from '../handlers/workflows';
+import { listToolsHandler } from '../handlers/tools';
 
 type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
   params: TParams & { mastra: Mastra },
@@ -91,6 +92,12 @@ export const SERVER_ROUTES: ServerRoute[] = [
     responseType: 'stream',
     handler: streamWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/streamVNext',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: listToolsHandler as unknown as ServerRouteHandler,
+    path: '/api/tools',
   },
   {
     method: 'GET',

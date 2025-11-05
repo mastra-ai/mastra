@@ -9,10 +9,6 @@ import express from 'express';
 import { z } from 'zod';
 import { ExpressServerAdapter } from '.';
 
-const app = express();
-app.use(express.json());
-app.use(cors());
-
 export const weatherTool = createTool({
   id: 'get-weather',
   description: 'Get current weather for a location',
@@ -28,9 +24,9 @@ export const weatherTool = createTool({
     conditions: z.string(),
     location: z.string(),
   }),
-  execute: async ({ context }) => {
-    console.log('tool context', context);
-    const location = context.location;
+  execute: async inputData => {
+    console.log('tool context', inputData);
+    const location = inputData.location;
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
     const geocodingData = (await geocodingResponse.json()) as any;
@@ -278,6 +274,10 @@ const mastra = new Mastra({
     },
   },
 });
+
+const app = express();
+app.use(express.json());
+app.use(cors());
 
 const expressServerAdapter = new ExpressServerAdapter({ mastra });
 await expressServerAdapter.registerRoutes(app);
