@@ -139,7 +139,7 @@ export function SpanScoreList({
         onNext={toNextScore}
         onPrevious={toPreviousScore}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
-        usageContext="aiSpanDialog"
+        usageContext="SpanDialog"
       />
     </>
   );

@@ -9,6 +9,17 @@ The evaluation API has been consolidated on the new scorers system with updated 
 
 ## Changed
 
+### `getScorers` to `listScorers`
+
+The `getScorers()` method has been renamed to `listScorers()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
+
+To migrate, replace all calls to `getScorers()` with `listScorers()`.
+
+```diff
+- const scorers = mastra.getScorers();
++ const scorers = mastra.listScorers();
+```
+
 ### `runExperiment` to `runEvals`
 
 The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.

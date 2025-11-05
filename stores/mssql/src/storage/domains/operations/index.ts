@@ -7,7 +7,7 @@ import {
   TABLE_MESSAGES,
   TABLE_TRACES,
   TABLE_SCORERS,
-  TABLE_AI_SPANS,
+  TABLE_SPANS,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -1056,25 +1056,25 @@ export class StoreOperationsMSSQL extends StoreOperations {
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'seq_id DESC'],
       },
-      // AI Spans indexes for optimal trace querying
+      // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['name'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       },
     ];

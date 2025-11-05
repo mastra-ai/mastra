@@ -24,7 +24,7 @@ type ScoreDialogProps = {
   onPrevious?: () => void;
   computeTraceLink: (traceId: string, spanId?: string) => string;
   dialogLevel?: SideDialogRootProps['level'];
-  usageContext?: 'scorerPage' | 'aiSpanDialog';
+  usageContext?: 'scorerPage' | 'SpanDialog';
 };
 
 export function ScoreDialog({
@@ -54,7 +54,7 @@ export function ScoreDialog({
             <GaugeIcon /> {scorerName}
           </TextAndIcon>
         )}
-        {usageContext === 'aiSpanDialog' && (
+        {usageContext === 'SpanDialog' && (
           <>
             <TextAndIcon>
               <EyeIcon /> {getShortId(score?.traceId)}
@@ -92,7 +92,7 @@ export function ScoreDialog({
         <Sections>
           <KeyValueList
             data={[
-              ...(usageContext === 'aiSpanDialog'
+              ...(usageContext === 'SpanDialog'
                 ? [
                     {
                       label: 'Scorer',
@@ -106,7 +106,7 @@ export function ScoreDialog({
                 value: score?.createdAt ? format(new Date(score?.createdAt), 'MMM d, h:mm:ss aaa') : 'n/a',
                 key: 'date',
               },
-              ...(usageContext !== 'aiSpanDialog'
+              ...(usageContext !== 'SpanDialog'
                 ? [
                     {
                       label: 'Trace ID',

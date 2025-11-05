@@ -5,26 +5,19 @@ description: "Learn how to migrate workflow-related changes when upgrading to v1
 
 # Workflows
 
-Workflow step execution signatures have been updated to match tool signatures, and legacy workflow features have been removed.
+Legacy workflow features have been removed.
 
 ## Changed
 
-### Workflow step `execute` signature to `(inputData, context)` format
+### `getWorkflows` to `listWorkflows`
 
-Workflow step `execute` functions now receive `inputData` as the first parameter and `context` as the second parameter. This change aligns with the tool signature changes and provides clearer separation between step inputs and execution context.
+The `mastra.getWorkflows()` method has been renamed to `mastra.listWorkflows()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
 
-To migrate, update step signatures to use `inputData` as the first parameter (typed from `inputSchema`) and access context properties through the `context` parameter.
+To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkflows()`.
 
 ```diff
-  createStep({
--   execute: async ({ inputData, mastra, requestContext, tracingContext }) => {
--     // inputData was wrapped in an object
--   },
-+   execute: async (inputData, context) => {
-+     // inputData is the first parameter
-+     // context contains: { mastra, requestContext, tracingContext, suspend, resumeData, workflow }
-+   },
-  });
+- const workflows = mastra.getWorkflows();
++ const workflows = mastra.listWorkflows();
 ```
 
 ### `RuntimeContext` to `RequestContext` in step context
@@ -35,9 +28,10 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
 
 ```diff
   createStep({
-    execute: async (inputData, context) => {
+-   execute: async ({ runtimeContext } ) => {
 -     const userTier = context.runtimeContext.get('userTier');
-+     const userTier = context.requestContext.get('userTier');
++   execute: async ({ requestContext } ) => {
++     const userTier = requestContext.get('userTier');
       return { result: userTier };
     },
   });
@@ -141,17 +135,34 @@ To migrate, use the workflow events API or streaming instead of watch events.
 
 ### `waitForEvent` API
 
-The `waitForEvent` API has been removed from workflows. Use the streaming API or events system instead.
+The `waitForEvent` API has been removed from workflows. Use the suspend/resume API instead.
 
-To migrate, use workflow streaming or the events API for waiting on workflow execution milestones.
+To migrate, use suspend/resume API for waiting on workflow execution milestones.
 
 ```diff
-- await workflow.waitForEvent('step-complete');
-+ // Use streaming API instead
-+ const stream = await run.stream({ inputData: { ... } });
-+ for await (const chunk of stream) {
-+   if (chunk.type === 'step-complete') {
-+     // Handle step completion
+- workflow.waitForEvent('step-complete', step1).commit();
++ workflow.then(step1).commit();
++ // Use suspend/resume API instead, in step1 execute function
+createStep({
+- execute: async (inputData, context) => {
+-  // ... execution logic 
+- }
++ execute: async (inputData, context) => {
++   if (!context.resumeData) {
++     return context.suspend({})
 +   }
++   //..continue execution logic
++ }
+});
++
++ // after workflow is suspended, you can resume it
++ const result = await run.start({ inputData: { ... } });
++ if (result.status === 'suspended') {
++   const resumedResult = await run.resume({
++     resumeData: {
++       event: 'step-complete',
++     },
++     step: 'step1',
++   });
 + }
 ```

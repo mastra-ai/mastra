@@ -7,11 +7,12 @@ import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraScorers } from '../evals';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import { AISpanType, getOrCreateSpan } from '../observability';
+import { SpanType, getOrCreateSpan } from '../observability';
 import type { WorkflowRun } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
@@ -605,32 +606,27 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
   }
 
+  /**
+   * @deprecated waitForEvent has been removed. Please use suspend/resume instead.
+   */
   waitForEvent<
     TStepState extends z.ZodObject<any>,
     TStepInputSchema extends TPrevSchema,
     TStepId extends string,
     TSchemaOut extends z.ZodType<any>,
   >(
-    event: string,
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    opts?: {
+    _event: string,
+    _step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+    _opts?: {
       timeout?: number;
     },
   ) {
-    this.stepFlow.push({ type: 'waitForEvent', event, step: step as any, timeout: opts?.timeout });
-    this.serializedStepFlow.push({
-      type: 'waitForEvent',
-      event,
-      step: {
-        id: step.id,
-        description: step.description,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-      },
-      timeout: opts?.timeout,
+    throw new MastraError({
+      id: 'WORKFLOW_WAIT_FOR_EVENT_REMOVED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text: 'waitForEvent has been removed. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
     });
-    this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
   }
 
   map(
@@ -1524,10 +1520,6 @@ export class Run<
     this.abortController?.abort();
   }
 
-  async sendEvent(event: string, data: any) {
-    this.emitter.emit(`user-event-${event}`, data);
-  }
-
   protected async _validateInput(inputData: z.input<TInput>) {
     const firstEntry = this.executionGraph.steps[0];
     let inputDataToUse = inputData;
@@ -1631,8 +1623,8 @@ export class Run<
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
       attributes: {
@@ -1649,7 +1641,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
-    const traceId = workflowAISpan?.externalTraceId;
+    const traceId = workflowSpan?.externalTraceId;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
@@ -1684,7 +1676,7 @@ export class Run<
       requestContext: requestContext ?? new RequestContext(),
       abortController: this.abortController,
       writableStream,
-      workflowAISpan,
+      workflowSpan,
       format,
       outputOptions,
     });
@@ -2315,8 +2307,8 @@ export class Run<
     });
 
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: resumeDataToUse,
       attributes: {
@@ -2333,7 +2325,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
-    const traceId = workflowAISpan?.externalTraceId;
+    const traceId = workflowSpan?.externalTraceId;
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -2371,7 +2363,7 @@ export class Run<
         },
         requestContext: requestContextToUse,
         abortController: this.abortController,
-        workflowAISpan,
+        workflowSpan,
         outputOptions: params.outputOptions,
         writableStream: params.writableStream,
       })

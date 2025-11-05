@@ -4,7 +4,7 @@ import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import { AISpanType, wrapMastra } from '@mastra/core/observability';
+import { SpanType, wrapMastra } from '@mastra/core/observability';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
@@ -181,13 +181,6 @@ export class InngestRun<
       }
     }
     return runs?.[0];
-  }
-
-  async sendEvent(event: string, data: any) {
-    await this.inngest.send({
-      name: `user-event-${event}`,
-      data,
-    });
   }
 
   async cancel() {
@@ -785,7 +778,7 @@ export class InngestWorkflow<
           resume,
           format,
           abortController: new AbortController(),
-          // currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+          // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
@@ -1231,7 +1224,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     let { duration, fn } = entry;
 
     const sleepSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
         durationMs: duration,
@@ -1348,7 +1341,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     let { date, fn } = entry;
 
     const sleepUntilSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
         untilDate: date,
@@ -1435,19 +1428,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
   }
 
-  async executeWaitForEvent({ event, timeout }: { event: string; timeout?: number }): Promise<any> {
-    const eventData = await this.inngestStep.waitForEvent(`user-event-${event}`, {
-      event: `user-event-${event}`,
-      timeout: timeout ?? 5e3,
-    });
-
-    if (eventData === null) {
-      throw 'Timeout waiting for event';
-    }
-
-    return eventData?.data;
-  }
-
   async executeStep({
     step,
     stepResults,
@@ -1477,9 +1457,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
+    const stepSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
-      type: AISpanType.WORKFLOW_STEP,
+      type: SpanType.WORKFLOW_STEP,
       input: prevOutput,
       attributes: {
         stepId: step.id,
@@ -1732,7 +1712,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
             tracingContext: {
-              currentSpan: stepAISpan,
+              currentSpan: stepSpan,
             },
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
@@ -1792,7 +1772,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           execResults = stepFailure;
 
           const fallbackErrorMessage = `Step ${step.id} failed`;
-          stepAISpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
+          stepSpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
           throw new RetryAfterError(execResults.error ?? fallbackErrorMessage, executionContext.retryConfig.delay, {
             cause: execResults,
           });
@@ -1844,7 +1824,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           });
         }
 
-        stepAISpan?.end({ output: execResults });
+        stepSpan?.end({ output: execResults });
 
         return { result: execResults, executionContext, stepResults };
       });
@@ -1882,7 +1862,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             requestContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan },
+            tracingContext: { currentSpan: stepSpan },
           });
         }
       });
@@ -1993,7 +1973,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_CONDITIONAL,
+      type: SpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: '${entry.conditions.length} conditions'`,
       input: prevOutput,
       attributes: {
@@ -2008,7 +1988,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         entry.conditions.map((cond, index) =>
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
             const evalSpan = conditionalSpan?.createChildSpan({
-              type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+              type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
               name: `condition: '${index}'`,
               input: prevOutput,
               attributes: {

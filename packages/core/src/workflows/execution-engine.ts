@@ -3,7 +3,7 @@ import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AISpan, AISpanType, TracingPolicy } from '../observability';
+import type { Span, SpanType, TracingPolicy } from '../observability';
 import type { ChunkType } from '../stream/types';
 import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
 import type { StepFlowEntry } from '.';
@@ -67,7 +67,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     requestContext: RequestContext;
-    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;
       delay?: number;

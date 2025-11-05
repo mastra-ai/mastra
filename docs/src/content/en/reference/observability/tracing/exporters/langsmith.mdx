@@ -1,0 +1,115 @@
+---
+title: "Reference: LangSmithExporter | Observability | Mastra Docs"
+description: LangSmith exporter for Tracing
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# LangSmithExporter
+
+Sends Tracing data to LangSmith for observability.
+
+## Constructor
+
+```typescript
+new LangSmithExporter(config: LangSmithExporterConfig)
+```
+
+## LangSmithExporterConfig
+
+```typescript
+interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
+  client?: Client;
+}
+```
+
+Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
+- From `BaseExporterConfig`: `logger?: IMastraLogger`, `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'`
+- From `ClientConfig`: `apiKey`, `apiUrl`, `callerOptions`, `hideInputs`, `hideOutputs`, etc.
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "LangSmith API key",
+      required: false,
+    },
+    {
+      name: "apiUrl",
+      type: "string",
+      description: "LangSmith API URL",
+      required: false,
+    },
+    {
+      name: "callerOptions",
+      type: "object",
+      description: "HTTP client configuration options",
+      required: false,
+    },
+    {
+      name: "hideInputs",
+      type: "boolean",
+      description: "Hide input data in the LangSmith UI",
+      required: false,
+    },
+    {
+      name: "hideOutputs",
+      type: "boolean",
+      description: "Hide output data in the LangSmith UI",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "Logger level (default: 'warn')",
+      required: false,
+    },
+    {
+      name: "client",
+      type: "Client",
+      description: "Pre-configured LangSmith client instance",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to LangSmith.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Ends all active spans and clears the trace map.
+
+## Usage
+
+```typescript
+import { LangSmithExporter } from "@mastra/langsmith";
+
+const exporter = new LangSmithExporter({
+  apiKey: process.env.LANGSMITH_API_KEY,
+  apiUrl: "https://api.smith.langchain.com",
+  logLevel: "info",
+});
+```
+
+## Span Type Mapping
+
+| Span Type       | LangSmith Type |
+| ------------------ | -------------- |
+| `MODEL_GENERATION` | `llm`          |
+| `MODEL_CHUNK`      | `llm`          |
+| `TOOL_CALL`        | `tool`         |
+| `MCP_TOOL_CALL`    | `tool`         |
+| All others         | `chain`        |

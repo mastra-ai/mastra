@@ -9,6 +9,17 @@ The Agent class has been updated with reorganized voice methods, updated propert
 
 ## Changed
 
+### `getAgents` to `listAgents`
+
+The `mastra.getAgents()` method has been renamed to `mastra.listAgents()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
+
+To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`.
+
+```diff
+- const agents = mastra.getAgents();
++ const agents = mastra.listAgents();
+```
+
 ### `RuntimeContext` to `RequestContext`
 
 The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.

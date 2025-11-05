@@ -2,9 +2,9 @@
  * Tests for OTEL-compliant span conversion
  */
 
-import { AISpanType } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type {
-  ExportedAISpan,
+  ExportedSpan,
   ModelGenerationAttributes,
   AgentRunAttributes,
   ToolCallAttributes,
@@ -24,11 +24,11 @@ describe('SpanConverter', () => {
 
   describe('Span Naming Conventions', () => {
     it('should format LLM generation span names correctly', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -45,11 +45,11 @@ describe('SpanConverter', () => {
     });
 
     it('should use tool_selection for tool selection LLM calls', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -66,11 +66,11 @@ describe('SpanConverter', () => {
     });
 
     it('should format tool call span names correctly', () => {
-      const span: ExportedAISpan<AISpanType.TOOL_CALL> = {
+      const span: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -86,11 +86,11 @@ describe('SpanConverter', () => {
     });
 
     it('should format agent span names correctly', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -106,11 +106,11 @@ describe('SpanConverter', () => {
     });
 
     it('should format workflow span names correctly', () => {
-      const span: ExportedAISpan<AISpanType.WORKFLOW_RUN> = {
+      const span: ExportedSpan<SpanType.WORKFLOW_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.WORKFLOW_RUN,
+        type: SpanType.WORKFLOW_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -128,11 +128,11 @@ describe('SpanConverter', () => {
 
   describe('Span Kind Mapping', () => {
     it('should use SERVER for root agent spans', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'agent-run',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -145,11 +145,11 @@ describe('SpanConverter', () => {
     });
 
     it('should use SERVER for root workflow spans', () => {
-      const span: ExportedAISpan<AISpanType.WORKFLOW_RUN> = {
+      const span: ExportedSpan<SpanType.WORKFLOW_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'workflow-run',
-        type: AISpanType.WORKFLOW_RUN,
+        type: SpanType.WORKFLOW_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -162,11 +162,11 @@ describe('SpanConverter', () => {
     });
 
     it('should use CLIENT for LLM generation spans', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -179,11 +179,11 @@ describe('SpanConverter', () => {
     });
 
     it('should use INTERNAL for tool calls', () => {
-      const span: ExportedAISpan<AISpanType.TOOL_CALL> = {
+      const span: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'tool-call',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -196,11 +196,11 @@ describe('SpanConverter', () => {
     });
 
     it('should use CLIENT for MCP tool calls', () => {
-      const span: ExportedAISpan<AISpanType.MCP_TOOL_CALL> = {
+      const span: ExportedSpan<SpanType.MCP_TOOL_CALL> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'mcp-tool',
-        type: AISpanType.MCP_TOOL_CALL,
+        type: SpanType.MCP_TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -218,11 +218,11 @@ describe('SpanConverter', () => {
 
   describe('Token Usage Attribute Mapping', () => {
     it('should map v5 token format correctly', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -254,11 +254,11 @@ describe('SpanConverter', () => {
     });
 
     it('should map legacy token format correctly', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -288,11 +288,11 @@ describe('SpanConverter', () => {
 
   describe('OTEL GenAI Attributes', () => {
     it('should include gen_ai.operation.name', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -308,11 +308,11 @@ describe('SpanConverter', () => {
     });
 
     it('should map LLM parameters to OTEL conventions', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -353,11 +353,11 @@ describe('SpanConverter', () => {
     });
 
     it('should handle tool attributes correctly', () => {
-      const span: ExportedAISpan<AISpanType.TOOL_CALL> = {
+      const span: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'tool-call',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -383,11 +383,11 @@ describe('SpanConverter', () => {
     });
 
     it('should handle MCP tool attributes correctly', () => {
-      const span: ExportedAISpan<AISpanType.MCP_TOOL_CALL> = {
+      const span: ExportedSpan<SpanType.MCP_TOOL_CALL> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'mcp-tool',
-        type: AISpanType.MCP_TOOL_CALL,
+        type: SpanType.MCP_TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -410,11 +410,11 @@ describe('SpanConverter', () => {
     });
 
     it('should handle agent attributes correctly', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'agent-run',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -438,11 +438,11 @@ describe('SpanConverter', () => {
 
   describe('Input/Output Handling', () => {
     it('should use gen_ai.prompt/completion for LLM spans', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -462,11 +462,11 @@ describe('SpanConverter', () => {
     });
 
     it('should serialize complex input/output', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -502,11 +502,11 @@ describe('SpanConverter', () => {
 
   describe('Error Handling', () => {
     it('should add error attributes when error info is present', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -533,11 +533,11 @@ describe('SpanConverter', () => {
 
   describe('Metadata Handling', () => {
     it('should add metadata as custom attributes', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'agent-run',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
