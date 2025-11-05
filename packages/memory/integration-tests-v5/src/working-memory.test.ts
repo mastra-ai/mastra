@@ -1898,7 +1898,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       'Calculate what 15 times 4 is, then remember that my name is Bob and I live in Seattle, then tell me the weather in Seattle.',
       {
         memory: { thread: threadId, resource: resourceId },
-        maxSteps: 10,
+        maxSteps: 5,
       },
     );
 

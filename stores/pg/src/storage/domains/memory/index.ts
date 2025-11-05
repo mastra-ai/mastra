@@ -567,6 +567,11 @@ export class MemoryPG extends MemoryStorage {
         const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
         const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 
+        // Handle undefined/null values (sort to end)
+        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+
         // Handle tiebreaker for stable sorting
         if (aValue === bValue) {
           return a.id.localeCompare(b.id);

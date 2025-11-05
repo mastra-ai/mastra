@@ -690,7 +690,7 @@ describe('Memory Handlers', () => {
         },
         storage,
       });
-      storage.getThreadById = vi.fn().mockResolvedValue(null);
+      vi.spyOn(storage, 'getThreadById').mockResolvedValue(null);
       await expect(listMessagesHandler({ mastra, threadId: 'non-existent', agentId: 'test-agent' })).rejects.toThrow(
         new HTTPException(404, { message: 'Thread not found' }),
       );
@@ -723,8 +723,8 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      storage.getThreadById = vi.fn().mockResolvedValue(createThread({}));
-      storage.listMessages = vi.fn().mockResolvedValue(mockResult);
+      vi.spyOn(storage, 'getThreadById').mockResolvedValue(createThread({}));
+      vi.spyOn(storage, 'listMessages').mockResolvedValue(mockResult);
 
       const result = await listMessagesHandler({
         mastra,

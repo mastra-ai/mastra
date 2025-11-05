@@ -926,6 +926,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         const aVal = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
         const bVal = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
 
+        // Handle undefined/null values (sort to end)
+        if (aVal == null && bVal == null) return a.id.localeCompare(b.id);
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+
         if (typeof aVal === 'number' && typeof bVal === 'number') {
           const cmp = direction === 'ASC' ? aVal - bVal : bVal - aVal;
           return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
