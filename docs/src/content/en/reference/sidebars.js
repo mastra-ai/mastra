@@ -629,6 +629,9 @@ const sidebars = {
       label: "Evals",
       collapsed: true,
       items: [
+        { type: "doc", id: "evals/mastra-scorer", label: "MastraScorer" },
+        { type: "doc", id: "evals/create-scorer", label: "createScorer" },
+        { type: "doc", id: "evals/run-evals", label: "runEvals" },
         { type: "doc", id: "evals/bias", label: "Bias" },
         { type: "doc", id: "evals/completeness", label: "Completeness" },
         { type: "doc", id: "evals/faithfulness", label: "Faithfulness" },
@@ -647,16 +650,13 @@ const sidebars = {
         {
           type: "doc",
           id: "evals/noise-sensitivity",
-          label: "Noise Sensitivity Scorer (CI/Testing Only)",
+          label: "Noise Sensitivity Scorer",
         },
-        { type: "doc", id: "evals/mastra-scorer", label: "MastraScorer" },
-        { type: "doc", id: "evals/create-scorer", label: "createScorer" },
         {
           type: "doc",
           id: "evals/content-similarity",
           label: "Content Similarity Scorer",
         },
-        { type: "doc", id: "evals/run-evals", label: "runEvals" },
         {
           type: "doc",
           id: "evals/answer-relevancy",
