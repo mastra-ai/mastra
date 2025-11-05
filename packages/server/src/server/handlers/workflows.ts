@@ -245,7 +245,6 @@ export async function executeWorkflowHandler({
       tracingOptions,
     });
 
-    // Include runId in the result for better developer experience
     return {
       ...result,
       runId: _run.runId,

@@ -667,7 +667,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
     '/:workflowId/execute',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Execute workflow and return final result in one call',
+      description: 'Execute a workflow and return result',
       tags: ['workflows'],
       parameters: [
         {
@@ -681,7 +681,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
           in: 'query',
           required: false,
           schema: { type: 'string' },
-          description: 'Optional custom run ID (auto-generated if not provided)',
+          description: 'Optional custom run ID',
         },
       ],
       requestBody: {
@@ -691,13 +691,10 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
             schema: {
               type: 'object',
               properties: {
-                inputData: {
-                  type: 'object',
-                  description: 'Input data for the workflow',
-                },
+                inputData: { type: 'object' },
                 requestContext: {
                   type: 'object',
-                  description: 'Request context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -718,10 +715,10 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       responses: {
         200: {
-          description: 'Complete workflow execution result',
+          description: 'workflow execution result',
         },
         404: {
-          description: 'Workflow not found',
+          description: 'workflow not found',
         },
       },
     }),
