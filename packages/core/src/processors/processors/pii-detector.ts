@@ -1,10 +1,10 @@
 import * as crypto from 'crypto';
 import z from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { TracingContext } from '../../ai-tracing';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -29,24 +29,14 @@ export interface PIICategories {
 }
 
 /**
- * Confidence scores for each PII category (0-1)
+ * Individual PII category score
  */
-export interface PIICategoryScores {
-  email?: number;
-  phone?: number;
-  'credit-card'?: number;
-  ssn?: number;
-  'api-key'?: number;
-  'ip-address'?: number;
-  name?: number;
-  address?: number;
-  'date-of-birth'?: number;
-  url?: number;
-  uuid?: number;
-  'crypto-wallet'?: number;
-  iban?: number;
-  [customType: string]: number | undefined;
+export interface PIICategoryScore {
+  type: string;
+  score: number;
 }
+
+export type PIICategoryScores = PIICategoryScore[];
 
 /**
  * Individual PII detection with location and redaction info
@@ -57,16 +47,16 @@ export interface PIIDetection {
   confidence: number;
   start: number;
   end: number;
-  redacted_value?: string;
+  redacted_value?: string | null; // Only present when strategy is 'redact'
 }
 
 /**
  * Result structure for PII detection (simplified for minimal tokens)
  */
 export interface PIIDetectionResult {
-  categories?: PIICategoryScores;
-  detections?: PIIDetection[];
-  redacted_content?: string;
+  categories: PIICategoryScores | null;
+  detections: PIIDetection[] | null;
+  redacted_content?: string | null; // Only present when strategy is 'redact'
 }
 
 /**
@@ -126,6 +116,16 @@ export interface PIIDetectorOptions {
    * When true, maintains structure like ***-**-1234 for phone numbers
    */
   preserveFormat?: boolean;
+
+  /**
+   * Structured output options used for the detection agent
+   */
+  structuredOutputOptions?: {
+    /**
+     * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+     */
+    jsonPromptInjection?: boolean;
+  };
 }
 
 /**
@@ -136,7 +136,8 @@ export interface PIIDetectorOptions {
  * for compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
  */
 export class PIIDetector implements Processor {
-  readonly name = 'pii-detector';
+  readonly id = 'pii-detector';
+  readonly name = 'PII Detector';
 
   private detectionAgent: Agent;
   private detectionTypes: string[];
@@ -145,6 +146,7 @@ export class PIIDetector implements Processor {
   private redactionMethod: 'mask' | 'hash' | 'remove' | 'placeholder';
   private includeDetections: boolean;
   private preserveFormat: boolean;
+  private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -170,20 +172,22 @@ export class PIIDetector implements Processor {
     this.redactionMethod = options.redactionMethod || 'mask';
     this.includeDetections = options.includeDetections ?? false;
     this.preserveFormat = options.preserveFormat ?? true;
+    this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
-      name: 'pii-detector',
+      id: 'pii-detector',
+      name: 'PII Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
     });
   }
 
   async processInput(args: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       const { messages, abort, tracingContext } = args;
 
@@ -191,7 +195,7 @@ export class PIIDetector implements Processor {
         return messages;
       }
 
-      const processedMessages: MastraMessageV2[] = [];
+      const processedMessages: MastraDBMessage[] = [];
 
       // Evaluate each message
       for (const message of messages) {
@@ -238,40 +242,59 @@ export class PIIDetector implements Processor {
   private async detectPII(content: string, tracingContext?: TracingContext): Promise<PIIDetectionResult> {
     const prompt = this.createDetectionPrompt(content);
 
-    const schema = z.object({
-      categories: z
-        .object(
-          this.detectionTypes.reduce(
-            (props, type) => {
-              props[type] = z.number().min(0).max(1).optional();
-              return props;
-            },
-            {} as Record<string, z.ZodType<number | undefined>>,
-          ),
-        )
-        .optional(),
-      detections: z
-        .array(
-          z.object({
-            type: z.string(),
-            value: z.string(),
-            confidence: z.number().min(0).max(1),
-            start: z.number(),
-            end: z.number(),
-            redacted_value: z.string().optional(),
-          }),
-        )
-        .optional(),
-      redacted_content: z.string().optional(),
-    });
-
     try {
       const model = await this.detectionAgent.getModel();
+
+      const baseDetectionSchema = z.object({
+        type: z.string().describe('Type of PII detected'),
+        value: z.string().describe('The actual PII value found'),
+        confidence: z.number().min(0).max(1).describe('Confidence of this detection'),
+        start: z.number().describe('Start position in the text'),
+        end: z.number().describe('End position in the text'),
+      });
+
+      const detectionSchema =
+        this.strategy === 'redact'
+          ? baseDetectionSchema.extend({
+              redacted_value: z.string().describe('Redacted version of the value').nullable(),
+            })
+          : baseDetectionSchema;
+
+      const baseSchema = z.object({
+        categories: z
+          .array(
+            z.object({
+              type: z
+                .enum(this.detectionTypes as [string, ...string[]])
+                .describe('The type of PII detected from the list of detection types'),
+              score: z
+                .number()
+                .min(0)
+                .max(1)
+                .describe('Confidence level between 0 and 1 indicating how certain the detection is'),
+            }),
+          )
+          .describe('Array of detected PII types with their confidence scores')
+          .nullable(),
+        detections: z.array(detectionSchema).describe('Array of specific PII detections with locations').nullable(),
+      });
+
+      const schema =
+        this.strategy === 'redact'
+          ? baseSchema.extend({
+              redacted_content: z
+                .string()
+                .describe('The content with all PII redacted according to the redaction method')
+                .nullable(),
+            })
+          : baseSchema;
+
       let response;
       if (model.specificationVersion === 'v2') {
         response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,
+            ...(this.structuredOutputOptions ?? {}),
           },
           modelSettings: {
             temperature: 0,
@@ -287,21 +310,26 @@ export class PIIDetector implements Processor {
       }
 
       const result = response.object as PIIDetectionResult;
-
       // Apply redaction method if not already provided and we have detections
-      if (!result.redacted_content && result.detections && result.detections.length > 0) {
-        result.redacted_content = this.applyRedactionMethod(content, result.detections);
-        result.detections = result.detections.map(detection => ({
-          ...detection,
-          redacted_value: detection.redacted_value || this.redactValue(detection.value, detection.type),
-        }));
+      if (this.strategy === 'redact') {
+        if (!result.redacted_content && result.detections && result.detections.length > 0) {
+          result.redacted_content = this.applyRedactionMethod(content, result.detections);
+          result.detections = result.detections.map(detection => ({
+            ...detection,
+            redacted_value: detection.redacted_value || this.redactValue(detection.value, detection.type),
+          }));
+        }
       }
 
       return result;
     } catch (error) {
       console.warn('[PIIDetector] Detection agent failed, allowing content:', error);
       // Fail open - return empty result if detection agent fails (no PII detected)
-      return {};
+      return {
+        categories: null,
+        detections: null,
+        redacted_content: this.strategy === 'redact' ? null : undefined,
+      };
     }
   }
 
@@ -315,10 +343,8 @@ export class PIIDetector implements Processor {
     }
 
     // Check if any category scores exceed the threshold
-    if (result.categories) {
-      const maxScore = Math.max(
-        ...(Object.values(result.categories).filter(score => typeof score === 'number') as number[]),
-      );
+    if (result.categories && result.categories.length > 0) {
+      const maxScore = Math.max(...result.categories.map(cat => cat.score));
       return maxScore >= this.threshold;
     }
 
@@ -329,14 +355,12 @@ export class PIIDetector implements Processor {
    * Handle detected PII based on strategy
    */
   private handleDetectedPII(
-    message: MastraMessageV2,
+    message: MastraDBMessage,
     result: PIIDetectionResult,
     strategy: 'block' | 'warn' | 'filter' | 'redact',
     abort: (reason?: string) => never,
-  ): MastraMessageV2 | null {
-    const detectedTypes = Object.entries(result.categories || {})
-      .filter(([_, detected]) => detected)
-      .map(([type]) => type);
+  ): MastraDBMessage | null {
+    const detectedTypes = (result.categories || []).filter(cat => cat.score >= this.threshold).map(cat => cat.type);
 
     const alertMessage = `PII detected. Types: ${detectedTypes.join(', ')}${
       this.includeDetections && result.detections ? `. Detections: ${result.detections.length} items` : ''
@@ -371,7 +395,7 @@ export class PIIDetector implements Processor {
   /**
    * Create a redacted message with PII removed/masked
    */
-  private createRedactedMessage(originalMessage: MastraMessageV2, redactedContent: string): MastraMessageV2 {
+  private createRedactedMessage(originalMessage: MastraDBMessage, redactedContent: string): MastraDBMessage {
     return {
       ...originalMessage,
       content: {
@@ -499,7 +523,7 @@ export class PIIDetector implements Processor {
   /**
    * Extract text content from message for analysis
    */
-  private extractTextContent(message: MastraMessageV2): string {
+  private extractTextContent(message: MastraDBMessage): string {
     let text = '';
 
     if (message.content.parts) {
@@ -526,7 +550,7 @@ export class PIIDetector implements Processor {
 Detect and analyze the following PII types:
 ${this.detectionTypes.map(type => `- ${type}`).join('\n')}
 
-IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHING ELSE. Do not include any zeros in your response, if the response should be 0, omit it, they will be counted as false.`;
+IMPORTANT: Only include PII types that are actually detected. If no PII is found, return empty arrays for categories and detections.`;
   }
 
   /**
@@ -610,16 +634,16 @@ IMPORTANT: IF NO PII IS DETECTED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHIN
     abort,
     tracingContext,
   }: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     try {
       if (messages.length === 0) {
         return messages;
       }
 
-      const processedMessages: MastraMessageV2[] = [];
+      const processedMessages: MastraDBMessage[] = [];
 
       // Evaluate each message
       for (const message of messages) {

@@ -5,7 +5,6 @@ import type {
   LanguageModelV2ProviderDefinedTool,
 } from '@ai-sdk/provider-v5';
 import { stepCountIs, tool } from 'ai-v5';
-import type { TextStreamPart } from 'ai-v5';
 import {
   convertArrayToReadableStream,
   convertReadableStreamToArray,
@@ -16,6 +15,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';
+import type { ChunkType } from '../../stream/types';
 import {
   createTestModels,
   testUsage,
@@ -25,7 +25,6 @@ import {
   testUsage2,
   createMessageListWithUserMessage,
 } from './utils';
-import { ModelSpanTracker } from '../../ai-tracing';
 
 export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('options.abortSignal', () => {
@@ -34,7 +33,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
       const abortController = new AbortController();
       const toolExecuteMock = vi.fn().mockResolvedValue('tool result');
-      const modelSpanTracker = new ModelSpanTracker();
 
       const result = loopFn({
         runId,
@@ -64,7 +62,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           abortSignal: abortController.signal,
         },
         agentId: 'agent-id',
-        modelSpanTracker,
       });
 
       await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
@@ -80,7 +77,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           writableStream: expect.any(Object),
           resumeData: undefined,
           suspend: expect.any(Function),
-          tracingContext: expect.any(Object),
         },
       );
     });
@@ -1644,7 +1640,26 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "call": "1",
                     },
                     "id": "id-0",
-                    "messages": [],
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [],
+                        "role": "tool",
+                      },
+                    ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
@@ -1770,7 +1785,26 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "call": "1",
                     },
                     "id": "id-0",
-                    "messages": [],
+                    "messages": [
+                      {
+                        "content": [
+                          {
+                            "input": {
+                              "value": "value",
+                            },
+                            "providerExecuted": undefined,
+                            "toolCallId": "call-1",
+                            "toolName": "tool1",
+                            "type": "tool-call",
+                          },
+                        ],
+                        "role": "assistant",
+                      },
+                      {
+                        "content": [],
+                        "role": "tool",
+                      },
+                    ],
                     "modelId": "mock-model-id",
                     "timestamp": 1970-01-01T00:00:00.000Z,
                   },
@@ -3812,22 +3846,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   });
 
   describe('options.onChunk', () => {
-    let result: Array<
-      Extract<
-        TextStreamPart<any>,
-        {
-          type:
-            | 'text-delta'
-            | 'reasoning-delta'
-            | 'source'
-            | 'tool-call'
-            | 'tool-input-start'
-            | 'tool-input-delta'
-            | 'tool-result'
-            | 'raw';
-        }
-      >
-    >;
+    let result: Array<ChunkType>;
 
     beforeEach(async () => {
       const messageList = createMessageListWithUserMessage();
@@ -3883,8 +3902,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         },
         messageList,
         options: {
-          onChunk(event) {
-            result.push((event as any).chunk);
+          onChunk(chunk) {
+            result.push(chunk);
           },
         },
       });
@@ -3896,84 +3915,126 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(result).toMatchInlineSnapshot(`
         [
           {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello",
+            "from": "AGENT",
+            "payload": {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello",
+            },
+            "runId": "test-run-id",
             "type": "text-delta",
           },
           {
-            "dynamic": false,
-            "id": "2",
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
-            "toolName": "tool1",
-            "type": "tool-input-start",
+            "from": "AGENT",
+            "payload": {
+              "providerExecuted": undefined,
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-input-streaming-start",
           },
           {
-            "delta": "{"value": "",
-            "id": "2",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
+            "from": "AGENT",
+            "payload": {
+              "argsTextDelta": "{"value": "",
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-delta",
           },
           {
-            "id": "3",
-            "providerMetadata": undefined,
-            "text": "Feeling clever",
+            "from": "AGENT",
+            "payload": {
+              "id": "3",
+              "providerMetadata": undefined,
+              "text": "Feeling clever",
+            },
+            "runId": "test-run-id",
             "type": "reasoning-delta",
           },
           {
-            "delta": "test",
-            "id": "2",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": ""}",
-            "id": "2",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "id": "123",
-            "providerMetadata": {
-              "provider": {
-                "custom": "value",
-              },
+            "from": "AGENT",
+            "payload": {
+              "argsTextDelta": "test",
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
             },
-            "sourceType": "url",
-            "title": "Example",
+            "runId": "test-run-id",
+            "type": "tool-call-delta",
+          },
+          {
+            "from": "AGENT",
+            "payload": {
+              "argsTextDelta": ""}",
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-delta",
+          },
+          {
+            "from": "AGENT",
+            "payload": {
+              "filename": undefined,
+              "id": "123",
+              "mimeType": undefined,
+              "providerMetadata": {
+                "provider": {
+                  "custom": "value",
+                },
+              },
+              "sourceType": "url",
+              "title": "Example",
+              "url": "https://example.com",
+            },
+            "runId": "test-run-id",
             "type": "source",
-            "url": "https://example.com",
           },
           {
-            "input": {
-              "value": "test",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": {
-              "provider": {
-                "custom": "value",
+            "from": "AGENT",
+            "payload": {
+              "args": {
+                "value": "test",
               },
+              "providerExecuted": undefined,
+              "providerMetadata": {
+                "provider": {
+                  "custom": "value",
+                },
+              },
+              "toolCallId": "2",
+              "toolName": "tool1",
             },
-            "toolCallId": "2",
-            "toolName": "tool1",
+            "runId": "test-run-id",
             "type": "tool-call",
           },
           {
-            "id": "4",
-            "providerMetadata": undefined,
-            "text": " World",
+            "from": "AGENT",
+            "payload": {
+              "id": "4",
+              "providerMetadata": undefined,
+              "text": " World",
+            },
+            "runId": "test-run-id",
             "type": "text-delta",
           },
           {
-            "input": {
-              "value": "test",
+            "chunk": {
+              "input": {
+                "value": "test",
+              },
+              "output": "test-result",
+              "providerExecuted": undefined,
+              "toolCallId": "2",
+              "toolName": "tool1",
+              "type": "tool-result",
             },
-            "output": "test-result",
-            "providerExecuted": undefined,
-            "toolCallId": "2",
-            "toolName": "tool1",
-            "type": "tool-result",
           },
         ]
       `);
@@ -5889,8 +5950,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
         messageList,
         includeRawChunks: true,
         options: {
-          onChunk(event) {
-            const chunk = (event as any).chunk;
+          onChunk(chunk) {
             onChunkCalls.push(chunk);
           },
         },
@@ -5901,45 +5961,59 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       expect(onChunkCalls).toMatchInlineSnapshot(`
         [
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "data": "start",
               "type": "stream-start",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "id": "test-id",
               "modelId": "test-model",
               "type": "response-metadata",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "content": "Hello",
               "type": "text-delta",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "content": ", world!",
               "type": "text-delta",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "rawValue": {
+            "from": "AGENT",
+            "payload": {
               "reason": "stop",
               "type": "finish",
             },
+            "runId": "test-run-id",
             "type": "raw",
           },
           {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello, world!",
+            "from": "AGENT",
+            "payload": {
+              "id": "1",
+              "providerMetadata": undefined,
+              "text": "Hello, world!",
+            },
+            "runId": "test-run-id",
             "type": "text-delta",
           },
         ]

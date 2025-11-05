@@ -12,15 +12,14 @@ Think of `Mastra` as a top-level registry:
 - Registering **integrations** makes them accessible to **agents**, **workflows**, and **tools** alike.
 - **tools** aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
 
-
 ## Usage example
 
-```typescript filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherWorkflow } from "./workflows/weather-workflow";
+import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
@@ -29,8 +28,8 @@ export const mastra = new Mastra({
     url: ":memory:",
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -77,7 +76,8 @@ export const mastra = new Mastra({
     {
       name: "idGenerator",
       type: "() => string",
-      description: "Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.",
+      description:
+        "Custom ID generator function. Used by agents, workflows, memory, and other components to generate unique identifiers.",
       isOptional: true,
     },
     {
@@ -125,19 +125,19 @@ export const mastra = new Mastra({
     {
       name: "bundler",
       type: "BundlerConfig",
-      description: "Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.",
+      description:
+        "Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.",
       isOptional: true,
-      defaultValue: "{ externals: [], sourcemap: false, transpilePackages: [] }",
+      defaultValue:
+        "{ externals: [], sourcemap: false, transpilePackages: [] }",
     },
     {
       name: "scorers",
       type: "Record<string, MastraScorer>",
-        description: "Scorers to register for scoring traces and overriding default scorers used during agent generation or workflow execution. Structured as a key-value pair, with keys being the scorer name and values being the scorer instance.",
+      description:
+        "Scorers to register for scoring traces and overriding default scorers used during agent generation or workflow execution. Structured as a key-value pair, with keys being the scorer name and values being the scorer instance.",
       isOptional: true,
       defaultValue: "{}",
     },
   ]}
 />
-
-
-

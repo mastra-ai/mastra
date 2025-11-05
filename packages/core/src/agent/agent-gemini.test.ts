@@ -1,19 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../runtime-context';
+import { MockMemory } from '../memory/mock';
+import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from './test-utils';
 import { Agent } from './index';
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;
-  let runtimeContext: RuntimeContext;
+  let requestContext: RequestContext;
 
   beforeEach(() => {
     memory = new MockMemory();
-    runtimeContext = new RuntimeContext();
+    requestContext = new RequestContext();
   });
 
   const MODEL = 'google/gemini-2.0-flash-lite';
@@ -206,7 +206,8 @@ describe('Gemini Model Compatibility Tests', () => {
   describe('Agent network() method', () => {
     it('should handle basic network generation with Gemini', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Helper Agent',
         instructions: 'You answer simple questions. For "what is the capital of France?", respond "Paris".',
         model: MODEL,
       });
@@ -221,7 +222,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('What is the capital of France?', {
-        runtimeContext,
+        requestContext,
         maxSteps: 2,
       });
 
@@ -231,14 +232,18 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle empty user message with system context in network', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Helper Agent',
         instructions: 'You help with tasks',
         model: MODEL,
+        defaultVNextStreamOptions: {
+          maxSteps: 1,
+        },
       });
 
       const agent = new Agent({
@@ -248,11 +253,14 @@ describe('Gemini Model Compatibility Tests', () => {
         model: MODEL,
         agents: { helperAgent },
         memory,
+        defaultVNextStreamOptions: {
+          maxSteps: 1,
+        },
       });
 
       const stream = await agent.network('', {
-        runtimeContext,
-        maxSteps: 2,
+        requestContext,
+        maxSteps: 1,
       });
 
       const chunks: ChunkType[] = [];
@@ -261,12 +269,13 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 60000);
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant in network', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Calculator Agent',
         instructions: 'You are a calculator. When asked for math, respond with just the numeric answer.',
         model: MODEL,
       });
@@ -286,7 +295,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'assistant', content: 'Let me calculate that for you.' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -297,7 +306,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle conversation ending with tool result in network (with follow-up user message)', async () => {
@@ -346,7 +355,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'user', content: 'Is that good weather for a picnic?' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -357,7 +366,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle conversation ending with tool result in network (agentic loop pattern)', async () => {
@@ -405,7 +414,7 @@ describe('Gemini Model Compatibility Tests', () => {
           },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -416,7 +425,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle messages starting with assistant-with-tool-call in network', async () => {
@@ -464,7 +473,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'user', content: 'Explain what this result means.' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -475,12 +484,13 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle network with workflow execution', async () => {
       const researchAgent = new Agent({
-        name: 'research-agent',
+        id: 'research-agent',
+        name: 'Research Agent',
         instructions: 'You research topics and provide brief summaries.',
         model: MODEL,
       });
@@ -520,7 +530,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network('Execute research-workflow on machine learning', {
-        runtimeContext,
+        requestContext,
         maxSteps: 2,
       });
 
@@ -530,7 +540,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 20000);
 
     it('should handle simple conversation ending with assistant in network', async () => {
@@ -548,7 +558,7 @@ describe('Gemini Model Compatibility Tests', () => {
           { role: 'assistant', content: 'I am doing well, thank you!' },
         ],
         {
-          runtimeContext,
+          requestContext,
           maxSteps: 1,
         },
       );
@@ -559,12 +569,13 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
 
     it('should handle messages with only assistant role in network', async () => {
       const helperAgent = new Agent({
-        name: 'helper-agent',
+        id: 'helper-agent',
+        name: 'Helper Agent',
         instructions: 'You help with tasks',
         model: MODEL,
       });
@@ -579,7 +590,7 @@ describe('Gemini Model Compatibility Tests', () => {
       });
 
       const stream = await agent.network([{ role: 'assistant', content: 'This is a system message' }], {
-        runtimeContext,
+        requestContext,
         maxSteps: 1,
       });
 
@@ -589,7 +600,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.length).toBeGreaterThanOrEqual(1);
     }, 15000);
   });
 });

@@ -5,7 +5,7 @@ import { execSync } from 'child_process';
 import { z } from 'zod';
 
 import { fsTool } from '../tools/fs.js';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 
 export const commitMessageGenerator = new Workflow({
   name: 'commit-message',
@@ -19,8 +19,8 @@ const getDiff = new Step({
   outputSchema: z.object({
     diff: z.string(),
   }),
-  execute: async ({ context }) => {
-    const repoPath = context?.getStepResult<{ repoPath: string }>('trigger')?.repoPath;
+  execute: async (inputData, context) => {
+    const repoPath = context?.workflow?.state?.getStepResult<{ repoPath: string }>('trigger')?.repoPath;
 
     // Get the git diff of staged changes
     const diff = execSync('git diff --staged', {
@@ -42,10 +42,10 @@ const readConventionalCommitSpec = new Step({
       return { fileData: null };
     }
 
-    const fileData = await fsTool.execute({
-      context: { action: 'read', file: 'data/crawl/conventional-commit.json', data: '' } as any,
-      runtimeContext: new RuntimeContext(),
-    });
+    const fileData = await fsTool.execute(
+      { action: 'read', file: 'data/crawl/conventional-commit.json', data: '' } as any,
+      { requestContext: new RequestContext() },
+    );
 
     return { fileData };
   },
@@ -58,15 +58,15 @@ const generateMessage = new Step({
     generated: z.boolean(),
     guidelines: z.array(z.string()),
   }),
-  execute: async ({ context, mastra }) => {
-    const diffData = context?.getStepResult<{ diff: string }>('getDiff');
-    const fileData = context?.getStepResult<{ fileData: any }>('readConventionalCommitSpec');
+  execute: async (inputData, context) => {
+    const diffData = context?.workflow?.state?.getStepResult<{ diff: string }>('getDiff');
+    const fileData = context?.workflow?.state?.getStepResult<{ fileData: any }>('readConventionalCommitSpec');
 
     if (!diffData) {
       return { commitMessage: '', generated: false, guidelines: [] };
     }
 
-    const daneCommitGenerator = mastra?.getAgent('daneCommitMessage');
+    const daneCommitGenerator = context?.mastra?.getAgent('daneCommitMessage');
 
     const res = await daneCommitGenerator?.generate(
       `
@@ -117,8 +117,8 @@ const confirmationStep = new Step({
   outputSchema: z.object({
     confirm: z.boolean(),
   }),
-  execute: async ({ context }) => {
-    const parentStep = context?.steps?.generateMessage;
+  execute: async (inputData, context) => {
+    const parentStep = context?.workflow?.state?.steps?.generateMessage;
     if (!parentStep || parentStep.status !== 'success') {
       return { confirm: false };
     }
@@ -142,19 +142,19 @@ const commitStep = new Step({
   outputSchema: z.object({
     commit: z.boolean(),
   }),
-  execute: async ({ context }) => {
-    const parentStep = context?.steps?.confirmation;
+  execute: async (inputData, context) => {
+    const parentStep = context?.workflow?.state?.steps?.confirmation;
     if (!parentStep || parentStep.status !== 'success' || !parentStep.output.confirm) {
       throw new Error('Commit message generation cancelled');
     }
 
-    if (context?.steps?.generateMessage?.status !== 'success') {
+    if (context?.workflow?.state?.steps?.generateMessage?.status !== 'success') {
       throw new Error('Failed to generate commit message');
     }
 
-    const commitMessage = context?.steps?.generateMessage?.output?.commitMessage;
+    const commitMessage = context?.workflow?.state?.steps?.generateMessage?.output?.commitMessage;
     execSync(`git commit -m "${commitMessage}"`, {
-      cwd: context?.triggerData?.repoPath,
+      cwd: context?.workflow?.state?.triggerData?.repoPath,
       encoding: 'utf-8',
     });
 

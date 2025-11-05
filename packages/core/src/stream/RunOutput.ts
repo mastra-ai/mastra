@@ -26,6 +26,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
 
   #streamFinished = false;
 
+  #streamError: Error | undefined;
+
   #delayedPromises = {
     usage: new DelayedPromise<LanguageModelUsage>(),
     result: new DelayedPromise<TResult>(),
@@ -76,10 +78,20 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               self.#emitter.emit('chunk', chunk);
             }
 
-            // @ts-ignore yoo
-            if (chunk.type === 'workflow-step-finish' && chunk.payload.usage) {
-              // @ts-ignore yoo
-              self.#updateUsageCount(chunk.payload.usage);
+            if (chunk.type === 'workflow-step-output') {
+              if ('output' in chunk.payload && chunk.payload.output) {
+                const output = chunk.payload.output;
+                if (output.type === 'finish') {
+                  if (output.payload && 'usage' in output.payload && output.payload.usage) {
+                    self.#updateUsageCount(output.payload.usage);
+                  } else if (output.payload && 'output' in output.payload && output.payload.output) {
+                    const outputPayload = output.payload.output;
+                    if ('usage' in outputPayload && outputPayload.usage) {
+                      self.#updateUsageCount(outputPayload.usage);
+                    }
+                  }
+                }
+              }
             } else if (chunk.type === 'workflow-canceled') {
               self.#status = 'canceled';
             } else if (chunk.type === 'workflow-step-suspended') {
@@ -99,12 +111,25 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {},
+                metadata: self.#streamError
+                  ? {
+                      error: self.#streamError,
+                      errorMessage: self.#streamError?.message,
+                    }
+                  : {},
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,
                 },
               },
+            });
+
+            self.#delayedPromises.usage.resolve(self.#usageCount);
+
+            Object.entries(self.#delayedPromises).forEach(([key, promise]) => {
+              if (promise.status.type === 'pending') {
+                promise.reject(new Error(`promise '${key}' was not resolved or rejected when stream finished`));
+              }
             });
 
             self.#streamFinished = true;
@@ -143,11 +168,11 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
         },
   ) {
     let totalUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      reasoningTokens: 0,
-      cachedInputTokens: 0,
+      inputTokens: this.#usageCount.inputTokens ?? 0,
+      outputTokens: this.#usageCount.outputTokens ?? 0,
+      totalTokens: this.#usageCount.totalTokens ?? 0,
+      reasoningTokens: this.#usageCount.reasoningTokens ?? 0,
+      cachedInputTokens: this.#usageCount.cachedInputTokens ?? 0,
     };
     if ('inputTokens' in usage) {
       totalUsage.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
@@ -176,6 +201,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
    */
   rejectResults(error: Error) {
     this.#delayedPromises.result.reject(error);
+    this.#status = 'failed';
+    this.#streamError = error;
   }
 
   /**
@@ -214,10 +241,20 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               self.#emitter.emit('chunk', chunk);
             }
 
-            // @ts-ignore yoo
-            if (chunk.type === 'workflow-step-finish' && chunk.payload.usage) {
-              // @ts-ignore yoo
-              self.#updateUsageCount(chunk.payload.usage);
+            if (chunk.type === 'workflow-step-output') {
+              if ('output' in chunk.payload && chunk.payload.output) {
+                const output = chunk.payload.output;
+                if (output.type === 'finish') {
+                  if (output.payload && 'usage' in output.payload && output.payload.usage) {
+                    self.#updateUsageCount(output.payload.usage);
+                  } else if (output.payload && 'output' in output.payload && output.payload.output) {
+                    const outputPayload = output.payload.output;
+                    if ('usage' in outputPayload && outputPayload.usage) {
+                      self.#updateUsageCount(outputPayload.usage);
+                    }
+                  }
+                }
+              }
             } else if (chunk.type === 'workflow-canceled') {
               self.#status = 'canceled';
             } else if (chunk.type === 'workflow-step-suspended') {
@@ -237,7 +274,12 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               from: ChunkFrom.WORKFLOW,
               payload: {
                 workflowStatus: self.#status,
-                metadata: {},
+                metadata: self.#streamError
+                  ? {
+                      error: self.#streamError,
+                      errorMessage: self.#streamError?.message,
+                    }
+                  : {},
                 output: {
                   // @ts-ignore
                   usage: self.#usageCount,

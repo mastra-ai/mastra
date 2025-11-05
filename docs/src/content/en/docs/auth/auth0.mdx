@@ -1,13 +1,14 @@
 ---
-title: "MastraAuthAuth0 Class"
+title: "MastraAuthAuth0 Class | Auth | Mastra Docs"
 description: "Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
 ---
 
-import { Tabs, Tab } from "@/components/tabs";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # MastraAuthAuth0 Class
 
-The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -18,7 +19,7 @@ This example uses Auth0 authentication. Make sure to:
 3. Configure an API in your Auth0 Dashboard with an identifier (audience)
 4. Configure your application's allowed callback URLs, web origins, and logout URLs
 
-```env filename=".env" copy
+```env title=".env" copy
 AUTH0_DOMAIN=your-tenant.auth0.com
 AUTH0_AUDIENCE=your-api-identifier
 ```
@@ -39,30 +40,30 @@ npm install @mastra/auth-auth0@latest
 
 ### Basic usage with environment variables
 
-```typescript {2,7} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0(),
+    auth: new MastraAuthAuth0(),
   },
 });
 ```
 
 ### Custom configuration
 
-```typescript {2,7-10} filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0({
+    auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
-      audience: process.env.AUTH0_AUDIENCE
+      audience: process.env.AUTH0_AUDIENCE,
     }),
   },
 });
@@ -81,18 +82,18 @@ By default, `MastraAuthAuth0` allows all authenticated users who have valid Auth
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
-```typescript filename="src/mastra/auth.ts" showLineNumbers copy
-import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+```typescript title="src/mastra/auth.ts" showLineNumbers copy
+import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 const auth0Provider = new MastraAuthAuth0({
   authorizeUser: async (user) => {
     // Custom authorization logic
-    return user.email?.endsWith('@yourcompany.com') || false;
-  }
+    return user.email?.endsWith("@yourcompany.com") || false;
+  },
 });
 ```
 
-> See the [MastraAuthAuth0](/reference/auth/auth0.mdx) API reference for all available configuration options.
+> See the [MastraAuthAuth0](/reference/auth/auth0) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -106,7 +107,7 @@ First, install and configure the Auth0 React SDK in your application:
 npm install @auth0/auth0-react
 ```
 
-```typescript filename="src/auth0-provider.tsx" showLineNumbers copy
+```typescript title="src/auth0-provider.tsx" showLineNumbers copy
 import React from 'react';
 import { Auth0Provider } from '@auth0/auth0-react';
 
@@ -133,8 +134,8 @@ export default Auth0ProviderWithHistory;
 
 Use the Auth0 React SDK to authenticate users and retrieve their access tokens:
 
-```typescript filename="lib/auth.ts" showLineNumbers copy
-import { useAuth0 } from '@auth0/auth0-react';
+```typescript title="lib/auth.ts" showLineNumbers copy
+import { useAuth0 } from "@auth0/auth0-react";
 
 export const useAuth0Token = () => {
   const { getAccessTokenSilently } = useAuth0();
@@ -152,32 +153,32 @@ export const useAuth0Token = () => {
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
 
-```typescript filename="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (accessToken: string) => {
   return new MastraClient({
     baseUrl: "https://<mastra-api-url>",
     headers: {
-      Authorization: `Bearer ${accessToken}`
-    }
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 };
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client.mdx) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 
 Once `MastraClient` is configured with the Auth0 access token, you can send authenticated requests:
 
-<Tabs items={["React Component", "curl"]}>
-  <Tab>
-    ```tsx filename="src/components/mastra-api-test.tsx" showLineNumbers copy
+<Tabs>
+  <TabItem value="react" label="React">
+    ```tsx title="src/components/mastra-api-test.tsx" showLineNumbers copy
     import React, { useState } from 'react';
     import { useAuth0 } from '@auth0/auth0-react';
     import { MastraClient } from '@mastra/client-js';
@@ -220,8 +221,9 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
       );
     };
     ```
-  </Tab>
-  <Tab>
+
+  </TabItem>
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -230,6 +232,5 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
-  </Tab>
+  </TabItem>
 </Tabs>
-

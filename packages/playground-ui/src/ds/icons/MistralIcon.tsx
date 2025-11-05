@@ -10,37 +10,10 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
     fill="none"
     {...props}
   >
-    <rect x="15" y="1" width="32" height="32" fill="#FFCD00" stroke="#636363" stroke-opacity="0.2" stroke-width="0.5" />
-    <rect
-      x="143"
-      y="1"
-      width="32"
-      height="32"
-      fill="#FFCD00"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
-    <rect
-      x="15"
-      y="33"
-      width="32"
-      height="32"
-      fill="#FFA400"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
-    <rect
-      x="47"
-      y="33"
-      width="32"
-      height="32"
-      fill="#FFA400"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
+    <rect x="15" y="1" width="32" height="32" fill="#FFCD00" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
+    <rect x="143" y="1" width="32" height="32" fill="#FFCD00" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
+    <rect x="15" y="33" width="32" height="32" fill="#FFA400" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
+    <rect x="47" y="33" width="32" height="32" fill="#FFA400" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
     <rect
       x="111"
       y="33"
@@ -49,7 +22,7 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
       fill="#FFA400"
       stroke="#636363"
       stroke-opacity="0.2"
-      stroke-width="0.5"
+      strokeWidth="0.5"
     />
     <rect
       x="143"
@@ -59,38 +32,11 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
       fill="#FFA400"
       stroke="#636363"
       stroke-opacity="0.2"
-      stroke-width="0.5"
+      strokeWidth="0.5"
     />
-    <rect
-      x="15"
-      y="65"
-      width="32"
-      height="32"
-      fill="#FF7100"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
-    <rect
-      x="47"
-      y="65"
-      width="32"
-      height="32"
-      fill="#FF7100"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
-    <rect
-      x="79"
-      y="65"
-      width="32"
-      height="32"
-      fill="#FF7100"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
+    <rect x="15" y="65" width="32" height="32" fill="#FF7100" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
+    <rect x="47" y="65" width="32" height="32" fill="#FF7100" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
+    <rect x="79" y="65" width="32" height="32" fill="#FF7100" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
     <rect
       x="111"
       y="65"
@@ -99,7 +45,7 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
       fill="#FF7100"
       stroke="#636363"
       stroke-opacity="0.2"
-      stroke-width="0.5"
+      strokeWidth="0.5"
     />
     <rect
       x="143"
@@ -109,28 +55,10 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
       fill="#FF7100"
       stroke="#636363"
       stroke-opacity="0.2"
-      stroke-width="0.5"
+      strokeWidth="0.5"
     />
-    <rect
-      x="15"
-      y="97"
-      width="32"
-      height="32"
-      fill="#FF4902"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
-    <rect
-      x="79"
-      y="97"
-      width="32"
-      height="32"
-      fill="#FF4902"
-      stroke="#636363"
-      stroke-opacity="0.2"
-      stroke-width="0.5"
-    />
+    <rect x="15" y="97" width="32" height="32" fill="#FF4902" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
+    <rect x="79" y="97" width="32" height="32" fill="#FF4902" stroke="#636363" stroke-opacity="0.2" strokeWidth="0.5" />
     <rect
       x="143"
       y="97"
@@ -139,7 +67,7 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
       fill="#FF4902"
       stroke="#636363"
       stroke-opacity="0.2"
-      stroke-width="0.5"
+      strokeWidth="0.5"
     />
     <rect
       x="15"
@@ -149,7 +77,7 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
       fill="#FF0006"
       stroke="#636363"
       stroke-opacity="0.2"
-      stroke-width="0.5"
+      strokeWidth="0.5"
     />
     <rect
       x="143"
@@ -159,7 +87,7 @@ export const MistralIcon = (props: React.SVGProps<SVGSVGElement>) => (
       fill="#FF0006"
       stroke="#636363"
       stroke-opacity="0.2"
-      stroke-width="0.5"
+      strokeWidth="0.5"
     />
     <rect y="1" width="16" height="160" fill="black" />
     <rect x="63" y="97" width="16" height="32" fill="black" />

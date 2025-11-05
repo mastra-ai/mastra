@@ -1,6 +1,7 @@
-import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
+import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
   MemoryThread,
@@ -13,7 +14,6 @@ import {
   AgentBuilder,
   Observability,
 } from './resources';
-import { NetworkMemoryThread } from './resources/network-memory-thread';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -22,23 +22,18 @@ import type {
   GetLogParams,
   GetLogsParams,
   GetLogsResponse,
-  GetMemoryThreadParams,
-  GetMemoryThreadResponse,
   GetToolResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
   McpServerToolListResponse,
-  GetNetworkMemoryThreadParams,
-  CreateNetworkMemoryThreadParams,
-  SaveNetworkMessageToMemoryParams,
   GetScorerResponse,
-  GetScoresByScorerIdParams,
-  GetScoresResponse,
-  GetScoresByRunIdParams,
-  GetScoresByEntityIdParams,
-  GetScoresBySpanParams,
+  ListScoresByScorerIdParams,
+  ListScoresResponse,
+  ListScoresByRunIdParams,
+  ListScoresByEntityIdParams,
+  ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
   GetAITracesResponse,
@@ -46,9 +41,11 @@ import type {
   GetMemoryConfigResponse,
   GetMemoryThreadMessagesResponse,
   MemorySearchResponse,
-  GetAgentsModelProvidersResponse,
+  ListAgentsModelProvidersResponse,
+  ListMemoryThreadsParams,
+  ListMemoryThreadsResponse,
 } from './types';
-import { base64RuntimeContext, parseClientRuntimeContext, runtimeContextQueryString } from './utils';
+import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -59,23 +56,23 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available agents
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public getAgents(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+  public listAgents(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
     }
 
     const queryString = searchParams.toString();
     return this.request(`/api/agents${queryString ? `?${queryString}` : ''}`);
   }
 
-  public getAgentsModelProviders(): Promise<GetAgentsModelProvidersResponse> {
+  public listAgentsModelProviders(): Promise<ListAgentsModelProvidersResponse> {
     return this.request(`/api/agents/providers`);
   }
 
@@ -89,35 +86,44 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Retrieves memory threads for a resource
-   * @param params - Parameters containing the resource ID and optional runtime context
-   * @returns Promise containing array of memory threads
+   * Lists memory threads for a resource with pagination support
+   * @param params - Parameters containing resource ID, pagination options, and optional request context
+   * @returns Promise containing paginated array of memory threads with metadata
    */
-  public getMemoryThreads(params: GetMemoryThreadParams): Promise<GetMemoryThreadResponse> {
+  public listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
+    const queryParams = new URLSearchParams({
+      resourceId: params.resourceId,
+      agentId: params.agentId,
+      ...(params.page !== undefined && { page: params.page.toString() }),
+      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
+      ...(params.orderBy && { orderBy: params.orderBy }),
+      ...(params.sortDirection && { sortDirection: params.sortDirection }),
+    });
+
     return this.request(
-      `/api/memory/threads?resourceid=${params.resourceId}&agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
+      `/api/memory/threads?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
     );
   }
 
   /**
    * Retrieves memory config for a resource
-   * @param params - Parameters containing the resource ID and optional runtime context
+   * @param params - Parameters containing the resource ID and optional request context
    * @returns Promise containing memory configuration
    */
   public getMemoryConfig(params: GetMemoryConfigParams): Promise<GetMemoryConfigResponse> {
     return this.request(
-      `/api/memory/config?agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
+      `/api/memory/config?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
     );
   }
 
   /**
    * Creates a new memory thread
-   * @param params - Parameters for creating the memory thread including optional runtime context
+   * @param params - Parameters for creating the memory thread including optional request context
    * @returns Promise containing the created memory thread
    */
   public createMemoryThread(params: CreateMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
     return this.request(
-      `/api/memory/threads?agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
+      `/api/memory/threads?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
       { method: 'POST', body: params },
     );
   }
@@ -127,45 +133,45 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the memory thread to retrieve
    * @returns MemoryThread instance
    */
-  public getMemoryThread(threadId: string, agentId: string) {
+  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId: string }) {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
   public getThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; runtimeContext?: RuntimeContext | Record<string, any> } = {},
+    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
   ): Promise<GetMemoryThreadMessagesResponse> {
     let url = '';
     if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
+      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
     } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
+      url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
     }
     return this.request(url);
   }
 
   public deleteThread(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; runtimeContext?: RuntimeContext | Record<string, any> } = {},
+    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
   ): Promise<{ success: boolean; message: string }> {
     let url = '';
 
     if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
+      url = `/api/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
     } else if (opts.networkId) {
-      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}${runtimeContextQueryString(opts.runtimeContext, '&')}`;
+      url = `/api/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
     }
     return this.request(url, { method: 'DELETE' });
   }
 
   /**
    * Saves messages to memory
-   * @param params - Parameters containing messages to save and optional runtime context
+   * @param params - Parameters containing messages to save and optional request context
    * @returns Promise containing the saved messages
    */
   public saveMessageToMemory(params: SaveMessageToMemoryParams): Promise<SaveMessageToMemoryResponse> {
     return this.request(
-      `/api/memory/save-messages?agentId=${params.agentId}${runtimeContextQueryString(params.runtimeContext, '&')}`,
+      `/api/memory/save-messages?agentId=${params.agentId}${requestContextQueryString(params.requestContext, '&')}`,
       {
         method: 'POST',
         body: params,
@@ -176,75 +182,28 @@ export class MastraClient extends BaseResource {
   /**
    * Gets the status of the memory system
    * @param agentId - The agent ID
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing memory system status
    */
   public getMemoryStatus(
     agentId: string,
-    runtimeContext?: RuntimeContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<{ result: boolean }> {
-    return this.request(`/api/memory/status?agentId=${agentId}${runtimeContextQueryString(runtimeContext, '&')}`);
-  }
-
-  /**
-   * Retrieves memory threads for a resource
-   * @param params - Parameters containing the resource ID
-   * @returns Promise containing array of memory threads
-   */
-  public getNetworkMemoryThreads(params: GetNetworkMemoryThreadParams): Promise<GetMemoryThreadResponse> {
-    return this.request(`/api/memory/network/threads?resourceid=${params.resourceId}&networkId=${params.networkId}`);
-  }
-
-  /**
-   * Creates a new memory thread
-   * @param params - Parameters for creating the memory thread
-   * @returns Promise containing the created memory thread
-   */
-  public createNetworkMemoryThread(params: CreateNetworkMemoryThreadParams): Promise<CreateMemoryThreadResponse> {
-    return this.request(`/api/memory/network/threads?networkId=${params.networkId}`, { method: 'POST', body: params });
-  }
-
-  /**
-   * Gets a memory thread instance by ID
-   * @param threadId - ID of the memory thread to retrieve
-   * @returns MemoryThread instance
-   */
-  public getNetworkMemoryThread(threadId: string, networkId: string) {
-    return new NetworkMemoryThread(this.options, threadId, networkId);
-  }
-
-  /**
-   * Saves messages to memory
-   * @param params - Parameters containing messages to save
-   * @returns Promise containing the saved messages
-   */
-  public saveNetworkMessageToMemory(params: SaveNetworkMessageToMemoryParams): Promise<SaveMessageToMemoryResponse> {
-    return this.request(`/api/memory/network/save-messages?networkId=${params.networkId}`, {
-      method: 'POST',
-      body: params,
-    });
-  }
-
-  /**
-   * Gets the status of the memory system
-   * @returns Promise containing memory system status
-   */
-  public getNetworkMemoryStatus(networkId: string): Promise<{ result: boolean }> {
-    return this.request(`/api/memory/network/status?networkId=${networkId}`);
+    return this.request(`/api/memory/status?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`);
   }
 
   /**
    * Retrieves all available tools
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public getTools(runtimeContext?: RuntimeContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+  public listTools(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
     }
 
     const queryString = searchParams.toString();
@@ -262,18 +221,18 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves all available workflows
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of workflow IDs to workflow details
    */
-  public getWorkflows(
-    runtimeContext?: RuntimeContext | Record<string, any>,
+  public listWorkflows(
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<Record<string, GetWorkflowResponse>> {
-    const runtimeContextParam = base64RuntimeContext(parseClientRuntimeContext(runtimeContext));
+    const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
-    if (runtimeContextParam) {
-      searchParams.set('runtimeContext', runtimeContextParam);
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
     }
 
     const queryString = searchParams.toString();
@@ -319,7 +278,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters for filtering logs
    * @returns Promise containing array of log messages
    */
-  public getLogs(params: GetLogsParams): Promise<GetLogsResponse> {
+  public listLogs(params: GetLogsParams): Promise<GetLogsResponse> {
     const { transportId, fromDate, toDate, logLevel, filters, page, perPage } = params;
     const _filters = filters ? Object.entries(filters).map(([key, value]) => `${key}:${value}`) : [];
 
@@ -412,22 +371,22 @@ export class MastraClient extends BaseResource {
    * List of all log transports
    * @returns Promise containing list of log transports
    */
-  public getLogTransports(): Promise<{ transports: string[] }> {
+  public listLogTransports(): Promise<{ transports: string[] }> {
     return this.request('/api/logs/transports');
   }
 
   /**
    * Retrieves a list of available MCP servers.
-   * @param params - Optional parameters for pagination (limit, offset).
+   * @param params - Optional parameters for pagination (perPage, page).
    * @returns Promise containing the list of MCP servers and pagination info.
    */
-  public getMcpServers(params?: { limit?: number; offset?: number }): Promise<McpServerListResponse> {
+  public getMcpServers(params?: { perPage?: number; page?: number }): Promise<McpServerListResponse> {
     const searchParams = new URLSearchParams();
-    if (params?.limit !== undefined) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
     }
-    if (params?.offset !== undefined) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
     }
     const queryString = searchParams.toString();
     return this.request(`/api/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
@@ -488,15 +447,15 @@ export class MastraClient extends BaseResource {
     agentId,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
   }: {
     agentId: string;
     threadId: string;
     resourceId?: string;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${runtimeContextQueryString(runtimeContext, '&')}`,
+      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
     );
   }
 
@@ -506,14 +465,14 @@ export class MastraClient extends BaseResource {
     threadId,
     searchQuery,
     memoryConfig,
-    runtimeContext,
+    requestContext,
   }: {
     agentId: string;
     resourceId: string;
     threadId?: string;
     searchQuery: string;
     memoryConfig?: any;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, any>;
   }): Promise<MemorySearchResponse> {
     const params = new URLSearchParams({
       searchQuery,
@@ -529,7 +488,7 @@ export class MastraClient extends BaseResource {
       params.append('memoryConfig', JSON.stringify(memoryConfig));
     }
 
-    return this.request(`/api/memory/search?${params}${runtimeContextQueryString(runtimeContext, '&')}`);
+    return this.request(`/api/memory/search?${params}${requestContextQueryString(requestContext, '&')}`);
   }
 
   /**
@@ -544,16 +503,16 @@ export class MastraClient extends BaseResource {
     threadId,
     workingMemory,
     resourceId,
-    runtimeContext,
+    requestContext,
   }: {
     agentId: string;
     threadId: string;
     workingMemory: string;
     resourceId?: string;
-    runtimeContext?: RuntimeContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
-      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}${runtimeContextQueryString(runtimeContext, '&')}`,
+      `/api/memory/threads/${threadId}/working-memory?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`,
       {
         method: 'POST',
         body: {
@@ -568,7 +527,7 @@ export class MastraClient extends BaseResource {
    * Retrieves all available scorers
    * @returns Promise containing list of available scorers
    */
-  public getScorers(): Promise<Record<string, GetScorerResponse>> {
+  public listScorers(): Promise<Record<string, GetScorerResponse>> {
     return this.request('/api/scores/scorers');
   }
 
@@ -581,7 +540,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
+  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponse> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -607,7 +566,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByRunId(params: GetScoresByRunIdParams): Promise<GetScoresResponse> {
+  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponse> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -627,7 +586,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByEntityId(params: GetScoresByEntityIdParams): Promise<GetScoresResponse> {
+  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponse> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -656,14 +615,6 @@ export class MastraClient extends BaseResource {
     });
   }
 
-  /**
-   * Retrieves model providers with available keys
-   * @returns Promise containing model providers with available keys
-   */
-  getModelProviders(): Promise<string[]> {
-    return this.request(`/api/model-providers`);
-  }
-
   getAITrace(traceId: string): Promise<AITraceRecord> {
     return this.observability.getTrace(traceId);
   }
@@ -672,8 +623,8 @@ export class MastraClient extends BaseResource {
     return this.observability.getTraces(params);
   }
 
-  getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
-    return this.observability.getScoresBySpan(params);
+  listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
+    return this.observability.listScoresBySpan(params);
   }
 
   score(params: {

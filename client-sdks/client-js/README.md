@@ -50,7 +50,7 @@ const client = new MastraClient({
 
 ### Agents
 
-- `getAgents()`: Get all available agents
+- `listAgents()`: Get all available agents
 - `getAgent(agentId)`: Get a specific agent instance
   - `agent.details()`: Get agent details
 - `agent.generate(params)`: Generate a response
@@ -63,29 +63,27 @@ const client = new MastraClient({
 
 ### Memory
 
-- `getMemoryThreads(params)`: Get memory threads
+- `listMemoryThreads(params)`: Get memory threads
 - `createMemoryThread(params)`: Create a new memory thread
-- `getMemoryThread(threadId)`: Get a memory thread instance
+- `getMemoryThread({ threadId, agentId })`: Get a memory thread instance
 - `saveMessageToMemory(params)`: Save messages to memory
 - `getMemoryStatus()`: Get memory system status
 
 ### Tools
 
-- `getTools()`: Get all available tools
+- `listTools()`: Get all available tools
 - `getTool(toolId)`: Get a tool instance
   - `tool.details()`: Get tool details
   - `tool.execute(params)`: Execute the tool
 
 ### Workflows
 
-- `getWorkflows()`: Get all workflows
+- `listWorkflows()`: Get all workflows
 - `getWorkflow(workflowId)`: Get a workflow instance
   - `workflow.details()`: Get workflow details
-  - `workflow.createRunAsync()`: Create workflow run
-  - `workflow.createRun()`: Deprecated - use createRunAsync() instead
+  - `workflow.createRun()`: Create workflow run
   - `workflow.startAsync(params)`: Execute the workflow and wait for execution results
   - `workflow.resumeAsync(params)`: Resume suspended workflow step async
-  - `workflow.watch({runId},(record)=>{})`: Watch the step transitions of the workflow run
   - `workflow.start({runId, triggerData})`: Start a workflow run sync
   - `workflow.resume(params)`: Resume the workflow run sync
 
@@ -101,9 +99,9 @@ const client = new MastraClient({
 
 ### Logs
 
-- `getLogs(params)`: Get system logs
+- `listLogs(params)`: Get system logs
 - `getLog(params)`: Get specific log entry
-- `getLogTransports()`: Get configured Log transports
+- `listLogTransports()`: Get configured Log transports
 
 ### Telemetry
 

@@ -1,10 +1,10 @@
 ---
-title: "Reference: createVectorQueryTool() | RAG | Mastra Tools Docs"
+title: "Reference: createVectorQueryTool() | Tools & MCP | Mastra Docs"
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
 ---
 
-import { Callout } from "nextra/components";
-import { Tabs } from "nextra/components";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # createVectorQueryTool()
 
@@ -25,13 +25,15 @@ const queryTool = createVectorQueryTool({
 
 ## Parameters
 
-<Callout>
-  **Parameter Requirements:** Most fields can be set at creation as defaults.
-  Some fields can be overridden at runtime via the runtime context or input. If
-  a required field is missing from both creation and runtime, an error will be
-  thrown. Note that `model`, `id`, and `description` can only be set at creation
-  time.
-</Callout>
+:::note
+
+**Parameter Requirements:** Most fields can be set at creation as defaults.
+Some fields can be overridden at runtime via the request context or input. If
+a required field is missing from both creation and runtime, an error will be
+thrown. Note that `model`, `id`, and `description` can only be set at creation
+time.
+
+:::
 
 <PropertiesTable
   content={[
@@ -74,7 +76,7 @@ const queryTool = createVectorQueryTool({
       name: "enableFilter",
       type: "boolean",
       description:
-        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
+        "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the request context.)",
       isOptional: true,
       defaultValue: "false",
     },
@@ -152,7 +154,8 @@ The `DatabaseConfig` type allows you to specify database-specific configurations
     {
       name: "pgvector",
       type: "PgVectorConfig",
-      description: "Configuration specific to PostgreSQL with pgvector extension",
+      description:
+        "Configuration specific to PostgreSQL with pgvector extension",
       isOptional: true,
       properties: [
         {
@@ -166,13 +169,15 @@ The `DatabaseConfig` type allows you to specify database-specific configurations
             },
             {
               name: "ef",
-              description: "HNSW search parameter - controls accuracy vs speed tradeoff",
+              description:
+                "HNSW search parameter - controls accuracy vs speed tradeoff",
               isOptional: true,
               type: "number",
             },
             {
               name: "probes",
-              description: "IVFFlat probe parameter - number of cells to visit during search",
+              description:
+                "IVFFlat probe parameter - number of cells to visit during search",
               isOptional: true,
               type: "number",
             },
@@ -321,7 +326,7 @@ This agent-driven approach:
 
 For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
-For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](../../../examples/rag/usage/filter-rag.mdx) example.
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](/examples/rag/usage/filter-rag) example.
 
 ## Example with Reranking
 
@@ -371,8 +376,8 @@ This example shows how to customize the tool description for a specific use case
 
 The `databaseConfig` parameter allows you to leverage unique features and optimizations specific to each vector database. These configurations are automatically applied during query execution.
 
-<Tabs items={['Pinecone', 'pgVector', 'Chroma', 'Multiple Configs']}>
-  <Tabs.Tab>
+<Tabs>
+  <TabItem value="pinecone" label="Pinecone">
     ### Pinecone Configuration
 
     ```typescript
@@ -396,9 +401,10 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **Namespace**: Isolate different data sets within the same index
     - **Sparse Vector**: Combine dense and sparse embeddings for improved search quality
     - **Use Cases**: Multi-tenant applications, hybrid semantic search
-  </Tabs.Tab>
 
-  <Tabs.Tab>
+  </TabItem>
+
+  <TabItem value="pgvector" label="pgVector">
     ### pgVector Configuration
 
     ```typescript
@@ -421,9 +427,10 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **ef (HNSW)**: Control accuracy vs speed for HNSW indexes
     - **probes (IVFFlat)**: Control recall vs speed for IVFFlat indexes
     - **Use Cases**: Performance tuning, quality filtering
-  </Tabs.Tab>
 
-  <Tabs.Tab>
+  </TabItem>
+
+  <TabItem value="chroma" label="Chroma">
     ### Chroma Configuration
 
     ```typescript
@@ -449,9 +456,10 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - **where**: Filter by metadata fields
     - **whereDocument**: Filter by document content
     - **Use Cases**: Advanced filtering, content-based search
-  </Tabs.Tab>
 
-  <Tabs.Tab>
+  </TabItem>
+
+  <TabItem value="multiple-configs" label="Multiple Configs">
     ### Multiple Database Configurations
 
     ```typescript
@@ -479,7 +487,8 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     - Support multiple vector stores with one tool
     - Database-specific optimizations are automatically applied
     - Flexible deployment scenarios
-  </Tabs.Tab>
+
+  </TabItem>
 </Tabs>
 
 ### Runtime Configuration Override
@@ -487,7 +496,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
 You can override database configurations at runtime to adapt to different scenarios:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from "@mastra/core/request-context";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
@@ -495,31 +504,31 @@ const queryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
-      namespace: "development"
-    }
-  }
+      namespace: "development",
+    },
+  },
 });
 
 // Override at runtime
-const runtimeContext = new RuntimeContext();
-runtimeContext.set('databaseConfig', {
+const requestContext = new RequestContext();
+requestContext.set("databaseConfig", {
   pinecone: {
-    namespace: 'production'  // Switch to production namespace
-  }
+    namespace: "production", // Switch to production namespace
+  },
 });
 
-const response = await agent.generate(
-  "Find information about deployment",
-  { runtimeContext }
-);
+const response = await agent.generate("Find information about deployment", {
+  requestContext,
+});
 ```
 
 This approach allows you to:
+
 - Switch between environments (dev/staging/prod)
 - Adjust performance parameters based on load
 - Apply different filtering strategies per request
 
-## Example: Using Runtime Context
+## Example: Using Request Context
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -529,44 +538,45 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-When using runtime context, provide required parameters at execution time via the runtime context:
+When using request context, provide required parameters at execution time via the request context:
 
 ```typescript
-const runtimeContext = new RuntimeContext<{
+const requestContext = new RequestContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
   filter: VectorFilter;
   databaseConfig: DatabaseConfig;
 }>();
-runtimeContext.set("vectorStoreName", "my-store");
-runtimeContext.set("indexName", "my-index");
-runtimeContext.set("topK", 5);
-runtimeContext.set("filter", { category: "docs" });
-runtimeContext.set("databaseConfig", {
-  pinecone: { namespace: "runtime-namespace" }
+requestContext.set("vectorStoreName", "my-store");
+requestContext.set("indexName", "my-index");
+requestContext.set("topK", 5);
+requestContext.set("filter", { category: "docs" });
+requestContext.set("databaseConfig", {
+  pinecone: { namespace: "runtime-namespace" },
 });
-runtimeContext.set("model", openai.embedding("text-embedding-3-small"));
+requestContext.set("model", openai.embedding("text-embedding-3-small"));
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
   {
-    runtimeContext,
+    requestContext,
   },
 );
 ```
 
-For more information on runtime context, please see:
+For more information on request context, please see:
 
-- [Agent Runtime Context](../../docs/server-db/runtime-context.mdx)
-- [Tool Runtime Context](../../docs/tools-mcp/overview.mdx#using-runtimecontext)
+- [Agent Request Context](/docs/server-db/request-context)
+- [Tool Request Context](/docs/tools-mcp/overview#using-requestcontext)
 
 ## Usage Without a Mastra Server
 
 The tool can be used by itself to retrieve documents matching a query:
-```typescript copy showLineNumbers filename="src/index.ts"
+
+```typescript copy showLineNumbers title="src/index.ts"
 import { openai } from "@ai-sdk/openai";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
@@ -581,11 +591,11 @@ const vectorQueryTool = createVectorQueryTool({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const runtimeContext = new RuntimeContext();
-const queryResult = await vectorQueryTool.execute({
-  context: { queryText: "foo", topK: 1 },
-  runtimeContext,
-});
+const requestContext = new RequestContext();
+const queryResult = await vectorQueryTool.execute(
+  { queryText: "foo", topK: 1 },
+  { requestContext }
+);
 
 console.log(queryResult.sources);
 ```

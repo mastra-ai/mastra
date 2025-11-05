@@ -1,5 +1,5 @@
 import { createTestSuite } from '@internal/storage-test-utils';
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AISpanType } from '@mastra/core/observability';
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { ConnectorHandler } from './connectors/base';
 import type { MongoDBConfig } from './types';

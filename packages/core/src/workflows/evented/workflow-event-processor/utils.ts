@@ -1,5 +1,5 @@
-import type { Workflow } from '../..';
-import type { Mastra, Step, StepFlowEntry } from '../../..';
+import type { Step, StepFlowEntry, Workflow } from '../..';
+import type { Mastra } from '../../../mastra';
 import { EventedWorkflow } from '../workflow';
 import type { ParentWorkflow } from '.';
 

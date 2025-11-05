@@ -12,13 +12,11 @@
  * - Adapts to v5 streaming protocol changes
  */
 
-import type {
-  AITracingEvent,
-  AnyExportedAISpan,
-  ModelGenerationAttributes,
-  BaseExporterConfig,
-} from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
+import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import { AISpanType } from '@mastra/core/observability';
+import { omitKeys } from '@mastra/core/utils';
+import { BaseExporter } from '@mastra/observability';
+import type { BaseExporterConfig } from '@mastra/observability';
 import { Langfuse } from 'langfuse';
 import type { LangfuseTraceClient, LangfuseSpanClient, LangfuseGenerationClient, LangfuseEventClient } from 'langfuse';
 

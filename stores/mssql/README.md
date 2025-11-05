@@ -209,14 +209,14 @@ MSSQLStore supports multiple connection methods:
 - `getThreadById({ threadId })`: Get a thread by ID
 - `updateThread({ id, title, metadata })`: Update thread title and metadata
 - `deleteThread({ threadId })`: Delete a thread and its messages
-- `getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy?, sortDirection? })`: Get paginated threads for a resource
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
 
 ### Messages
 
 - `saveMessages({ messages, format? })`: Save multiple messages with atomic transaction (supports v1 and v2 formats)
 - `getMessages({ threadId, format? })`: Get all messages for a thread
-- `getMessagesById({ messageIds, format? })`: Get messages by their IDs
-- `getMessagesPaginated({ threadId, format?, page?, perPage? })`: Get paginated messages for a thread
+- `listMessagesById({ messageIds, format? })`: Get messages by their IDs
+- `listMessages({ threadId, resourceId?, page?, perPage?, orderBy?, filter? })`: Get paginated messages for a thread with filtering and sorting
 - `updateMessages({ messages })`: Update existing messages with atomic transaction
 - `deleteMessages(messageIds)`: Delete specific messages with atomic transaction
 
@@ -249,17 +249,17 @@ MSSQLStore supports multiple connection methods:
 - `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow execution state
 - `updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext })`: Update step results (transaction + row locking)
 - `updateWorkflowState({ workflowName, runId, opts })`: Update workflow run status (transaction + row locking)
-- `getWorkflowRuns({ workflowName?, fromDate?, toDate?, limit?, offset?, resourceId? })`: Query workflow runs
+- `listWorkflowRuns({ workflowName?, fromDate?, toDate?, limit?, offset?, resourceId? })`: Query workflow runs
 - `getWorkflowRunById({ runId, workflowName? })`: Get specific workflow run
 
 ### Scores & Evaluation
 
 - `saveScore(score)`: Save evaluation score
 - `getScoreById({ id })`: Get score by ID
-- `getScoresByScorerId({ scorerId, pagination, entityId?, entityType?, source? })`: Get scores by scorer
-- `getScoresByRunId({ runId, pagination })`: Get scores for a run
-- `getScoresByEntityId({ entityId, entityType, pagination })`: Get scores for an entity
-- `getScoresBySpan({ traceId, spanId, pagination })`: Get scores for a trace span
+- `listScoresByScorerId({ scorerId, pagination, entityId?, entityType?, source? })`: Get scores by scorer
+- `listScoresByRunId({ runId, pagination })`: Get scores for a run
+- `listScoresByEntityId({ entityId, entityType, pagination })`: Get scores for an entity
+- `listScoresBySpan({ traceId, spanId, pagination })`: Get scores for a trace span
 
 ### Traces (Legacy)
 

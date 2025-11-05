@@ -1,12 +1,14 @@
 import EventEmitter from 'events';
-import type { Emitter, LoopConditionFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
 import { MastraBase } from '../../base';
-import type { RuntimeContext } from '../../di';
+import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
+import type { LoopConditionFunction, Step } from '../step';
+import type { Emitter, StepFlowEntry, StepResult } from '../types';
 import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
 
 export class StepExecutor extends MastraBase {
@@ -29,12 +31,12 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     emitter: EventEmitter;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     retryCount?: number;
     foreachIdx?: number;
     validateInputs?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
 
@@ -76,14 +78,13 @@ export class StepExecutor extends MastraBase {
             workflowId: params.workflowId,
             runId,
             mastra: this.mastra!,
-            runtimeContext,
+            requestContext,
             inputData,
             state: params.state,
             setState: (state: any) => {
               // TODO
               params.state = state;
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -171,10 +172,10 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     emitter: { runtime: PubSub; events: PubSub };
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     retryCount?: number;
   }): Promise<number[]> {
-    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -186,7 +187,7 @@ export class StepExecutor extends MastraBase {
             workflowId: params.workflowId,
             condition,
             runId,
-            runtimeContext,
+            requestContext,
             inputData: params.input,
             state: params.state,
             retryCount,
@@ -222,7 +223,7 @@ export class StepExecutor extends MastraBase {
     resumeData,
     stepResults,
     state,
-    runtimeContext,
+    requestContext,
     emitter,
     abortController,
     retryCount = 0,
@@ -236,7 +237,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     emitter: EventEmitter;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     abortController: AbortController;
     retryCount?: number;
     iterationCount: number;
@@ -247,13 +248,12 @@ export class StepExecutor extends MastraBase {
           workflowId,
           runId,
           mastra: this.mastra!,
-          runtimeContext,
+          requestContext,
           inputData,
           state,
           setState: (_state: any) => {
             // TODO
           },
-          runCount: retryCount,
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
@@ -294,10 +294,10 @@ export class StepExecutor extends MastraBase {
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     retryCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -317,14 +317,13 @@ export class StepExecutor extends MastraBase {
             workflowId: params.workflowId,
             runId,
             mastra: this.mastra!,
-            runtimeContext,
+            requestContext,
             inputData: params.input,
             // TODO: implement state
             state: {},
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -368,10 +367,10 @@ export class StepExecutor extends MastraBase {
     resumeData?: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     emitter: { runtime: PubSub; events: PubSub };
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     retryCount?: number;
   }): Promise<number> {
-    const { step, stepResults, runId, runtimeContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = new AbortController();
     const ee = new EventEmitter();
@@ -391,14 +390,13 @@ export class StepExecutor extends MastraBase {
             workflowId: params.workflowId,
             runId,
             mastra: this.mastra!,
-            runtimeContext,
+            requestContext,
             inputData: params.input,
             // TODO: implement state
             state: {},
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,

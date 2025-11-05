@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { AITracesPaginatedArg } from '@mastra/core';
+import { AITracesPaginatedArg } from '@mastra/core/storage';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 

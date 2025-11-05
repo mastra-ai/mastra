@@ -1,11 +1,11 @@
-import { AISpanType } from '@mastra/core/ai-tracing';
 import type { Mastra } from '@mastra/core/mastra';
+import { AISpanType } from '@mastra/core/observability';
 import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import {
   getAITraceHandler as getOriginalAITraceHandler,
   getAITracesPaginatedHandler as getOriginalAITracesPaginatedHandler,
   scoreTracesHandler as getOriginalScoreTracesHandler,
-  getScoresBySpan as getOriginalScoresBySpanHandler,
+  listScoresBySpan as getOriginalScoresBySpanHandler,
 } from '@mastra/server/handlers/observability';
 import type { Context } from 'hono';
 import { handleError } from '../../error';
@@ -100,7 +100,7 @@ export async function processTraceScoringHandler(c: Context) {
   }
 }
 
-export async function getScoresBySpan(c: Context) {
+export async function listScoresBySpan(c: Context) {
   const mastra = c.get('mastra');
   const traceId = c.req.param('traceId');
   const spanId = c.req.param('spanId');

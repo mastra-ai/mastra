@@ -1,23 +1,22 @@
 ---
-title: "Reference: Chroma Vector Store | Vector Databases | Mastra Docs"
+title: "Reference: Chroma Vector Store | Vectors | Mastra Docs"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 ---
-
-import { Callout } from "nextra/components";
 
 # Chroma Vector Store
 
 The ChromaVector class provides vector search using [Chroma](https://docs.trychroma.com/docs/overview/getting-started), an open-source embedding database.
 It offers efficient vector search with metadata filtering and hybrid search capabilities.
 
-<Callout type="info">
-  <b>Chroma Cloud</b>
-  <p>
+:::info
+
+<b>Chroma Cloud</b>
+
     Chroma Cloud powers serverless vector and full-text search. It's extremely fast, cost-effective, scalable and painless. Create a DB and try it out in under 30 seconds with $5 of free credits.
 
     [Get started with Chroma Cloud](https://trychroma.com/signup)
-  </p>
-</Callout>
+
+:::
 
 ## Constructor Options
 
@@ -27,7 +26,8 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       name: "host",
       type: "string",
       isOptional: true,
-      description: "The host address of the Chroma server. Defaults to 'localhost'",
+      description:
+        "The host address of the Chroma server. Defaults to 'localhost'",
     },
     {
       name: "port",
@@ -39,7 +39,8 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       name: "ssl",
       type: "boolean",
       isOptional: true,
-      description: "Whether to use SSL/HTTPS for connections. Defaults to false",
+      description:
+        "Whether to use SSL/HTTPS for connections. Defaults to false",
     },
     {
       name: "apiKey",
@@ -51,13 +52,15 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       name: "tenant",
       type: "string",
       isOptional: true,
-      description: "The tenant name in the Chroma server to connect to. Defaults to 'default_tenant' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
+      description:
+        "The tenant name in the Chroma server to connect to. Defaults to 'default_tenant' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
     },
     {
       name: "database",
       type: "string",
       isOptional: true,
-      description: "The database name to connect to. Defaults to 'default_database' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
+      description:
+        "The database name to connect to. Defaults to 'default_database' for single-node Chroma. Auto-resolved for Chroma Cloud users based on the provided API key",
     },
     {
       name: "headers",
@@ -70,7 +73,7 @@ It offers efficient vector search with metadata filtering and hybrid search capa
       type: "RequestInit",
       isOptional: true,
       description: "Additional fetch options for HTTP requests",
-    }
+    },
   ]}
 />
 
@@ -81,9 +84,10 @@ If you are a Chroma Cloud user, simply provide the `ChromaVector` constructor yo
 When you install the `@mastra/chroma` package, you get access to the [Chroma CLI](https://docs.trychroma.com/docs/cli/db), which can set these as environment variables for you: `chroma db connect [DB-NAME] --env-file`.
 
 Otherwise, you have several options for setting up your single-node Chroma server:
-* Run one locally using the Chroma CLI: `chroma run`. You can find more configuration options on the [Chroma docs](https://docs.trychroma.com/docs/cli/run).
-* Run on [Docker](https://docs.trychroma.com/guides/deploy/docker) using the official Chroma image.
-* Deploy your own Chroma server on your provider of choice. Chroma offers example templates for [AWS](https://docs.trychroma.com/guides/deploy/aws), [Azure](https://docs.trychroma.com/guides/deploy/azure), and [GCP](https://docs.trychroma.com/guides/deploy/gcp).
+
+- Run one locally using the Chroma CLI: `chroma run`. You can find more configuration options on the [Chroma docs](https://docs.trychroma.com/docs/cli/run).
+- Run on [Docker](https://docs.trychroma.com/guides/deploy/docker) using the official Chroma image.
+- Deploy your own Chroma server on your provider of choice. Chroma offers example templates for [AWS](https://docs.trychroma.com/guides/deploy/aws), [Azure](https://docs.trychroma.com/guides/deploy/azure), and [GCP](https://docs.trychroma.com/guides/deploy/gcp).
 
 ## Methods
 
@@ -128,7 +132,7 @@ Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS *
       name: "newIndexName",
       type: "string",
       description: "The name of the forked index",
-    }
+    },
   ]}
 />
 
@@ -251,7 +255,8 @@ You can also provide the shape of your metadata to a `get` call for type inferen
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description: "A list of record IDs to return. If not provided, all records are returned.",
+      description:
+        "A list of record IDs to return. If not provided, all records are returned.",
     },
     {
       name: "filter",
@@ -284,7 +289,8 @@ You can also provide the shape of your metadata to a `get` call for type inferen
       type: "number",
       isOptional: true,
       defaultValue: 0,
-      description: "Offset for returning records. Use with `limit` to paginate results.",
+      description:
+        "Offset for returning records. Use with `limit` to paginate results.",
     },
   ]}
 />
