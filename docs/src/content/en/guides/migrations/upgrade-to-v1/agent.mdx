@@ -53,6 +53,16 @@ To migrate, replace property access with the corresponding getter methods.
 + const instructions = agent.getInstructions();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-property-access .
+```
+
+:::
+
 ### Voice methods moved to `agent.voice` namespace
 
 Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.

@@ -4,4 +4,5 @@ export const BUNDLE = [
   'v1/runtime-context',
   'v1/mastra-property-access',
   'v1/experimental-auth',
+  'v1/agent-property-access',
 ];
