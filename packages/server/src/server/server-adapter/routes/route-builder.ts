@@ -1,11 +1,12 @@
+import { generateRouteOpenAPI } from '../openapi-utils';
 import type { ServerRoute, ServerRouteHandler } from './index';
-import { generateRouteOpenAPI, registerRoute } from '../openapi-utils';
 
 interface RouteConfig<TParams = Record<string, unknown>, TResponse = unknown> {
   method: ServerRoute['method'];
   path: string;
   responseType: 'stream' | 'json';
   handler: ServerRouteHandler<TParams, TResponse>;
+  pathParamSchema?: ServerRoute['pathParamSchema'];
   queryParamSchema?: ServerRoute['queryParamSchema'];
   bodySchema?: ServerRoute['bodySchema'];
   responseSchema?: ServerRoute['responseSchema'];
@@ -35,7 +36,7 @@ interface RouteConfig<TParams = Record<string, unknown>, TResponse = unknown> {
  * ```
  */
 export function createRoute<TParams = Record<string, unknown>, TResponse = unknown>(
-  config: RouteConfig<TParams, TResponse>
+  config: RouteConfig<TParams, TResponse>,
 ): ServerRoute<TParams, TResponse> {
   const { summary, description, tags, ...baseRoute } = config;
 
@@ -49,16 +50,12 @@ export function createRoute<TParams = Record<string, unknown>, TResponse = unkno
           summary,
           description,
           tags,
+          pathParamSchema: config.pathParamSchema,
           queryParamSchema: config.queryParamSchema,
           bodySchema: config.bodySchema,
           responseSchema: config.responseSchema,
         })
       : undefined;
-
-  // Register this route for full OpenAPI document generation
-  if (openapi) {
-    registerRoute(config.path, config.method, openapi);
-  }
 
   return {
     ...baseRoute,

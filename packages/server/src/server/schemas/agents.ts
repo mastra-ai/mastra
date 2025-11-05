@@ -1,5 +1,19 @@
 import z from 'zod';
 
+// Path parameter schemas
+export const agentIdPathParams = z.object({
+  agentId: z.string().describe('Unique identifier for the agent'),
+});
+
+export const toolIdPathParams = z.object({
+  toolId: z.string().describe('Unique identifier for the tool'),
+});
+
+export const agentToolPathParams = z.object({
+  agentId: z.string().describe('Unique identifier for the agent'),
+  toolId: z.string().describe('Unique identifier for the tool'),
+});
+
 /**
  * Schema for serialized processor metadata
  */

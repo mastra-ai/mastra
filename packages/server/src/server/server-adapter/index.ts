@@ -23,6 +23,15 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
     await Promise.all(SERVER_ROUTES.map(route => this.registerRoute(app, route)));
   }
 
+  async parsePathParams(route: ServerRoute, params: Record<string, string>): Promise<Record<string, any>> {
+    const pathParamSchema = route.pathParamSchema;
+    if (!pathParamSchema) {
+      return params;
+    }
+
+    return pathParamSchema.parseAsync(params);
+  }
+
   async parseQueryParams(route: ServerRoute, params: Record<string, string>): Promise<Record<string, any>> {
     const queryParamSchema = route.queryParamSchema;
     if (!queryParamSchema) {

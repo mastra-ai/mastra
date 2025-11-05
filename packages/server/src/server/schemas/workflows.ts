@@ -1,5 +1,15 @@
 import z from 'zod';
 
+// Path parameter schemas
+export const workflowIdPathParams = z.object({
+  workflowId: z.string().describe('Unique identifier for the workflow'),
+});
+
+export const workflowRunPathParams = z.object({
+  workflowId: z.string().describe('Unique identifier for the workflow'),
+  runId: z.string().describe('Unique identifier for the workflow run'),
+});
+
 /**
  * Schema for serialized step
  * Uses passthrough() to allow step-specific fields

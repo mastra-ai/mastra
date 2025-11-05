@@ -19,6 +19,7 @@ import {
   listThreadsQuerySchema,
   listThreadsResponseSchema,
   memoryStatusResponseSchema,
+  threadIdPathParams,
 } from '../../schemas/memory';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
@@ -62,6 +63,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: getThreadByIdHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId',
+    pathParamSchema: threadIdPathParams,
     queryParamSchema: getThreadByIdQuerySchema,
     responseSchema: getThreadByIdResponseSchema,
     summary: 'Get thread by ID',
@@ -73,6 +75,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: getMessagesHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId/messages',
+    pathParamSchema: threadIdPathParams,
     queryParamSchema: getMessagesQuerySchema,
     responseSchema: getMessagesResponseSchema,
     summary: 'Get thread messages',
@@ -84,6 +87,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: getWorkingMemoryHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId/working-memory',
+    pathParamSchema: threadIdPathParams,
     queryParamSchema: getWorkingMemoryQuerySchema,
     responseSchema: getWorkingMemoryResponseSchema,
     summary: 'Get working memory',

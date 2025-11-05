@@ -1,5 +1,6 @@
 import { z, type ZodSchema } from 'zod';
 import { createDocument } from 'zod-openapi';
+import type { ServerRoute } from './routes';
 
 interface RouteOpenAPIConfig {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -7,6 +8,7 @@ interface RouteOpenAPIConfig {
   summary?: string;
   description?: string;
   tags?: string[];
+  pathParamSchema?: ZodSchema;
   queryParamSchema?: ZodSchema;
   bodySchema?: ZodSchema;
   responseSchema?: ZodSchema;
@@ -49,6 +51,7 @@ export function generateRouteOpenAPI({
   summary,
   description,
   tags = [],
+  pathParamSchema,
   queryParamSchema,
   bodySchema,
   responseSchema,
@@ -64,19 +67,12 @@ export function generateRouteOpenAPI({
     },
   };
 
-  // Extract and document path parameters (e.g., :agentId, :threadId, :toolId)
-  const pathParams = path.match(/:(\w+)/g);
-  if (pathParams || queryParamSchema) {
+  // Add path and query parameters
+  if (pathParamSchema || queryParamSchema) {
     route.requestParams = {};
 
-    if (pathParams) {
-      // Build a Zod schema for path parameters
-      const pathSchemaObj: Record<string, ZodSchema> = {};
-      pathParams.forEach(param => {
-        const paramName = param.slice(1); // Remove the ':'
-        pathSchemaObj[paramName] = z.string().describe(`The ${paramName} parameter`);
-      });
-      route.requestParams.path = z.object(pathSchemaObj);
+    if (pathParamSchema) {
+      route.requestParams.path = pathParamSchema;
     }
 
     if (queryParamSchema) {
@@ -110,30 +106,28 @@ export function generateRouteOpenAPI({
   return route;
 }
 
-// Store all route definitions for full document generation
-const allRoutes: Array<{ path: string; method: string; spec: OpenAPIRoute }> = [];
-
 /**
- * Registers a route for inclusion in the full OpenAPI document
+ * Generates a complete OpenAPI 3.1.0 document from server routes
+ * @param routes - Array of ServerRoute objects with OpenAPI specifications
+ * @param info - API metadata (title, version, description)
+ * @returns Complete OpenAPI 3.1.0 document
  */
-export function registerRoute(path: string, method: string, spec: OpenAPIRoute) {
-  allRoutes.push({ path, method, spec });
-}
-
-/**
- * Generates a complete OpenAPI 3.1.0 document from all registered routes
- */
-export function generateOpenAPIDocument(info: { title: string; version: string; description?: string }): any {
+export function generateOpenAPIDocument(
+  routes: ServerRoute[],
+  info: { title: string; version: string; description?: string }
+): any {
   const paths: Record<string, any> = {};
 
-  // Build paths object from all registered routes
+  // Build paths object from routes
   // Convert Express-style :param to OpenAPI-style {param}
-  allRoutes.forEach(({ path, method, spec }) => {
-    const openapiPath = path.replace(/:(\w+)/g, '{$1}');
+  routes.forEach(route => {
+    if (!route.openapi) return;
+
+    const openapiPath = route.path.replace(/:(\w+)/g, '{$1}');
     if (!paths[openapiPath]) {
       paths[openapiPath] = {};
     }
-    paths[openapiPath][method.toLowerCase()] = spec;
+    paths[openapiPath][route.method.toLowerCase()] = route.openapi;
   });
 
   return createDocument({
@@ -145,11 +139,4 @@ export function generateOpenAPIDocument(info: { title: string; version: string; 
     },
     paths,
   });
-}
-
-/**
- * Clears all registered routes (useful for testing)
- */
-export function clearRegisteredRoutes() {
-  allRoutes.length = 0;
 }

@@ -1,5 +1,5 @@
 import { getToolByIdHandler, listToolsHandler } from '../../handlers/tools';
-import { listToolsResponseSchema, serializedToolSchema } from '../../schemas/agents';
+import { listToolsResponseSchema, serializedToolSchema, toolIdPathParams } from '../../schemas/agents';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
@@ -19,6 +19,7 @@ export const TOOLS_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: getToolByIdHandler as unknown as ServerRouteHandler,
     path: '/api/tools/:toolId',
+    pathParamSchema: toolIdPathParams,
     responseSchema: serializedToolSchema,
     summary: 'Get tool by ID',
     description: 'Returns details for a specific tool including its schema and configuration',

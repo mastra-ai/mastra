@@ -1,5 +1,10 @@
 import z from 'zod';
 
+// Path parameter schemas
+export const threadIdPathParams = z.object({
+  threadId: z.string().describe('Unique identifier for the conversation thread'),
+});
+
 /**
  * Common query parameter: optional agent ID
  */

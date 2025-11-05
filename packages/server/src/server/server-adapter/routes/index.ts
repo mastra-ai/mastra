@@ -18,6 +18,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
 > & {
   responseType: 'stream' | 'json';
   handler: ServerRouteHandler<TParams, TResponse>;
+  pathParamSchema?: z.ZodSchema;
   queryParamSchema?: z.ZodSchema;
   bodySchema?: z.ZodSchema;
   responseSchema?: z.ZodSchema;
