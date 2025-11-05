@@ -1,5 +1,24 @@
 # @mastra/core
 
+## 0.24.0
+
+### Patch Changes
+
+- update peerdeps ([`5ca1cca`](https://github.com/mastra-ai/mastra/commit/5ca1ccac61ffa7141e6d9fa8f22d3ad4d03bf5dc))
+
+- Fix workflow input property preservation after resume from snapshot ([#9527](https://github.com/mastra-ai/mastra/pull/9527))
+
+  Ensure that when resuming a workflow from a snapshot, the input property is correctly set from the snapshot's context input rather than from resume data. This prevents the loss of original workflow input data during suspend/resume cycles.
+
+- Fix a bug where streaming didn't output the final chunk ([#9726](https://github.com/mastra-ai/mastra/pull/9726))
+
+- Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction. ([#9487](https://github.com/mastra-ai/mastra/pull/9487))
+
+- Fix network routing agent smoothstreaming ([#9727](https://github.com/mastra-ai/mastra/pull/9727))
+
+- Updated dependencies [[`5ca1cca`](https://github.com/mastra-ai/mastra/commit/5ca1ccac61ffa7141e6d9fa8f22d3ad4d03bf5dc)]:
+  - @mastra/schema-compat@0.11.7
+
 ## 0.24.0-alpha.0
 
 ### Patch Changes
