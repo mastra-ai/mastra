@@ -1121,9 +1121,12 @@ export class Agent extends BaseResource {
       // Use tee() to split the stream into two branches
       const [streamForWritable, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream without holding a persistent lock
+      let pipeFinished = false;
+      let shouldCloseAfterPipe = false;
 
-      streamForWritable
+      // Pipe one branch to the writable stream without holding a persistent lock
+      // The promise is handled via .then/.catch chains and intentionally not awaited
+      void streamForWritable
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
@@ -1148,8 +1151,17 @@ export class Agent extends BaseResource {
             preventClose: true,
           },
         )
+        .then(() => {
+          pipeFinished = true;
+          if (shouldCloseAfterPipe) {
+            writable.close().catch((error: Error) => {
+              console.error('Error closing writable stream:', error);
+            });
+          }
+        })
         .catch(error => {
           console.error('Error piping to writable stream:', error);
+          pipeFinished = true;
         });
 
       // Process the other branch for chat response handling
@@ -1237,14 +1249,22 @@ export class Agent extends BaseResource {
             }
 
             if (!shouldExecuteClientTool) {
-              setTimeout(() => {
-                writable.close();
-              }, 0);
+              if (pipeFinished) {
+                writable.close().catch((error: Error) => {
+                  console.error('Error closing writable stream:', error);
+                });
+              } else {
+                shouldCloseAfterPipe = true;
+              }
             }
           } else {
-            setTimeout(() => {
-              writable.close();
-            }, 0);
+            if (pipeFinished) {
+              writable.close().catch((error: Error) => {
+                console.error('Error closing writable stream:', error);
+              });
+            } else {
+              shouldCloseAfterPipe = true;
+            }
           }
         },
         lastMessage: undefined,
