@@ -3,7 +3,6 @@ import { MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ServerInfo } from '@mastra/core/mcp';
 import path from 'node:path';
-import { RequestContext } from '@mastra/core/di';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
@@ -45,13 +44,8 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
             const data = await response.json();
             const hasExpectedServer = data.servers?.some((s: any) => s.id === mcpServerId);
             if (hasExpectedServer) {
-              console.log(`Server ready! Found MCP server '${mcpServerId}'`);
               resolve();
               return true;
-            } else {
-              console.log(
-                `Server responded but MCP server '${mcpServerId}' not found yet. Found: ${data.servers?.map((s: any) => s.id).join(', ') || 'none'}`,
-              );
             }
           }
         } catch (e) {
@@ -138,13 +132,10 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     };
 
     const tools = await client.listTools();
-    console.log('Tools:', tools);
 
     const tool = tools['my-mcp-server_calculator'];
-    console.log('Tool:', tool);
 
-    const result = await tool.execute(toolCallPayload.params.args);
-    console.log('Result:', result);
+    const result = await tool.execute!(toolCallPayload.params.args);
 
     expect(result).toBeDefined();
     expect(result.isError).toBe(false);
@@ -180,7 +171,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     expect(tool, `Tool '${toolName}' should be available via SSE client`).toBeDefined();
 
     // Execute the tool
-    const result = await tool.execute(toolCallPayloadParams);
+    const result = await tool.execute!(toolCallPayloadParams);
 
     expect(result).toBeDefined();
     expect(result.isError).toBe(false);
@@ -289,7 +280,6 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     it('Should be able to get lazy loaded tools', async () => {
       const agent = await fetch(`http://localhost:${port}/api/agents/test`);
       const agentJson = await agent.json();
-      console.log('Agent JSON:', JSON.stringify(agentJson, null, 2));
       const tools = agentJson.tools;
 
       expect(tools).toBeDefined();
