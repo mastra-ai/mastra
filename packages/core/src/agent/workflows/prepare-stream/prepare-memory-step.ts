@@ -174,7 +174,7 @@ export function createPrepareMemoryStep<
               memoryConfig,
               runtimeContext,
             })
-          : { messages: [] },
+          : [],
         memory.getSystemMessage({
           threadId: threadObject.id,
           resourceId,
