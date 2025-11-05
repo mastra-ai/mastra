@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, it, expect, vi } from 'vitest';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createPromptAlignmentScorerLLM } from '.';
 
 describe('Prompt Alignment Scorer', () => {
@@ -57,14 +57,14 @@ describe('Prompt Alignment Scorer', () => {
 
       const validTestRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-1',
             role: 'user',
             content: 'Write a detailed Python function with documentation',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-2',
             role: 'assistant',
             content: 'def factorial(n): return 1 if n <= 1 else n * factorial(n-1)',
@@ -144,7 +144,7 @@ describe('Prompt Alignment Scorer', () => {
       const testRunNoUser = createAgentTestRun({
         inputMessages: [],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-1',
             role: 'assistant',
             content: 'Response without prompt',
@@ -167,7 +167,7 @@ describe('Prompt Alignment Scorer', () => {
 
       const testRunNoResponse = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-1',
             role: 'user',
             content: 'Some prompt',
@@ -195,14 +195,14 @@ describe('Prompt Alignment Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Write a Python function to calculate factorial',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: `def factorial(n):
@@ -235,14 +235,14 @@ describe('Prompt Alignment Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Explain how to implement a binary search tree in Python',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'A linked list is a linear data structure.',
@@ -269,14 +269,14 @@ describe('Prompt Alignment Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Create a REST API endpoint with authentication and rate limiting',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: `app.post('/api/endpoint', authenticate, (req, res) => {
@@ -306,14 +306,14 @@ describe('Prompt Alignment Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'List the benefits of TypeScript in bullet points',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content:
@@ -341,14 +341,14 @@ describe('Prompt Alignment Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Write a function',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'function example() { return true; }',
@@ -425,14 +425,14 @@ describe('Prompt Alignment Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: 'Write a Python function to calculate factorial',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: 'def factorial(n): return 1 if n <= 1 else n * factorial(n-1)',
@@ -468,14 +468,14 @@ describe('Prompt Alignment Scorer', () => {
           },
         ],
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: 'Explain quantum computing',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Quantum computing uses quantum bits that can be in superposition.',
@@ -511,14 +511,14 @@ describe('Prompt Alignment Scorer', () => {
           },
         ],
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: 'Explain recursion',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: `Recursion is when a function calls itself. Here's an example:
@@ -550,14 +550,14 @@ def factorial(n):
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-1',
             role: 'user',
             content: 'Create a REST API endpoint in Node.js with Express that handles user authentication',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-2',
             role: 'assistant',
             content: `const express = require('express');
@@ -592,14 +592,14 @@ module.exports = router;`,
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-1',
             role: 'user',
             content: 'Explain the difference between let and const in JavaScript in bullet points',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-2',
             role: 'assistant',
             content: `• let allows reassignment, const does not
@@ -628,14 +628,14 @@ module.exports = router;`,
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Write a Python class with initialization, validation, error handling, and documentation',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: `class Example:

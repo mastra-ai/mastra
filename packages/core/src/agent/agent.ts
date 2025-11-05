@@ -2101,13 +2101,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     const scorerInput: ScorerRunInputForAgent = {
-      inputMessages: messageList.getPersisted.input.ui(),
-      rememberedMessages: messageList.getPersisted.remembered.ui(),
+      inputMessages: messageList.getPersisted.input.db(),
+      rememberedMessages: messageList.getPersisted.remembered.db(),
       systemMessages: messageList.getSystemMessages(),
       taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
-    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.db();
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
