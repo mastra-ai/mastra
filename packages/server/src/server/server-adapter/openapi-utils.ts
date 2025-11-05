@@ -1,5 +1,5 @@
 import { z, type ZodSchema } from 'zod';
-import { createDocument } from 'zod-openapi';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ServerRoute } from './routes';
 
 interface RouteOpenAPIConfig {
@@ -107,6 +107,86 @@ export function generateRouteOpenAPI({
 }
 
 /**
+ * Converts an OpenAPI route spec with Zod schemas to one with JSON Schema
+ */
+function convertZodToJsonSchema(spec: OpenAPIRoute): any {
+  const converted: any = {
+    summary: spec.summary,
+    description: spec.description,
+    tags: spec.tags,
+    responses: {},
+  };
+
+  const parameters: any[] = [];
+
+  // Convert path parameters
+  if (spec.requestParams?.path) {
+    const pathSchema = zodToJsonSchema(spec.requestParams.path, { target: 'openApi3' }) as any;
+    const properties = pathSchema.properties || {};
+
+    Object.entries(properties).forEach(([name, schema]) => {
+      parameters.push({
+        name,
+        in: 'path',
+        required: true,
+        description: (schema as any).description || `The ${name} parameter`,
+        schema,
+      });
+    });
+  }
+
+  // Convert query parameters
+  if (spec.requestParams?.query) {
+    const querySchema = zodToJsonSchema(spec.requestParams.query, { target: 'openApi3' }) as any;
+    const properties = querySchema.properties || {};
+    const required = querySchema.required || [];
+
+    Object.entries(properties).forEach(([name, schema]) => {
+      parameters.push({
+        name,
+        in: 'query',
+        required: required.includes(name),
+        description: (schema as any).description || `Query parameter: ${name}`,
+        schema,
+      });
+    });
+  }
+
+  if (parameters.length > 0) {
+    converted.parameters = parameters;
+  }
+
+  // Convert request body
+  if (spec.requestBody?.content?.['application/json']?.schema) {
+    converted.requestBody = {
+      required: true,
+      content: {
+        'application/json': {
+          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, { target: 'openApi3' }),
+        },
+      },
+    };
+  }
+
+  // Convert response schemas
+  Object.entries(spec.responses).forEach(([statusCode, response]) => {
+    converted.responses[statusCode] = {
+      description: response.description,
+    };
+
+    if (response.content?.['application/json']?.schema) {
+      converted.responses[statusCode].content = {
+        'application/json': {
+          schema: zodToJsonSchema(response.content['application/json'].schema, { target: 'openApi3' }),
+        },
+      };
+    }
+  });
+
+  return converted;
+}
+
+/**
  * Generates a complete OpenAPI 3.1.0 document from server routes
  * @param routes - Array of ServerRoute objects with OpenAPI specifications
  * @param info - API metadata (title, version, description)
@@ -114,7 +194,7 @@ export function generateRouteOpenAPI({
  */
 export function generateOpenAPIDocument(
   routes: ServerRoute[],
-  info: { title: string; version: string; description?: string }
+  info: { title: string; version: string; description?: string },
 ): any {
   const paths: Record<string, any> = {};
 
@@ -127,10 +207,12 @@ export function generateOpenAPIDocument(
     if (!paths[openapiPath]) {
       paths[openapiPath] = {};
     }
-    paths[openapiPath][route.method.toLowerCase()] = route.openapi;
+
+    // Convert Zod schemas to JSON Schema
+    paths[openapiPath][route.method.toLowerCase()] = convertZodToJsonSchema(route.openapi);
   });
 
-  return createDocument({
+  return {
     openapi: '3.1.0',
     info: {
       title: info.title,
@@ -138,5 +220,5 @@ export function generateOpenAPIDocument(
       description: info.description,
     },
     paths,
-  });
+  };
 }

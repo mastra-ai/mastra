@@ -7,6 +7,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import cors from 'cors';
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
 import { z } from 'zod';
 import { ExpressServerAdapter } from '.';
 
@@ -423,8 +424,13 @@ app.use(cors());
 const expressServerAdapter = new ExpressServerAdapter({ mastra });
 await expressServerAdapter.registerRoutes(app);
 
+// Add Swagger UI
+app.use('/swagger-ui', swaggerUi.serve, swaggerUi.setup(undefined, { swaggerUrl: '/openapi.json' }));
+
 app.listen(3001, () => {
   console.log('Server is running on port 3001');
+  console.log('OpenAPI spec: http://localhost:3001/openapi.json');
+  console.log('Swagger UI: http://localhost:3001/swagger-ui');
 });
 
 // TODOs

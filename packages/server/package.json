@@ -106,6 +106,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "zod-openapi": "^5.4.3"
+    "zod-to-json-schema": "^3.24.1"
   }
 }

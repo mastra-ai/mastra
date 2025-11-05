@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
+import { swaggerUI } from '@hono/swagger-ui';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
@@ -423,13 +424,18 @@ app.use('*', cors());
 const honoServerAdapter = new HonoServerAdapter({ mastra });
 await honoServerAdapter.registerRoutes(app);
 
+// Add Swagger UI
+app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+
 serve(
   {
     fetch: app.fetch,
     port: 3001,
   },
   () => {
-    console.log('Server is running on port 3000');
+    console.log('Server is running on port 3001');
+    console.log('OpenAPI spec: http://localhost:3001/openapi.json');
+    console.log('Swagger UI: http://localhost:3001/swagger-ui');
   },
 );
 
