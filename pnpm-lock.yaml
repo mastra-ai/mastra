@@ -2944,6 +2944,9 @@ importers:
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@mastra/observability':
         specifier: workspace:*
         version: link:../../observability/mastra

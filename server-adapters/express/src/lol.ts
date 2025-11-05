@@ -4,10 +4,15 @@ import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import cors from 'cors';
 import express from 'express';
 import { z } from 'zod';
 import { ExpressServerAdapter } from '.';
+
+const storage = new LibSQLStore({
+  url: 'file:./mastra.db',
+});
 
 export const weatherTool = createTool({
   id: 'get-weather',
@@ -79,6 +84,12 @@ export const weatherAgent = new Agent({
   tools: {
     weatherTool,
   },
+  memory: new Memory({
+    storage,
+    options: {
+      lastMessages: 10,
+    },
+  }),
 });
 
 export const planningAgent = new Agent({
@@ -253,10 +264,6 @@ const weatherWorkflow = createWorkflow({
   .then(planActivities);
 
 weatherWorkflow.commit();
-
-const storage = new LibSQLStore({
-  url: 'file:./mastra.db',
-});
 
 const mastra = new Mastra({
   agents: {

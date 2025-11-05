@@ -1,7 +1,13 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { ApiRoute } from '@mastra/core/server';
 import z from 'zod';
-import { generateHandler, getAgentByIdHandler, listAgentsHandler, streamGenerateHandler } from '../handlers/agents';
+import {
+  generateHandler,
+  getAgentByIdHandler,
+  getProvidersHandler,
+  listAgentsHandler,
+  streamGenerateHandler,
+} from '../handlers/agents';
 import { getAITracesPaginatedHandler } from '../handlers/observability';
 import {
   createWorkflowRunHandler,
@@ -12,6 +18,16 @@ import {
   streamWorkflowHandler,
 } from '../handlers/workflows';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, listToolsHandler } from '../handlers/tools';
+import {
+  getMemoryConfigHandler,
+  getMemoryStatusHandler,
+  getMessagesHandler,
+  getThreadByIdHandler,
+  getWorkingMemoryHandler,
+  listThreadsHandler,
+} from '../handlers/memory';
+import { getSpeakersHandler } from '../handlers/voice';
+import { listScorersHandler } from '../handlers/scores';
 
 type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
   params: TParams & { mastra: Mastra },
@@ -36,8 +52,20 @@ export const SERVER_ROUTES: ServerRoute[] = [
   {
     method: 'GET',
     responseType: 'json',
+    handler: getProvidersHandler as unknown as ServerRouteHandler,
+    path: '/api/agents/providers',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
     handler: getAgentByIdHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: getSpeakersHandler as unknown as ServerRouteHandler,
+    path: '/api/agents/:agentId/voice/speakers',
   },
   {
     method: 'POST',
@@ -110,6 +138,48 @@ export const SERVER_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: executeAgentToolHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/tools/:toolId/execute',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: getMemoryStatusHandler as unknown as ServerRouteHandler,
+    path: '/api/memory/status',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: getMemoryConfigHandler as unknown as ServerRouteHandler,
+    path: '/api/memory/config',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: listThreadsHandler as unknown as ServerRouteHandler,
+    path: '/api/memory/threads',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: getThreadByIdHandler as unknown as ServerRouteHandler,
+    path: '/api/memory/threads/:threadId',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: getMessagesHandler as unknown as ServerRouteHandler,
+    path: '/api/memory/threads/:threadId/messages',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: getWorkingMemoryHandler as unknown as ServerRouteHandler,
+    path: '/api/memory/threads/:threadId/working-memory',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: listScorersHandler as unknown as ServerRouteHandler,
+    path: '/api/scores/scorers',
   },
   {
     method: 'GET',

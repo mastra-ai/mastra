@@ -34,6 +34,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/observability": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@types/node": "^20.19.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
