@@ -7,29 +7,6 @@ description: "Learn how to migrate voice package changes when upgrading to v1."
 
 ## Changed
 
-### Changed: Package names from `@mastra/speech-*` to `@mastra/voice-*`
-
-Speech packages have been renamed to voice packages. This includes `@mastra/speech-murf`, `@mastra/speech-speechify`, and `@mastra/speech-playai`. This change provides more consistent naming that better describes the functionality.
-
-To migrate, update package names in your dependencies and imports.
-
-```diff
-  // package.json
-  {
-    "dependencies": {
--     "@mastra/speech-murf": "^0.x.x",
--     "@mastra/speech-speechify": "^0.x.x",
--     "@mastra/speech-playai": "^0.x.x"
-+     "@mastra/voice-murf": "^1.x.x",
-+     "@mastra/voice-speechify": "^1.x.x",
-+     "@mastra/voice-playai": "^1.x.x"
-    }
-  }
-
-- import { MurfTTS } from '@mastra/speech-murf';
-+ import { MurfVoice } from '@mastra/voice-murf';
-```
-
 ### Changed: Class names from `*TTS` to `*Voice`
 
 TTS class names have been renamed to Voice classes. `MurfTTS`, `SpeechifyTTS`, and `PlayAITTS` are now `MurfVoice`, `SpeechifyVoice`, and `PlayAIVoice` respectively. This change aligns class names with the package rename.

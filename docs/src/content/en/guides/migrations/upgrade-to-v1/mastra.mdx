@@ -11,7 +11,7 @@ description: "Learn how to migrate Mastra class changes when upgrading to v1."
 
 The main `@mastra/core` index file now only exports `Mastra` and `Config`. All other exports have been moved to subpath imports. This change improves tree-shaking and reduces bundle size by allowing bundlers to eliminate unused code.
 
-To migrate, update all imports from `@mastra/core` to use the appropriate subpath. The main index now only allows `Mastra` and `type Config` - everything else must be imported from specific subpaths.
+To migrate, update all imports from `@mastra/core` to use the appropriate subpath.
 
 ```diff
 - import { Mastra, Agent, Workflow, createTool } from '@mastra/core';

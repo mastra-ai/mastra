@@ -175,11 +175,3 @@ To migrate, use regular memory API endpoints.
 Several eval-related types have been removed from the client SDK including `GetEvalsByAgentIdResponse`, `GetTelemetryResponse`, and `GetTelemetryParams`. This change reflects the removal of legacy evals functionality.
 
 To migrate, use the new scorers API instead of legacy evals.
-
-```diff
-- import type {
--   GetEvalsByAgentIdResponse,
--   GetTelemetryResponse,
-- } from '@mastra/client-js';
-+ // Use new scorers API types
-```

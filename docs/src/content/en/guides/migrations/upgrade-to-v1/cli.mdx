@@ -5,37 +5,13 @@ description: "Learn how to migrate CLI changes when upgrading to v1."
 
 # CLI
 
-## Changed
-
-### Changed: Environment variable names from hyphens to underscores
-
-Provider environment variable names now use underscores instead of hyphens. Provider IDs remain in kebab-case, but environment variables use snake_case. This change aligns with standard environment variable naming conventions.
-
-To migrate, update environment variable names by converting hyphens to underscores.
-
-```diff
-  # Provider ID: github-copilot (still kebab-case)
-- GITHUB-COPILOT_API_KEY=...
-- GITHUB-COPILOT_BASE_URL=...
-+ GITHUB_COPILOT_API_KEY=...
-+ GITHUB_COPILOT_BASE_URL=...
-```
-
 ## Removed
 
 ### Removed: `mastra deploy` command
 
 The `mastra deploy` command has been removed from the CLI. This change simplifies the CLI by removing vendor-specific deployment logic.
 
-To migrate, use vendor-specific deployment tools directly.
-
-```diff
-- mastra deploy
-+ # Use vendor-specific tools:
-+ # vercel deploy
-+ # netlify deploy
-+ # wrangler deploy
-```
+To migrate, choose one of the [deployment platforms](/deployment/overview) of your choice.
 
 ### Removed: `--env` flag from `mastra build`
 
@@ -55,28 +31,12 @@ The `--port` flag has been removed from the `mastra dev` command. Port configura
 
 To migrate, use `server.port` on the Mastra instance instead of the CLI flag.
 
-```diff
-- mastra dev --port 3001
-+ // In your Mastra configuration:
-+ const mastra = new Mastra({
-+   server: {
-+     port: 3001,
-+   },
-+ });
-+ 
-+ mastra dev
-```
-
-### Removed: `-y` / `--yes` option from CLI commands
-
-The `-y` / `--yes` option has been removed from CLI commands. The CLI will now prompt interactively when needed. This change encourages more intentional interactions with the CLI.
-
-To migrate, remove the `-y` flag from CLI commands and respond to prompts interactively.
-
-```diff
-- mastra init -y
-+ mastra init
-+ # Respond to prompts interactively
+```ts
+const mastra = new Mastra({
+  server: {
+    port: 3001,
+  },
+});
 ```
 
 ### Removed: Telemetry options from CLI
@@ -84,22 +44,3 @@ To migrate, remove the `-y` flag from CLI commands and respond to prompts intera
 The `telemetry` option has been removed from CLI commands including the `--no-telemetry` / `-nt` flag. Telemetry configuration has been removed from the CLI. This change reflects the move of telemetry features to the observability package.
 
 To migrate, remove telemetry flags from CLI commands. Use `@mastra/observability` for tracing features.
-
-```diff
-- mastra dev --no-telemetry
-+ mastra dev
-+ // Use @mastra/observability for tracing instead
-```
-
-### Removed: Docker Compose starter files
-
-Docker Compose configuration files have been removed from CLI starter files. Files like `mastra-pg.docker-compose.yaml` are no longer included in starter templates. This change reduces opinionated infrastructure setup in starter templates.
-
-To migrate, create your own Docker setup if needed when initializing new projects.
-
-```diff
-  mastra init
-- # Included docker-compose.yaml files
-+ # Docker Compose files no longer included
-+ # Create your own Docker setup as needed
-```

@@ -7,172 +7,60 @@ description: "Overview of breaking changes when upgrading to Mastra v1."
 
 This guide provides a comprehensive overview of breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
 
+:::tip[Need help?]
+Need help with the migration? Join our [Discord community](https://discord.gg/BTYqqHKUrf) to ask questions.
+:::
+
 ## Migration Strategy
+
+### Update all Mastra packages
 
 Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility.
 
-```bash
-# Using pnpm
-pnpm update @mastra/core @mastra/memory @mastra/cli ...
+### Update Node.js version
 
-# Using npm
-npm update @mastra/core @mastra/memory @mastra/cli ...
-
-# Using yarn
-yarn upgrade @mastra/core @mastra/memory @mastra/cli ...
-```
-
-:::info
-Versions mentioned in individual migration guides refer to the `@mastra/core` package. If necessary, versions of other Mastra packages are called out in the detailed descriptions.
-
-All Mastra packages have a peer dependency on `@mastra/core` so your package manager can inform you about compatibility.
-:::
+Mastra v1 requires Node.js 22.13.0 or higher. Update your development and production environments accordingly.
 
 ## Breaking Changes by Area
 
-### Core Package (`@mastra/core`)
-
-The core package has undergone significant restructuring to improve tree-shaking and API consistency:
-
-- **Imports**: Top-level imports are now restricted. Only `Mastra` and `type Config` can be imported from the main index. All other exports moved to subpath imports.
-- **Property Access**: Direct property access on Mastra and Agent instances deprecated in favor of getter methods.
-- **Naming**: `RuntimeContext` renamed to `RequestContext` throughout the codebase.
-
-See the [Mastra Class](/guides/migrations/upgrade-to-v1/mastra) migration guide for details.
-
-### Agent API
-
-Agent API changes focus on better organization and clearer method signatures:
-
-- **Voice Methods**: Moved to `agent.voice` namespace.
-- **Memory Access**: `fetchMemory()` replaced with explicit `getMemory().query()` pattern.
-- **Processor Methods**: Renamed from `get*` to `list*` pattern.
-- **Stream/Generate**: `format` parameter removed, AI SDK conversions moved to `@mastra/ai-sdk`.
-- **Deprecated Methods**: `generateVNext`, `streamVNext`, and `toStep` removed.
-
-See the [Agent Class](/guides/migrations/upgrade-to-v1/agent) migration guide for details.
-
-### Tools
-
-Tool execution signature has changed to provide clearer separation between inputs and context:
-
-- **Execute Signature**: Changed from `({ context, ... })` to `(inputData, context)`.
-- **Context Organization**: Context properties now organized into namespaces (`context.agent`, `context.workflow`, `context.mcp`).
-
-See the [Tools](/guides/migrations/upgrade-to-v1/tools) migration guide for details.
-
-### Workflows
-
-Workflow step execution aligns with tool signature changes:
-
-- **Step Execute Signature**: Changed to `(inputData, context)` format.
-- **Method Renames**: `createRunAsync` → `createRun`, `getWorkflowRuns` → `listWorkflowRuns`.
-- **Deprecated Properties**: `runCount` → `retryCount`.
-- **Removed Features**: Legacy workflows, watch events, and `waitForEvent` removed.
-
-See the [Workflows](/guides/migrations/upgrade-to-v1/workflows) migration guide for details.
-
-### Memory (`@mastra/memory`)
-
-Memory configuration and API have been updated for better defaults and consistency:
-
-- **Required Config**: `storage`, `vector`, and `embedder` are now required (no defaults).
-- **Default Changes**: Last messages reduced from 40 to 10, semantic recall disabled by default, scope changed from `thread` to `resource`.
-- **API Simplification**: Query returns simple `{ messages }` format, `format` parameter removed.
-- **Type Renames**: `MastraMessageV2` → `MastraDBMessage`.
-- **Removed Features**: `text-stream` working memory mode, `MastraMessageV3`, processors config.
-
-See the [Memory](/guides/migrations/upgrade-to-v1/memory) migration guide for details.
-
-### Storage
-
-Storage APIs have been standardized with consistent naming and pagination:
-
-- **Pagination**: Changed from `offset/limit` to `page/perPage` across all methods.
-- **Method Renames**: All `get*` methods renamed to `list*` pattern.
-- **Vector Stores**: Changed from positional to named arguments.
-- **Removed Methods**: Non-paginated functions, `getTraces`, format overloads removed.
-
-See the [Storage](/guides/migrations/upgrade-to-v1/storage) migration guide for details.
-
-### Evals & Scorers
-
-Evaluation API has been consolidated on the new scorers system:
-
-- **Function Renames**: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById`.
-- **Scorer Config**: Scorers now use `id` instead of `name` as required field.
-- **Processor Updates**: Processors require `id`, use `MastraDBMessage` type.
-- **Removed Features**: Legacy evals code, `TMetrics` generic parameter, deprecated processor exports.
-
-See the [Evals & Scorers](/guides/migrations/upgrade-to-v1/evals) migration guide for details.
-
-### CLI
-
-CLI has been simplified with cleaner command structure:
-
-- **Removed Commands**: `mastra deploy` removed.
-- **Removed Flags**: `--env` from build, `--port` from dev, `-y` from init, telemetry flags.
-- **Removed Files**: Docker Compose starter files no longer included.
-- **Environment Variables**: Hyphens converted to underscores in provider env var names.
-
-See the [CLI](/guides/migrations/upgrade-to-v1/cli) migration guide for details.
-
-### Client SDKs
-
-Client SDK changes align with server-side API updates:
-
-- **Naming**: `RuntimeContext` utilities → `RequestContext` utilities.
-- **Pagination**: Changed from `offset/limit` to `page/perPage`.
-- **Type Renames**: `Get*` types → `List*` types.
-- **Removed Features**: `toAISdkFormat`, network memory methods, watch-related types, deprecated stream endpoints.
-
-See the [Client SDKs](/guides/migrations/upgrade-to-v1/client) migration guide for details.
-
-### Voice Packages
-
-Voice packages have been renamed and reorganized:
-
-- **Package Renames**: `@mastra/speech-*` → `@mastra/voice-*`.
-- **Class Renames**: `*TTS` classes → `*Voice` classes.
-- **Method Changes**: `generate`/`stream` → `speak`, `voices` → `getSpeakers`.
-- **Config Properties**: `speakProvider` → `output`, `listenProvider` → `input`, `realtimeProvider` → `realtime`.
-
-See the [Voice Packages](/guides/migrations/upgrade-to-v1/voice) migration guide for details.
-
-## High Impact Changes
-
-These changes affect most applications and require immediate attention:
-
-1. **Tool Signature Changes**: All tools must update to `(inputData, context)` format.
-2. **Workflow Step Signature**: All workflow steps must update to match tool signature.
-3. **Import Restructuring**: Top-level `@mastra/core` imports must move to subpath imports.
-4. **Memory Configuration**: Memory now requires explicit `storage`, `vector`, and `embedder` configuration.
-5. **Pagination Updates**: All pagination calls must change from `offset/limit` to `page/perPage`.
-
-## Medium Impact Changes
-
-These changes may affect your application depending on features used:
-
-1. **RuntimeContext → RequestContext**: Update throughout codebase.
-2. **Method Renames**: Update all `get*` to `list*` method calls.
-3. **Agent Property Access**: Replace direct property access with getter methods.
-4. **Memory Scope Defaults**: Update if relying on default `thread` scope.
-5. **Vector Store API**: Update to named arguments.
-
-## Low Impact Changes
-
-These changes have minimal impact or provide deprecation warnings:
-
-1. **createRunAsync → createRun**: Simple rename.
-2. **Deprecated Agent Methods**: Show warnings before removal.
-3. **Playground → Studio**: Internal rename.
+- **[Mastra Class](/guides/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
+- **[Agent Class](/guides/migrations/upgrade-to-v1/agent)** - Voice methods moved to namespace and streaming API updates.
+- **[Tools](/guides/migrations/upgrade-to-v1/tools)** - Execute signature changed to separate input and context.
+- **[Workflows](/guides/migrations/upgrade-to-v1/workflows)** - Step execution signature updated and legacy features removed.
+- **[Memory](/guides/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
+- **[Storage](/guides/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
+- **[Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
+- **[CLI](/guides/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
+- **[Client SDKs](/guides/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
+- **[Voice Packages](/guides/migrations/upgrade-to-v1/voice)** - Packages renamed from speech to voice.
 
 ## Migration Checklist
 
-Refer to the detailed checklist in the [BREAKING_CHANGES.md](https://github.com/mastra-ai/mastra/blob/main/BREAKING_CHANGES.md) file for a comprehensive list of migration tasks.
+Work through this checklist in order, starting with high-impact changes that affect most applications.
 
-## Getting Help
+### High Impact Changes
 
-- Review individual migration guides for detailed examples
-- Check the [BREAKING_CHANGES.md](https://github.com/mastra-ai/mastra/blob/main/BREAKING_CHANGES.md) for the complete list of changes
-- Test thoroughly after migration, especially around tool execution, workflow execution, memory queries, and pagination
+- Update tool signatures to `(inputData, context)` format - [Tools](/guides/migrations/upgrade-to-v1/tools)
+- Update workflow step signatures to `(inputData, context)` format - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra)
+- Add required `storage`, `vector`, and `embedder` to Memory configuration - [Memory](/guides/migrations/upgrade-to-v1/memory)
+- Update pagination from `offset/limit` to `page/perPage` - [Storage](/guides/migrations/upgrade-to-v1/storage)
+
+### Medium Impact Changes
+
+- Rename `RuntimeContext` to `RequestContext` throughout codebase - [Agent Class](/guides/migrations/upgrade-to-v1/agent), [Tools](/guides/migrations/upgrade-to-v1/tools), [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update storage methods from `get*` to `list*` pattern - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Replace direct property access with getter methods - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra), [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Update memory scope if relying on default `thread` scope - [Memory](/guides/migrations/upgrade-to-v1/memory)
+- Update vector store calls to use named arguments - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Remove `format` parameter from agent methods - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Update voice methods to use `agent.voice` namespace - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+
+### Low Impact Changes
+
+- Rename `createRunAsync` to `createRun` - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update voice package names from `@mastra/speech-*` to `@mastra/voice-*` - [Voice Packages](/guides/migrations/upgrade-to-v1/voice)
+- Update scorer methods: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById` - [Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)
+- Remove deprecated CLI flags - [CLI](/guides/migrations/upgrade-to-v1/cli)
+- Update client SDK types from `Get*` to `List*` - [Client SDKs](/guides/migrations/upgrade-to-v1/client)
+- Replace `runCount` with `retryCount` - [Workflows](/guides/migrations/upgrade-to-v1/workflows)

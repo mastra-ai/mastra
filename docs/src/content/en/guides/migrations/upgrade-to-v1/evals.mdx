@@ -68,10 +68,11 @@ To migrate, update score query methods to use the new naming pattern.
 + const scores = await storage.listScoresByScorerId({
 +   scorerId: 'helpfulness-scorer',
 + });
-+ // Also available:
-+ // - listScoresByRunId
-+ // - listScoresByEntityId  
-+ // - listScoresBySpan
+
+// Also available:
+// - listScoresByRunId
+// - listScoresByEntityId  
+// - listScoresBySpan
 ```
 
 ### Changed: Processor interface requirements
