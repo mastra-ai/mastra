@@ -48,7 +48,6 @@
     "command-line",
     "devtools"
   ],
-  "author": "",
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "@expo/devcert": "^1.2.0",
@@ -100,5 +99,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

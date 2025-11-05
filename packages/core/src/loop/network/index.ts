@@ -580,8 +580,6 @@ export async function createNetworkLoop({
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
-        // resourceId: inputData.resourceId,
-        // threadId: inputData.threadId,
         requestContext: requestContext,
         runId,
       });
@@ -902,11 +900,14 @@ export async function createNetworkLoop({
       });
 
       const finalResult = await tool.execute(
+        inputDataToUse,
         {
           requestContext,
           mastra: agent.getMastraInstance(),
-          resourceId: initData.threadResourceId || networkName,
-          threadId: initData.threadId,
+          agent: {
+            resourceId: initData.threadResourceId || networkName,
+            threadId: initData.threadId,
+          },
           runId,
           memory,
           context: inputDataToUse,

@@ -1,4 +1,3 @@
-import { convertMessages } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
@@ -309,6 +308,7 @@ export async function deleteThreadHandler({
 
 export async function listMessagesHandler({
   mastra,
+  agentId,
   threadId,
   resourceId,
   perPage,
@@ -316,49 +316,9 @@ export async function listMessagesHandler({
   orderBy,
   include,
   filter,
-}: Pick<MemoryContext, 'mastra'> & StorageListMessagesInput) {
-  try {
-    validateBody({ threadId });
-
-    const storage = mastra.getStorage();
-
-    if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
-    }
-
-    const thread = await storage.getThreadById({ threadId: threadId! });
-
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
-
-    const result = await storage.listMessages({
-      threadId: threadId!,
-      resourceId,
-      perPage,
-      page,
-      orderBy,
-      include,
-      filter,
-    });
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error getting messages');
-  }
-}
-
-export async function getMessagesHandler({
-  mastra,
-  agentId,
-  threadId,
-  limit,
   requestContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
-  limit?: number;
-}) {
-  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
-    throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
-  }
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> &
+  Omit<StorageListMessagesInput, 'threadId'>) {
   try {
     validateBody({ threadId });
 
@@ -377,12 +337,16 @@ export async function getMessagesHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await memory.query({
+    const result = await memory.recall({
       threadId: threadId,
-      ...(limit && { selectBy: { last: limit } }),
+      resourceId,
+      perPage,
+      page,
+      orderBy,
+      include,
+      filter,
     });
-    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
-    return { messages: result.messages, uiMessages };
+    return result;
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
@@ -621,13 +585,19 @@ export async function searchMemoryHandler({
           : { ...config.semanticRecall, messageRange: 0 };
     }
 
-    // Single call to rememberMessages - just like the agent does
+    // Single call to recall - just like the agent does
     // The Memory class handles scope (thread vs resource) internally
-    const result = await memory.rememberMessages({
+    const threadConfig = memory.getMergedThreadConfig(config || {});
+    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
+      return { results: [], count: 0, query: searchQuery };
+    }
+
+    const result = await memory.recall({
       threadId,
       resourceId,
-      vectorMessageSearch: searchQuery,
-      config,
+      perPage: threadConfig.lastMessages,
+      threadConfig: config,
+      vectorSearchString: threadConfig.semanticRecall && searchQuery ? searchQuery : undefined,
     });
 
     // Get all threads to build context and show which thread each message is from
@@ -649,7 +619,7 @@ export async function searchMemoryHandler({
       const thread = threadMap.get(msgThreadId);
 
       // Get thread messages for context
-      const threadMessages = (await memory.query({ threadId: msgThreadId })).messages;
+      const threadMessages = (await memory.recall({ threadId: msgThreadId })).messages;
       const messageIndex = threadMessages.findIndex(m => m.id === msg.id);
 
       const searchResult: SearchResult = {

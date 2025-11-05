@@ -197,9 +197,9 @@ describe('Working Memory Tests', () => {
 
       await memory.saveMessages({ messages });
 
-      const remembered = await memory.rememberMessages({
+      const remembered = await memory.recall({
         threadId: thread.id,
-        config: { lastMessages: 10 },
+        perPage: 10,
       });
 
       // Working memory tags should be stripped from the messages
@@ -343,7 +343,7 @@ describe('Working Memory Tests', () => {
         expect(workingMemory).toContain('**Location**: Vancouver Island');
       }
 
-      const history = await memory.query({
+      const history = await memory.recall({
         threadId: thread.id,
         resourceId,
         perPage: 20,
@@ -1566,8 +1566,8 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     id: 'get-weather',
     description: 'Get current weather for a city',
     inputSchema: z.object({ city: z.string() }),
-    execute: async ({ context }) => {
-      return { city: context.city, temp: 68, condition: 'partly cloudy' };
+    execute: async inputData => {
+      return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
     },
   });
 
@@ -1898,7 +1898,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       'Calculate what 15 times 4 is, then remember that my name is Bob and I live in Seattle, then tell me the weather in Seattle.',
       {
         memory: { thread: threadId, resource: resourceId },
-        maxSteps: 10,
+        maxSteps: 5,
       },
     );
 
