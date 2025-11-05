@@ -1520,7 +1520,7 @@ importers:
         version: 2.0.1
       '@mastra/observability':
         specifier: '>=0.0.2'
-        version: 0.0.4(@mastra/core@0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))
+        version: 0.0.4(@mastra/core@0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -2731,6 +2731,9 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@3.25.76)
+      '@internal/ai-sdk-v4':
+        specifier: workspace:*
+        version: link:../_ai-sdk-v4
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -20315,7 +20318,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)':
+  '@mastra/core@0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/anthropic-v5': '@ai-sdk/anthropic@2.0.33(zod@3.25.76)'
@@ -20332,7 +20335,7 @@ snapshots:
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.2.0)(zod@3.25.76))(zod@3.25.76)
       '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@3.25.76))(zod@3.25.76)'
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20380,9 +20383,9 @@ snapshots:
       - valibot
       - zod-openapi
 
-  '@mastra/observability@0.0.4(@mastra/core@0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))':
+  '@mastra/observability@0.0.4(@mastra/core@0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))':
     dependencies:
-      '@mastra/core': 0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)
+      '@mastra/core': 0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)
 
   '@mastra/rag@1.3.1(@mastra/core@packages+core)(ai@4.3.19(react@19.2.0)(zod@3.25.76))(encoding@0.1.13)(zod@3.25.76)':
     dependencies:
@@ -20818,7 +20821,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
@@ -20867,7 +20870,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.7.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.10(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22021,7 +22024,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
