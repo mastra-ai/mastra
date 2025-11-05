@@ -54,6 +54,9 @@ export type AgentExecutionOptions<
   /** Save messages incrementally after each stream step completes (default: false). */
   savePerStep?: boolean;
 
+  /** Include raw chunks of type "raw" from the provider (default: false) */
+  includeRawChunks?: boolean;
+
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext;
 

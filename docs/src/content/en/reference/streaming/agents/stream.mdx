@@ -556,6 +556,14 @@ const aiSdkStream = await agent.stream("message for agent", {
         "Save messages incrementally after each stream step completes (default: false).",
     },
     {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description:
+        "Include raw chunks of type 'raw' from the provider (default: false). This allows access to cutting-edge provider features not yet wrapped by the Mastra and AI SDK.",
+    },
+    {
       name: "providerOptions",
       type: "Record<string, Record<string, JSONValue>>",
       isOptional: true,

@@ -4982,6 +4982,176 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(abortCalled).toBe(true);
         expect(abortEvent).toBeDefined();
       });
+
+      it('should include raw chunks in onChunk when includeRawChunks is true', async () => {
+        const modelWithRawChunks = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'test-id',
+                modelId: 'test-model',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'raw',
+                rawValue: {
+                  type: 'test-raw-data',
+                  content: 'raw chunk content',
+                },
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 5, promptTokens: 3, totalTokens: 8 },
+              },
+            ]),
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-include-raw-chunks',
+          name: 'Test Include Raw Chunks',
+          model: modelWithRawChunks,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const chunks: any[] = [];
+
+        const stream = await agent.stream('Hello', {
+          includeRawChunks: true,
+          onChunk: chunk => {
+            chunks.push(chunk);
+          },
+        });
+
+        await stream.consumeStream();
+
+        const rawChunks = chunks.filter(chunk => chunk.type === 'raw');
+        expect(rawChunks.length).toBeGreaterThan(0);
+        expect(rawChunks[0].payload).toEqual({
+          type: 'test-raw-data',
+          content: 'raw chunk content',
+        });
+      });
+
+      it('should include raw chunks in fullStream when includeRawChunks is true', async () => {
+        const modelWithRawChunks = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'test-id',
+                modelId: 'test-model',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'raw',
+                rawValue: {
+                  type: 'test-raw-data',
+                  content: 'raw chunk content from fullStream',
+                },
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 5, promptTokens: 3, totalTokens: 8 },
+              },
+            ]),
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-fullstream-raw-chunks',
+          name: 'Test FullStream Raw Chunks',
+          model: modelWithRawChunks,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const stream = await agent.stream('Hello', {
+          includeRawChunks: true,
+        });
+
+        const chunks: any[] = [];
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
+        }
+
+        const rawChunks = chunks.filter(chunk => chunk.type === 'raw');
+        expect(rawChunks.length).toBeGreaterThan(0);
+        expect(rawChunks[0].payload).toEqual({
+          type: 'test-raw-data',
+          content: 'raw chunk content from fullStream',
+        });
+      });
+
+      it('should not include raw chunks when includeRawChunks is false or undefined', async () => {
+        const modelWithRawChunks = new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: 'test-id',
+                modelId: 'test-model',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'raw',
+                rawValue: {
+                  type: 'test-raw-data',
+                  content: 'raw chunk content',
+                },
+              },
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: 'Test response' },
+              { type: 'text-end', id: '1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 5, promptTokens: 3, totalTokens: 8 },
+              },
+            ]),
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-exclude-raw-chunks',
+          name: 'Test Exclude Raw Chunks',
+          model: modelWithRawChunks,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const chunks: any[] = [];
+
+        const stream = await agent.stream('Hello', {
+          onChunk: chunk => {
+            chunks.push(chunk);
+          },
+        });
+
+        await stream.consumeStream();
+
+        const rawChunks = chunks.filter(chunk => chunk.type === 'raw');
+        expect(rawChunks.length).toBe(0);
+      });
     });
     describe(`${version} - stream destructuring support`, () => {
       it('should support destructuring of stream properties and methods', async () => {

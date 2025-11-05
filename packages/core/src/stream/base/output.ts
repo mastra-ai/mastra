@@ -294,7 +294,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               if (!self.#options.includeRawChunks) {
                 return;
               }
-              break;
+              // Enqueue raw chunk immediately when includeRawChunks is true
+              self.#emitChunk(chunk);
+              controller.enqueue(chunk);
+              return;
             case 'object-result':
               self.#bufferedObject = chunk.object;
               // Only resolve if not already rejected by validation error
