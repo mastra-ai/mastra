@@ -936,8 +936,12 @@ export class Mastra<
     const activeRuns = await this.listActiveWorkflowRuns();
     for (const runSnapshot of activeRuns.runs) {
       const workflow = this.getWorkflowById(runSnapshot.workflowName);
-      const run = await workflow.createRun({ runId: runSnapshot.runId });
-      await run.restart();
+      try {
+        const run = await workflow.createRun({ runId: runSnapshot.runId });
+        await run.restart();
+      } catch (error) {
+        this.#logger.error(`Failed to restart ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}: ${error}`);
+      }
     }
   }
 
