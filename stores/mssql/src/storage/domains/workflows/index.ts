@@ -248,10 +248,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     const now = new Date().toISOString();
     try {
       const request = this.pool.request();
+      const { status, value, ...rest } = snapshot;
       request.input('workflow_name', workflowName);
       request.input('run_id', runId);
       request.input('resourceId', resourceId);
-      request.input('snapshot', JSON.stringify(snapshot));
+      request.input('snapshot', JSON.stringify({ status, value, ...rest })); // this is to ensure status is always just before value, for when querying the db by status
       request.input('createdAt', sql.DateTime2, new Date(now));
       request.input('updatedAt', sql.DateTime2, new Date(now));
       const mergeSql = `MERGE INTO ${table} AS target

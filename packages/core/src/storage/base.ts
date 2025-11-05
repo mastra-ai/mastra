@@ -431,11 +431,17 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<void> {
     await this.init();
 
+    const { status, value, ...rest } = snapshot;
+
     const data = {
       workflow_name: workflowName,
       run_id: runId,
       resourceId,
-      snapshot,
+      snapshot: {
+        status, // this is to ensure status is always just before value, for when querying the db by status
+        value,
+        ...rest,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     };

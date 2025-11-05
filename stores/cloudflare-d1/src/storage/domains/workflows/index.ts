@@ -70,19 +70,20 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
+    const { status, value, ...rest } = snapshot;
 
     const persisting = currentSnapshot
       ? {
           ...currentSnapshot,
           resourceId,
-          snapshot: JSON.stringify(snapshot),
+          snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
           updatedAt: now,
         }
       : {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
-          snapshot: snapshot as Record<string, any>,
+          snapshot: { status, value, ...rest } as Record<string, any>, // this is to ensure status is always just before value, for when querying the db by status
           createdAt: now,
           updatedAt: now,
         };

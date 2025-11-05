@@ -95,11 +95,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         createdAt = now;
       }
 
+      const { status, value, ...rest } = snapshot;
+
       const record = {
         workflow_name: workflowName,
         run_id: runId,
         resourceId,
-        snapshot: JSON.stringify(snapshot),
+        snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
         createdAt,
         updatedAt: now,
       };

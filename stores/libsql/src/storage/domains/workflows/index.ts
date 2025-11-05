@@ -269,11 +269,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     resourceId?: string;
     snapshot: WorkflowRunState;
   }) {
+    const { status, value, ...rest } = snapshot;
     const data = {
       workflow_name: workflowName,
       run_id: runId,
       resourceId,
-      snapshot,
+      snapshot: { status, value, ...rest }, // this is to ensure status is always just before value, for when querying the db by status
       createdAt: new Date(),
       updatedAt: new Date(),
     };

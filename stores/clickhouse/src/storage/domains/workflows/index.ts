@@ -69,19 +69,21 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
         keys: { workflow_name: workflowName, run_id: runId },
       });
 
+      const { status, value, ...rest } = snapshot;
+
       const now = new Date();
       const persisting = currentSnapshot
         ? {
             ...currentSnapshot,
             resourceId,
-            snapshot: JSON.stringify(snapshot),
+            snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
             updatedAt: now.toISOString(),
           }
         : {
             workflow_name: workflowName,
             run_id: runId,
             resourceId,
-            snapshot: JSON.stringify(snapshot),
+            snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
             createdAt: now.toISOString(),
             updatedAt: now.toISOString(),
           };
