@@ -269,7 +269,9 @@ export async function createNetworkLoop({
 
       let completionResult;
 
-      let iterationCount = (inputData.iteration ? inputData.iteration : -1) + 1;
+      // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
+      // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
+      const iterationCount = (inputData.iteration ?? -1) + 1;
 
       await writer.write({
         type: 'routing-agent-start',
@@ -1231,7 +1233,8 @@ export async function networkLoop<
           task,
           primitiveId: '',
           primitiveType: 'none',
-          iteration: 0,
+          // Start at -1 so first iteration increments to 0 (not 1)
+          iteration: -1,
           threadResourceId: thread?.resourceId,
           threadId: thread?.id,
           isOneOff: false,
