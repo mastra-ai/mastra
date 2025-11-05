@@ -18,11 +18,14 @@ new LangSmithExporter(config: LangSmithExporterConfig)
 ## LangSmithExporterConfig
 
 ```typescript
-interface LangSmithExporterConfig extends ClientConfig {
-  logLevel?: "debug" | "info" | "warn" | "error";
+interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   client?: Client;
 }
 ```
+
+Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
+- From `BaseExporterConfig`: `logger?: IMastraLogger`, `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'`
+- From `ClientConfig`: `apiKey`, `apiUrl`, `callerOptions`, `hideInputs`, `hideOutputs`, etc.
 
 <PropertiesTable
   props={[
@@ -73,10 +76,10 @@ interface LangSmithExporterConfig extends ClientConfig {
 
 ## Methods
 
-### exportEvent
+### exportTracingEvent
 
 ```typescript
-async exportEvent(event: TracingEvent): Promise<void>
+async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to LangSmith.

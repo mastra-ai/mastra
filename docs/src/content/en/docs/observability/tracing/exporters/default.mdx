@@ -18,21 +18,21 @@ The `DefaultExporter` persists traces to your configured storage backend, making
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { DefaultExporter } from "@mastra/core/observability";
+import { Observability, DefaultExporter } from "@mastra/observability";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     url: "file:./mastra.db", // Required for trace persistence
   }),
-  observability: {
+  observability: new Observability({
     configs: {
       local: {
         serviceName: "my-service",
         exporters: [new DefaultExporter()],
       },
     },
-  },
+  }),
 });
 ```
 
@@ -41,13 +41,16 @@ export const mastra = new Mastra({
 When using the default observability configuration, DefaultExporter is automatically included:
 
 ```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     url: "file:./mastra.db",
   }),
-  observability: {
+  observability: new Observability({
     default: { enabled: true }, // Automatically includes DefaultExporter
-  },
+  }),
 });
 ```
 

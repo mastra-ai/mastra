@@ -23,10 +23,10 @@ MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { CloudExporter } from "@mastra/core/observability";
+import { Observability, CloudExporter } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     configs: {
       production: {
         serviceName: "my-service",
@@ -35,7 +35,7 @@ export const mastra = new Mastra({
         ],
       },
     },
-  },
+  }),
 });
 ```
 
@@ -44,10 +44,13 @@ export const mastra = new Mastra({
 When using the default observability configuration, CloudExporter is automatically included if the access token is set:
 
 ```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+
 export const mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     default: { enabled: true }, // Automatically includes CloudExporter if token exists
-  },
+  }),
 });
 ```
 

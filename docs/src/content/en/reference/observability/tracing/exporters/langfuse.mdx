@@ -18,15 +18,18 @@ new LangfuseExporter(config: LangfuseExporterConfig)
 ## LangfuseExporterConfig
 
 ```typescript
-interface LangfuseExporterConfig {
+interface LangfuseExporterConfig extends BaseExporterConfig {
   publicKey?: string;
   secretKey?: string;
   baseUrl?: string;
   realtime?: boolean;
-  logLevel?: "debug" | "info" | "warn" | "error";
   options?: any;
 }
 ```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
@@ -71,10 +74,10 @@ interface LangfuseExporterConfig {
 
 ## Methods
 
-### exportEvent
+### exportTracingEvent
 
 ```typescript
-async exportEvent(event: TracingEvent): Promise<void>
+async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to Langfuse.

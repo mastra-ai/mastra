@@ -36,10 +36,11 @@ PHOENIX_PROJECT_NAME=mastra-service  # Optional, defaults to 'mastra-service'
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
 import { ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     configs: {
       arize: {
         serviceName: process.env.PHOENIX_PROJECT_NAME || "mastra-service",
@@ -52,7 +53,7 @@ export const mastra = new Mastra({
         ],
       },
     },
-  },
+  }),
 });
 ```
 
@@ -93,10 +94,11 @@ ARIZE_PROJECT_NAME=mastra-service  # Optional
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
 import { ArizeExporter } from "@mastra/arize";
 
 export const mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     configs: {
       arize: {
         serviceName: process.env.ARIZE_PROJECT_NAME || "mastra-service",
@@ -109,7 +111,7 @@ export const mastra = new Mastra({
         ],
       },
     },
-  },
+  }),
 });
 ```
 

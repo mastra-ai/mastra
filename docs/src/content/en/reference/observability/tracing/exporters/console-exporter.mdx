@@ -12,7 +12,27 @@ Outputs trace events to the console for debugging and development.
 ## Constructor
 
 ```typescript
-new ConsoleExporter(logger?: IMastraLogger)
+new ConsoleExporter(config?: BaseExporterConfig)
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "config",
+      type: "BaseExporterConfig",
+      description: "Configuration options",
+      required: false,
+    },
+  ]}
+/>
+
+## BaseExporterConfig
+
+```typescript
+interface BaseExporterConfig {
+  logger?: IMastraLogger;
+  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error';
+}
 ```
 
 <PropertiesTable
@@ -20,8 +40,13 @@ new ConsoleExporter(logger?: IMastraLogger)
     {
       name: "logger",
       type: "IMastraLogger",
-      description:
-        "Logger instance to use. Falls back to ConsoleLogger with INFO level if not provided",
+      description: "Logger instance (falls back to ConsoleLogger with INFO level)",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+      description: "Log level for the exporter (default: INFO)",
       required: false,
     },
   ]}
@@ -35,10 +60,10 @@ readonly name = 'tracing-console-exporter';
 
 ## Methods
 
-### exportEvent
+### exportTracingEvent
 
 ```typescript
-async exportEvent(event: TracingEvent): Promise<void>
+async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to the console.
@@ -113,15 +138,22 @@ The exporter outputs different formats based on event type:
 ## Usage
 
 ```typescript
-import { ConsoleExporter } from "@mastra/core/observability";
+import { ConsoleExporter } from "@mastra/observability";
 import { ConsoleLogger, LogLevel } from "@mastra/core/logger";
 
 // Use default logger (INFO level)
 const exporter = new ConsoleExporter();
 
-// Use custom logger
+// Use custom log level
+const exporter = new ConsoleExporter({
+  logLevel: 'debug'
+});
+
+// Use custom logger instance
 const customLogger = new ConsoleLogger({ level: LogLevel.DEBUG });
-const exporterWithLogger = new ConsoleExporter(customLogger);
+const exporterWithLogger = new ConsoleExporter({
+  logger: customLogger
+});
 ```
 
 ## Implementation Details

@@ -30,10 +30,11 @@ LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
 import { LangSmithExporter } from "@mastra/langsmith";
 
 export const mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     configs: {
       langsmith: {
         serviceName: "my-service",
@@ -44,7 +45,7 @@ export const mastra = new Mastra({
         ],
       },
     },
-  },
+  }),
 });
 ```
 

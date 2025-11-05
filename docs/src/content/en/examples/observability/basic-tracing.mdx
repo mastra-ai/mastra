@@ -33,6 +33,7 @@ Create your Mastra configuration with Tracing enabled:
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { LibSQLStorage } from "@mastra/libsql";
+import { Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
   // Configure storage (required for DefaultExporter)
@@ -41,9 +42,9 @@ export const mastra = new Mastra({
   }),
 
   // Enable Tracing with default configuration
-  observability: {
+  observability: new Observability({
     default: { enabled: true },
-  },
+  }),
 });
 ```
 

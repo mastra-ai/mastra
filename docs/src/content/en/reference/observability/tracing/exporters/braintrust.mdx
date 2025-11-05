@@ -18,14 +18,17 @@ new BraintrustExporter(config: BraintrustExporterConfig)
 ## BraintrustExporterConfig
 
 ```typescript
-interface BraintrustExporterConfig {
+interface BraintrustExporterConfig extends BaseExporterConfig {
   apiKey?: string;
   endpoint?: string;
   projectName?: string;
-  logLevel?: "debug" | "info" | "warn" | "error";
   tuningParameters?: Record<string, any>;
 }
 ```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 <PropertiesTable
   props={[
@@ -64,10 +67,10 @@ interface BraintrustExporterConfig {
 
 ## Methods
 
-### exportEvent
+### exportTracingEvent
 
 ```typescript
-async exportEvent(event: TracingEvent): Promise<void>
+async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to Braintrust.

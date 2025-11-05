@@ -6,53 +6,53 @@ asIndexPage: true
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Tracing
+# Observability Instances
 
-## DefaultTracing
+## DefaultObservabilityInstance
 
-Default implementation of the Tracing interface.
+Default implementation of the ObservabilityInstance interface.
 
 ### Constructor
 
 ```typescript
-new DefaultTracing(config: TracingConfig)
+new DefaultObservabilityInstance(config: ObservabilityInstanceConfig)
 ```
 
-Creates a new DefaultTracing instance with the specified configuration.
+Creates a new DefaultObservabilityInstance with the specified configuration.
 
 ### Properties
 
-Inherits all properties and methods from BaseTracing.
+Inherits all properties and methods from BaseObservabilityInstance.
 
-## BaseTracing
+## BaseObservabilityInstance
 
-Base class for custom Tracing implementations.
+Base class for custom ObservabilityInstance implementations.
 
 ### Methods
 
 #### getConfig
 
 ```typescript
-getConfig(): Readonly<Required<TracingConfig>>
+getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
 ```
 
-Returns the current tracing configuration.
+Returns the current observability configuration.
 
 #### getExporters
 
 ```typescript
-getExporters(): readonly TracingExporter[]
+getExporters(): readonly ObservabilityExporter[]
 ```
 
 Returns all configured exporters.
 
-#### getProcessors
+#### getSpanOutputProcessors
 
 ```typescript
-getProcessors(): readonly SpanProcessor[]
+getSpanOutputProcessors(): readonly SpanOutputProcessor[]
 ```
 
-Returns all configured processors.
+Returns all configured span output processors.
 
 #### getLogger
 
@@ -129,11 +129,11 @@ Shuts down all exporters and processors, cleaning up resources.
 
 ## Custom Implementation
 
-To create a custom Tracing implementation, extend BaseTracing:
+To create a custom ObservabilityInstance implementation, extend BaseObservabilityInstance:
 
 ```typescript
-class CustomTracing extends BaseTracing {
-  constructor(config: TracingConfig) {
+class CustomObservabilityInstance extends BaseObservabilityInstance {
+  constructor(config: ObservabilityInstanceConfig) {
     super(config);
     // Custom initialization
   }
@@ -148,24 +148,6 @@ class CustomTracing extends BaseTracing {
 }
 ```
 
-## NO-OP Spans
-
-When tracing is disabled (sampling returns false), NO-OP spans are returned:
-
-### NoOpSpan
-
-```typescript
-class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>
-```
-
-A span that performs no operations. All methods are no-ops:
-
-- `id` returns `'no-op'`
-- `traceId` returns `'no-op-trace'`
-- `isValid` returns `false`
-- `end()`, `error()`, `update()` do nothing
-- `createChildSpan()` returns another NO-OP span
-
 ## See Also
 
 ### Documentation
@@ -173,7 +155,7 @@ A span that performs no operations. All methods are no-ops:
 - [Tracing Overview](/docs/observability/tracing/overview) - Concepts and usage guide
 - [Configuration Reference](/reference/observability/tracing/configuration) - Configuration options
 - [Interfaces Reference](/reference/observability/tracing/interfaces) - Type definitions
-- [Span Reference](/reference/observability/tracing/span) - Span lifecycle and methods
+- [Spans Reference](/reference/observability/tracing/spans) - Span lifecycle and methods
 
 ### Examples
 

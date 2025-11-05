@@ -9,20 +9,20 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 ## Core Interfaces
 
-### Tracing
+### ObservabilityInstance
 
-Primary interface for Tracing.
+Primary interface for observability.
 
 ```typescript
-interface Tracing {
+interface ObservabilityInstance {
   /** Get current configuration */
-  getConfig(): Readonly<Required<TracingConfig>>;
+  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>;
 
   /** Get all exporters */
-  getExporters(): readonly TracingExporter[];
+  getExporters(): readonly ObservabilityExporter[];
 
-  /** Get all processors */
-  getProcessors(): readonly SpanProcessor[];
+  /** Get all span output processors */
+  getSpanOutputProcessors(): readonly SpanOutputProcessor[];
 
   /** Get the logger instance (for exporters and other components) */
   getLogger(): IMastraLogger;
@@ -32,7 +32,7 @@ interface Tracing {
     options: StartSpanOptions<TType>,
   ): Span<TType>;
 
-  /** Shutdown Tracing and clean up resources */
+  /** Shutdown observability and clean up resources */
   shutdown(): Promise<void>;
 }
 ```
@@ -50,6 +50,7 @@ interface SpanTypeMap {
   MODEL_CHUNK: ModelChunkAttributes;
   TOOL_CALL: ToolCallAttributes;
   MCP_TOOL_CALL: MCPToolCallAttributes;
+  PROCESSOR_RUN: ProcessorRunAttributes;
   WORKFLOW_STEP: WorkflowStepAttributes;
   WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes;
   WORKFLOW_CONDITIONAL_EVAL: WorkflowConditionalEvalAttributes;
@@ -80,8 +81,8 @@ interface Span<TType extends SpanType> {
   /** Parent span reference (undefined for root spans) */
   parent?: AnySpan;
 
-  /** Pointer to the Tracing instance */
-  Tracing: Tracing;
+  /** Pointer to the ObservabilityInstance instance */
+  observabilityInstance: ObservabilityInstance;
 
   attributes?: SpanTypeMap[TType];
   metadata?: Record<string, any>;
@@ -116,32 +117,49 @@ interface Span<TType extends SpanType> {
 }
 ```
 
-### TracingExporter
+### ObservabilityExporter
 
-Interface for tracing exporters.
+Interface for observability exporters.
 
 ```typescript
-interface TracingExporter {
+interface ObservabilityExporter {
   /** Exporter name */
   name: string;
 
-  /** Initialize exporter (called after all dependencies are ready) */
-  init?(): void;
+  /** Initialize exporter with tracing configuration and/or access to Mastra */
+  init?(options: InitExporterOptions): void;
 
   /** Export tracing events */
-  exportEvent(event: TracingEvent): Promise<void>;
+  exportTracingEvent(event: TracingEvent): Promise<void>;
+
+  /** Add score to a trace (optional) */
+  addScoreToTrace?({
+    traceId,
+    spanId,
+    score,
+    reason,
+    scorerName,
+    metadata,
+  }: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }): Promise<void>;
 
   /** Shutdown exporter */
   shutdown(): Promise<void>;
 }
 ```
 
-### SpanProcessor
+### SpanOutputProcessor
 
-Interface for span processors.
+Interface for span output processors.
 
 ```typescript
-interface SpanProcessor {
+interface SpanOutputProcessor {
   /** Processor name */
   name: string;
 
@@ -178,6 +196,9 @@ enum SpanType {
 
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = "mcp_tool_call",
+
+  /** Input or Output Processor execution */
+  PROCESSOR_RUN = "processor_run",
 
   /** Function/tool execution with inputs, outputs, errors */
   TOOL_CALL = "tool_call",
@@ -360,6 +381,23 @@ interface MCPToolCallAttributes {
 }
 ```
 
+### ProcessorRunAttributes
+
+Processor attributes.
+
+```typescript
+interface ProcessorRunAttributes {
+  /** Name of the Processor */
+  processorName: string;
+
+  /** Processor type (input or output) */
+  processorType: 'input' | 'output';
+
+  /** Processor index in the agent */
+  processorIndex?: number;
+}
+```
+
 ### WorkflowRunAttributes
 
 Workflow Run attributes.
@@ -369,13 +407,7 @@ interface WorkflowRunAttributes {
   /** Workflow identifier */
   workflowId: string;
 
-  /** Workflow version */
-  workflowVersion?: string;
-
-  /** Workflow run ID */
-  runId?: string;
-
-  /** Final workflow execution status */
+  /** Workflow status */
   status?: WorkflowRunStatus;
 }
 ```
@@ -387,19 +419,10 @@ Workflow Step attributes.
 ```typescript
 interface WorkflowStepAttributes {
   /** Step identifier */
-  stepId?: string;
-
-  /** Step type */
-  stepType?: string;
+  stepId: string;
 
   /** Step status */
   status?: WorkflowStepStatus;
-
-  /** Step execution order */
-  stepNumber?: number;
-
-  /** Result store key */
-  resultKey?: string;
 }
 ```
 
@@ -546,35 +569,38 @@ interface TracingPolicy {
 
 ## Configuration Types
 
-### TracingConfig
+### ObservabilityInstanceConfig
 
-Configuration for a single tracing instance.
+Configuration for a single observability instance.
 
 ```typescript
-interface TracingConfig {
-  /** Unique identifier for this config in the Tracing registry */
+interface ObservabilityInstanceConfig {
+  /** Unique identifier for this config in the observability registry */
   name: string;
 
-  /** Service name for tracing */
+  /** Service name for observability */
   serviceName: string;
 
   /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
   sampling?: SamplingStrategy;
 
   /** Custom exporters */
-  exporters?: TracingExporter[];
+  exporters?: ObservabilityExporter[];
 
-  /** Custom processors */
-  processors?: SpanProcessor[];
+  /** Custom span output processors */
+  spanOutputProcessors?: SpanOutputProcessor[];
 
   /** Set to true if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
+
+  /** RequestContext keys to automatically extract as metadata for all spans */
+  requestContextKeys?: string[];
 }
 ```
 
 ### ObservabilityRegistryConfig
 
-Complete Tracing registry configuration.
+Complete observability registry configuration.
 
 ```typescript
 interface ObservabilityRegistryConfig {
@@ -584,7 +610,7 @@ interface ObservabilityRegistryConfig {
   };
 
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  configs?: Record<string, Omit<TracingConfig, "name"> | Tracing>;
+  configs?: Record<string, Omit<ObservabilityInstanceConfig, "name"> | ObservabilityInstance>;
 
   /** Optional selector function to choose which tracing instance to use */
   configSelector?: ConfigSelector;
@@ -620,12 +646,12 @@ interface CustomSamplerOptions {
 
 ### ConfigSelector
 
-Function to select which Tracing instance to use for a given span.
+Function to select which observability instance to use for a given span.
 
 ```typescript
 type ConfigSelector = (
   options: ConfigSelectorOptions,
-  availableConfigs: ReadonlyMap<string, Tracing>,
+  availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
 ) => string | undefined;
 ```
 
@@ -680,7 +706,7 @@ enum InternalSpans {
 
 - [Configuration](/reference/observability/tracing/configuration) - Registry and configuration
 - [Tracing Classes](/reference/observability/tracing/) - Core implementations
-- [Span Reference](/reference/observability/tracing/span) - Span lifecycle methods
+- [Spans Reference](/reference/observability/tracing/spans) - Span lifecycle methods
 
 ### Examples
 

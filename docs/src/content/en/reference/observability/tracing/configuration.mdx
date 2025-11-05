@@ -12,7 +12,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 ```typescript
 interface ObservabilityRegistryConfig {
   default?: { enabled?: boolean };
-  configs?: Record<string, TracingConfig | Tracing>;
+  configs?: Record<string, Omit<ObservabilityInstanceConfig, "name"> | ObservabilityInstance>;
   configSelector?: ConfigSelector;
 }
 ```
@@ -22,33 +22,35 @@ interface ObservabilityRegistryConfig {
     {
       name: "default",
       type: "{ enabled?: boolean }",
-      description: "Enable default configuration",
+      description: "Enable default configuration with DefaultExporter and CloudExporter",
       required: false,
     },
     {
       name: "configs",
-      type: "Record<string, TracingConfig | Tracing>",
-      description: "Named tracing configurations",
+      type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
+      description: "Named observability instance configurations or pre-instantiated instances",
       required: false,
     },
     {
       name: "configSelector",
       type: "ConfigSelector",
-      description: "Runtime configuration selector",
+      description: "Runtime configuration selector function",
       required: false,
     },
   ]}
 />
 
-## TracingConfig
+## ObservabilityInstanceConfig
 
 ```typescript
-interface TracingConfig {
+interface ObservabilityInstanceConfig {
   name: string;
   serviceName: string;
   sampling?: SamplingStrategy;
-  exporters?: TracingExporter[];
-  processors?: SpanProcessor[];
+  exporters?: ObservabilityExporter[];
+  spanOutputProcessors?: SpanOutputProcessor[];
+  includeInternalSpans?: boolean;
+  requestContextKeys?: string[];
 }
 ```
 
@@ -69,19 +71,31 @@ interface TracingConfig {
     {
       name: "sampling",
       type: "SamplingStrategy",
-      description: "Sampling configuration",
+      description: "Sampling configuration (defaults to ALWAYS)",
       required: false,
     },
     {
       name: "exporters",
-      type: "TracingExporter[]",
+      type: "ObservabilityExporter[]",
       description: "Trace data exporters",
       required: false,
     },
     {
-      name: "processors",
-      type: "SpanProcessor[]",
-      description: "Span processors",
+      name: "spanOutputProcessors",
+      type: "SpanOutputProcessor[]",
+      description: "Span output processors",
+      required: false,
+    },
+    {
+      name: "includeInternalSpans",
+      type: "boolean",
+      description: "Include spans internal to Mastra operations",
+      required: false,
+    },
+    {
+      name: "requestContextKeys",
+      type: "string[]",
+      description: "RequestContext keys to extract as metadata (supports dot notation)",
       required: false,
     },
   ]}
@@ -102,7 +116,7 @@ type SamplingStrategy =
 ```typescript
 type ConfigSelector = (
   options: ConfigSelectorOptions,
-  availableConfigs: Map<string, Tracing>,
+  availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
 ) => string | undefined;
 ```
 
@@ -110,106 +124,99 @@ type ConfigSelector = (
 
 ```typescript
 interface ConfigSelectorOptions {
-  metadata?: Record<string, any>;
-  requestContext?: Map<string, any>;
+  requestContext?: RequestContext;
 }
 ```
 
-# Registry Functions
+# Registry Methods
 
-## setupTracing
+The Observability class provides methods for managing observability instances:
 
-```typescript
-function setupTracing(config: ObservabilityRegistryConfig): void;
-```
-
-Initializes Tracing from configuration. Called automatically by Mastra constructor.
-
-## registerTracing
+## registerInstance
 
 ```typescript
-function registerTracing(
+registerInstance(
   name: string,
-  instance: Tracing,
-  isDefault?: boolean,
+  instance: ObservabilityInstance,
+  isDefault?: boolean
 ): void;
 ```
 
-Registers a tracing config in the global registry.
+Registers an observability instance in the registry.
 
-## getTracing
-
-```typescript
-function getTracing(name: string): Tracing | undefined;
-```
-
-Retrieves a tracing config by name.
-
-## getDefaultTracing
+## getInstance
 
 ```typescript
-function getDefaultTracing(): Tracing | undefined;
+getInstance(name: string): ObservabilityInstance | undefined;
 ```
 
-Returns the default tracing config.
+Retrieves an observability instance by name.
 
-## getSelectedTracing
+## getDefaultInstance
 
 ```typescript
-function getSelectedTracing(
-  options: ConfigSelectorOptions,
-): Tracing | undefined;
+getDefaultInstance(): ObservabilityInstance | undefined;
 ```
 
-Returns the tracing config selected by the config selector or default.
+Returns the default observability instance.
 
-## setSelector
+## getSelectedInstance
 
 ```typescript
-function setSelector(selector: ConfigSelector): void;
+getSelectedInstance(
+  options: ConfigSelectorOptions
+): ObservabilityInstance | undefined;
 ```
 
-Sets the global config selector function.
+Returns the observability instance selected by the config selector or default.
 
-## unregisterTracing
+## listInstances
 
 ```typescript
-function unregisterTracing(name: string): boolean;
+listInstances(): ReadonlyMap<string, ObservabilityInstance>;
 ```
 
-Removes a tracing config from the registry.
+Returns all registered observability instances.
 
-## shutdownTracingRegistry
+## hasInstance
 
 ```typescript
-async function shutdownTracingRegistry(): Promise<void>;
+hasInstance(name: string): boolean;
 ```
 
-Shuts down all tracing configs and clears the registry.
+Checks if an observability instance exists.
 
-## clearTracingRegistry
+## setConfigSelector
 
 ```typescript
-function clearTracingRegistry(): void;
+setConfigSelector(selector: ConfigSelector): void;
 ```
 
-Clears all configs without shutdown.
+Sets the config selector function.
 
-## getAllTracing
+## unregisterInstance
 
 ```typescript
-function getAllTracing(): ReadonlyMap<string, Tracing>;
+unregisterInstance(name: string): boolean;
 ```
 
-Returns all registered tracing configs.
+Removes an observability instance from the registry.
 
-## hasTracing
+## clear
 
 ```typescript
-function hasTracing(name: string): boolean;
+clear(): void;
 ```
 
-Checks if a tracing instance exists and is enabled.
+Clears all instances without shutdown.
+
+## shutdown
+
+```typescript
+async shutdown(): Promise<void>;
+```
+
+Shuts down all observability instances and clears the registry.
 
 ## See Also
 
@@ -223,7 +230,7 @@ Checks if a tracing instance exists and is enabled.
 
 - [Tracing Classes](/reference/observability/tracing/) - Core tracing classes
 - [Interfaces](/reference/observability/tracing/interfaces) - Type definitions
-- [Span Reference](/reference/observability/tracing/span) - Span lifecycle
+- [Spans Reference](/reference/observability/tracing/spans) - Span lifecycle
 
 ### Examples
 

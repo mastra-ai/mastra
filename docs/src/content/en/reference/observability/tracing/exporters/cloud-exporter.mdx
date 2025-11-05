@@ -29,7 +29,7 @@ new CloudExporter(config?: CloudExporterConfig)
 ## CloudExporterConfig
 
 ```typescript
-interface CloudExporterConfig {
+interface CloudExporterConfig extends BaseExporterConfig {
   /** Maximum number of spans per batch. Default: 1000 */
   maxBatchSize?: number;
 
@@ -42,33 +42,34 @@ interface CloudExporterConfig {
   /** Cloud access token (from env or config) */
   accessToken?: string;
 
-  /** Cloud Tracing endpoint */
+  /** Cloud observability endpoint */
   endpoint?: string;
-
-  /** Optional logger */
-  logger?: IMastraLogger;
 }
 ```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
 ## Environment Variables
 
 The exporter reads these environment variables if not provided in config:
 
 - `MASTRA_CLOUD_ACCESS_TOKEN` - Access token for authentication
-- `MASTRA_CLOUD_AI_TRACES_ENDPOINT` - Custom endpoint (defaults to `https://api.mastra.ai/ai/spans/publish`)
+- `MASTRA_CLOUD_TRACES_ENDPOINT` - Custom endpoint (defaults to `https://api.mastra.ai/ai/spans/publish`)
 
 ## Properties
 
 ```typescript
-readonly name = 'mastra-cloud-tracing-exporter';
+readonly name = 'mastra-cloud-observability-exporter';
 ```
 
 ## Methods
 
-### exportEvent
+### exportTracingEvent
 
 ```typescript
-async exportEvent(event: TracingEvent): Promise<void>
+async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Processes tracing events. Only exports SPAN_ENDED events to Cloud.
@@ -148,7 +149,7 @@ interface MastraCloudSpanRecord {
 ## Usage
 
 ```typescript
-import { CloudExporter } from "@mastra/core/observability";
+import { CloudExporter } from "@mastra/observability";
 
 // Uses environment variable for token
 const exporter = new CloudExporter();
@@ -158,6 +159,7 @@ const customExporter = new CloudExporter({
   accessToken: "your-token",
   maxBatchSize: 500,
   maxBatchWaitMs: 2000,
+  logLevel: 'debug'
 });
 ```
 

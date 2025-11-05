@@ -452,8 +452,8 @@ const sidebars = {
           items: [
             {
               type: "doc",
-              id: "observability/tracing/tracing",
-              label: "Tracing",
+              id: "observability/tracing/instances",
+              label: "Instances",
             },
             {
               type: "doc",
@@ -462,8 +462,8 @@ const sidebars = {
             },
             {
               type: "doc",
-              id: "observability/tracing/span",
-              label: "Span",
+              id: "observability/tracing/spans",
+              label: "Spans",
             },
             {
               type: "doc",
@@ -481,6 +481,11 @@ const sidebars = {
                 },
                 {
                   type: "doc",
+                  id: "observability/tracing/exporters/braintrust",
+                  label: "BraintrustExporter",
+                },
+                {
+                  type: "doc",
                   id: "observability/tracing/exporters/cloud-exporter",
                   label: "CloudExporter",
                 },
@@ -491,8 +496,8 @@ const sidebars = {
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/langsmith",
-                  label: "LangSmithExporter",
+                  id: "observability/tracing/exporters/default-exporter",
+                  label: "DefaultExporter",
                 },
                 {
                   type: "doc",
@@ -501,18 +506,13 @@ const sidebars = {
                 },
                 {
                   type: "doc",
+                  id: "observability/tracing/exporters/langsmith",
+                  label: "LangSmithExporter",
+                },
+                {
+                  type: "doc",
                   id: "observability/tracing/exporters/otel",
                   label: "OtelExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/tracing/exporters/braintrust",
-                  label: "BraintrustExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/tracing/exporters/default-exporter",
-                  label: "DefaultExporter",
                 },
               ],
             },

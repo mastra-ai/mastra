@@ -43,10 +43,11 @@ npm install @mastra/otel-exporter @opentelemetry/exporter-trace-otlp-http
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
 import { OtelExporter } from "@mastra/otel-exporter";
 
 export const mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     configs: {
       otel: {
         serviceName: "my-service",
@@ -67,7 +68,7 @@ export const mastra = new Mastra({
         ],
       },
     },
-  },
+  }),
 });
 ```
 

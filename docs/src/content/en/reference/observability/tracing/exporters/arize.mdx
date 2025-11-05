@@ -18,7 +18,7 @@ new ArizeExporter(config: ArizeExporterConfig)
 ## ArizeExporterConfig
 
 ```typescript
-interface ArizeExporterConfig {
+type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
   // Phoenix / OpenTelemetry configuration
   endpoint?: string;
   apiKey?: string;
@@ -29,14 +29,14 @@ interface ArizeExporterConfig {
   // Common configuration
   projectName?: string;
   headers?: Record<string, string>;
-
-  // Inherited from OtelExporterConfig
-  timeout?: number;
-  batchSize?: number;
-  logLevel?: "debug" | "info" | "warn" | "error";
-  resourceAttributes?: Record<string, any>;
 }
 ```
+
+Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
+- `timeout?: number` - Export timeout in milliseconds (default: 30000)
+- `batchSize?: number` - Number of spans per batch (default: 512)
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
+- `resourceAttributes?: Record<string, any>` - Custom resource attributes
 
 <PropertiesTable
   props={[
@@ -103,10 +103,10 @@ interface ArizeExporterConfig {
 
 ## Methods
 
-### exportEvent
+### exportTracingEvent
 
 ```typescript
-async exportEvent(event: TracingEvent): Promise<void>
+async exportTracingEvent(event: TracingEvent): Promise<void>
 ```
 
 Exports a tracing event to the configured endpoint.

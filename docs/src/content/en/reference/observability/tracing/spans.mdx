@@ -1,11 +1,11 @@
 ---
-title: "Reference: Span | Observability | Mastra Docs"
+title: "Reference: Spans | Observability | Mastra Docs"
 description: Span interfaces, methods, and lifecycle events
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Span
+# Spans
 
 ## BaseSpan
 
@@ -69,8 +69,8 @@ interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span reference (undefined for root spans) */
   parent?: AnySpan;
 
-  /** Pointer to the Tracing instance */
-  Tracing: Tracing;
+  /** Pointer to the ObservabilityInstance instance */
+  observabilityInstance: ObservabilityInstance;
 }
 ```
 
@@ -354,6 +354,24 @@ type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
 ```
 
 Union type for cases that need to handle any exported span type.
+
+## NO-OP Spans
+
+When tracing is disabled (sampling returns false), NO-OP spans are returned:
+
+### NoOpSpan
+
+```typescript
+class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>
+```
+
+A span that performs no operations. All methods are no-ops:
+
+- `id` returns `'no-op'`
+- `traceId` returns `'no-op-trace'`
+- `isValid` returns `false`
+- `end()`, `error()`, `update()` do nothing
+- `createChildSpan()` returns another NO-OP span
 
 ## See Also
 

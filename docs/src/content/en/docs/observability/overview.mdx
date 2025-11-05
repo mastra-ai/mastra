@@ -13,7 +13,7 @@ Mastra provides comprehensive observability features designed specifically for A
 
 Specialized tracing for AI operations that captures:
 
-- **LLM interactions**: Token usage, latency, prompts, and completions
+- **Model interactions**: Token usage, latency, prompts, and completions
 - **Agent execution**: Decision paths, tool calls, and memory operations
 - **Workflow steps**: Branching logic, parallel execution, and step outputs
 - **Automatic instrumentation**: Zero-configuration tracing with decorators
@@ -31,13 +31,10 @@ import { Observability } from "@mastra/observability";
 export const mastra = new Mastra({
   // ... other config
   logger: new PinoLogger(),
-  observability: {
-    default: { enabled: true }, // Enables Tracing
-  },
   storage: new LibSQLStore({
     url: "file:./mastra.db", // Storage is required for tracing
   }),
-  observability: new Observability ({
+  observability: new Observability({ // Enables Tracing
     default: { enabled: true },
   }),
 });
