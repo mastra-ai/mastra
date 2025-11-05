@@ -24,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 // Tracing imports
-import { DefaultObservability } from './default';
+import { Observability } from './default';
 
 /**
  * Test exporter for tracing events with real-time span lifecycle validation.
@@ -690,7 +690,7 @@ const mockModelV2 = new MockLanguageModelV2({
 function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
   return {
     storage: new MockStore(),
-    observability: new DefaultObservability({
+    observability: new Observability({
       configs: {
         test: {
           ...options,

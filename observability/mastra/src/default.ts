@@ -5,7 +5,7 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   ConfigSelector,
   ConfigSelectorOptions,
-  Observability,
+  ObservabilityEntrypoint,
   ObservabilityInstance,
 } from '@mastra/core/observability';
 import { SamplingStrategyType } from './config';
@@ -24,13 +24,13 @@ function isInstance(
   return obj instanceof BaseObservabilityInstance;
 }
 
-export class DefaultObservability extends MastraBase implements Observability {
+export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
       component: RegisteredLogger.OBSERVABILITY,
-      name: 'DefaultObservability',
+      name: 'Observability',
     });
 
     if (config === undefined) {
@@ -66,7 +66,7 @@ export class DefaultObservability extends MastraBase implements Observability {
       instances.forEach(([name, tracingDef], index) => {
         const instance = isInstance(tracingDef)
           ? tracingDef // Pre-instantiated custom implementation
-          : new DefaultObservabilityInstance({ ...tracingDef, name }); // Config -> DefaultObservability with instance name
+          : new DefaultObservabilityInstance({ ...tracingDef, name }); // Config -> Observability with instance name
 
         // First user-provided instance becomes default only if no default config
         const isDefault = !config.default?.enabled && index === 0;

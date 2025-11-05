@@ -8,13 +8,13 @@ import type {
   ObservabilityInstanceConfig,
 } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DefaultObservability } from './default';
+import { Observability } from './default';
 import { CloudExporter, DefaultExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import { SensitiveDataFilter } from './span_processors';
 
 describe('Observability Registry', () => {
-  let observability = new DefaultObservability({});
+  let observability = new Observability({});
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -222,7 +222,7 @@ describe('Observability Registry', () => {
         exporters: [],
       };
 
-      observability = new DefaultObservability({
+      observability = new Observability({
         configs: {
           test: tracingConfig,
         },
@@ -242,7 +242,7 @@ describe('Observability Registry', () => {
         name: 'default-sampling-instance',
       };
 
-      observability = new DefaultObservability({
+      observability = new Observability({
         configs: {
           test: tracingConfig,
         },
@@ -285,7 +285,7 @@ describe('Observability Registry', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      observability = new DefaultObservability({
+      observability = new Observability({
         configs: {
           custom: customInstance,
         },
@@ -311,7 +311,7 @@ describe('Observability Registry', () => {
         sampling: { type: SamplingStrategyType.NEVER },
       });
 
-      observability = new DefaultObservability({
+      observability = new Observability({
         configs: {
           standard: {
             serviceName: 'standard-service',
@@ -354,7 +354,7 @@ describe('Observability Registry', () => {
         sampling: { type: SamplingStrategyType.ALWAYS },
       });
 
-      observability = new DefaultObservability({
+      observability = new Observability({
         configs: {
           test: testInstance,
         },
@@ -377,7 +377,7 @@ describe('Observability Registry', () => {
         return undefined; // Use default
       };
 
-      observability = new DefaultObservability({
+      observability = new Observability({
         configs: {
           console: {
             serviceName: 'console-service',
@@ -415,10 +415,10 @@ describe('Observability Registry', () => {
     });
   });
 
-  describe('observability = new DefaultObservability edge cases', () => {
+  describe('observability = new Observability edge cases', () => {
     it('should handle config.configs being undefined', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: false },
           // configs is undefined
         });
@@ -427,7 +427,7 @@ describe('Observability Registry', () => {
 
     it('should handle config.configs being empty array', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: false },
           configs: [] as any, // Empty array instead of object
         });
@@ -436,7 +436,7 @@ describe('Observability Registry', () => {
 
     it('should handle config.configs being undefined with default enabled', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: true },
           // configs is undefined - should not throw "Cannot read properties of undefined"
         });
@@ -449,7 +449,7 @@ describe('Observability Registry', () => {
 
     it('should handle empty configs object', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: false },
           configs: {}, // Empty object
         });
@@ -460,7 +460,7 @@ describe('Observability Registry', () => {
       const selector: ConfigSelector = () => undefined;
 
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           configSelector: selector,
           // No default, no configs
         });
@@ -469,7 +469,7 @@ describe('Observability Registry', () => {
 
     it('should handle config with null configs property', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: true },
           configs: null as any, // null instead of undefined or object
         });
@@ -482,7 +482,7 @@ describe('Observability Registry', () => {
       // when config.configs is undefined but config.default is enabled
 
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: true },
           // configs intentionally undefined to test the original bug
         });
@@ -495,7 +495,7 @@ describe('Observability Registry', () => {
       // when trying to do Object.entries(config.configs)
 
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: false },
           // configs intentionally undefined to test the original bug
         });
@@ -504,19 +504,19 @@ describe('Observability Registry', () => {
 
     it('should handle when entire config is undefined', () => {
       expect(() => {
-        observability = new DefaultObservability(undefined as any);
+        observability = new Observability(undefined as any);
       }).not.toThrow();
     });
 
     it('should handle when entire config is empty object', () => {
       expect(() => {
-        observability = new DefaultObservability({});
+        observability = new Observability({});
       }).not.toThrow();
     });
 
     it('should handle when default property is undefined', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: undefined,
           configs: {
             test: {
@@ -530,7 +530,7 @@ describe('Observability Registry', () => {
 
     it('should handle when default property is empty object', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: {} as any,
           configs: {
             test: {
@@ -544,7 +544,7 @@ describe('Observability Registry', () => {
 
     it('should handle when default property is null', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: null as any,
           configs: {
             test: {
@@ -558,7 +558,7 @@ describe('Observability Registry', () => {
 
     it('should handle when default.enabled is undefined', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: undefined } as any,
           configs: {
             test: {
@@ -572,7 +572,7 @@ describe('Observability Registry', () => {
 
     it('should handle completely minimal config', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: undefined,
           configs: undefined,
           configSelector: undefined,
@@ -592,7 +592,7 @@ describe('Observability Registry', () => {
     });
 
     it('should create default config when enabled', async () => {
-      observability = new DefaultObservability({
+      observability = new Observability({
         default: { enabled: true },
         configs: {},
       });
@@ -619,7 +619,7 @@ describe('Observability Registry', () => {
     });
 
     it('should not create default config when disabled', async () => {
-      observability = new DefaultObservability({
+      observability = new Observability({
         default: { enabled: false },
         configs: {
           custom: {
@@ -638,7 +638,7 @@ describe('Observability Registry', () => {
     });
 
     it('should not create default config when default property is not provided', async () => {
-      observability = new DefaultObservability({
+      observability = new Observability({
         configs: {
           custom: {
             serviceName: 'custom-service',
@@ -653,7 +653,7 @@ describe('Observability Registry', () => {
 
     it('should throw error when custom config named "default" conflicts with default config', () => {
       expect(() => {
-        observability = new DefaultObservability({
+        observability = new Observability({
           default: { enabled: true },
           configs: {
             default: {
@@ -666,7 +666,7 @@ describe('Observability Registry', () => {
     });
 
     it('should allow custom config named "default" when default config is disabled', async () => {
-      observability = new DefaultObservability({
+      observability = new Observability({
         default: { enabled: false },
         configs: {
           default: {
@@ -682,7 +682,7 @@ describe('Observability Registry', () => {
     });
 
     it('should work with both default and custom configs', async () => {
-      observability = new DefaultObservability({
+      observability = new Observability({
         default: { enabled: true },
         configs: {
           custom1: {
@@ -720,7 +720,7 @@ describe('Observability Registry', () => {
         return 'custom';
       };
 
-      observability = new DefaultObservability({
+      observability = new Observability({
         default: { enabled: true },
         configs: {
           custom: {

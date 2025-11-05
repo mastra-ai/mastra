@@ -6,7 +6,7 @@
  */
 
 // Export the default observability class
-export { DefaultObservability } from './default';
+export { Observability } from './default';
 
 // Export configuration types
 export * from './config';

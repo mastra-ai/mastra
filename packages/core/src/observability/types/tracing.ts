@@ -589,7 +589,7 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
 // Lifecycle Types
 // ============================================================================
 
-export interface Observability {
+export interface ObservabilityEntrypoint {
   shutdown(): Promise<void>;
 
   setMastraContext(options: { mastra: Mastra }): void;

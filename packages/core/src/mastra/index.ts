@@ -13,7 +13,7 @@ import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
-import type { Observability } from '../observability';
+import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
@@ -103,7 +103,7 @@ export interface Config<
   tts?: TTTS;
 
   /**
-   * Observability instance for tracking model interactions and tracing.
+   * Observability entrypoint for tracking model interactions and tracing.
    * Pass an instance of the Observability class from @mastra/observability.
    *
    * @example
@@ -117,7 +117,7 @@ export interface Config<
    * })
    * ```
    */
-  observability?: Observability;
+  observability?: ObservabilityEntrypoint;
 
   /**
    * Custom ID generator function for creating unique identifiers.
@@ -217,7 +217,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
-  #observability: Observability;
+  #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -1193,7 +1193,7 @@ export class Mastra<
     return this.#storage;
   }
 
-  get observability(): Observability {
+  get observability(): ObservabilityEntrypoint {
     return this.#observability;
   }
 
