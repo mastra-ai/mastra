@@ -39,12 +39,18 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
           const response = await fetch(`http://localhost:${port}/api/mcp/v0/servers`, {
             signal: AbortSignal.timeout(1000),
           });
-          if (response.ok || response.status === 404) {
-            // 404 is also ok - means server is up but no servers configured
-            // but in this case we should have servers, so ok is expected
-            if (response.ok) {
+          if (response.ok) {
+            // Check that the expected MCP server is actually registered
+            const data = await response.json();
+            const hasExpectedServer = data.servers?.some((s: any) => s.id === mcpServerId);
+            if (hasExpectedServer) {
+              console.log(`Server ready! Found MCP server '${mcpServerId}'`);
               resolve();
               return true;
+            } else {
+              console.log(
+                `Server responded but MCP server '${mcpServerId}' not found yet. Found: ${data.servers?.map((s: any) => s.id).join(', ') || 'none'}`,
+              );
             }
           }
         } catch (e) {
