@@ -8,7 +8,7 @@
 '@mastra/client-js': major
 '@mastra/cloudflare-d1': major
 '@mastra/ai-sdk': major
-'@mastra/react': major
+'@mastra/react': minor
 '@mastra/deployer': major
 '@mastra/clickhouse': major
 '@mastra/cloudflare': major

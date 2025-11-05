@@ -1,6 +1,6 @@
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
+import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -36,7 +36,7 @@ import type {
   ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
-  GetAITracesResponse,
+  GetTracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   ListMemoryThreadMessagesResponse,
@@ -619,11 +619,11 @@ export class MastraClient extends BaseResource {
     });
   }
 
-  getAITrace(traceId: string): Promise<AITraceRecord> {
+  getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
   }
 
-  getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
+  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
     return this.observability.getTraces(params);
   }
 

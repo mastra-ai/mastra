@@ -1,7 +1,7 @@
 /**
- * Langfuse Exporter for Mastra Tracing
+ * Langfuse Exporter for Mastra Observability
  *
- * This exporter sends tracing data to Langfuse for AI observability.
+ * This exporter sends observability data to Langfuse.
  * Root spans start traces in Langfuse.
  * MODEL_GENERATION spans become Langfuse generations, all others become spans.
  *

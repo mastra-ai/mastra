@@ -63,8 +63,8 @@ class TestExporter implements ObservabilityExporter {
     // Store log for potential test failure reporting
     this.logs.push(logMessage);
 
-    // Only log to console in verbose mode or if AI_TRACING_VERBOSE is set
-    if (process.env.AI_TRACING_VERBOSE === 'true') {
+    // Only log to console in verbose mode or if TRACING_VERBOSE is set
+    if (process.env.TRACING_VERBOSE === 'true') {
       console.log(logMessage);
     }
     // Otherwise, logs will only appear on test failures

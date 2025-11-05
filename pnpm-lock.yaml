@@ -1911,9 +1911,6 @@ importers:
       compromise:
         specifier: ^14.14.4
         version: 14.14.4
-      difflib:
-        specifier: ^0.2.4
-        version: 0.2.4
       fs-extra:
         specifier: ^11.3.2
         version: 11.3.2
@@ -1942,9 +1939,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.53.1(@types/node@20.19.23)
-      '@types/difflib':
-        specifier: ^0.2.7
-        version: 0.2.7
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
@@ -9875,9 +9869,6 @@ packages:
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
 
-  '@types/difflib@0.2.7':
-    resolution: {integrity: sha512-NCG38r/Wxkx7ZnGntRAVl3dPReR6nrauZq51viGgCQ8iM0QldrF7mN65SFnU3cJPaXo6Ry5+zhL0EVkfOgJsHw==}
-
   '@types/doctrine@0.0.9':
     resolution: {integrity: sha512-eOIHzCUSH7SMfonMG1LsC2f8vxBFtho6NGBznK41R84YzPuvSBzrhEps33IsQiOW9+VL6NQ9DbjQJznk/S4uRA==}
 
@@ -11617,9 +11608,6 @@ packages:
   didyoumean@1.2.2:
     resolution: {integrity: sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==}
 
-  difflib@0.2.4:
-    resolution: {integrity: sha512-9YVwmMb0wQHQNr5J9m6BSj6fk4pfGITGQOOs+D9Fl+INODWFOfvhIU1hNv6GgR1RBoC/9NJcwu77zShxV0kT7w==}
-
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
@@ -12556,9 +12544,6 @@ packages:
   heap-js@2.7.1:
     resolution: {integrity: sha512-EQfezRg0NCZGNlhlDR3Evrw1FVL2G3LhU7EgPoxufQKruNBSYA8MiRPHeWbU+36o+Fhel0wMwM+sLEiBAlNLJA==}
     engines: {node: '>=10.0.0'}
-
-  heap@0.2.7:
-    resolution: {integrity: sha512-2bsegYkkHO+h/9MGbn6KWcE45cHZgPANo5LXF7EvWdT0yT2EguSVO1nDgU5c8+ZOPwp2vMNa7YFsJhVcDR9Sdg==}
 
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
@@ -23820,8 +23805,6 @@ snapshots:
 
   '@types/deep-eql@4.0.2': {}
 
-  '@types/difflib@0.2.7': {}
-
   '@types/doctrine@0.0.9': {}
 
   '@types/duplexify@3.6.4':
@@ -25899,10 +25882,6 @@ snapshots:
 
   didyoumean@1.2.2: {}
 
-  difflib@0.2.4:
-    dependencies:
-      heap: 0.2.7
-
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
@@ -27278,8 +27257,6 @@ snapshots:
   headers-polyfill@4.0.3: {}
 
   heap-js@2.7.1: {}
-
-  heap@0.2.7: {}
 
   help-me@5.0.0: {}
 
