@@ -20,55 +20,74 @@ import {
   listThreadsResponseSchema,
   memoryStatusResponseSchema,
 } from '../../schemas/memory';
+import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
 export const MEMORY_ROUTES: ServerRoute[] = [
-  {
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getMemoryStatusHandler as unknown as ServerRouteHandler,
     path: '/api/memory/status',
     queryParamSchema: getMemoryStatusQuerySchema,
     responseSchema: memoryStatusResponseSchema,
-  },
-  {
+    summary: 'Get memory status',
+    description: 'Returns the current status of the memory system including configuration and health information',
+    tags: ['Memory'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getMemoryConfigHandler as unknown as ServerRouteHandler,
     path: '/api/memory/config',
     queryParamSchema: getMemoryConfigQuerySchema,
     responseSchema: memoryConfigResponseSchema,
-  },
-  {
+    summary: 'Get memory configuration',
+    description: 'Returns the memory configuration for a specific agent or the system default',
+    tags: ['Memory'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: listThreadsHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads',
     queryParamSchema: listThreadsQuerySchema,
     responseSchema: listThreadsResponseSchema,
-  },
-  {
+    summary: 'List memory threads',
+    description: 'Returns a paginated list of conversation threads filtered by resource ID',
+    tags: ['Memory'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getThreadByIdHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId',
     queryParamSchema: getThreadByIdQuerySchema,
     responseSchema: getThreadByIdResponseSchema,
-  },
-  {
+    summary: 'Get thread by ID',
+    description: 'Returns details for a specific conversation thread',
+    tags: ['Memory'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getMessagesHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId/messages',
     queryParamSchema: getMessagesQuerySchema,
     responseSchema: getMessagesResponseSchema,
-  },
-  {
+    summary: 'Get thread messages',
+    description: 'Returns all messages in a conversation thread',
+    tags: ['Memory'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getWorkingMemoryHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId/working-memory',
     queryParamSchema: getWorkingMemoryQuerySchema,
     responseSchema: getWorkingMemoryResponseSchema,
-  },
+    summary: 'Get working memory',
+    description: 'Returns the current working memory state for a conversation thread',
+    tags: ['Memory'],
+  }),
 ];

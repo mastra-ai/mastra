@@ -17,39 +17,52 @@ import {
   workflowRunResponseSchema,
   workflowRunsResponseSchema,
 } from '../../schemas/workflows';
+import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
 export const WORKFLOWS_ROUTES: ServerRoute[] = [
-  {
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: listWorkflowsHandler as unknown as ServerRouteHandler,
     path: '/api/workflows',
     responseSchema: listWorkflowsResponseSchema,
-  },
-  {
+    summary: 'List all workflows',
+    description: 'Returns a list of all available workflows in the system',
+    tags: ['Workflows'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getWorkflowByIdHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId',
     responseSchema: workflowInfoSchema,
-  },
-  {
+    summary: 'Get workflow by ID',
+    description: 'Returns details for a specific workflow including steps and configuration',
+    tags: ['Workflows'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: listWorkflowRunsHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/runs',
     queryParamSchema: listWorkflowRunsQuerySchema,
     responseSchema: workflowRunsResponseSchema,
-  },
-  {
+    summary: 'List workflow runs',
+    description: 'Returns a paginated list of execution runs for the specified workflow',
+    tags: ['Workflows'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getWorkflowRunByIdHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/runs/:runId',
     responseSchema: workflowRunResponseSchema,
-  },
-  {
+    summary: 'Get workflow run by ID',
+    description: 'Returns details for a specific workflow run including execution status and results',
+    tags: ['Workflows'],
+  }),
+  createRoute({
     method: 'POST',
     responseType: 'json',
     handler: createWorkflowRunHandler as unknown as ServerRouteHandler,
@@ -57,26 +70,38 @@ export const WORKFLOWS_ROUTES: ServerRoute[] = [
     bodySchema: z.object({
       runId: z.string().optional(),
     }),
-  },
-  {
+    summary: 'Create workflow run',
+    description: 'Creates a new workflow execution instance with an optional custom run ID',
+    tags: ['Workflows'],
+  }),
+  createRoute({
     method: 'POST',
     responseType: 'stream',
     handler: streamWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/stream',
     bodySchema: streamWorkflowBodySchema,
-  },
-  {
+    summary: 'Stream workflow execution',
+    description: 'Executes a workflow and streams the results in real-time',
+    tags: ['Workflows'],
+  }),
+  createRoute({
     method: 'POST',
     responseType: 'stream',
     handler: streamWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/streamVNext',
     bodySchema: streamWorkflowBodySchema,
-  },
-  {
+    summary: 'Stream workflow execution (v2)',
+    description: 'Executes a workflow using the v2 streaming API and streams the results in real-time',
+    tags: ['Workflows'],
+  }),
+  createRoute({
     method: 'POST',
     responseType: 'stream',
     handler: resumeStreamWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/resume-stream',
     bodySchema: resumeStreamBodySchema,
-  },
+    summary: 'Resume workflow stream',
+    description: 'Resumes a suspended workflow execution and continues streaming results',
+    tags: ['Workflows'],
+  }),
 ];

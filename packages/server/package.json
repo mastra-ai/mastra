@@ -81,8 +81,9 @@
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.42",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
-    "@mastra/core": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "eslint": "^9.37.0",
@@ -90,8 +91,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
-    "zod": "^3.25.76",
-    "@internal/types-builder": "workspace:*"
+    "zod": "^3.25.76"
   },
   "homepage": "https://mastra.ai",
   "repository": {
@@ -104,5 +104,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "zod-openapi": "^5.4.3"
   }
 }

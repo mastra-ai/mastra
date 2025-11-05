@@ -15,56 +15,78 @@ import {
   serializedAgentSchema,
   voiceSpeakersResponseSchema,
 } from '../../schemas/agents';
+import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
 export const AGENTS_ROUTES: ServerRoute[] = [
-  {
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: listAgentsHandler as unknown as ServerRouteHandler,
     path: '/api/agents',
     responseSchema: listAgentsResponseSchema,
-  },
-  {
+    summary: 'List all agents',
+    description: 'Returns a list of all available agents in the system',
+    tags: ['Agents'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getProvidersHandler as unknown as ServerRouteHandler,
     path: '/api/agents/providers',
     responseSchema: providersResponseSchema,
-  },
-  {
+    summary: 'List AI providers',
+    description: 'Returns a list of all configured AI model providers',
+    tags: ['Agents'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getAgentByIdHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId',
     responseSchema: serializedAgentSchema,
-  },
-  {
+    summary: 'Get agent by ID',
+    description: 'Returns details for a specific agent including configuration, tools, and memory settings',
+    tags: ['Agents'],
+  }),
+  createRoute({
     method: 'GET',
     responseType: 'json',
     handler: getSpeakersHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/voice/speakers',
     responseSchema: voiceSpeakersResponseSchema,
-  },
-  {
+    summary: 'Get voice speakers',
+    description: 'Returns available voice speakers for the specified agent',
+    tags: ['Agents', 'Voice'],
+  }),
+  createRoute({
     method: 'POST',
     responseType: 'json',
     handler: generateHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/generate',
     bodySchema: agentExecutionBodySchema,
-  },
-  {
+    summary: 'Generate agent response',
+    description: 'Executes an agent with the provided messages and returns the complete response',
+    tags: ['Agents'],
+  }),
+  createRoute({
     method: 'POST',
     responseType: 'stream',
     handler: streamGenerateHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/stream',
     bodySchema: agentExecutionBodySchema,
-  },
-  {
+    summary: 'Stream agent response',
+    description: 'Executes an agent with the provided messages and streams the response in real-time',
+    tags: ['Agents'],
+  }),
+  createRoute({
     method: 'POST',
     responseType: 'json',
     handler: executeAgentToolHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/tools/:toolId/execute',
     bodySchema: executeToolBodySchema,
-  },
+    summary: 'Execute agent tool',
+    description: 'Executes a specific tool assigned to the agent with the provided input data',
+    tags: ['Agents', 'Tools'],
+  }),
 ];

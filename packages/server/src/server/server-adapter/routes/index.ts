@@ -21,6 +21,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   queryParamSchema?: z.ZodSchema;
   bodySchema?: z.ZodSchema;
   responseSchema?: z.ZodSchema;
+  openapi?: any; // Auto-generated OpenAPI spec for this route
 };
 
 export const SERVER_ROUTES: ServerRoute[] = [
@@ -31,3 +32,7 @@ export const SERVER_ROUTES: ServerRoute[] = [
   ...SCORES_ROUTES,
   ...OBSERVABILITY_ROUTES,
 ];
+
+// Export route builder and OpenAPI utilities
+export { createRoute } from './route-builder';
+export { generateOpenAPIDocument } from '../openapi-utils';
