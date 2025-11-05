@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloud",
-  "version": "0.1.22-alpha.0",
+  "version": "0.1.22",
   "description": "Official Mastra Cloud integration package for telemetry",
   "type": "module",
   "files": [

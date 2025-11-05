@@ -1,5 +1,14 @@
 # @mastra/auth-workos
 
+## 0.10.9
+
+### Patch Changes
+
+- update peerdeps ([`5ca1cca`](https://github.com/mastra-ai/mastra/commit/5ca1ccac61ffa7141e6d9fa8f22d3ad4d03bf5dc))
+
+- Updated dependencies [[`5ca1cca`](https://github.com/mastra-ai/mastra/commit/5ca1ccac61ffa7141e6d9fa8f22d3ad4d03bf5dc)]:
+  - @mastra/auth@0.1.5
+
 ## 0.10.9-alpha.0
 
 ### Patch Changes
