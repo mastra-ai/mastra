@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, Network } from 'lucide-react';
+import { ChevronDown, Network, Repeat, RefreshCw, Timer, GitBranch, CornerDownRight, Repeat1 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCurrentRun } from '../context/use-current-run';
@@ -28,6 +28,27 @@ export type ConditionNode = Node<
   'condition-node'
 >;
 
+const getConditionIconAndColor = (type: string) => {
+  switch (type) {
+    case 'when':
+      return { icon: Network, color: '#ECB047' }; // Orange
+    case 'dountil':
+      return { icon: Repeat1, color: '#8B5CF6' }; // Purple
+    case 'dowhile':
+      return { icon: Repeat, color: '#06B6D4' }; // Cyan
+    case 'until':
+      return { icon: Timer, color: '#F59E0B' }; // Amber
+    case 'while':
+      return { icon: RefreshCw, color: '#10B981' }; // Green
+    case 'if':
+      return { icon: GitBranch, color: '#3B82F6' }; // Blue
+    case 'else':
+      return { icon: CornerDownRight, color: '#6B7280' }; // Gray
+    default:
+      return { icon: null, color: null };
+  }
+};
+
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const { conditions, previousStepId, nextStepId, withoutTopHandle } = data;
   const [open, setOpen] = useState(true);
@@ -39,6 +60,8 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
 
   const previousStep = steps[previousStepId];
   const nextStep = steps[nextStepId];
+
+  const { icon: IconComponent, color } = getConditionIconAndColor(type);
 
   return (
     <>
@@ -64,7 +87,9 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           }}
         >
           <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2">
-            <Badge icon={type === 'when' ? <Network className="text-[#ECB047]" /> : null}>{type?.toUpperCase()}</Badge>
+            <Badge icon={IconComponent ? <IconComponent className="text-current" style={{ color }} /> : null}>
+              {type?.toUpperCase()}
+            </Badge>
             {isCollapsible && (
               <Icon>
                 <ChevronDown
@@ -142,11 +167,23 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                   <Fragment key={`${condition.ref?.path}-${index}`}>
                     {condition.ref?.step ? (
                       <div className="flex items-center gap-1">
-                        {index === 0 ? null : (
-                          <Badge icon={<Network className="text-[#ECB047]" />}>
-                            {condition.conj?.toLocaleUpperCase() || 'WHEN'}
-                          </Badge>
-                        )}
+                        {index === 0
+                          ? null
+                          : (() => {
+                              const conjType = condition.conj || type;
+                              const { icon: ConjIconComponent, color: conjColor } = getConditionIconAndColor(conjType);
+                              return (
+                                <Badge
+                                  icon={
+                                    ConjIconComponent ? (
+                                      <ConjIconComponent className="text-current" style={{ color: conjColor }} />
+                                    ) : null
+                                  }
+                                >
+                                  {condition.conj?.toLocaleUpperCase() || 'WHEN'}
+                                </Badge>
+                              );
+                            })()}
 
                         <Text size={'xs'} className=" text-mastra-el-3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}

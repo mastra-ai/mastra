@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
+import { CircleDashed, HourglassIcon, Loader2, PauseIcon, List } from 'lucide-react';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { cn } from '@/lib/utils';
@@ -38,6 +38,9 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
 
   const step = steps[fullLabel];
 
+  const isForEachNode = Boolean(mapConfig);
+  const forEachIconColor = '#F97316'; // Orange color for forEach nodes
+
   return (
     <>
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
@@ -61,7 +64,8 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
             {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
             {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
             {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-            {!step && <CircleDashed className="text-icon2" />}
+            {!step && isForEachNode && <List className="text-icon2" style={{ color: forEachIconColor }} />}
+            {!step && !isForEachNode && <CircleDashed className="text-icon2" />}
           </Icon>
 
           <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">
