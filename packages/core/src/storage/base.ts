@@ -582,7 +582,7 @@ export abstract class MastraStorage extends MastraBase {
       return this.stores.observability.getTrace(traceId);
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_GET_AI_TRACE_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_GET_TRACE_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
@@ -597,7 +597,7 @@ export abstract class MastraStorage extends MastraBase {
       return this.stores.observability.getTracesPaginated(args);
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_GET_AI_TRACES_PAGINATED_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_GET_TRACES_PAGINATED_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
@@ -648,7 +648,7 @@ export abstract class MastraStorage extends MastraBase {
       return this.stores.observability.batchDeleteTraces(args);
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_BATCH_DELETE_AI_TRACES_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_BATCH_DELETE_TRACES_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `tracing is not supported by this storage adapter (${this.constructor.name})`,

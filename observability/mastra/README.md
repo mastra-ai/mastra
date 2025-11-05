@@ -21,7 +21,7 @@ The AI Tracing system enables detailed observability for AI-driven applications 
 ### Manual Tracing
 
 ```typescript
-import { DefaultAITracing, AISpanType } from '@mastra/core/observability';
+import { DefaultAITracing, SpanType } from '@mastra/core/observability';
 
 // Create tracing instance
 const tracing = new DefaultAITracing({
@@ -30,7 +30,7 @@ const tracing = new DefaultAITracing({
 
 // Start an agent span
 const agentSpan = tracing.startSpan({
-  type: AISpanType.AGENT_RUN,
+  type: SpanType.AGENT_RUN,
   name: 'customer-support-agent',
   attributes: {
     agentId: 'agent-123',
@@ -41,7 +41,7 @@ const agentSpan = tracing.startSpan({
 
 // Create child spans for nested operations
 const llmSpan = agentSpan.createChildSpan({
-  type: AISpanType.MODEL_GENERATION,
+  type: SpanType.MODEL_GENERATION,
   name: 'gpt-4-response',
   attributes: {
     model: 'gpt-4',

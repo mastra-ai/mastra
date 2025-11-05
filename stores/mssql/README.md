@@ -227,12 +227,12 @@ MSSQLStore supports multiple connection methods:
 
 ### AI Tracing & Observability
 
-- `createAISpan(span)`: Create an trace span
-- `updateAISpan({ spanId, traceId, updates })`: Update an existing span
+- `createSpan(span)`: Create a trace span
+- `updateSpan({ spanId, traceId, updates })`: Update an existing span
 - `getTrace(traceId)`: Get complete trace with all spans
 - `getTracesPaginated({ filters?, pagination? })`: Query traces with pagination and filters
-- `batchCreateAISpans({ records })`: Batch create multiple spans
-- `batchUpdateAISpans({ records })`: Batch update multiple spans
+- `batchCreateSpans({ records })`: Batch create multiple spans
+- `batchUpdateSpans({ records })`: Batch update multiple spans
 - `batchDeleteTraces({ traceIds })`: Batch delete traces
 
 ### Index Management

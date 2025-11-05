@@ -368,10 +368,10 @@ The system automatically detects configuration changes and only rebuilds indexes
 
 ### AI Observability Operations
 
-- `createAISpan(span)`: Create a single AI span
-- `batchCreateAISpans({ records })`: Create multiple AI spans
-- `updateAISpan({ traceId, spanId, updates })`: Update an AI span
-- `batchUpdateAISpans({ updates })`: Update multiple AI spans
+- `createSpan(span)`: Create a single AI span
+- `batchCreateSpans({ records })`: Create multiple AI spans
+- `updateSpan({ traceId, spanId, updates })`: Update an AI span
+- `batchUpdateSpans({ updates })`: Update multiple AI spans
 - `getTrace(traceId)`: Get an trace by ID
 - `getTracesPaginated({ ...filters, pagination })`: Get paginated traces with filtering
 - `batchDeleteTraces({ traceIds })`: Delete multiple traces
