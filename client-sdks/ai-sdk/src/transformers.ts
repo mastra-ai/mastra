@@ -143,7 +143,7 @@ export function AgentNetworkToAISDKTransformer() {
   });
 }
 
-export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
+export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>(lastMessageId?: string) {
   let bufferedSteps = new Map<string, any>();
 
   return new TransformStream<ChunkType<TOutput>, object>({
@@ -156,7 +156,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
         sendSources: false,
         sendStart: true,
         sendFinish: true,
-        responseMessageId: chunk.runId,
+        responseMessageId: lastMessageId,
         onError() {
           return 'Error';
         },
