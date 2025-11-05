@@ -10,7 +10,8 @@ vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
   const port: number = 4114;
-  const mcpServerId = 'myMcpServer';
+  // Note: The ID gets slugified in MCPServerBase constructor, so 'myMcpServer' becomes 'my-mcp-server'
+  const mcpServerId = 'my-mcp-server';
   const testToolId = 'calculator';
   let client: MCPClient;
 
