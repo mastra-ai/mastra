@@ -1,9 +1,9 @@
 ---
 '@mastra/mcp-registry-registry': major
-'@mastra/voice-google-gemini-live': major
+'@mastra/voice-google-gemini-live': minor
 '@mastra/otel-exporter': major
-'@mastra/google-cloud-pubsub': major
-'@mastra/voice-openai-realtime': major
+'@mastra/google-cloud-pubsub': minor
+'@mastra/voice-openai-realtime': minor
 '@mastra/longmemeval': major
 '@mastra/braintrust': major
 '@mastra/mcp-docs-server': major
@@ -21,7 +21,7 @@
 '@mastra/ai-sdk': major
 '@mastra/fastembed': major
 '@mastra/turbopuffer': major
-'@mastra/react': major
+'@mastra/react': minor
 '@mastra/deployer-netlify': major
 '@mastra/deployer': major
 '@mastra/clickhouse': major
@@ -33,18 +33,18 @@
 '@mastra/couchbase': major
 '@mastra/s3vectors': major
 '@mastra/vectorize': major
-'@mastra/voice-cloudflare': major
-'@mastra/voice-elevenlabs': major
+'@mastra/voice-cloudflare': minor
+'@mastra/voice-elevenlabs': minor
 '@mastra/deployer-cloud': major
 '@mastra/memory': major
 '@mastra/server': major
 '@mastra/dynamodb': major
 '@mastra/pinecone': major
-'@mastra/voice-speechify': major
+'@mastra/voice-speechify': minor
 '@mastra/evals': major
 '@mastra/mongodb': major
 '@mastra/upstash': major
-'@mastra/voice-deepgram': major
+'@mastra/voice-deepgram': minor
 '@mastra/auth-firebase': major
 '@mastra/auth-supabase': major
 '@mastra/dane': major
@@ -59,16 +59,16 @@
 '@mastra/astra': major
 '@mastra/lance': major
 '@mastra/mssql': major
-'@mastra/voice-gladia': major
-'@mastra/voice-google': major
-'@mastra/voice-openai': major
-'@mastra/voice-playai': major
-'@mastra/voice-sarvam': major
+'@mastra/voice-gladia': minor
+'@mastra/voice-google': minor
+'@mastra/voice-openai': minor
+'@mastra/voice-playai': minor
+'@mastra/voice-sarvam': minor
 '@mastra/auth-workos': major
-'@mastra/voice-azure': major
+'@mastra/voice-azure': minor
 '@mastra/auth-auth0': major
 '@mastra/auth-clerk': major
-'@mastra/voice-murf': major
+'@mastra/voice-murf': minor
 '@mastra/pg': major
 ---
 
