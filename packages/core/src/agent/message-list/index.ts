@@ -279,7 +279,7 @@ export class MessageList {
         // Filter incomplete tool calls when sending messages TO the LLM
         const modelMessages = this.aiV5UIMessagesToAIV5ModelMessages(this.all.aiV5.ui(), true);
 
-        let messages = [...systemMessages, ...modelMessages];
+        const messages = [...systemMessages, ...modelMessages];
 
         return ensureGeminiCompatibleMessages(messages);
       },
@@ -361,7 +361,7 @@ export class MessageList {
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
         const coreMessages = this.all.aiV4.core();
-        let messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+        const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
         return ensureGeminiCompatibleMessages(messages);
       },
