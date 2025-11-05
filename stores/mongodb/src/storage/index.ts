@@ -12,8 +12,8 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   CreateSpanRecord,
   UpdateSpanRecord,
   StorageListWorkflowRunsInput,
@@ -412,7 +412,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.updateSpan({ spanId, traceId, updates });
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -421,10 +421,10 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.getAITrace(traceId);
+    return this.stores.observability.getTrace(traceId);
   }
 
-  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -433,7 +433,7 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.getAITracesPaginated(args);
+    return this.stores.observability.getTracesPaginated(args);
   }
 
   async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
@@ -466,7 +466,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.batchUpdateSpans(args);
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -475,6 +475,6 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchDeleteAITraces(args);
+    return this.stores.observability.batchDeleteTraces(args);
   }
 }

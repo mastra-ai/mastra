@@ -448,26 +448,26 @@ const sidebars = {
       items: [
         {
           type: "category",
-          label: "AI Tracing",
+          label: "Tracing",
           items: [
             {
               type: "doc",
-              id: "observability/ai-tracing/ai-tracing",
-              label: "AITracing",
+              id: "observability/tracing/instances",
+              label: "Instances",
             },
             {
               type: "doc",
-              id: "observability/ai-tracing/configuration",
+              id: "observability/tracing/configuration",
               label: "Configuration",
             },
             {
               type: "doc",
-              id: "observability/ai-tracing/span",
-              label: "Span",
+              id: "observability/tracing/spans",
+              label: "Spans",
             },
             {
               type: "doc",
-              id: "observability/ai-tracing/interfaces",
+              id: "observability/tracing/interfaces",
               label: "Interfaces",
             },
             {
@@ -476,43 +476,43 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/arize",
+                  id: "observability/tracing/exporters/arize",
                   label: "ArizeExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/cloud-exporter",
-                  label: "CloudExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/console-exporter",
-                  label: "ConsoleExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/langsmith",
-                  label: "LangSmithExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/langfuse",
-                  label: "LangfuseExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/otel",
-                  label: "OtelExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/braintrust",
+                  id: "observability/tracing/exporters/braintrust",
                   label: "BraintrustExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/default-exporter",
+                  id: "observability/tracing/exporters/cloud-exporter",
+                  label: "CloudExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/console-exporter",
+                  label: "ConsoleExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/default-exporter",
                   label: "DefaultExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/langfuse",
+                  label: "LangfuseExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/langsmith",
+                  label: "LangSmithExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/otel",
+                  label: "OtelExporter",
                 },
               ],
             },
@@ -522,7 +522,7 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/processors/sensitive-data-filter",
+                  id: "observability/tracing/processors/sensitive-data-filter",
                   label: "SensitiveDataFilter",
                 },
               ],
@@ -535,90 +535,8 @@ const sidebars = {
           items: [
             {
               type: "doc",
-              id: "observability/logging/pino-logger",
+              id: "logging/pino-logger",
               label: "PinoLogger",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "OTEL Tracing",
-          items: [
-            {
-              type: "doc",
-              id: "observability/otel-tracing/otel-config",
-              label: "OtelConfig",
-            },
-            {
-              type: "category",
-              label: "Providers",
-              items: [
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/traceloop",
-                  label: "Traceloop",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/dash0",
-                  label: "Dash0",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/new-relic",
-                  label: "New Relic",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/langwatch",
-                  label: "LangWatch",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/index",
-                  label: "OTLP Providers",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/langsmith",
-                  label: "LangSmith",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/langfuse",
-                  label: "Langfuse",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/arize-ax",
-                  label: "Arize AX",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/laminar",
-                  label: "Laminar",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/braintrust",
-                  label: "Braintrust",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/signoz",
-                  label: "SigNoz",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/arize-phoenix",
-                  label: "Arize Phoenix",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/keywordsai",
-                  label: "Keywords AI",
-                },
-              ],
             },
           ],
         },

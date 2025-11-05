@@ -2,7 +2,7 @@
 '@mastra/mssql': minor
 ---
 
-Implemented AI tracing and observability features
+Implemented tracing and observability features
 
 - Added createAISpan, updateAISpan, getAITrace, getAITracesPaginated
 - Added batchCreateAISpans, batchUpdateAISpans, batchDeleteAITraces

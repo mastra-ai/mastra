@@ -1,7 +1,7 @@
 /**
- * Braintrust Exporter for Mastra Tracing
+ * Braintrust Exporter for Mastra Observability
  *
- * This exporter sends tracing data to Braintrust for AI observability.
+ * This exporter sends observability data to Braintrust.
  * Root spans become top-level Braintrust spans (no trace wrapper).
  * Events are handled as zero-duration spans with matching start/end times.
  */
