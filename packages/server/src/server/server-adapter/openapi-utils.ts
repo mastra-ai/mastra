@@ -121,7 +121,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert path parameters
   if (spec.requestParams?.path) {
-    const pathSchema = zodToJsonSchema(spec.requestParams.path, { target: 'openApi3' }) as any;
+    const pathSchema = zodToJsonSchema(spec.requestParams.path, { target: 'openApi3', $refStrategy: 'none' }) as any;
     const properties = pathSchema.properties || {};
 
     Object.entries(properties).forEach(([name, schema]) => {
@@ -137,7 +137,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
 
   // Convert query parameters
   if (spec.requestParams?.query) {
-    const querySchema = zodToJsonSchema(spec.requestParams.query, { target: 'openApi3' }) as any;
+    const querySchema = zodToJsonSchema(spec.requestParams.query, { target: 'openApi3', $refStrategy: 'none' }) as any;
     const properties = querySchema.properties || {};
     const required = querySchema.required || [];
 
@@ -162,7 +162,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
       required: true,
       content: {
         'application/json': {
-          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, { target: 'openApi3' }),
+          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, { target: 'openApi3', $refStrategy: 'none' }),
         },
       },
     };
@@ -177,7 +177,7 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
     if (response.content?.['application/json']?.schema) {
       converted.responses[statusCode].content = {
         'application/json': {
-          schema: zodToJsonSchema(response.content['application/json'].schema, { target: 'openApi3' }),
+          schema: zodToJsonSchema(response.content['application/json'].schema, { target: 'openApi3', $refStrategy: 'none' }),
         },
       };
     }
