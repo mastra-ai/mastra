@@ -1,4 +1,4 @@
-# OtelExporter - OpenTelemetry AI Tracing Exporter
+# OtelExporter - OpenTelemetry Tracing Exporter
 
 Export Mastra traces to any OpenTelemetry-compatible observability platform.
 

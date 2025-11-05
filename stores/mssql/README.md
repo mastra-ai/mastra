@@ -161,7 +161,7 @@ MSSQLStore supports multiple connection methods:
   - Rich metadata support
   - Update working memory and metadata independently
 
-- **AI Tracing & Observability**
+- **Tracing & Observability**
   - Trace AI agent execution with spans
   - Query traces with pagination and filtering
   - Batch operations for high-volume tracing
@@ -225,7 +225,7 @@ MSSQLStore supports multiple connection methods:
 - `getResourceById({ resourceId })`: Get a resource by ID
 - `updateResource({ resourceId, workingMemory?, metadata? })`: Update resource working memory and metadata
 
-### AI Tracing & Observability
+### Tracing & Observability
 
 - `createSpan(span)`: Create a trace span
 - `updateSpan({ spanId, traceId, updates })`: Update an existing span

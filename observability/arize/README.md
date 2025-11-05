@@ -1,4 +1,4 @@
-# @mastra/arize - OpenTelemetry + OpenInference AI Tracing Exporter
+# @mastra/arize - OpenTelemetry + OpenInference Tracing Exporter
 
 Export Mastra traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
 
