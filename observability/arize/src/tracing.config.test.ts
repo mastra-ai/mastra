@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ARIZE_AX_ENDPOINT, ArizeExporter } from './ai-tracing';
+import { ARIZE_AX_ENDPOINT, ArizeExporter } from './tracing';
 
 // Mock OtelExporter to spy on its constructor
 vi.mock('@mastra/otel-exporter', () => ({
   OtelExporter: vi.fn().mockImplementation(() => ({
-    exportEvent: vi.fn(),
+    exportTracingEvent: vi.fn(),
     shutdown: vi.fn(),
   })),
 }));

@@ -7,7 +7,7 @@ import { createTool } from '@mastra/core/tools';
 import { Client } from 'langsmith';
 import { it } from 'vitest';
 import { z } from 'zod';
-import { LangSmithExporter } from './ai-tracing';
+import { LangSmithExporter } from './tracing';
 
 it.skip('should initialize with correct configuration', async () => {
   const client = new Client();

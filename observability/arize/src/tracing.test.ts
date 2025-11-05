@@ -1,8 +1,8 @@
 import type { Mutable } from '@arizeai/openinference-genai/types';
-import { AISpanType, AITracingEventType } from '@mastra/core/observability';
-import type { AnyExportedAISpan } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { AnyExportedSpan } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ArizeExporter } from './ai-tracing';
+import { ArizeExporter } from './tracing';
 
 // Capture spans exported by the mocked OTLP exporter
 const exportedSpans: any[] = [];
@@ -72,10 +72,10 @@ describe('ArizeExporter', () => {
       projectName: 'test-project',
     });
 
-    const testSpan: Mutable<AnyExportedAISpan> = {
+    const testSpan: Mutable<AnyExportedSpan> = {
       id: 'span-1',
       traceId: 'trace-1',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       name: 'Test LLM Generation',
       startTime: new Date(),
       endTime: new Date(),
@@ -149,10 +149,10 @@ describe('ArizeExporter', () => {
           totalTokens: 15,
         },
       },
-    } as unknown as AnyExportedAISpan;
+    } as unknown as AnyExportedSpan;
 
-    await exporter.exportEvent({
-      type: AITracingEventType.SPAN_ENDED,
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
       exportedSpan: testSpan,
     });
 

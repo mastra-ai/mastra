@@ -98,7 +98,7 @@ await store.saveMessages({
 
 // Query threads and messages
 const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.getMessages({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -213,9 +213,8 @@ MSSQLStore supports multiple connection methods:
 
 ### Messages
 
-- `saveMessages({ messages, format? })`: Save multiple messages with atomic transaction (supports v1 and v2 formats)
-- `getMessages({ threadId, format? })`: Get all messages for a thread
-- `listMessagesById({ messageIds, format? })`: Get messages by their IDs
+- `saveMessages({ messages })`: Save multiple messages with atomic transaction
+- `listMessagesById({ messageIds })`: Get messages by their IDs
 - `listMessages({ threadId, resourceId?, page?, perPage?, orderBy?, filter? })`: Get paginated messages for a thread with filtering and sorting
 - `updateMessages({ messages })`: Update existing messages with atomic transaction
 - `deleteMessages(messageIds)`: Delete specific messages with atomic transaction

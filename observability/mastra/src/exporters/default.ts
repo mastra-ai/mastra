@@ -1,16 +1,16 @@
-import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
-  AITracingEvent,
-  AITracingExporter,
-  AnyExportedAISpan,
+  TracingEvent,
+  AnyExportedSpan,
   InitExporterOptions,
-  TracingStrategy,
+  TracingStorageStrategy,
 } from '@mastra/core/observability';
-import { AITracingEventType } from '@mastra/core/observability';
-import type { MastraStorage, CreateAISpanRecord, UpdateAISpanRecord } from '@mastra/core/storage';
+import { TracingEventType } from '@mastra/core/observability';
+import type { MastraStorage, CreateSpanRecord, UpdateSpanRecord } from '@mastra/core/storage';
+import type { BaseExporterConfig } from './base';
+import { BaseExporter } from './base';
 
-interface BatchingConfig {
+interface DefaultExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBufferSize?: number; // Default: 10000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
@@ -18,16 +18,16 @@ interface BatchingConfig {
   retryDelayMs?: number; // Default: 500ms (base delay for exponential backoff)
 
   // Strategy selection (optional)
-  strategy?: TracingStrategy | 'auto';
+  strategy?: TracingStorageStrategy | 'auto';
 }
 
 interface BatchBuffer {
   // For batch-with-updates strategy
-  creates: CreateAISpanRecord[];
+  creates: CreateSpanRecord[];
   updates: UpdateRecord[];
 
   // For insert-only strategy
-  insertOnly: CreateAISpanRecord[];
+  insertOnly: CreateSpanRecord[];
 
   // Ordering enforcement (batch-with-updates only)
   seenSpans: Set<string>; // "traceId:spanId" combinations we've seen creates for
@@ -47,52 +47,56 @@ interface BatchBuffer {
 interface UpdateRecord {
   traceId: string;
   spanId: string;
-  updates: Partial<UpdateAISpanRecord>;
+  updates: Partial<UpdateSpanRecord>;
   sequenceNumber: number; // For ordering updates to same span
 }
 
 /**
- * Resolves the final strategy based on user config and storage hints
+ * Resolves the final tracing storage strategy based on config and storage hints
  */
-function resolveStrategy(userConfig: BatchingConfig, storage: MastraStorage, logger: IMastraLogger): TracingStrategy {
-  if (userConfig.strategy && userConfig.strategy !== 'auto') {
-    const hints = storage.aiTracingStrategy;
-    if (hints.supported.includes(userConfig.strategy)) {
-      return userConfig.strategy;
+function resolveTracingStorageStrategy(
+  config: DefaultExporterConfig,
+  storage: MastraStorage,
+  logger: IMastraLogger,
+): TracingStorageStrategy {
+  if (config.strategy && config.strategy !== 'auto') {
+    const hints = storage.tracingStrategy;
+    if (hints.supported.includes(config.strategy)) {
+      return config.strategy;
     }
     // Log warning and fall through to auto-selection
-    logger.warn('User-specified AI tracing strategy not supported by storage adapter, falling back to auto-selection', {
-      userStrategy: userConfig.strategy,
+    logger.warn('User-specified tracing strategy not supported by storage adapter, falling back to auto-selection', {
+      userStrategy: config.strategy,
       storageAdapter: storage.constructor.name,
       supportedStrategies: hints.supported,
       fallbackStrategy: hints.preferred,
     });
   }
-  return storage.aiTracingStrategy.preferred;
+  return storage.tracingStrategy.preferred;
 }
 
-export class DefaultExporter implements AITracingExporter {
-  name = 'tracing-default-exporter';
-  private logger: IMastraLogger;
-  private storage?: MastraStorage;
-  private config: Required<BatchingConfig>;
-  private resolvedStrategy: TracingStrategy;
+export class DefaultExporter extends BaseExporter {
+  name = 'mastra-default-observability-exporter';
+
+  #storage?: MastraStorage;
+  #config: DefaultExporterConfig;
+  #resolvedStrategy: TracingStorageStrategy;
   private buffer: BatchBuffer;
-  private flushTimer: NodeJS.Timeout | null = null;
+  #flushTimer: NodeJS.Timeout | null = null;
 
   // Track all spans that have been created, persists across flushes
   private allCreatedSpans: Set<string> = new Set();
 
-  constructor(config: BatchingConfig = {}, logger?: IMastraLogger) {
-    if (logger) {
-      this.logger = logger;
-    } else {
-      // Fallback: create a direct ConsoleLogger instance if none provided
-      this.logger = new ConsoleLogger({ level: LogLevel.INFO });
+  constructor(config: DefaultExporterConfig = {}) {
+    super(config);
+
+    if (config === undefined) {
+      config = {};
     }
 
     // Set default configuration
-    this.config = {
+    this.#config = {
+      ...config,
       maxBatchSize: config.maxBatchSize ?? 1000,
       maxBufferSize: config.maxBufferSize ?? 10000,
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
@@ -114,39 +118,39 @@ export class DefaultExporter implements AITracingExporter {
     };
 
     // Resolve strategy - we'll do this lazily on first export since we need storage
-    this.resolvedStrategy = 'batch-with-updates'; // temporary default
+    this.#resolvedStrategy = 'batch-with-updates'; // temporary default
   }
 
-  private strategyInitialized = false;
+  #strategyInitialized = false;
 
   /**
    * Initialize the exporter (called after all dependencies are ready)
    */
   init(options: InitExporterOptions): void {
-    this.storage = options.mastra?.getStorage();
-    if (!this.storage) {
+    this.#storage = options.mastra?.getStorage();
+    if (!this.#storage) {
       this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
       return;
     }
 
-    this.initializeStrategy(this.storage);
+    this.initializeStrategy(this.#storage);
   }
 
   /**
    * Initialize the resolved strategy once storage is available
    */
   private initializeStrategy(storage: MastraStorage): void {
-    if (this.strategyInitialized) return;
+    if (this.#strategyInitialized) return;
 
-    this.resolvedStrategy = resolveStrategy(this.config, storage, this.logger);
-    this.strategyInitialized = true;
+    this.#resolvedStrategy = resolveTracingStorageStrategy(this.#config, storage, this.logger);
+    this.#strategyInitialized = true;
 
-    this.logger.debug('AI tracing exporter initialized', {
-      strategy: this.resolvedStrategy,
-      source: this.config.strategy !== 'auto' ? 'user' : 'auto',
+    this.logger.debug('tracing storage exporter initialized', {
+      strategy: this.#resolvedStrategy,
+      source: this.#config.strategy !== 'auto' ? 'user' : 'auto',
       storageAdapter: storage.constructor.name,
-      maxBatchSize: this.config.maxBatchSize,
-      maxBatchWaitMs: this.config.maxBatchWaitMs,
+      maxBatchSize: this.#config.maxBatchSize,
+      maxBatchWaitMs: this.#config.maxBatchWaitMs,
     });
   }
 
@@ -170,7 +174,7 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Handles out-of-order span updates by logging and skipping
    */
-  private handleOutOfOrderUpdate(event: AITracingEvent): void {
+  private handleOutOfOrderUpdate(event: TracingEvent): void {
     this.logger.warn('Out-of-order span update detected - skipping event', {
       spanId: event.exportedSpan.id,
       traceId: event.exportedSpan.traceId,
@@ -182,7 +186,7 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Adds an event to the appropriate buffer based on strategy
    */
-  private addToBuffer(event: AITracingEvent): void {
+  private addToBuffer(event: TracingEvent): void {
     const spanKey = this.buildSpanKey(event.exportedSpan.traceId, event.exportedSpan.id);
 
     // Set first event time if buffer is empty
@@ -191,8 +195,8 @@ export class DefaultExporter implements AITracingExporter {
     }
 
     switch (event.type) {
-      case AITracingEventType.SPAN_STARTED:
-        if (this.resolvedStrategy === 'batch-with-updates') {
+      case TracingEventType.SPAN_STARTED:
+        if (this.#resolvedStrategy === 'batch-with-updates') {
           const createRecord = this.buildCreateRecord(event.exportedSpan);
           this.buffer.creates.push(createRecord);
           this.buffer.seenSpans.add(spanKey);
@@ -202,8 +206,8 @@ export class DefaultExporter implements AITracingExporter {
         // insert-only ignores SPAN_STARTED
         break;
 
-      case AITracingEventType.SPAN_UPDATED:
-        if (this.resolvedStrategy === 'batch-with-updates') {
+      case TracingEventType.SPAN_UPDATED:
+        if (this.#resolvedStrategy === 'batch-with-updates') {
           if (this.allCreatedSpans.has(spanKey)) {
             // Span was created previously (possibly in a prior batch)
             this.buffer.updates.push({
@@ -221,8 +225,8 @@ export class DefaultExporter implements AITracingExporter {
         // insert-only ignores SPAN_UPDATED
         break;
 
-      case AITracingEventType.SPAN_ENDED:
-        if (this.resolvedStrategy === 'batch-with-updates') {
+      case TracingEventType.SPAN_ENDED:
+        if (this.#resolvedStrategy === 'batch-with-updates') {
           if (this.allCreatedSpans.has(spanKey)) {
             // Span was created previously (possibly in a prior batch)
             this.buffer.updates.push({
@@ -247,7 +251,7 @@ export class DefaultExporter implements AITracingExporter {
             this.handleOutOfOrderUpdate(event);
             this.buffer.outOfOrderCount++;
           }
-        } else if (this.resolvedStrategy === 'insert-only') {
+        } else if (this.#resolvedStrategy === 'insert-only') {
           // Only process SPAN_ENDED for insert-only strategy
           const createRecord = this.buildCreateRecord(event.exportedSpan);
           this.buffer.insertOnly.push(createRecord);
@@ -267,19 +271,19 @@ export class DefaultExporter implements AITracingExporter {
    */
   private shouldFlush(): boolean {
     // Emergency flush - buffer overflow
-    if (this.buffer.totalSize >= this.config.maxBufferSize) {
+    if (this.buffer.totalSize >= this.#config.maxBufferSize!) {
       return true;
     }
 
     // Size-based flush
-    if (this.buffer.totalSize >= this.config.maxBatchSize) {
+    if (this.buffer.totalSize >= this.#config.maxBatchSize!) {
       return true;
     }
 
     // Time-based flush
     if (this.buffer.firstEventTime && this.buffer.totalSize > 0) {
       const elapsed = Date.now() - this.buffer.firstEventTime.getTime();
-      if (elapsed >= this.config.maxBatchWaitMs) {
+      if (elapsed >= this.#config.maxBatchWaitMs!) {
         return true;
       }
     }
@@ -311,23 +315,23 @@ export class DefaultExporter implements AITracingExporter {
    * Schedules a flush using setTimeout
    */
   private scheduleFlush(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
+    if (this.#flushTimer) {
+      clearTimeout(this.#flushTimer);
     }
-    this.flushTimer = setTimeout(() => {
+    this.#flushTimer = setTimeout(() => {
       this.flush().catch(error => {
         this.logger.error('Scheduled flush failed', {
           error: error instanceof Error ? error.message : String(error),
         });
       });
-    }, this.config.maxBatchWaitMs);
+    }, this.#config.maxBatchWaitMs);
   }
 
   /**
    * Serializes span attributes to storage record format
-   * Handles all AI span types and their specific attributes
+   * Handles all Span types and their specific attributes
    */
-  private serializeAttributes(span: AnyExportedAISpan): Record<string, any> | null {
+  private serializeAttributes(span: AnyExportedSpan): Record<string, any> | null {
     if (!span.attributes) {
       return null;
     }
@@ -360,7 +364,7 @@ export class DefaultExporter implements AITracingExporter {
     }
   }
 
-  private buildCreateRecord(span: AnyExportedAISpan): CreateAISpanRecord {
+  private buildCreateRecord(span: AnyExportedSpan): CreateSpanRecord {
     return {
       traceId: span.traceId,
       spanId: span.id,
@@ -380,7 +384,7 @@ export class DefaultExporter implements AITracingExporter {
     };
   }
 
-  private buildUpdateRecord(span: AnyExportedAISpan): Partial<UpdateAISpanRecord> {
+  private buildUpdateRecord(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
     return {
       name: span.name,
       scope: null,
@@ -397,34 +401,34 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Handles realtime strategy - processes each event immediately
    */
-  private async handleRealtimeEvent(event: AITracingEvent, storage: MastraStorage): Promise<void> {
+  private async handleRealtimeEvent(event: TracingEvent, storage: MastraStorage): Promise<void> {
     const span = event.exportedSpan;
     const spanKey = this.buildSpanKey(span.traceId, span.id);
 
     // Event spans only have an end event
     if (span.isEvent) {
-      if (event.type === AITracingEventType.SPAN_ENDED) {
-        await storage.createAISpan(this.buildCreateRecord(event.exportedSpan));
+      if (event.type === TracingEventType.SPAN_ENDED) {
+        await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
         // For event spans in realtime, we don't need to track them since they're immediately complete
       } else {
         this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
       }
     } else {
       switch (event.type) {
-        case AITracingEventType.SPAN_STARTED:
-          await storage.createAISpan(this.buildCreateRecord(event.exportedSpan));
+        case TracingEventType.SPAN_STARTED:
+          await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
           // Track this span as created persistently
           this.allCreatedSpans.add(spanKey);
           break;
-        case AITracingEventType.SPAN_UPDATED:
-          await storage.updateAISpan({
+        case TracingEventType.SPAN_UPDATED:
+          await storage.updateSpan({
             traceId: span.traceId,
             spanId: span.id,
             updates: this.buildUpdateRecord(span),
           });
           break;
-        case AITracingEventType.SPAN_ENDED:
-          await storage.updateAISpan({
+        case TracingEventType.SPAN_ENDED:
+          await storage.updateSpan({
             traceId: span.traceId,
             spanId: span.id,
             updates: this.buildUpdateRecord(span),
@@ -441,7 +445,7 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Handles batch-with-updates strategy - buffers events and processes in batches
    */
-  private handleBatchWithUpdatesEvent(event: AITracingEvent): void {
+  private handleBatchWithUpdatesEvent(event: TracingEvent): void {
     this.addToBuffer(event);
 
     if (this.shouldFlush()) {
@@ -460,9 +464,9 @@ export class DefaultExporter implements AITracingExporter {
   /**
    * Handles insert-only strategy - only processes SPAN_ENDED events in batches
    */
-  private handleInsertOnlyEvent(event: AITracingEvent): void {
+  private handleInsertOnlyEvent(event: TracingEvent): void {
     // Only process SPAN_ENDED events for insert-only strategy
-    if (event.type === AITracingEventType.SPAN_ENDED) {
+    if (event.type === TracingEventType.SPAN_ENDED) {
       this.addToBuffer(event);
 
       if (this.shouldFlush()) {
@@ -484,22 +488,22 @@ export class DefaultExporter implements AITracingExporter {
    * Calculates retry delay using exponential backoff
    */
   private calculateRetryDelay(attempt: number): number {
-    return this.config.retryDelayMs * Math.pow(2, attempt);
+    return this.#config.retryDelayMs! * Math.pow(2, attempt);
   }
 
   /**
    * Flushes the current buffer to storage with retry logic
    */
   private async flush(): Promise<void> {
-    if (!this.storage) {
+    if (!this.#storage) {
       this.logger.debug('Cannot flush traces. Mastra storage is not initialized');
       return;
     }
 
     // Clear timer since we're flushing
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
+    if (this.#flushTimer) {
+      clearTimeout(this.#flushTimer);
+      this.#flushTimer = null;
     }
 
     if (this.buffer.totalSize === 0) {
@@ -508,9 +512,9 @@ export class DefaultExporter implements AITracingExporter {
 
     const startTime = Date.now();
     const flushReason =
-      this.buffer.totalSize >= this.config.maxBufferSize
+      this.buffer.totalSize >= this.#config.maxBufferSize!
         ? 'overflow'
-        : this.buffer.totalSize >= this.config.maxBatchSize
+        : this.buffer.totalSize >= this.#config.maxBatchSize!
           ? 'size'
           : 'time';
 
@@ -532,11 +536,11 @@ export class DefaultExporter implements AITracingExporter {
     this.resetBuffer();
 
     // Attempt to flush with retry logic
-    await this.flushWithRetries(this.storage, bufferCopy, 0);
+    await this.flushWithRetries(this.#storage, bufferCopy, 0);
 
     const elapsed = Date.now() - startTime;
     this.logger.debug('Batch flushed', {
-      strategy: this.resolvedStrategy,
+      strategy: this.#resolvedStrategy,
       batchSize: bufferCopy.totalSize,
       flushReason,
       durationMs: elapsed,
@@ -549,10 +553,10 @@ export class DefaultExporter implements AITracingExporter {
    */
   private async flushWithRetries(storage: MastraStorage, buffer: BatchBuffer, attempt: number): Promise<void> {
     try {
-      if (this.resolvedStrategy === 'batch-with-updates') {
+      if (this.#resolvedStrategy === 'batch-with-updates') {
         // Process creates first (always safe)
         if (buffer.creates.length > 0) {
-          await storage.batchCreateAISpans({ records: buffer.creates });
+          await storage.batchCreateSpans({ records: buffer.creates });
         }
 
         // Sort updates by span, then by sequence number
@@ -565,12 +569,12 @@ export class DefaultExporter implements AITracingExporter {
             return a.sequenceNumber - b.sequenceNumber;
           });
 
-          await storage.batchUpdateAISpans({ records: sortedUpdates });
+          await storage.batchUpdateSpans({ records: sortedUpdates });
         }
-      } else if (this.resolvedStrategy === 'insert-only') {
+      } else if (this.#resolvedStrategy === 'insert-only') {
         // Simple batch insert for insert-only strategy
         if (buffer.insertOnly.length > 0) {
-          await storage.batchCreateAISpans({ records: buffer.insertOnly });
+          await storage.batchCreateSpans({ records: buffer.insertOnly });
         }
       }
 
@@ -579,11 +583,11 @@ export class DefaultExporter implements AITracingExporter {
         this.allCreatedSpans.delete(spanKey);
       }
     } catch (error) {
-      if (attempt < this.config.maxRetries) {
+      if (attempt < this.#config.maxRetries!) {
         const retryDelay = this.calculateRetryDelay(attempt);
         this.logger.warn('Batch flush failed, retrying', {
           attempt: attempt + 1,
-          maxRetries: this.config.maxRetries,
+          maxRetries: this.#config.maxRetries,
           nextRetryInMs: retryDelay,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -593,7 +597,7 @@ export class DefaultExporter implements AITracingExporter {
       } else {
         this.logger.error('Batch flush failed after all retries, dropping batch', {
           finalAttempt: attempt + 1,
-          maxRetries: this.config.maxRetries,
+          maxRetries: this.#config.maxRetries,
           droppedBatchSize: buffer.totalSize,
           error: error instanceof Error ? error.message : String(error),
         });
@@ -606,21 +610,21 @@ export class DefaultExporter implements AITracingExporter {
     }
   }
 
-  async exportEvent(event: AITracingEvent): Promise<void> {
-    if (!this.storage) {
+  async _exportTracingEvent(event: TracingEvent): Promise<void> {
+    if (!this.#storage) {
       this.logger.debug('Cannot store traces. Mastra storage is not initialized');
       return;
     }
 
     // Initialize strategy if not already done (fallback for edge cases)
-    if (!this.strategyInitialized) {
-      this.initializeStrategy(this.storage);
+    if (!this.#strategyInitialized) {
+      this.initializeStrategy(this.#storage);
     }
 
     // Clear strategy routing - explicit and readable
-    switch (this.resolvedStrategy) {
+    switch (this.#resolvedStrategy) {
       case 'realtime':
-        await this.handleRealtimeEvent(event, this.storage);
+        await this.handleRealtimeEvent(event, this.#storage);
         break;
       case 'batch-with-updates':
         this.handleBatchWithUpdatesEvent(event);
@@ -633,9 +637,9 @@ export class DefaultExporter implements AITracingExporter {
 
   async shutdown(): Promise<void> {
     // Clear any pending timer
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
+    if (this.#flushTimer) {
+      clearTimeout(this.#flushTimer);
+      this.#flushTimer = null;
     }
 
     // Flush any remaining events

@@ -1,14 +1,14 @@
 import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4/message';
 import { z } from 'zod';
 import type { MastraDBMessage } from '../agent';
-import { AISpanType } from '../observability';
+import { SpanType } from '../observability';
 import type { TracingContext } from '../observability';
 
 export type ScoringSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
 
 export type ScoringSource = 'LIVE' | 'TEST';
 
-export type ScoringEntityType = 'AGENT' | 'WORKFLOW' | AISpanType;
+export type ScoringEntityType = 'AGENT' | 'WORKFLOW' | SpanType;
 
 export type ScoringPrompts = {
   description: string;
@@ -126,7 +126,7 @@ export const saveScorePayloadSchema = z.object({
   input: z.any().optional(),
   output: z.any(),
   source: z.enum(['LIVE', 'TEST']),
-  entityType: z.enum(['AGENT', 'WORKFLOW', ...Object.values(AISpanType)]).optional(),
+  entityType: z.enum(['AGENT', 'WORKFLOW', ...Object.values(SpanType)]).optional(),
   scorer: z.record(z.string(), z.any()),
 
   traceId: z.string().optional(),

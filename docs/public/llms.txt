@@ -176,7 +176,18 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Guide: Building an Agent that can search the web | Mastra Guide](https://mastra.ai/en/guides/guide/web-search): A step-by-step guide to creating an agent that can search the web.
 - [Overview](https://mastra.ai/en/guides): Guides on building with Mastra
 - [Migration: AgentNetwork to .network() | Migration Guide](https://mastra.ai/en/guides/migrations/agentnetwork): Learn how to migrate from AgentNetwork primitives to .network() in Mastra.
-- [Migration: Upgrade to Mastra v1 | Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1): Learn how to upgrade through breaking changes in pre-v1 versions of Mastra.
+- [_template](https://mastra.ai/en/guides/migrations/upgrade-to-v1/_template)
+- [Agent Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/agent): Learn how to migrate Agent class changes when upgrading to v1.
+- [CLI | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/cli): Learn how to migrate CLI changes when upgrading to v1.
+- [Client SDK | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/client): Learn how to migrate client SDK changes when upgrading to v1.
+- [Evals & Scorers | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/evals): Learn how to migrate evals and scorers changes when upgrading to v1.
+- [Mastra Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/mastra): Learn how to migrate Mastra class changes when upgrading to v1.
+- [Memory | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/memory): Learn how to migrate memory-related changes when upgrading to v1.
+- [Overview | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/overview): Overview of breaking changes when upgrading to Mastra v1.
+- [Storage | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/storage): Learn how to migrate storage-related changes when upgrading to v1.
+- [Tools | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/tools): Learn how to migrate tool-related changes when upgrading to v1.
+- [Voice | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/voice): Learn how to migrate voice package changes when upgrading to v1.
+- [Workflows | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/workflows): Learn how to migrate workflow-related changes when upgrading to v1.
 - [Migration: VNext to Standard APIs | Migration Guide](https://mastra.ai/en/guides/migrations/vnext-to-standard-apis): Learn how to migrate from VNext methods to the new standard agent APIs in Mastra.
 
 ## EN - models
@@ -185,7 +196,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 49+ AI providers and 857+ models through Mastras model router.
+- [Models](https://mastra.ai/en/models): Access 49+ AI providers and 858+ models through Mastras model router.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
@@ -222,7 +233,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 20 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
 - [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 31 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 13 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 14 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
 - [Requesty | Models | Mastra](https://mastra.ai/en/models/providers/requesty): Use Requesty models with Mastra. 13 models available.
 - [Scaleway | Models | Mastra](https://mastra.ai/en/models/providers/scaleway): Use Scaleway models with Mastra. 13 models available.
@@ -310,6 +321,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Memory.listThreadsByResourceId() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/listThreadsByResourceId): Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support.
 - [Reference: Memory Class | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/memory-class): Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage.
 - [Reference: Memory.query() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/query): Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.
+- [Reference: Memory.recall() | Memory | Mastra Docs](https://mastra.ai/en/reference/memory/recall): Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search.
 - [Reference: AITracing | Observability | Mastra Docs](https://mastra.ai/en/reference/observability/ai-tracing/ai-tracing): Core AI Tracing classes and methods
 - [Reference: Configuration | Observability | Mastra Docs](https://mastra.ai/en/reference/observability/ai-tracing/configuration): AI Tracing configuration types and registry functions
 - [Reference: ArizeExporter | Observability | Mastra Docs](https://mastra.ai/en/reference/observability/ai-tracing/exporters/arize): Arize exporter for AI tracing using OpenInference
