@@ -38,46 +38,6 @@ npx @mastra/codemod v1/runtime-context .
 
 :::
 
-### Direct property access to getter methods
-
-Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. This change provides better encapsulation and consistency with the broader API design.
-
-To migrate, replace property access with the corresponding getter methods.
-
-```diff
-- const llm = agent.llm;
-- const tools = agent.tools;
-- const instructions = agent.instructions;
-+ const llm = agent.getLLM();
-+ const tools = agent.getTools();
-+ const instructions = agent.getInstructions();
-```
-
-:::tip[Codemod]
-
-You can use Mastra's codemod CLI to update your code automatically:
-
-```shell
-npx @mastra/codemod v1/agent-property-access .
-```
-
-:::
-
-### Voice methods moved to `agent.voice` namespace
-
-Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.
-
-To migrate, update voice method calls to use the `agent.voice` namespace.
-
-```diff
-- await agent.speak('Hello');
-- await agent.listen();
-- const speakers = agent.getSpeakers();
-+ await agent.voice.speak('Hello');
-+ await agent.voice.listen();
-+ const speakers = agent.voice.getSpeakers();
-```
-
 ### `agent.fetchMemory()` to `(await agent.getMemory()).recall()`
 
 The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
