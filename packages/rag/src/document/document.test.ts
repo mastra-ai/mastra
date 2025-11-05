@@ -1,5 +1,6 @@
-import { embedMany, type EmbeddingModel } from 'ai';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { embedMany } from 'ai';
+import type { EmbeddingModel } from 'ai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
@@ -136,7 +137,7 @@ describe('MDocument', () => {
       expect(embeddings.embeddings.length).toBe(chunks.length);
 
       // Verify each embedding has the correct dimension
-      embeddings.embeddings.forEach((embedding, idx) => {
+      embeddings.embeddings.forEach(embedding => {
         expect(embedding).toBeInstanceOf(Array);
         expect(embedding.length).toBe(384);
 
