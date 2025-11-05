@@ -3,8 +3,8 @@ import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
 
 import { weatherInfo } from '../tools';
-import { simulateReadableStream } from 'ai';
 import * as aiTest from 'ai/test';
+import { convertArrayToReadableStream } from 'ai-v5/test';
 import { fixtures } from '../../../fixtures';
 import { Fixtures } from '../../../types';
 import { lessComplexWorkflow } from '../workflows/complex-workflow';
@@ -58,10 +58,7 @@ export const weatherAgent = new Agent({
         }
 
         return {
-          stream: simulateReadableStream({
-            chunks: chunk,
-            delay: 500,
-          }),
+          stream: convertArrayToReadableStream(chunk),
         };
       },
     });
