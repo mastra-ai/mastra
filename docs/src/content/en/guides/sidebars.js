@@ -70,14 +70,14 @@ const sidebars = {
               label: "Agents",
             },
             {
-              id: "migrations/upgrade-to-v1/cli",
-              type: "doc",
-              label: "CLI",
-            },
-            {
               id: "migrations/upgrade-to-v1/tools",
               type: "doc",
               label: "Tools",
+            },
+            {
+              id: "migrations/upgrade-to-v1/cli",
+              type: "doc",
+              label: "CLI",
             },
             {
               id: "migrations/upgrade-to-v1/memory",
