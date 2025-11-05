@@ -105,7 +105,7 @@ To migrate, replace `fetchMemory()` calls with the new API.
 
 Agent processor methods have been renamed from `get*` to `list*` pattern for consistency with the broader API. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, update processor method names and the parameter from `runtimeContext` to `requestContext`.
+To migrate, update processor method names.
 
 ```diff
 - const inputProcessors = await agent.getInputProcessors(runtimeContext);
@@ -113,6 +113,16 @@ To migrate, update processor method names and the parameter from `runtimeContext
 + const inputProcessors = await agent.listInputProcessors(requestContext);
 + const outputProcessors = await agent.listOutputProcessors(requestContext);
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-processor-methods .
+```
+
+:::
 
 ### Default options method renames for AI SDK versions
 

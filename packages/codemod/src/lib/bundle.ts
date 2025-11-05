@@ -5,4 +5,5 @@ export const BUNDLE = [
   'v1/experimental-auth',
   'v1/agent-property-access',
   'v1/agent-voice',
+  'v1/agent-processor-methods',
 ];
