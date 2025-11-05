@@ -264,6 +264,7 @@
         "meta/llama-3.3-70b",
         "meta/llama-4-maverick",
         "meta/llama-4-scout",
+        "minimax/minimax-m2",
         "mistral/codestral",
         "mistral/magistral-medium",
         "mistral/magistral-small",
@@ -440,7 +441,8 @@
         "qwen-2.5-vl",
         "qwen3-235b",
         "qwen3-4b",
-        "venice-uncensored"
+        "venice-uncensored",
+        "zai-org-glm-4.6"
       ],
       "docUrl": "https://docs.venice.ai",
       "gateway": "models.dev"
@@ -627,6 +629,7 @@
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Zen",
       "models": [
+        "an-gd4",
         "big-pickle",
         "claude-3-5-haiku",
         "claude-haiku-4-5",
@@ -1444,6 +1447,7 @@
       "meta/llama-3.3-70b",
       "meta/llama-4-maverick",
       "meta/llama-4-scout",
+      "minimax/minimax-m2",
       "mistral/codestral",
       "mistral/magistral-medium",
       "mistral/magistral-small",
@@ -1588,7 +1592,8 @@
       "qwen-2.5-vl",
       "qwen3-235b",
       "qwen3-4b",
-      "venice-uncensored"
+      "venice-uncensored",
+      "zai-org-glm-4.6"
     ],
     "chutes": [
       "MiniMaxAI/MiniMax-M2",
@@ -1719,6 +1724,7 @@
       "zai-org/GLM-4.6"
     ],
     "opencode": [
+      "an-gd4",
       "big-pickle",
       "claude-3-5-haiku",
       "claude-haiku-4-5",

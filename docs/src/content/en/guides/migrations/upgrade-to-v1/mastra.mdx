@@ -1,0 +1,105 @@
+---
+title: "Mastra Class | v1 Migration Guide"
+description: "Learn how to migrate Mastra class changes when upgrading to v1."
+---
+
+# Mastra Class
+
+The Mastra class has been restructured to restrict top-level imports and replace direct property access with getter methods.
+
+## Changed
+
+### Top-level imports to subpath imports
+
+The main `@mastra/core` index file now only exports `Mastra` and `Config`. All other exports have been moved to subpath imports. This change improves tree-shaking and reduces bundle size by allowing bundlers to eliminate unused code.
+
+To migrate, update all imports from `@mastra/core` to use the appropriate subpath.
+
+```diff
+- import { Mastra, Agent, Workflow, createTool } from '@mastra/core';
++ import { Mastra, type Config } from '@mastra/core';
++ import { Agent } from '@mastra/core/agent';
++ import { Workflow } from '@mastra/core/workflows';
++ import { createTool } from '@mastra/core/tools';
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mastra-core-imports .
+```
+
+:::
+
+### Direct property access to getter methods
+
+Direct property access on the Mastra instance is deprecated. Methods like `mastra.logger`, `mastra.storage`, `mastra.agents`, etc. now show deprecation warnings and will be removed in a future version. This change provides better encapsulation and allows for dynamic configuration based on request context.
+
+To migrate, replace direct property access with the corresponding getter methods.
+
+```diff
+- const logger = mastra.logger;
+- const storage = mastra.storage;
+- const agents = mastra.agents;
+- const tts = mastra.tts;
+- const vectors = mastra.vectors;
+- const memory = mastra.memory;
++ const logger = mastra.getLogger();
++ const storage = mastra.getStorage();
++ const agents = mastra.listAgents();
++ const tts = mastra.getTTS();
++ const vectors = mastra.getVectors();
++ const memory = mastra.getMemory();
+```
+
+### `experimental_auth` to `auth`
+
+The experimental auth configuration has been promoted to stable. This change reflects that the auth API is now stable and production-ready.
+
+To migrate, rename the `experimental_auth` key to `auth` in your Mastra configuration.
+
+```diff
+  const mastra = new Mastra({
+-   experimental_auth: {
++   auth: {
+      provider: workos,
+    },
+  });
+```
+
+## Removed
+
+### `memory` property from Mastra class
+
+The `memory` property has been removed from the Mastra class. Memory is now configured at the Agent level rather than globally.
+
+To migrate, move memory configuration from the Mastra constructor to individual Agent constructors.
+
+```diff
+- const mastra = new Mastra({
+-   memory: new Memory({
+-     storage: libsqlStore,
+-     vector: libsqlVector,
+-     embedder: fastembed,
+-   }),
+- });
+- 
+- const agent = new Agent({
+-   name: 'my-agent',
+- });
+
++ const mastra = new Mastra({
++   // memory removed from here
++ });
++ 
++ const agent = new Agent({
++   name: 'my-agent',
++   memory: new Memory({
++     storage: libsqlStore,
++     vector: libsqlVector,
++     embedder: fastembed,
++   }),
++ });
+```

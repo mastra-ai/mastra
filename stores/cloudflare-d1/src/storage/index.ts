@@ -7,7 +7,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
@@ -240,13 +239,6 @@ export class D1Store extends MastraStorage {
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
-  }
-
-  /**
-   * @deprecated use listMessages instead
-   */
-  public async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, selectBy });
   }
 
   async updateWorkflowResults({

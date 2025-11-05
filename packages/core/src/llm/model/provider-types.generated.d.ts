@@ -181,6 +181,7 @@ export type ProviderModelsMap = {
     'meta/llama-3.3-70b',
     'meta/llama-4-maverick',
     'meta/llama-4-scout',
+    'minimax/minimax-m2',
     'mistral/codestral',
     'mistral/magistral-medium',
     'mistral/magistral-small',
@@ -326,6 +327,7 @@ export type ProviderModelsMap = {
     'qwen3-235b',
     'qwen3-4b',
     'venice-uncensored',
+    'zai-org-glm-4.6',
   ];
   readonly chutes: readonly [
     'MiniMaxAI/MiniMax-M2',
@@ -460,6 +462,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly opencode: readonly [
+    'an-gd4',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',

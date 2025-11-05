@@ -130,6 +130,12 @@ async function main() {
       hasError = true;
     }
 
+    // Check if engines field exists and includes node
+    if (!pkg.engines || !pkg.engines.node) {
+      console.log(`❌ ${file}: missing engines.node field`);
+      hasError = true;
+    }
+
     checkedFiles.add(file);
   }
 

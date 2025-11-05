@@ -1,4 +1,4 @@
-import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { MastraDBMessage, StorageThreadType } from '../memory/types';
 import type { AISpanType } from '../observability';
 import type { WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
@@ -129,24 +129,6 @@ export type StorageListThreadsByResourceIdInput = {
 
 export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
-};
-
-export type StorageGetMessagesArg = {
-  threadId: string;
-  resourceId?: string;
-  selectBy?: {
-    vectorSearchString?: string;
-    last?: number | false;
-    include?: {
-      id: string;
-      threadId?: string;
-      withPreviousMessages?: number;
-      withNextMessages?: number;
-    }[];
-    pagination?: PaginationArgs;
-  };
-  threadConfig?: MemoryConfig;
-  format?: MastraMessageFormat;
 };
 
 export type StorageResourceType = {

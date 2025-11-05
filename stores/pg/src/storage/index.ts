@@ -6,7 +6,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
@@ -232,13 +231,6 @@ export class PostgresStore extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     return this.stores.memory.deleteThread({ threadId });
-  }
-
-  /**
-   * @deprecated use listMessages instead
-   */
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
