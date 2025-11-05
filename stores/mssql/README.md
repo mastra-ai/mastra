@@ -161,7 +161,7 @@ MSSQLStore supports multiple connection methods:
   - Rich metadata support
   - Update working memory and metadata independently
 
-- **AI Tracing & Observability**
+- **Tracing & Observability**
   - Trace AI agent execution with spans
   - Query traces with pagination and filtering
   - Batch operations for high-volume tracing
@@ -225,15 +225,15 @@ MSSQLStore supports multiple connection methods:
 - `getResourceById({ resourceId })`: Get a resource by ID
 - `updateResource({ resourceId, workingMemory?, metadata? })`: Update resource working memory and metadata
 
-### AI Tracing & Observability
+### Tracing & Observability
 
-- `createAISpan(span)`: Create an AI trace span
-- `updateAISpan({ spanId, traceId, updates })`: Update an existing span
-- `getAITrace(traceId)`: Get complete trace with all spans
-- `getAITracesPaginated({ filters?, pagination? })`: Query traces with pagination and filters
-- `batchCreateAISpans({ records })`: Batch create multiple spans
-- `batchUpdateAISpans({ records })`: Batch update multiple spans
-- `batchDeleteAITraces({ traceIds })`: Batch delete traces
+- `createSpan(span)`: Create a trace span
+- `updateSpan({ spanId, traceId, updates })`: Update an existing span
+- `getTrace(traceId)`: Get complete trace with all spans
+- `getTracesPaginated({ filters?, pagination? })`: Query traces with pagination and filters
+- `batchCreateSpans({ records })`: Batch create multiple spans
+- `batchUpdateSpans({ records })`: Batch update multiple spans
+- `batchDeleteTraces({ traceIds })`: Batch delete traces
 
 ### Index Management
 

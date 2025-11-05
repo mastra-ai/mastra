@@ -1,7 +1,7 @@
 {
   "name": "@mastra/observability",
   "version": "0.0.2",
-  "description": "Core observability package for Mastra - includes AI tracing and scoring features",
+  "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
