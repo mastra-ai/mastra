@@ -4,11 +4,11 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { Observability } from '@mastra/observability';
 import { Client } from 'langsmith';
 import { it } from 'vitest';
 import { z } from 'zod';
 import { LangSmithExporter } from './tracing';
-import { Observability } from '@mastra/observability';
 
 it.skip('should initialize with correct configuration', async () => {
   const client = new Client();
