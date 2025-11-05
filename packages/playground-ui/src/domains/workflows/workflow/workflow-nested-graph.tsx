@@ -12,16 +12,14 @@ import Spinner from '@/components/ui/spinner';
 import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 import { useCurrentRun } from '../context/use-current-run';
-import { WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
   open: boolean;
   workflowName: string;
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
 }
 
-export function WorkflowNestedGraph({ stepGraph, open, workflowName, onSendEvent }: WorkflowNestedGraphProps) {
+export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowNestedGraphProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
     stepGraph,
   });
@@ -32,13 +30,13 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName, onSendEvent
 
   const nodeTypes = {
     'default-node': (props: NodeProps<DefaultNode>) => (
-      <WorkflowDefaultNode parentWorkflowName={workflowName} onSendEvent={onSendEvent} {...props} />
+      <WorkflowDefaultNode parentWorkflowName={workflowName} {...props} />
     ),
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
     'nested-node': (props: NodeProps<NestedNode>) => (
-      <WorkflowNestedNode parentWorkflowName={workflowName} onSendEvent={onSendEvent} {...props} />
+      <WorkflowNestedNode parentWorkflowName={workflowName} {...props} />
     ),
   };
 

@@ -654,16 +654,4 @@ export class EventedRun<
       },
     });
   }
-
-  async sendEvent(eventName: string, data: any) {
-    await this.mastra?.pubsub.publish('workflows', {
-      type: `workflow.user-event.${eventName}`,
-      runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-        resumeData: data,
-      },
-    });
-  }
 }

@@ -455,45 +455,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           step,
         },
       );
-    } else if (step?.type === 'waitForEvent' && !resumeData) {
-      // wait for event to arrive externally (with resumeData)
-      await this.mastra.getStorage()?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
-        stepId: step.step.id,
-        result: {
-          startedAt: Date.now(),
-          status: 'waiting',
-          payload: prevResult.status === 'success' ? prevResult.output : undefined,
-        },
-        requestContext,
-      });
-      await this.mastra.getStorage()?.updateWorkflowState({
-        workflowName: workflowId,
-        runId,
-        opts: {
-          status: 'waiting',
-          waitingPaths: {
-            [step.event]: executionPath,
-          },
-        },
-      });
-
-      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-waiting',
-          payload: {
-            id: step.step.id,
-            status: 'waiting',
-            payload: prevResult.status === 'success' ? prevResult.output : undefined,
-            startedAt: Date.now(),
-          },
-        },
-      });
-
-      return;
     } else if (step?.type === 'foreach' && executionPath.length === 1) {
       return processWorkflowForEach(
         {
@@ -633,7 +594,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step.type === 'step' || step.type === 'waitForEvent') {
+    if (step.type === 'step') {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
@@ -671,10 +632,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       emitter: ee,
       requestContext: rc,
       input: (prevResult as any)?.output,
-      resumeData:
-        step.type === 'waitForEvent' || (resumeSteps?.length === 1 && resumeSteps?.[0] === step.step.id)
-          ? resumeData
-          : undefined,
+      resumeData: resumeSteps?.length === 1 && resumeSteps?.[0] === step.step.id ? resumeData : undefined,
       retryCount,
       foreachIdx: step.type === 'foreach' ? executionPath[1] : undefined,
       validateInputs: workflow.options.validateInputs,
@@ -950,7 +908,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    if (step?.type === 'step' || step?.type === 'waitForEvent') {
+    if (step?.type === 'step') {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,

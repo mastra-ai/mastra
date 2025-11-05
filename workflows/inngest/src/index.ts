@@ -185,13 +185,6 @@ export class InngestRun<
     return runs?.[0];
   }
 
-  async sendEvent(event: string, data: any) {
-    await this.inngest.send({
-      name: `user-event-${event}`,
-      data,
-    });
-  }
-
   async cancel() {
     const storage = this.#mastra?.getStorage();
 
@@ -1441,19 +1434,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       sleepUntilSpan?.error({ error: e as Error });
       throw e;
     }
-  }
-
-  async executeWaitForEvent({ event, timeout }: { event: string; timeout?: number }): Promise<any> {
-    const eventData = await this.inngestStep.waitForEvent(`user-event-${event}`, {
-      event: `user-event-${event}`,
-      timeout: timeout ?? 5e3,
-    });
-
-    if (eventData === null) {
-      throw 'Timeout waiting for event';
-    }
-
-    return eventData?.data;
   }
 
   async executeStep({
