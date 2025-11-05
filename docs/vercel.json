@@ -287,7 +287,7 @@
     },
     {
       "source": "/docs/guide/local-dev/integrations",
-      "destination": "/docs/server-db/mastra-client",
+      "destination": "/docs/getting-started/studio",
       "permanent": true
     },
     {
@@ -422,7 +422,7 @@
     },
     {
       "source": "/docs/local-dev/mastra-dev",
-      "destination": "/docs/server-db/mastra-client",
+      "destination": "/docs/getting-started/studio",
       "permanent": true
     },
     {
