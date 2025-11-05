@@ -2,16 +2,25 @@ import { format } from 'date-fns';
 import { SpanRecord } from '@mastra/core/storage';
 import { useLinkComponent } from '@/lib/framework';
 
+import { useWorkflows } from '@/domains/workflows';
+
 export function useTraceInfo(trace: SpanRecord | undefined) {
   const { paths } = useLinkComponent();
+  // TODO: fix this, it's a hack because workflowId is stored in trace using the name value
+  // and not the dictionnary key
+  const { data: workflows } = useWorkflows();
+
   if (!trace) {
     return [];
   }
 
+  const workflowId = Object.keys(workflows ?? {}).find(key => workflows?.[key]?.name === trace?.attributes?.workflowId);
+  const agentId = trace?.metadata?.resourceId;
+
   const agentsLink = paths.agentsLink();
   const workflowsLink = paths.workflowsLink();
-  const agentLink = paths.agentLink(trace?.metadata?.resourceId!);
-  const workflowLink = paths.workflowLink(trace?.metadata?.resourceId!);
+  const agentLink = paths.agentLink(agentId!);
+  const workflowLink = paths.workflowLink(workflowId!);
 
   return [
     {
@@ -19,7 +28,7 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
       label: 'Entity Id',
       value: [
         {
-          id: trace?.metadata?.resourceId,
+          id: trace?.metadata?.runId,
           name: trace?.attributes?.agentId || trace?.attributes?.workflowId || '-',
           path: trace?.attributes?.agentId ? agentLink : trace?.attributes?.workflowId ? workflowLink : undefined,
         },

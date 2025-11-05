@@ -18,7 +18,7 @@ export const weatherInfo = createTool({
   }),
   execute: async input => {
     return {
-      city: inputData.city,
+      city: input.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
