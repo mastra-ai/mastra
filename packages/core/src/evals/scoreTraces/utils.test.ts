@@ -1,5 +1,22 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { MastraDBMessage } from '../../agent';
 import { buildSpanTree, transformTraceToScorerInputAndOutput, validateTrace } from './utils';
+
+/**
+ * Helper to extract text content from MastraDBMessage
+ * Matches the logic used in MessageList.mastraDBMessageToAIV4UIMessage
+ */
+function getTextContent(message: MastraDBMessage): string {
+  if (typeof message.content.content === 'string' && message.content.content !== '') {
+    return message.content.content;
+  }
+  if (message.content.parts && Array.isArray(message.content.parts)) {
+    // Return only the last text part like AI SDK does
+    const textParts = message.content.parts.filter(p => p.type === 'text');
+    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
+  }
+  return '';
+}
 
 /**
  * Test utilities for transformer functions - focused on maintainability
@@ -298,7 +315,7 @@ describe('Transformer Functions', () => {
       const result = transformTraceToScorerInputAndOutput(trace);
 
       expect(result.input.inputMessages).toHaveLength(1);
-      expect(result.input.inputMessages[0]?.content).toBe('Hello, how are you?');
+      expect(getTextContent(result.input.inputMessages[0]!)).toBe('Hello, how are you?');
       expect(result.input.inputMessages[0]?.role).toBe('user');
     });
 
@@ -316,9 +333,9 @@ describe('Transformer Functions', () => {
       const result = transformTraceToScorerInputAndOutput(trace);
 
       expect(result.input.rememberedMessages).toHaveLength(2);
-      expect(result.input.rememberedMessages[0]?.content).toBe('What is the weather?');
+      expect(getTextContent(result.input.rememberedMessages[0]!)).toBe('What is the weather?');
       expect(result.input.rememberedMessages[0]?.role).toBe('user');
-      expect(result.input.rememberedMessages[1]?.content).toBe('The weather is sunny');
+      expect(getTextContent(result.input.rememberedMessages[1]!)).toBe('The weather is sunny');
       expect(result.input.rememberedMessages[1]?.role).toBe('assistant');
     });
 
@@ -336,7 +353,7 @@ describe('Transformer Functions', () => {
 
       const result = transformTraceToScorerInputAndOutput(trace);
       expect(result.input.inputMessages).toHaveLength(1);
-      expect(result.input.inputMessages[0]?.content).toBe('Simple string input');
+      expect(getTextContent(result.input.inputMessages[0]!)).toBe('Simple string input');
     });
 
     it('should throw for trace without agent span', () => {
@@ -358,26 +375,26 @@ describe('Transformer Functions', () => {
 
       expect(result.output).toHaveLength(1);
       expect(result.output[0]?.role).toBe('assistant');
-      expect(result.output[0]?.content).toBe('I am doing well, thank you!');
+      expect(getTextContent(result.output[0]!)).toBe('I am doing well, thank you!');
     });
 
     it('should include tool invocations in response', () => {
       const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.output[0]?.toolInvocations).toHaveLength(1);
-      expect(result.output[0]?.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
-      expect(result.output[0]?.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
+      expect(result.output[0]?.content.toolInvocations).toHaveLength(1);
+      expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
+      expect(result.output[0]?.content.toolInvocations?.[0]?.args).toEqual({ location: 'Seattle' });
 
       // @ts-ignore
-      expect(result.output[0]?.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
+      expect(result.output[0]?.content.toolInvocations?.[0]?.result).toEqual({ temperature: 72, condition: 'sunny' });
     });
 
     it('should include both tool invocation and text parts', () => {
       const trace = TransformerTestScenarios.agentWithToolCalls().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      const parts = result.output[0]?.parts;
+      const parts = result.output[0]?.content.parts;
       expect(parts).toHaveLength(2); // 1 tool invocation + 1 text
 
       const toolPart = parts?.find(p => p.type === 'tool-invocation');
@@ -411,7 +428,7 @@ describe('Transformer Functions', () => {
       // Verify input structure
       expect(result.input).toBeDefined();
       expect(result.input.inputMessages).toHaveLength(1);
-      expect(result.input.inputMessages[0]?.content).toBe('Hello, how are you?');
+      expect(getTextContent(result.input.inputMessages[0]!)).toBe('Hello, how are you?');
       expect(result.input.systemMessages).toHaveLength(1);
       expect(result.input.systemMessages[0]?.content).toBe('You are a friendly assistant');
 
@@ -419,7 +436,7 @@ describe('Transformer Functions', () => {
       expect(result.output).toBeDefined();
       expect(result.output).toHaveLength(1);
       expect(result.output[0]?.role).toBe('assistant');
-      expect(result.output[0]?.content).toBe('I am doing well, thank you!');
+      expect(getTextContent(result.output[0]!)).toBe('I am doing well, thank you!');
     });
 
     it('should handle tool calls in both input and output', () => {
@@ -427,11 +444,11 @@ describe('Transformer Functions', () => {
       const result = transformTraceToScorerInputAndOutput(trace);
 
       // Input should have the user message
-      expect(result.input.inputMessages[0]?.content).toBe('What is the weather?');
+      expect(getTextContent(result.input.inputMessages[0]!)).toBe('What is the weather?');
 
       // Output should have tool invocations
-      expect(result.output[0]?.toolInvocations).toHaveLength(1);
-      expect(result.output[0]?.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
+      expect(result.output[0]?.content.toolInvocations).toHaveLength(1);
+      expect(result.output[0]?.content.toolInvocations?.[0]?.toolName).toBe('weatherAPI');
     });
   });
 
@@ -440,8 +457,8 @@ describe('Transformer Functions', () => {
       const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
 
-      expect(result.output[0]?.toolInvocations).toHaveLength(0);
-      expect(result.output[0]?.parts?.filter(p => p.type === 'tool-invocation')).toHaveLength(0);
+      expect(result.output[0]?.content.toolInvocations).toHaveLength(0);
+      expect(result.output[0]?.content.parts?.filter(p => p.type === 'tool-invocation')).toHaveLength(0);
     });
 
     it('should handle complex nested message content', () => {
@@ -463,8 +480,8 @@ describe('Transformer Functions', () => {
         .buildTrace();
 
       const result = transformTraceToScorerInputAndOutput(trace);
-      expect(result.input.inputMessages[0]?.content).toBe('Test input');
-      expect(result.input.rememberedMessages[0]?.content).toBe('Second part'); // AI SDK convention: last text part only
+      expect(getTextContent(result.input.inputMessages[0]!)).toBe('Test input');
+      expect(getTextContent(result.input.rememberedMessages[0]!)).toBe('Second part'); // AI SDK convention: last text part only
     });
   });
 });
