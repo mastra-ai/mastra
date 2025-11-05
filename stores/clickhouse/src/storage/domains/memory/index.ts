@@ -1226,8 +1226,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             }
 
             if (needsRetry) {
-              console.info('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
-
               // Use DELETE + INSERT as fallback
               await this.client.command({
                 query: `DELETE FROM ${TABLE_MESSAGES} WHERE id = {messageId:String}`,
@@ -1299,9 +1297,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
         // Get existing threads to preserve their data
         const threadUpdatePromises = Array.from(threadIdsToUpdate).map(async threadId => {
-          // Get existing thread data - use FINAL to deduplicate ReplacingMergeTree rows
+          // Get existing thread data - get newest version by updatedAt
           const threadResult = await this.client.query({
-            query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} FINAL WHERE id = {threadId:String}`,
+            query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
             query_params: { threadId },
             clickhouse_settings: {
               date_time_input_format: 'best_effort',
@@ -1407,7 +1405,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
       const result = await this.client.query({
-        query: `SELECT id, workingMemory, metadata, createdAt, updatedAt FROM ${TABLE_RESOURCES} FINAL WHERE id = {resourceId:String}`,
+        query: `SELECT id, workingMemory, metadata, createdAt, updatedAt FROM ${TABLE_RESOURCES} WHERE id = {resourceId:String} ORDER BY updatedAt DESC LIMIT 1`,
         query_params: { resourceId },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
