@@ -1,4 +1,5 @@
 import { listScorersHandler } from '../../handlers/scores';
+import { listScorersResponseSchema } from '../../schemas/scores';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
 export const SCORES_ROUTES: ServerRoute[] = [
@@ -7,5 +8,6 @@ export const SCORES_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: listScorersHandler as unknown as ServerRouteHandler,
     path: '/api/scores/scorers',
+    responseSchema: listScorersResponseSchema,
   },
 ];

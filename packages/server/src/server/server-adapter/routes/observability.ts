@@ -1,5 +1,6 @@
 import z from 'zod';
 import { getAITracesPaginatedHandler } from '../../handlers/observability';
+import { getAITracesPaginatedResponseSchema } from '../../schemas/observability';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
 export const OBSERVABILITY_ROUTES: ServerRoute[] = [
@@ -17,5 +18,6 @@ export const OBSERVABILITY_ROUTES: ServerRoute[] = [
       entityId: z.string().optional(),
       entityType: z.string().optional(),
     }),
+    responseSchema: getAITracesPaginatedResponseSchema,
   },
 ];

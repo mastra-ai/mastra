@@ -10,14 +10,17 @@ export const serializedProcessorSchema = z.object({
 
 /**
  * Schema for serialized tool with JSON schemas
+ * Uses passthrough() to allow additional tool properties beyond core fields
  */
-export const serializedToolSchema = z.object({
-  id: z.string(),
-  description: z.string().optional(),
-  inputSchema: z.string().optional(),
-  outputSchema: z.string().optional(),
-  requireApproval: z.boolean().optional(),
-});
+export const serializedToolSchema = z
+  .object({
+    id: z.string(),
+    description: z.string().optional(),
+    inputSchema: z.string().optional(),
+    outputSchema: z.string().optional(),
+    requireApproval: z.boolean().optional(),
+  })
+  .passthrough();
 
 /**
  * Schema for serialized workflow with steps
@@ -117,3 +120,150 @@ export const providersResponseSchema = z.object({
  * Returns a record of agent ID to serialized agent
  */
 export const listAgentsResponseSchema = z.record(serializedAgentSchema);
+
+/**
+ * Schema for list tools endpoint response
+ * Returns a record of tool ID to serialized tool
+ */
+export const listToolsResponseSchema = z.record(serializedToolSchema);
+
+// ============================================================================
+// Agent Execution Body Schemas
+// ============================================================================
+
+/**
+ * Schema for agent memory option
+ */
+const agentMemoryOptionSchema = z.object({
+  thread: z.union([
+    z.string(),
+    z.object({ id: z.string() }).passthrough(),
+  ]),
+  resource: z.string(),
+  options: z.record(z.unknown()).optional(),
+  readOnly: z.boolean().optional(),
+});
+
+/**
+ * Schema for tracing options
+ */
+const tracingOptionsSchema = z.object({
+  metadata: z.record(z.unknown()).optional(),
+  requestContextKeys: z.array(z.string()).optional(),
+  traceId: z.string().optional(),
+  parentSpanId: z.string().optional(),
+});
+
+/**
+ * Schema for tool choice configuration
+ */
+const toolChoiceSchema = z.union([
+  z.enum(['auto', 'none', 'required']),
+  z.object({ type: z.literal('tool'), toolName: z.string() }),
+]);
+
+/**
+ * Comprehensive body schema for agent generate and stream endpoints
+ * Validates common fields while using passthrough for complex nested objects
+ *
+ * EXCLUDED FIELDS (not serializable):
+ * - Callbacks: onStepFinish, onFinish, onChunk, onError, onAbort, prepareStep
+ * - Class instances: inputProcessors, outputProcessors
+ * - Non-serializable: abortSignal, tracingContext
+ */
+export const agentExecutionBodySchema = z
+  .object({
+    // REQUIRED
+    messages: z.union([
+      z.array(z.unknown()), // Array of messages
+      z.string(), // Single user message shorthand
+    ]),
+
+    // Message Configuration
+    instructions: systemMessageSchema.optional(),
+    system: systemMessageSchema.optional(),
+    context: z.array(z.unknown()).optional(),
+
+    // Memory & Persistence
+    memory: agentMemoryOptionSchema.optional(),
+    resourceId: z.string().optional(), // @deprecated
+    threadId: z.string().optional(), // @deprecated
+    runId: z.string().optional(),
+    savePerStep: z.boolean().optional(),
+
+    // Request Context (handler-specific field)
+    requestContext: z.record(z.unknown()).optional(),
+
+    // Execution Control
+    maxSteps: z.number().optional(),
+    stopWhen: z.object({}).passthrough().optional(),
+
+    // Model Configuration
+    providerOptions: z
+      .object({
+        anthropic: z.record(z.unknown()).optional(),
+        google: z.record(z.unknown()).optional(),
+        openai: z.record(z.unknown()).optional(),
+        xai: z.record(z.unknown()).optional(),
+      })
+      .passthrough()
+      .optional(),
+    modelSettings: z.object({}).passthrough().optional(),
+
+    // Tool Configuration
+    activeTools: z.array(z.string()).optional(),
+    toolsets: z.record(z.unknown()).optional(),
+    clientTools: z.record(z.unknown()).optional(),
+    toolChoice: toolChoiceSchema.optional(),
+    requireToolApproval: z.boolean().optional(),
+
+    // Evaluation
+    scorers: z
+      .union([
+        z.array(z.unknown()),
+        z.record(
+          z.object({
+            scorer: z.string(),
+            sampling: z.object({}).passthrough().optional(),
+          }),
+        ),
+      ])
+      .optional(),
+    returnScorerData: z.boolean().optional(),
+
+    // Observability
+    tracingOptions: tracingOptionsSchema.optional(),
+
+    // Structured Output
+    structuredOutput: z
+      .object({
+        schema: z.unknown(),
+        model: z.union([z.string(), z.object({}).passthrough()]).optional(),
+        instructions: z.string().optional(),
+        jsonPromptInjection: z.boolean().optional(),
+        errorStrategy: z.enum(['strict', 'warn', 'fallback']).optional(),
+        fallbackValue: z.unknown().optional(),
+      })
+      .optional(),
+  })
+  .passthrough(); // Allow additional fields for forward compatibility
+
+/**
+ * Body schema for tool execute endpoint
+ * Simple schema - tool validates its own input data
+ */
+export const executeToolBodySchema = z.object({
+  data: z.unknown(),
+});
+
+/**
+ * Response schema for voice speakers endpoint
+ * Flexible to accommodate provider-specific metadata
+ */
+export const voiceSpeakersResponseSchema = z.array(
+  z
+    .object({
+      voiceId: z.string(),
+    })
+    .passthrough(), // Allow provider-specific fields like name, language, etc.
+);
