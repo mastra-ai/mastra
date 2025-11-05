@@ -25,10 +25,12 @@ Mastra v1 requires Node.js 22.13.0 or higher. Update your development and produc
 
 - **[Mastra Class](/guides/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
 - **[Agent Class](/guides/migrations/upgrade-to-v1/agent)** - Voice methods moved to namespace and streaming API updates.
-- **[Tools](/guides/migrations/upgrade-to-v1/tools)** - Execute signature changed to separate input and context.
-- **[Workflows](/guides/migrations/upgrade-to-v1/workflows)** - Step execution signature updated and legacy features removed.
+- **[Tools](/guides/migrations/upgrade-to-v1/tools)** - CreateTool execute signature changed to separate input and context.
+- **[Workflows](/guides/migrations/upgrade-to-v1/workflows)** - Function name changes and legacy features removed.
 - **[Memory](/guides/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
 - **[Storage](/guides/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
+- **[Vectors](/guides/migrations/upgrade-to-v1/vectors)** - Vector store methods renamed to list pattern.
+- **[MCP](/guides/migrations/upgrade-to-v1/mcp)** - Tool context reorganized and deprecated client classes removed.
 - **[Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
 - **[CLI](/guides/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
 - **[Client SDKs](/guides/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
@@ -40,10 +42,8 @@ Work through this checklist in order, starting with high-impact changes that aff
 
 ### High Impact Changes
 
-- Update tool signatures to `(inputData, context)` format - [Tools](/guides/migrations/upgrade-to-v1/tools)
-- Update workflow step signatures to `(inputData, context)` format - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update `createTool` tool signatures to `(inputData, context)` format - [Tools](/guides/migrations/upgrade-to-v1/tools)
 - Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra)
-- Add required `storage`, `vector`, and `embedder` to Memory configuration - [Memory](/guides/migrations/upgrade-to-v1/memory)
 - Update pagination from `offset/limit` to `page/perPage` - [Storage](/guides/migrations/upgrade-to-v1/storage)
 
 ### Medium Impact Changes
