@@ -5,272 +5,112 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 # Suspend & Resume
 
-Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle expensive operations, or wait for [Human in the Loop](./human-in-the-loop) input. When a workflow is suspended, its current state can be persisted as a [snapshot](./snapshots) and later resumed from the same point. Snapshots are stored in the configured storage system and persist across deployments and application restarts.
+Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle expensive operations, or wait for [Human in the Loop](/docs/workflows/human-in-the-loop) input. When a workflow is suspended, its current state can be persisted as a [snapshot](/docs/workflows/snapshots) and later resumed from a [specific step ID](/docs/workflows/snapshots#retrieving-snapshots). Snapshots are stored in the configured storage system and persist across deployments and application restarts.
 
-> **New to suspend and resume?** Watch these official video tutorials:
->
-> - **[Mastering Human-in-the-Loop with Suspend & Resume](https://youtu.be/aORuNG8Tq_k)** - Learn how to suspend workflows and accept user inputs
-> - **[Building Multi-Turn Chat Interfaces with React](https://youtu.be/UMVm8YZwlxc)** - Implement multi-turn human-involved interactions with a React chat interface
+## Pausing a workflow with `suspend()`
 
-## Workflow status types
+Use `suspend()` to pause workflow execution at a specific step. If a `resumeSchema` condition isn’t met, the workflow suspends at `return suspend()`. No further logic runs, and only the values passed to `suspend()` are returned. The step’s main return block is skipped, and workflow execution doesn’t continue.
 
-When running a workflow, its `status` can be one of the following:
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
 
-- `running` - The workflow is currently running
-- `suspended` - The workflow is suspended
-- `success` - The workflow has completed
-- `failed` - The workflow has failed
-
-## Suspending a workflow with `suspend()`
-
-To pause execution at a specific step until user input is received, use the `⁠suspend` function to temporarily halt the workflow, allowing it to resume only when the necessary data is provided.
-
-![Suspending a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
-
-```typescript {16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
-    input: z.string(),
+    userEmail: z.string()
   }),
   outputSchema: z.object({
-    output: z.string(),
+    output: z.string()
   }),
   resumeSchema: z.object({
-    city: z.string(),
+    okToSend: z.boolean()
   }),
-  execute: async ({ resumeData, suspend }) => {
-    const { city } = resumeData ?? {};
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { userEmail } = inputData;
+    const { okToSend } = resumeData ?? {};
 
-    if (!city) {
+    if (!okToSend) {
       return await suspend({});
     }
 
-    return { output: "" };
-  },
+    await fetch("https://httpbin.org/post", {
+      method: "POST",
+      body: JSON.stringify({ to: userEmail })
+    });
+
+    return {
+      output: `Email sent to ${userEmail}`
+    };
+  }
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
-})
-  .then(step1)
-  .commit();
-```
-
-> For more details, check out the [Suspend workflow example](/examples/workflows_legacy/suspend-and-resume).
-
-### Identifying suspended steps
-
-To resume a suspended workflow, inspect the `suspended` array in the result to determine which step needs input:
-
-```typescript {15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
-
-const result = await run.start({
-  inputData: {
-    city: "London",
-  },
-});
-
-console.log(JSON.stringify(result, null, 2));
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    step: result.suspended[0],
-    resumeData: {
-      city: "Berlin",
-    },
-  });
-}
-```
-
-In this case, the logic resumes the first step listed in the `suspended` array. A `step` can also be defined using it's `id`, for example: 'step-1'.
-
-```json
-{
-  "status": "suspended",
-  "steps": {
-    // ...
-    "step-1": {
-      // ...
-      "status": "suspended"
-    }
-  },
-  "suspended": [["step-1"]]
-}
-```
-
-> See [Workflow Output](./overview#workflow-output) for more details.
-
-## Providing user feedback with suspend
-
-When a workflow is suspended, feedback can be surfaced to the user through the `suspendSchema`. Include a reason in the `suspend` payload to explain why the workflow paused.
-
-```typescript {13,23} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const step1 = createStep({
-  id: "step-1",
+  id: "test-workflow",
   inputSchema: z.object({
-    value: z.string(),
-  }),
-  resumeSchema: z.object({
-    confirm: z.boolean(),
-  }),
-  suspendSchema: z.object({
-    reason: z.string(),
+    userEmail: z.string()
   }),
   outputSchema: z.object({
-    value: z.string(),
-  }),
-  execute: async ({ resumeData, suspend }) => {
-    const { confirm } = resumeData ?? {};
-
-    if (!confirm) {
-      return await suspend({
-        reason: "Confirm to continue",
-      });
-    }
-
-    return { value: "" };
-  },
-});
-
-export const testWorkflow = createWorkflow({
-  // ...
+    output: z.string()
+  })
 })
   .then(step1)
   .commit();
 ```
 
-In this case, the reason provided explains that the user must confirm to continue.
+## Restarting a workflow with `resume()`
 
-```json
-{
-  "step-1": {
-    // ...
-    "status": "suspended",
-    "suspendPayload": {
-      "reason": "Confirm to continue"
-    }
+Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from where it left off.
+
+![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+
+```typescript {13} showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
+
+await run.start({
+  inputData: {
+    userEmail: "alex@example.com"
   }
-}
+});
+
+const handleResume = async () => {
+  const result = await run.resume({
+    step: 'step-1',
+    resumeData: { okToSend: true }
+  });
+  console.log(result);
+};
 ```
 
-> See [Workflow Output](./overview#workflow-output) for more details.
+## Identifying suspended executions
 
-## Resuming a workflow with `resume()`
+When a workflow is suspended, it restarts from the step where it paused. You can check the workflow’s `status` to confirm it's suspended, and use `suspended` to identify the paused step or [nested workflow](/docs/workflows/overview#workflows-as-steps).
 
-A workflow can be resumed by calling `resume` and providing the required `resumeData`. You can either explicitly specify which step to resume from, or when exactly one step is suspended, omit the `step` parameter and the workflow will automatically resume that step.
-
-```typescript {16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+```typescript {11} showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
-    city: "London",
-  },
+    userEmail: "alex@example.com"
+  }
 });
 
-console.log(JSON.stringify(result, null, 2));
-
 if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    step: "step-1",
-    resumeData: {
-      city: "Berlin",
-    },
+  console.log(result.suspended[0]);
+  await run.resume({
+    step: result.suspended[0],
+    resumeData: { okToSend: true }
   });
-
-  console.log(JSON.stringify(resumedResult, null, 2));
 }
 ```
 
-You can also omit the `step` parameter when exactly one step is suspended:
+**Example output**
 
-```typescript {5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const resumedResult = await run.resume({
-  resumeData: {
-    city: "Berlin",
-  },
-  // step parameter omitted - automatically resumes the single suspended step
-});
-```
+The `suspended` array contains the IDs of any suspended workflows and steps from the run. These can be passed to the `step` parameter when calling `resume()` to target and resume the suspended execution path.
 
-You can pass `runtimeContext` as an argument to both the `start` and `resume` commands.
-
-```typescript title="src/mastra/workflows/test-workflow.ts"
-import { RuntimeContext } from "@mastra/core/runtime-context";
-
-const runtimeContext = new RuntimeContext();
-
-const result = await run.start({
-  step: "step-1",
-  inputData: {
-    city: "London",
-  },
-  runtimeContext,
-});
-
-const resumedResult = await run.resume({
-  step: "step-1",
-  resumeData: {
-    city: "New York",
-  },
-  runtimeContext,
-});
-```
-
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
-
-### Resuming nested workflows
-
-To resume a suspended nested workflow pass the workflow instance to the `step` parameter of the `resume` function.
-
-```typescript {33-34} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const dowhileWorkflow = createWorkflow({
-  id: "dowhile-workflow",
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ value: z.number() }),
-})
-  .dountil(
-    createWorkflow({
-      id: "simple-resume-workflow",
-      inputSchema: z.object({ value: z.number() }),
-      outputSchema: z.object({ value: z.number() }),
-      steps: [incrementStep, resumeStep],
-    })
-      .then(incrementStep)
-      .then(resumeStep)
-      .commit(),
-    async ({ inputData }) => inputData.value >= 10,
-  )
-  .then(
-    createStep({
-      id: "final",
-      inputSchema: z.object({ value: z.number() }),
-      outputSchema: z.object({ value: z.number() }),
-      execute: async ({ inputData }) => ({ value: inputData.value }),
-    }),
-  )
-  .commit();
-
-const run = await dowhileWorkflow.createRunAsync();
-const result = await run.start({ inputData: { value: 0 } });
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    resumeData: { value: 2 },
-    step: ["simple-resume-workflow", "resume"],
-  });
-
-  console.log(JSON.stringify(resumedResult, null, 2));
-}
+```typescript
+[ 'nested-workflow', 'step-1' ]
 ```
 
 ## Sleep & Events
@@ -283,3 +123,8 @@ Workflows can also pause execution for timed delays or external events. These me
 - [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil) : Pause until a specific date
 - [`.waitForEvent()`](/reference/workflows/workflow-methods/waitForEvent): Pause until an external event is received
 - [`.sendEvent()`](/reference/workflows/workflow-methods/sendEvent) : Send an event to resume a waiting workflow
+
+## Related
+
+- [Control Flow](/docs/workflows/control-flow)
+- [Human-in-the-loop](/docs/workflows/human-in-the-loop)

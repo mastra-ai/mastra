@@ -112,11 +112,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/error-handling",
-          label: "Error Handling",
-        },
-        {
-          type: "doc",
           id: "workflows/human-in-the-loop",
           label: "Human-in-the-loop",
         },
@@ -124,6 +119,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/snapshots",
           label: "Snapshots",
+        },
+        {
+          type: "doc",
+          id: "workflows/error-handling",
+          label: "Error Handling",
         },
         {
           type: "doc",

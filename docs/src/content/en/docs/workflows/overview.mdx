@@ -26,6 +26,15 @@ Mastra workflows operate using these principles:
 - Composing **steps** with `createWorkflow` to define the execution flow.
 - Running **workflows** to execute the entire sequence, with built-in support for suspension, resumption, and streaming results.
 
+## Workflow status types
+
+When running a workflow, its `status` can be one of the following:
+
+- `running` - The workflow is currently running
+- `suspended` - The workflow is suspended
+- `success` - The workflow has completed
+- `failed` - The workflow has failed
+
 ## Creating a workflow step
 
 Steps are the building blocks of workflows. Create a step using `createStep()` with `inputSchema` and `outputSchema` to define the data it accepts and returns.
@@ -329,3 +338,7 @@ Use [Studio](/docs/getting-started/studio) to easily run workflows with differen
 ## Related
 
 For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
+
+- [Control Flow](/docs/workflows/control-flow)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume)
+- [Error Handling](/docs/workflows/error-handling)
