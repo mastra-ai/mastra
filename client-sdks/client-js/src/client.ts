@@ -39,7 +39,7 @@ import type {
   GetAITracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
-  GetMemoryThreadMessagesResponse,
+  ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
   ListMemoryThreadsParams,
@@ -137,10 +137,13 @@ export class MastraClient extends BaseResource {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
-  public getThreadMessages(
+  public listThreadMessages(
     threadId: string,
     opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
-  ): Promise<GetMemoryThreadMessagesResponse> {
+  ): Promise<ListMemoryThreadMessagesResponse> {
+    if (!opts.agentId && !opts.networkId) {
+      throw new Error('Either agentId or networkId must be provided');
+    }
     let url = '';
     if (opts.agentId) {
       url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;

@@ -1,9 +1,9 @@
-import { AISpanType, AITracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type {
   ModelGenerationAttributes,
   WorkflowStepAttributes,
-  AITracingEvent,
-  AnyExportedAISpan,
+  TracingEvent,
+  AnyExportedSpan,
 } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DefaultExporter } from './default';
@@ -23,11 +23,11 @@ const mockLogger = {
 describe('DefaultExporter', () => {
   describe('serializeAttributes', () => {
     it('should serialize LLM generation attributes with dates', () => {
-      const exporter = new DefaultExporter({}, mockLogger);
+      const exporter = new DefaultExporter({ logger: mockLogger });
 
       const mockSpan = {
         id: 'span-1',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -61,11 +61,11 @@ describe('DefaultExporter', () => {
     });
 
     it('should serialize workflow step attributes', () => {
-      const exporter = new DefaultExporter({}, mockLogger);
+      const exporter = new DefaultExporter({ logger: mockLogger });
 
       const mockSpan = {
         id: 'span-2',
-        type: AISpanType.WORKFLOW_STEP,
+        type: SpanType.WORKFLOW_STEP,
         attributes: {
           stepId: 'step-1',
           status: 'success',
@@ -81,12 +81,12 @@ describe('DefaultExporter', () => {
     });
 
     it('should handle Date objects in attributes', () => {
-      const exporter = new DefaultExporter({}, mockLogger);
+      const exporter = new DefaultExporter({ logger: mockLogger });
       const testDate = new Date('2023-12-01T10:00:00Z');
 
       const mockSpan = {
         id: 'span-3',
-        type: AISpanType.WORKFLOW_SLEEP,
+        type: SpanType.WORKFLOW_SLEEP,
         attributes: {
           untilDate: testDate,
           durationMs: 5000,
@@ -102,11 +102,11 @@ describe('DefaultExporter', () => {
     });
 
     it('should return null for undefined attributes', () => {
-      const exporter = new DefaultExporter({}, mockLogger);
+      const exporter = new DefaultExporter({ logger: mockLogger });
 
       const mockSpan = {
         id: 'span-4',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         attributes: undefined,
       } as any;
 
@@ -116,7 +116,7 @@ describe('DefaultExporter', () => {
     });
 
     it('should handle serialization errors gracefully', () => {
-      const exporter = new DefaultExporter({}, mockLogger);
+      const exporter = new DefaultExporter({ logger: mockLogger });
 
       // Create an object that will cause JSON.stringify to throw
       const circularObj = {} as any;
@@ -124,7 +124,7 @@ describe('DefaultExporter', () => {
 
       const mockSpan = {
         id: 'span-5',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         attributes: {
           circular: circularObj,
         },
@@ -137,7 +137,7 @@ describe('DefaultExporter', () => {
         'Failed to serialize span attributes, storing as null',
         expect.objectContaining({
           spanId: 'span-5',
-          spanType: AISpanType.TOOL_CALL,
+          spanType: SpanType.TOOL_CALL,
         }),
       );
     });
@@ -166,14 +166,14 @@ describe('DefaultExporter', () => {
       }) as any);
 
       mockStorage = {
-        aiTracingStrategy: {
+        tracingStrategy: {
           preferred: 'batch-with-updates',
           supported: ['realtime', 'batch-with-updates', 'insert-only'],
         },
-        batchCreateAISpans: vi.fn().mockResolvedValue(undefined),
-        batchUpdateAISpans: vi.fn().mockResolvedValue(undefined),
-        createAISpan: vi.fn().mockResolvedValue(undefined),
-        updateAISpan: vi.fn().mockResolvedValue(undefined),
+        batchCreateSpans: vi.fn().mockResolvedValue(undefined),
+        batchUpdateSpans: vi.fn().mockResolvedValue(undefined),
+        createSpan: vi.fn().mockResolvedValue(undefined),
+        updateSpan: vi.fn().mockResolvedValue(undefined),
         constructor: { name: 'MockStorage' },
       };
 
@@ -186,11 +186,11 @@ describe('DefaultExporter', () => {
 
     describe('Strategy resolution', () => {
       it('should auto-select storage preferred strategy', async () => {
-        const exporter = new DefaultExporter({}, mockLogger);
+        const exporter = new DefaultExporter({ logger: mockLogger });
         exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
-          'AI tracing exporter initialized',
+          'tracing storage exporter initialized',
           expect.objectContaining({
             strategy: 'batch-with-updates',
             source: 'auto',
@@ -200,11 +200,11 @@ describe('DefaultExporter', () => {
       });
 
       it('should use user-specified strategy when supported', async () => {
-        const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
+        const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
         exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
-          'AI tracing exporter initialized',
+          'tracing storage exporter initialized',
           expect.objectContaining({
             strategy: 'realtime',
             source: 'user',
@@ -213,13 +213,13 @@ describe('DefaultExporter', () => {
       });
 
       it('should fallback to storage preferred when user strategy not supported', async () => {
-        mockStorage.aiTracingStrategy.supported = ['batch-with-updates'];
+        mockStorage.tracingStrategy.supported = ['batch-with-updates'];
 
-        const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
+        const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
         exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
-          'User-specified AI tracing strategy not supported by storage adapter, falling back to auto-selection',
+          'User-specified tracing strategy not supported by storage adapter, falling back to auto-selection',
           expect.objectContaining({
             userStrategy: 'realtime',
             fallbackStrategy: 'batch-with-updates',
@@ -232,7 +232,7 @@ describe('DefaultExporter', () => {
           getStorage: vi.fn().mockReturnValue(null),
         } as any;
 
-        const exporter = new DefaultExporter({}, mockLogger);
+        const exporter = new DefaultExporter({ logger: mockLogger });
         // Should not throw, but log error instead
         expect(() => exporter.init({ mastra: mockMastraWithoutStorage })).not.toThrow();
 
@@ -244,13 +244,13 @@ describe('DefaultExporter', () => {
 
     describe('Realtime strategy', () => {
       it('should process events immediately', async () => {
-        const exporter = new DefaultExporter({ strategy: 'realtime' }, mockLogger);
+        const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
         exporter.init({ mastra: mockMastra });
-        const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
+        const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
 
-        await exporter.exportEvent(mockEvent);
+        await exporter.exportTracingEvent(mockEvent);
 
-        expect(mockStorage.createAISpan).toHaveBeenCalledWith(
+        expect(mockStorage.createSpan).toHaveBeenCalledWith(
           expect.objectContaining({
             traceId: 'trace-1',
             spanId: 'span-1',
@@ -261,29 +261,27 @@ describe('DefaultExporter', () => {
 
     describe('Batch-with-updates strategy', () => {
       it('should buffer events and flush when batch size reached', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchSize: 2,
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 2,
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
-        const event1 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
-        const event2 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
+        const event1 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        const event2 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
 
-        await exporter.exportEvent(event1);
+        await exporter.exportTracingEvent(event1);
         // First event should schedule timer but not flush yet
-        expect(mockStorage.batchCreateAISpans).not.toHaveBeenCalled();
+        expect(mockStorage.batchCreateSpans).not.toHaveBeenCalled();
 
-        await exporter.exportEvent(event2);
+        await exporter.exportTracingEvent(event2);
 
         // Wait for the async flush to complete (it's called in a fire-and-forget manner)
         await new Promise(resolve => setImmediate(resolve));
 
         // Should flush when batch size reached
-        expect(mockStorage.batchCreateAISpans).toHaveBeenCalledWith({
+        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({ spanId: 'span-1' }),
             expect.objectContaining({ spanId: 'span-2' }),
@@ -292,30 +290,28 @@ describe('DefaultExporter', () => {
       });
 
       it('should handle span updates with sequence numbers', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchSize: 10,
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // Add span create first
-        const createEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
-        await exporter.exportEvent(createEvent);
+        const createEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        await exporter.exportTracingEvent(createEvent);
 
         // Add updates
-        const updateEvent1 = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
-        const updateEvent2 = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'span-1');
+        const updateEvent1 = createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
+        const updateEvent2 = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-1');
 
-        await exporter.exportEvent(updateEvent1);
-        await exporter.exportEvent(updateEvent2);
+        await exporter.exportTracingEvent(updateEvent1);
+        await exporter.exportTracingEvent(updateEvent2);
 
         // Manually trigger flush
         await (exporter as any).flush();
 
-        expect(mockStorage.batchUpdateAISpans).toHaveBeenCalledWith({
+        expect(mockStorage.batchUpdateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({
               spanId: 'span-1',
@@ -330,47 +326,43 @@ describe('DefaultExporter', () => {
       });
 
       it('should handle out-of-order updates', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // Send update without create first
-        const updateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
-        await exporter.exportEvent(updateEvent);
+        const updateEvent = createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
+        await exporter.exportTracingEvent(updateEvent);
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
           'Out-of-order span update detected - skipping event',
           expect.objectContaining({
             spanId: 'span-1',
             traceId: 'trace-1',
-            eventType: AITracingEventType.SPAN_UPDATED,
+            eventType: TracingEventType.SPAN_UPDATED,
           }),
         );
       });
 
       it('should handle event-type spans that only emit SPAN_ENDED', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchSize: 1, // Set to 1 to trigger immediate flush
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 1, // Set to 1 to trigger immediate flush
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // Event-type spans only emit SPAN_ENDED (no SPAN_STARTED)
-        const eventSpan = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'event-1', true);
-        await exporter.exportEvent(eventSpan);
+        const eventSpan = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'event-1', true);
+        await exporter.exportTracingEvent(eventSpan);
 
         // Wait for async flush to complete
         await new Promise(resolve => setImmediate(resolve));
 
         // Should create the span record (not treat as out-of-order)
-        expect(mockStorage.batchCreateAISpans).toHaveBeenCalledWith({
+        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({
               spanId: 'event-1',
@@ -389,47 +381,43 @@ describe('DefaultExporter', () => {
 
     describe('Insert-only strategy', () => {
       it('should only process SPAN_ENDED events', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'insert-only',
-            maxBatchSize: 1, // Set to 1 to trigger immediate flush
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'insert-only',
+          maxBatchSize: 1, // Set to 1 to trigger immediate flush
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
-        const startEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
-        const updateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
-        const endEvent = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'span-1');
+        const startEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        const updateEvent = createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
+        const endEvent = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-1');
 
-        await exporter.exportEvent(startEvent);
-        await exporter.exportEvent(updateEvent);
-        await exporter.exportEvent(endEvent);
+        await exporter.exportTracingEvent(startEvent);
+        await exporter.exportTracingEvent(updateEvent);
+        await exporter.exportTracingEvent(endEvent);
 
         // Only the end event should trigger a batch
-        expect(mockStorage.batchCreateAISpans).toHaveBeenCalledWith({
+        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([expect.objectContaining({ spanId: 'span-1' })]),
         });
 
         // Should have been called only once (for the end event)
-        expect(mockStorage.batchCreateAISpans).toHaveBeenCalledTimes(1);
-        expect(mockStorage.batchUpdateAISpans).not.toHaveBeenCalled();
+        expect(mockStorage.batchCreateSpans).toHaveBeenCalledTimes(1);
+        expect(mockStorage.batchUpdateSpans).not.toHaveBeenCalled();
       });
     });
 
     describe('Timer-based flushing', () => {
       it('should schedule flush for first event', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchWaitMs: 1000,
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchWaitMs: 1000,
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
-        const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
-        await exporter.exportEvent(mockEvent);
+        const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
+        await exporter.exportTracingEvent(mockEvent);
 
         // Should have scheduled a timer
         expect(timers).toHaveLength(1);
@@ -437,26 +425,24 @@ describe('DefaultExporter', () => {
       });
 
       it('should clear timer when flush triggered by size', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchSize: 2,
-            maxBatchWaitMs: 1000,
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 2,
+          maxBatchWaitMs: 1000,
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // First event should schedule timer
-        const mockEvent1 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
-        await exporter.exportEvent(mockEvent1);
+        const mockEvent1 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        await exporter.exportTracingEvent(mockEvent1);
 
         // Timer should be scheduled
         expect(timers).toHaveLength(1);
 
         // Second event should trigger flush and clear timer
-        const mockEvent2 = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
-        await exporter.exportEvent(mockEvent2);
+        const mockEvent2 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
+        await exporter.exportTracingEvent(mockEvent2);
 
         // Timer should be cleared after size-based flush
         expect(global.clearTimeout).toHaveBeenCalled();
@@ -471,23 +457,19 @@ describe('DefaultExporter', () => {
           return 123 as any;
         }) as any);
 
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxRetries: 2,
-            retryDelayMs: 100,
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 2,
+          retryDelayMs: 100,
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // Mock storage failure then success
-        mockStorage.batchCreateAISpans
-          .mockRejectedValueOnce(new Error('Storage error'))
-          .mockResolvedValueOnce(undefined);
+        mockStorage.batchCreateSpans.mockRejectedValueOnce(new Error('Storage error')).mockResolvedValueOnce(undefined);
 
-        const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
-        await exporter.exportEvent(mockEvent);
+        const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
+        await exporter.exportTracingEvent(mockEvent);
 
         // Manually trigger flush and wait for retry
         await (exporter as any).flush();
@@ -510,21 +492,19 @@ describe('DefaultExporter', () => {
           return 123 as any;
         }) as any);
 
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxRetries: 1, // Test with 1 retry
-            retryDelayMs: 1, // Very short delay for fast test
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 1, // Test with 1 retry
+          retryDelayMs: 1, // Very short delay for fast test
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // Mock persistent storage failure
-        mockStorage.batchCreateAISpans.mockRejectedValue(new Error('Persistent error'));
+        mockStorage.batchCreateSpans.mockRejectedValue(new Error('Persistent error'));
 
-        const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
-        await exporter.exportEvent(mockEvent);
+        const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
+        await exporter.exportTracingEvent(mockEvent);
 
         // Manually trigger flush and wait for completion
         await (exporter as any).flush();
@@ -547,17 +527,15 @@ describe('DefaultExporter', () => {
 
     describe('Shutdown', () => {
       it('should flush remaining events on shutdown', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchSize: 10, // Ensure single event doesn't trigger auto-flush
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 10, // Ensure single event doesn't trigger auto-flush
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
-        const mockEvent = createMockEvent(AITracingEventType.SPAN_STARTED);
-        await exporter.exportEvent(mockEvent);
+        const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
+        await exporter.exportTracingEvent(mockEvent);
 
         // Wait for any async operations to settle
         await new Promise(resolve => setImmediate(resolve));
@@ -569,30 +547,28 @@ describe('DefaultExporter', () => {
 
         expect(mockLogger.info).toHaveBeenCalledWith('Flushing remaining events on shutdown', { remainingEvents: 1 });
 
-        expect(mockStorage.batchCreateAISpans).toHaveBeenCalled();
+        expect(mockStorage.batchCreateSpans).toHaveBeenCalled();
       });
     });
 
     describe('Memory management', () => {
       it('should clean up completed spans from allCreatedSpans after successful flush', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchWaitMs: 100,
-            maxBatchSize: 10,
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchWaitMs: 100,
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // Send span start and end events
-        const span1Start = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
-        const span1End = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'span-1');
-        const span2Start = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
+        const span1Start = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        const span1End = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-1');
+        const span2Start = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
 
-        await exporter.exportEvent(span1Start);
-        await exporter.exportEvent(span1End);
-        await exporter.exportEvent(span2Start);
+        await exporter.exportTracingEvent(span1Start);
+        await exporter.exportTracingEvent(span1End);
+        await exporter.exportTracingEvent(span2Start);
 
         // Check that spans are tracked in allCreatedSpans
         expect((exporter as any).allCreatedSpans.has('trace-1:span-1')).toBe(true);
@@ -606,8 +582,8 @@ describe('DefaultExporter', () => {
         expect((exporter as any).allCreatedSpans.has('trace-1:span-2')).toBe(true);
 
         // Now complete span-2
-        const span2End = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'span-2');
-        await exporter.exportEvent(span2End);
+        const span2End = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-2');
+        await exporter.exportTracingEvent(span2End);
 
         // Flush again
         await (exporter as any).flush();
@@ -624,23 +600,21 @@ describe('DefaultExporter', () => {
 
     describe('Out-of-order span handling with delayed ends', () => {
       it('should handle spans that end after buffer has been flushed', async () => {
-        const exporter = new DefaultExporter(
-          {
-            strategy: 'batch-with-updates',
-            maxBatchWaitMs: 100, // Short wait time for faster test
-            maxBatchSize: 10, // High enough to not trigger size-based flush
-          },
-          mockLogger,
-        );
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxBatchWaitMs: 100, // Short wait time for faster test
+          maxBatchSize: 10, // High enough to not trigger size-based flush
+          logger: mockLogger,
+        });
         exporter.init({ mastra: mockMastra });
 
         // Simulate workflow with nested spans like the example
-        const workflowStartEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'workflow-1');
-        const step1StartEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'step-1');
+        const workflowStartEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'workflow-1');
+        const step1StartEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'step-1');
 
         // Send start events
-        await exporter.exportEvent(workflowStartEvent);
-        await exporter.exportEvent(step1StartEvent);
+        await exporter.exportTracingEvent(workflowStartEvent);
+        await exporter.exportTracingEvent(step1StartEvent);
 
         // Manually execute the flush timer
         const flushTimer = timers.find(t => t.delay === 100);
@@ -650,7 +624,7 @@ describe('DefaultExporter', () => {
         await flushTimer.fn();
 
         // Verify the creates were flushed
-        expect(mockStorage.batchCreateAISpans).toHaveBeenCalledWith({
+        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({ spanId: 'workflow-1' }),
             expect.objectContaining({ spanId: 'step-1' }),
@@ -658,18 +632,18 @@ describe('DefaultExporter', () => {
         });
 
         // Clear the mock calls to make assertions clearer
-        mockStorage.batchCreateAISpans.mockClear();
-        mockStorage.batchUpdateAISpans.mockClear();
+        mockStorage.batchCreateSpans.mockClear();
+        mockStorage.batchUpdateSpans.mockClear();
         mockLogger.warn.mockClear();
 
         // Now send update and end events after the buffer has been cleared
-        const step1UpdateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'step-1');
-        const step1EndEvent = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'step-1');
-        const step2StartEvent = createMockEvent(AITracingEventType.SPAN_STARTED, 'trace-1', 'step-2');
+        const step1UpdateEvent = createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'step-1');
+        const step1EndEvent = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'step-1');
+        const step2StartEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'step-2');
 
-        await exporter.exportEvent(step1UpdateEvent);
-        await exporter.exportEvent(step1EndEvent);
-        await exporter.exportEvent(step2StartEvent);
+        await exporter.exportTracingEvent(step1UpdateEvent);
+        await exporter.exportTracingEvent(step1EndEvent);
+        await exporter.exportTracingEvent(step2StartEvent);
 
         // Execute any new flush timer
         const newFlushTimer = timers.find(t => t.delay === 100 && t.fn !== flushTimer.fn);
@@ -678,13 +652,13 @@ describe('DefaultExporter', () => {
         }
 
         // Now send more update and end events
-        const step2EndEvent = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'step-2');
-        const workflowUpdateEvent = createMockEvent(AITracingEventType.SPAN_UPDATED, 'trace-1', 'workflow-1');
-        const workflowEndEvent = createMockEvent(AITracingEventType.SPAN_ENDED, 'trace-1', 'workflow-1');
+        const step2EndEvent = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'step-2');
+        const workflowUpdateEvent = createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'workflow-1');
+        const workflowEndEvent = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'workflow-1');
 
-        await exporter.exportEvent(step2EndEvent);
-        await exporter.exportEvent(workflowUpdateEvent);
-        await exporter.exportEvent(workflowEndEvent);
+        await exporter.exportTracingEvent(step2EndEvent);
+        await exporter.exportTracingEvent(workflowUpdateEvent);
+        await exporter.exportTracingEvent(workflowEndEvent);
 
         // Flush any remaining events
         await (exporter as any).flush();
@@ -694,8 +668,8 @@ describe('DefaultExporter', () => {
         expect(mockLogger.error).not.toHaveBeenCalled();
 
         // All update and end events should be properly stored
-        expect(mockStorage.batchUpdateAISpans).toHaveBeenCalled();
-        const updateCalls = mockStorage.batchUpdateAISpans.mock.calls;
+        expect(mockStorage.batchUpdateSpans).toHaveBeenCalled();
+        const updateCalls = mockStorage.batchUpdateSpans.mock.calls;
         const allUpdates = updateCalls.flatMap((call: any) => call[0].records);
 
         // Find all updates for each span (there can be multiple per span)
@@ -731,26 +705,26 @@ describe('DefaultExporter', () => {
     });
 
     function createMockEvent(
-      type: AITracingEventType,
+      type: TracingEventType,
       traceId = 'trace-1',
       spanId = 'span-1',
       isEvent = false,
-    ): AITracingEvent {
+    ): TracingEvent {
       return {
         type,
         exportedSpan: {
           id: spanId,
           traceId,
-          type: AISpanType.GENERIC,
+          type: SpanType.GENERIC,
           name: 'test-span',
           startTime: new Date(),
-          endTime: type === AITracingEventType.SPAN_ENDED ? new Date() : undefined,
+          endTime: type === TracingEventType.SPAN_ENDED ? new Date() : undefined,
           isEvent,
           attributes: { test: 'value' },
           metadata: undefined,
           input: 'test input',
-          output: type === AITracingEventType.SPAN_ENDED ? 'test output' : undefined,
-        } as any as AnyExportedAISpan,
+          output: type === TracingEventType.SPAN_ENDED ? 'test output' : undefined,
+        } as any as AnyExportedSpan,
       };
     }
   });

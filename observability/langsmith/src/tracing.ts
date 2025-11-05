@@ -1,13 +1,13 @@
 /**
- * LangSmith Exporter for Mastra AI Tracing
+ * LangSmith Exporter for Mastra Tracing
  *
  * This exporter sends tracing data to LangSmith for AI observability.
  * Root spans become top-level LangSmith RunTrees (no trace wrapper).
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/observability';
-import { AISpanType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -30,17 +30,17 @@ type SpanData = {
 const DEFAULT_SPAN_TYPE = 'chain';
 
 // Exceptions to the default mapping
-const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, 'llm' | 'tool' | 'chain'>> = {
-  [AISpanType.MODEL_GENERATION]: 'llm',
-  [AISpanType.MODEL_CHUNK]: 'llm',
-  [AISpanType.TOOL_CALL]: 'tool',
-  [AISpanType.MCP_TOOL_CALL]: 'tool',
-  [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'chain',
-  [AISpanType.WORKFLOW_WAIT_EVENT]: 'chain',
+const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, 'llm' | 'tool' | 'chain'>> = {
+  [SpanType.MODEL_GENERATION]: 'llm',
+  [SpanType.MODEL_CHUNK]: 'llm',
+  [SpanType.TOOL_CALL]: 'tool',
+  [SpanType.MCP_TOOL_CALL]: 'tool',
+  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'chain',
+  [SpanType.WORKFLOW_WAIT_EVENT]: 'chain',
 };
 
 // Mapping function - returns valid LangSmith span types
-function mapSpanType(spanType: AISpanType): 'llm' | 'tool' | 'chain' {
+function mapSpanType(spanType: SpanType): 'llm' | 'tool' | 'chain' {
   return SPAN_TYPE_EXCEPTIONS[spanType] ?? DEFAULT_SPAN_TYPE;
 }
 
@@ -70,7 +70,7 @@ export class LangSmithExporter extends BaseExporter {
     this.config = config;
   }
 
-  protected async _exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -89,11 +89,11 @@ export class LangSmithExporter extends BaseExporter {
     }
   }
 
-  private initializeRootSpan(span: AnyExportedAISpan) {
+  private initializeRootSpan(span: AnyExportedSpan) {
     this.traceMap.set(span.traceId, { spans: new Map(), activeIds: new Set() });
   }
 
-  private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
+  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
     this.logger.debug('LangSmith exporter: handleSpanStarted', span.id, span.name);
     if (span.isRootSpan) {
       this.initializeRootSpan(span);
@@ -129,7 +129,7 @@ export class LangSmithExporter extends BaseExporter {
     await langsmithRunTree.postRun();
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyExportedAISpan, isEnd: boolean): Promise<void> {
+  private async handleSpanUpdateOrEnd(span: AnyExportedSpan, isEnd: boolean): Promise<void> {
     this.logger.debug('LangSmith exporter: handleSpanUpdateOrEnd', span.id, span.name, 'isEnd:', isEnd);
     const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
 
@@ -188,7 +188,7 @@ export class LangSmithExporter extends BaseExporter {
     }
   }
 
-  private async handleEventSpan(span: AnyExportedAISpan): Promise<void> {
+  private async handleEventSpan(span: AnyExportedSpan): Promise<void> {
     if (span.isRootSpan) {
       this.logger.debug('LangSmith exporter: Creating logger for event', {
         traceId: span.traceId,
@@ -226,7 +226,7 @@ export class LangSmithExporter extends BaseExporter {
     await langsmithRunTree.patchRun();
   }
 
-  private getSpanData(options: { span: AnyExportedAISpan; method: string }): SpanData | undefined {
+  private getSpanData(options: { span: AnyExportedSpan; method: string }): SpanData | undefined {
     const { span, method } = options;
     if (this.traceMap.has(span.traceId)) {
       return this.traceMap.get(span.traceId);
@@ -245,7 +245,7 @@ export class LangSmithExporter extends BaseExporter {
 
   private getLangSmithParent(options: {
     spanData: SpanData;
-    span: AnyExportedAISpan;
+    span: AnyExportedSpan;
     method: string;
   }): RunTree | undefined {
     const { spanData, span, method } = options;
@@ -276,7 +276,7 @@ export class LangSmithExporter extends BaseExporter {
     });
   }
 
-  private buildRunTreePayload(span: AnyExportedAISpan): Partial<RunTreeConfig> {
+  private buildRunTreePayload(span: AnyExportedSpan): Partial<RunTreeConfig> {
     const payload: Partial<RunTreeConfig> & { metadata: KVMap } = {
       client: this.client,
       metadata: {
@@ -296,7 +296,7 @@ export class LangSmithExporter extends BaseExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.MODEL_GENERATION) {
+    if (span.type === SpanType.MODEL_GENERATION) {
       const modelAttr = attributes as ModelGenerationAttributes;
 
       // See: https://docs.langchain.com/langsmith/log-llm-trace

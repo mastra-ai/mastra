@@ -8,7 +8,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   PaginationInfo,
-  StorageGetMessagesArg,
   StorageColumn,
   WorkflowRuns,
   StoragePagination,
@@ -273,15 +272,6 @@ export class LanceStorage extends MastraStorage {
     return Array.from(allIndices)
       .sort((a, b) => a - b)
       .map(index => records[index]);
-  }
-
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, threadConfig });
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

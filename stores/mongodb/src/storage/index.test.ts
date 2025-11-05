@@ -1,5 +1,5 @@
 import { createTestSuite } from '@internal/storage-test-utils';
-import { AISpanType } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { ConnectorHandler } from './connectors/base';
 import type { MongoDBConfig } from './types';
@@ -430,19 +430,19 @@ describe('MongoDB Specific Tests', () => {
     });
   });
 
-  describe('MongoDB AI Span Operations', () => {
+  describe('MongoDB Span Operations', () => {
     beforeEach(async () => {
       try {
         await store.clearTable({ tableName: 'mastra_ai_spans' as any });
       } catch {}
     });
 
-    it('should handle AI span creation with MongoDB-specific features', async () => {
-      const aiSpan = {
+    it('should handle Span creation with MongoDB-specific features', async () => {
+      const Span = {
         spanId: 'mongodb-span-1',
         traceId: 'mongodb-trace-1',
         name: 'MongoDB AI Operation',
-        spanType: AISpanType.LLM_GENERATION,
+        spanType: SpanType.LLM_GENERATION,
         parentSpanId: null,
         scope: {
           name: 'mongodb-test',
@@ -487,7 +487,7 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(store.createAISpan(aiSpan)).resolves.not.toThrow();
+      await expect(store.createSpan(Span)).resolves.not.toThrow();
 
       // Verify the span was created
       const trace = await store.getAITrace('mongodb-trace-1');
@@ -496,13 +496,13 @@ describe('MongoDB Specific Tests', () => {
       expect(trace?.spans[0]?.spanId).toBe('mongodb-span-1');
     });
 
-    it('should handle AI span updates with complex data', async () => {
+    it('should handle Span updates with complex data', async () => {
       // Create initial span with all required fields
       const initialSpan = {
         spanId: 'update-span-1',
         traceId: 'update-trace-1',
         name: 'Updating Span',
-        spanType: AISpanType.AGENT_RUN,
+        spanType: SpanType.AGENT_RUN,
         parentSpanId: null,
         scope: {
           name: 'test-scope',
@@ -519,7 +519,7 @@ describe('MongoDB Specific Tests', () => {
         links: null,
       };
 
-      await store.createAISpan(initialSpan);
+      await store.createSpan(initialSpan);
 
       // Update with complex nested data
       const updates = {
@@ -552,7 +552,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       await expect(
-        store.updateAISpan({
+        store.updateSpan({
           spanId: 'update-span-1',
           traceId: 'update-trace-1',
           updates,

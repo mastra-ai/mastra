@@ -1581,8 +1581,8 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
     id: 'get-weather',
     description: 'Get current weather for a city',
     inputSchema: z.object({ city: z.string() }),
-    execute: async ({ context }) => {
-      return { city: context.city, temp: 68, condition: 'partly cloudy' };
+    execute: async inputData => {
+      return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
     },
   });
 
@@ -1913,7 +1913,7 @@ function runWorkingMemoryTests(getMemory: () => Memory) {
       'Calculate what 15 times 4 is, then remember that my name is Bob and I live in Seattle, then tell me the weather in Seattle.',
       {
         memory: { thread: threadId, resource: resourceId },
-        maxSteps: 10,
+        maxSteps: 5,
       },
     );
 

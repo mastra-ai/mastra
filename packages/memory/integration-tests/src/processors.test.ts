@@ -98,6 +98,7 @@ describe('Memory with Processors', () => {
     const queryResult = await memory.recall({
       threadId: thread.id,
       perPage: 20,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
     console.log('DEBUG queryResult.messages.length:', queryResult.messages.length);
     const messageList = new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory');
@@ -128,6 +129,7 @@ describe('Memory with Processors', () => {
     const allMessagesQuery = await memory.recall({
       threadId: thread.id,
       perPage: 20,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
     expect(allMessagesQuery.messages.length).toBe(20);
 

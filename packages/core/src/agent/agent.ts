@@ -27,7 +27,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { AISpanType, getOrCreateSpan } from '../observability';
+import { SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext } from '../request-context';
@@ -1679,7 +1679,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
           // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
-          // manually wrap agent tools with ai tracing, so that we can pass the
+          // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
             try {
@@ -1838,7 +1838,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           outputSchema: workflow.outputSchema,
           mastra: this.#mastra,
           // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
-          // manually wrap workflow tools with ai tracing, so that we can pass the
+          // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             try {
@@ -2346,10 +2346,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
-    // Set AI Tracing context
+    // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
-    const agentAISpan = getOrCreateSpan({
-      type: AISpanType.AGENT_RUN,
+    const agentSpan = getOrCreateSpan({
+      type: SpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
       input: options.messages,
       attributes: {
@@ -2407,7 +2407,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       resourceId,
       runId,
       requestContext,
-      agentAISpan: agentAISpan!,
+      agentSpan: agentSpan!,
       methodType,
       instructions,
       memoryConfig,
@@ -2421,7 +2421,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     });
 
     const run = await executionWorkflow.createRun();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
+    const result = await run.start({ tracingContext: { currentSpan: agentSpan } });
 
     return result;
   }
@@ -2439,7 +2439,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     memoryConfig,
     outputText,
     requestContext,
-    agentAISpan,
+    agentSpan,
     runId,
     messageList,
     threadExists,
@@ -2531,7 +2531,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               this.genTitle(
                 userMessage,
                 requestContext,
-                { currentSpan: agentAISpan },
+                { currentSpan: agentSpan },
                 titleModel,
                 titleInstructions,
               ).then(title => {
@@ -2600,10 +2600,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentAISpan },
+      tracingContext: { currentSpan: agentSpan },
     });
 
-    agentAISpan?.end({
+    agentSpan?.end({
       output: {
         text: result.text,
         object: result.object,

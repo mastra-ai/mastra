@@ -6,17 +6,16 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageDomains,
-  StorageGetMessagesArg,
   StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  AISpanRecord,
+  SpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
-  CreateAISpanRecord,
-  UpdateAISpanRecord,
+  CreateSpanRecord,
+  UpdateSpanRecord,
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
@@ -185,10 +184,6 @@ export class MongoDBStore extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     return this.stores.memory.deleteThread({ threadId });
-  }
-
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -384,9 +379,9 @@ export class MongoDBStore extends MastraStorage {
   }
 
   /**
-   * AI Tracing/Observability
+   * Tracing/Observability
    */
-  async createAISpan(span: CreateAISpanRecord): Promise<void> {
+  async createSpan(span: CreateSpanRecord): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -395,17 +390,17 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.createAISpan(span);
+    return this.stores.observability.createSpan(span);
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
@@ -415,7 +410,7 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.updateAISpan({ spanId, traceId, updates });
+    return this.stores.observability.updateSpan({ spanId, traceId, updates });
   }
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
@@ -430,9 +425,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.getAITrace(traceId);
   }
 
-  async getAITracesPaginated(
-    args: AITracesPaginatedArg,
-  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -444,7 +437,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.getAITracesPaginated(args);
   }
 
-  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -453,14 +446,14 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchCreateAISpans(args);
+    return this.stores.observability.batchCreateSpans(args);
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
     if (!this.stores.observability) {
@@ -471,7 +464,7 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchUpdateAISpans(args);
+    return this.stores.observability.batchUpdateSpans(args);
   }
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
