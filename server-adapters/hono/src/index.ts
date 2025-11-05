@@ -5,17 +5,21 @@ import type { Context, Hono, HonoRequest, Next } from 'hono';
 import { stream } from 'hono/streaming';
 
 export class HonoServerAdapter extends MastraServerAdapter<Hono, HonoRequest, Context> {
-  async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<void> {
+  async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
     res.header('Content-Type', 'text/plain');
     res.header('Transfer-Encoding', 'chunked');
 
     const streamMode: 'data' | 'plain' = result instanceof ReadableStream ? 'plain' : 'data';
 
-    stream(
+    return stream(
       res,
       async stream => {
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
+
+        stream.onAbort(() => {
+          void reader.cancel('request aborted');
+        });
 
         try {
           while (true) {
@@ -30,8 +34,12 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono, HonoRequest, Co
               }
             }
           }
+
+          await stream.write('data: [DONE]\n\n');
         } catch (error) {
           console.error(error);
+        } finally {
+          await stream.close();
         }
       },
       async err => {
