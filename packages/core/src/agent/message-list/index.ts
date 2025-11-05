@@ -27,7 +27,7 @@ import {
   parseDataUri,
 } from './prompt/image-utils';
 import type { AIV5Type } from './types';
-import { ensureGeminiCompatibleMessages } from './utils/ai-v5/gemini-compatibility';
+import { ensureGeminiCompatibleMessages, filterGeminiIncompatibleMessages } from './utils/ai-v5/gemini-compatibility';
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
@@ -278,8 +278,9 @@ export class MessageList {
         );
         const modelMessages = this.all.aiV5.model();
 
-        const messages = [...systemMessages, ...modelMessages];
+        let messages = [...systemMessages, ...modelMessages];
 
+        messages = filterGeminiIncompatibleMessages(messages);
         return ensureGeminiCompatibleMessages(messages);
       },
 
@@ -340,6 +341,7 @@ export class MessageList {
           });
         }
 
+        messages = filterGeminiIncompatibleMessages(messages);
         messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV5ModelMessageToV2PromptMessage);
@@ -359,8 +361,9 @@ export class MessageList {
       // Used when calling AI SDK streamText/generateText
       prompt: () => {
         const coreMessages = this.all.aiV4.core();
-        const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
+        let messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
+        messages = filterGeminiIncompatibleMessages(messages);
         return ensureGeminiCompatibleMessages(messages);
       },
 
@@ -371,6 +374,7 @@ export class MessageList {
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
         let messages = [...systemMessages, ...coreMessages];
 
+        messages = filterGeminiIncompatibleMessages(messages);
         messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV4CoreMessageToV1PromptMessage);
@@ -2793,11 +2797,11 @@ export class MessageList {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
-        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
+        // Filter out streaming states (which aren't supported by convertToModelMessages)
         const safeParts = m.parts.filter(p => {
           if (!AIV5.isToolUIPart(p)) return true;
-          // Only keep tool parts with output states for model messages
-          return p.state === 'output-available' || p.state === 'output-error';
+          // Keep all tool parts except streaming states
+          return p.state !== 'input-streaming';
         });
 
         if (!safeParts.length) return false;
