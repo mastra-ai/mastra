@@ -9,11 +9,9 @@ describe('KeywordExtractor', () => {
   let model: any;
 
   beforeAll(() => {
-    console.log('🟢 Using MOCK MODEL');
     model = new MockLanguageModelV1({
       doGenerate: async () => {
         const mockResponse = 'keyword1, keyword2, keyword3';
-        console.log('  📤 Mock returning:', mockResponse);
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
@@ -28,11 +26,9 @@ describe('KeywordExtractor', () => {
   });
 
   it('can use a custom model for keywords extraction', async () => {
-    console.log('  📥 Input text:', 'The quick brown fox jumps over the lazy dog.');
     const extractor = new KeywordExtractor({ llm: model });
     const node = new TextNode({ text: 'The quick brown fox jumps over the lazy dog.' });
     const result = await extractor.extractKeywordsFromNodes(node);
-    console.log('  ✅ Extracted keywords:', result.excerptKeywords);
     expect(result).toHaveProperty('excerptKeywords');
     expect(result.excerptKeywords.length).toBeGreaterThan(0);
   });
