@@ -27,7 +27,7 @@ import {
   parseDataUri,
 } from './prompt/image-utils';
 import type { AIV5Type } from './types';
-import { ensureGeminiCompatibleMessages, filterGeminiIncompatibleMessages } from './utils/ai-v5/gemini-compatibility';
+import { ensureGeminiCompatibleMessages } from './utils/ai-v5/gemini-compatibility';
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
@@ -276,11 +276,11 @@ export class MessageList {
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
         );
-        const modelMessages = this.all.aiV5.model();
+        // Filter incomplete tool calls when sending messages TO the LLM
+        const modelMessages = this.aiV5UIMessagesToAIV5ModelMessages(this.all.aiV5.ui(), true);
 
         let messages = [...systemMessages, ...modelMessages];
 
-        messages = filterGeminiIncompatibleMessages(messages);
         return ensureGeminiCompatibleMessages(messages);
       },
 
@@ -295,7 +295,8 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
-        const modelMessages = this.all.aiV5.model();
+        // Filter incomplete tool calls when sending messages TO the LLM
+        const modelMessages = this.aiV5UIMessagesToAIV5ModelMessages(this.all.aiV5.ui(), true);
         const systemMessages = this.aiV4CoreMessagesToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
@@ -341,7 +342,6 @@ export class MessageList {
           });
         }
 
-        messages = filterGeminiIncompatibleMessages(messages);
         messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV5ModelMessageToV2PromptMessage);
@@ -363,7 +363,6 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
         let messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
-        messages = filterGeminiIncompatibleMessages(messages);
         return ensureGeminiCompatibleMessages(messages);
       },
 
@@ -374,7 +373,6 @@ export class MessageList {
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
         let messages = [...systemMessages, ...coreMessages];
 
-        messages = filterGeminiIncompatibleMessages(messages);
         messages = ensureGeminiCompatibleMessages(messages);
 
         return messages.map(MessageList.aiV4CoreMessageToV1PromptMessage);
@@ -2771,8 +2769,11 @@ export class MessageList {
     );
   }
 
-  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    const sanitized = this.sanitizeV5UIMessages(messages);
+  private aiV5UIMessagesToAIV5ModelMessages(
+    messages: AIV5Type.UIMessage[],
+    filterIncompleteToolCalls = false,
+  ): AIV5Type.ModelMessage[] {
+    const sanitized = this.sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
     const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
     return result;
@@ -2793,14 +2794,25 @@ export class MessageList {
     return messages;
   }
 
-  private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+  private sanitizeV5UIMessages(
+    messages: AIV5Type.UIMessage[],
+    filterIncompleteToolCalls = false,
+  ): AIV5Type.UIMessage[] {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
-        // Filter out streaming states (which aren't supported by convertToModelMessages)
+        // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
         const safeParts = m.parts.filter(p => {
           if (!AIV5.isToolUIPart(p)) return true;
-          // Keep all tool parts except streaming states
+
+          // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
+          // This filters out input-available (incomplete client-side tool calls) and input-streaming
+          if (filterIncompleteToolCalls) {
+            return p.state === 'output-available' || p.state === 'output-error';
+          }
+
+          // When processing response messages FROM the LLM: keep input-available states
+          // (tool calls waiting for client-side execution) but filter out input-streaming
           return p.state !== 'input-streaming';
         });
 

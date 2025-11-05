@@ -2,10 +2,12 @@
 '@mastra/core': patch
 ---
 
-Fix message conversion and Gemini API compatibility for tool-call messages
+Fix message conversion for incomplete client-side tool calls
 
-Two related fixes for handling messages with tool-calls:
+Fixed handling of `input-available` tool state in `sanitizeV5UIMessages()` to differentiate between two use cases:
 
-1. **Stop filtering out input-available tool states in sanitizeV5UIMessages()**: Previously, `input-available` states (completed tool-calls) were being filtered out, causing assistant messages with only tool-calls to be dropped entirely. This broke loop tests with prepareStep. Now only `input-streaming` states are filtered, preserving completed tool-call messages.
+1. **Response messages FROM the LLM**: Keep `input-available` states (tool calls waiting for client-side execution) in `response.messages` for proper message history.
 
-2. **Filter problematic patterns before sending to Gemini**: When passing historical conversation messages with tool-calls to agent.network(), the AI SDK's convertToModelMessages creates empty tool messages and duplicate assistant messages. Added filterGeminiIncompatibleMessages() helper that removes these patterns before sending to Gemini, while preserving complete message history in response.messages for internal use and testing.
+2. **Prompt messages TO the LLM**: Filter out `input-available` states when sending historical messages back to the LLM, as these incomplete tool calls (without results) cause errors in the OpenAI Responses API.
+
+The fix adds a `filterIncompleteToolCalls` parameter to control this behavior based on whether messages are being sent to or received from the LLM.
