@@ -67,6 +67,10 @@ export const isCloudSqlConfig = <SSLType>(
 };
 
 export const validateConfig = (name: string, config: PostgresConfig<ISSLConfig | ConnectionOptions>) => {
+  if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+    throw new Error(`${name}: id must be provided and cannot be empty.`);
+  }
+
   if (isConnectionStringConfig(config)) {
     if (
       !config.connectionString ||
