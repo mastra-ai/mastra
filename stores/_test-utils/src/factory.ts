@@ -38,7 +38,7 @@ export function createTestSuite(storage: MastraStorage) {
         storage.clearTable({ tableName: TABLE_RESOURCES }),
         storage.clearTable({ tableName: TABLE_SCORERS }),
         storage.clearTable({ tableName: TABLE_TRACES }),
-        storage.supports.aiTracing && storage.clearTable({ tableName: TABLE_AI_SPANS }),
+        storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_AI_SPANS }),
       ]);
     });
 
@@ -50,7 +50,7 @@ export function createTestSuite(storage: MastraStorage) {
 
     createScoresTest({ storage });
 
-    if (storage.supports.aiTracing) {
+    if (storage.supports.observabilityInstance) {
       createObservabilityTests({ storage });
     }
   });

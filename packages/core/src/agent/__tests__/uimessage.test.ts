@@ -97,12 +97,10 @@ function uiMessageTest(version: 'v1' | 'v2') {
         });
       }
       // Verify messages were saved with metadata
-      const result = await mockMemory.getMessages({
+      const result = await mockMemory.recall({
         threadId: 'support-thread',
         resourceId: 'customer-12345',
-        selectBy: {
-          last: 10,
-        },
+        perPage: 10,
       });
 
       expect(result.messages.length).toBeGreaterThan(0);
@@ -177,12 +175,10 @@ function uiMessageTest(version: 'v1' | 'v2') {
       expect(finalText).toBe('Response acknowledging metadata');
 
       // Verify messages were saved with metadata
-      const result = await mockMemory.getMessages({
+      const result = await mockMemory.recall({
         threadId: 'mobile-thread',
         resourceId: 'user-mobile',
-        selectBy: {
-          last: 10,
-        },
+        perPage: 10,
       });
 
       expect(result.messages.length).toBeGreaterThan(0);
@@ -257,12 +253,10 @@ function uiMessageTest(version: 'v1' | 'v2') {
         });
       }
       // Verify messages were saved correctly
-      const result = await mockMemory.getMessages({
+      const result = await mockMemory.recall({
         threadId: 'mixed-thread',
         resourceId: 'mixed-user',
-        selectBy: {
-          last: 10,
-        },
+        perPage: 10,
       });
 
       expect(result.messages.length).toBeGreaterThan(0);

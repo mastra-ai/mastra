@@ -6,13 +6,11 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
-  resolveMessageLimit,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
-  StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -344,14 +342,13 @@ export class MemoryMSSQL extends MemoryStorage {
 
   private async _getIncludedMessages({
     threadId,
-    selectBy,
+    include,
   }: {
     threadId: string;
-    selectBy: StorageGetMessagesArg['selectBy'];
+    include: StorageListMessagesInput['include'];
   }) {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const include = selectBy?.include;
     if (!include) return null;
 
     const unionQueries: string[] = [];
@@ -434,81 +431,6 @@ export class MemoryMSSQL extends MemoryStorage {
     return dedupedRows;
   }
 
-  /**
-   * @deprecated use listMessages instead
-   */
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-
-    const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
-    const orderByStatement = `ORDER BY [seq_id] DESC`;
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      let rows: any[] = [];
-      const include = selectBy?.include || [];
-      if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          rows.push(...includeMessages);
-        }
-      }
-      const excludeIds = rows.map(m => m.id).filter(Boolean);
-
-      let query = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE [thread_id] = @threadId`;
-      const request = this.pool.request();
-      request.input('threadId', threadId);
-
-      if (excludeIds.length > 0) {
-        const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
-        query += ` AND id NOT IN (${excludeParams.join(', ')})`;
-        excludeIds.forEach((id, idx) => {
-          request.input(`id${idx}`, id);
-        });
-      }
-
-      query += ` ${orderByStatement} OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY`;
-      request.input('limit', limit);
-      const result = await request.query(query);
-      const remainingRows = result.recordset || [];
-      rows.push(...remainingRows);
-      rows.sort((a, b) => {
-        const timeDiff = a.seq_id - b.seq_id;
-        return timeDiff;
-      });
-      const messagesWithParsedContent = rows.map(row => {
-        if (typeof row.content === 'string') {
-          try {
-            return { ...row, content: JSON.parse(row.content) };
-          } catch {
-            return row;
-          }
-        }
-        return row;
-      });
-      const cleanMessages = messagesWithParsedContent.map(({ seq_id, ...rest }) => rest);
-      const list = new MessageList().add(cleanMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-      return { messages: list.get.all.db() };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException?.(mastraError);
-      return { messages: [] };
-    }
-  }
-
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
@@ -579,7 +501,7 @@ export class MemoryMSSQL extends MemoryStorage {
 
     try {
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const orderByStatement = `ORDER BY [${field}] ${direction}`;
 
       const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
@@ -641,8 +563,7 @@ export class MemoryMSSQL extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const selectBy = { include };
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        const includeMessages = await this._getIncludedMessages({ threadId, include });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
