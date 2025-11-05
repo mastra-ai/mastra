@@ -31,18 +31,72 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     // Wait for server to be ready
     await new Promise<void>((resolve, reject) => {
       let output = '';
+      let errorOutput = '';
+
+      const checkServer = async () => {
+        try {
+          // Try to fetch the MCP servers list endpoint to check if server is ready
+          const response = await fetch(`http://localhost:${port}/api/mcp/v0/servers`, {
+            signal: AbortSignal.timeout(1000)
+          });
+          if (response.ok || response.status === 404) {
+            // 404 is also ok - means server is up but no servers configured
+            // but in this case we should have servers, so ok is expected
+            if (response.ok) {
+              resolve();
+              return true;
+            }
+          }
+        } catch (e) {
+          // Server not ready yet
+        }
+        return false;
+      };
+
+      // Check if server is ready every 500ms
+      const healthCheckInterval = setInterval(async () => {
+        if (await checkServer()) {
+          clearInterval(healthCheckInterval);
+        }
+      }, 500);
+
       mastraServer.stdout?.on('data', data => {
         output += data.toString();
-        console.log(output);
-        if (output.includes('http://localhost:')) {
-          resolve();
+        console.log(data.toString());
+
+        // Also check via output as a fallback
+        if (output.includes('http://localhost:') || output.includes('ready in')) {
+          checkServer(); // Trigger immediate health check
         }
       });
+
       mastraServer.stderr?.on('data', data => {
+        errorOutput += data.toString();
         console.error('Mastra server error:', data.toString());
+
+        // Check for port conflicts
+        if (errorOutput.includes('EADDRINUSE') || errorOutput.includes('address already in use')) {
+          clearInterval(healthCheckInterval);
+          reject(new Error(`Port ${port} is already in use. Server stderr: ${errorOutput}`));
+        }
       });
 
-      setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
+      mastraServer.on('error', (err) => {
+        clearInterval(healthCheckInterval);
+        reject(new Error(`Failed to spawn Mastra server: ${err.message}`));
+      });
+
+      mastraServer.on('exit', (code) => {
+        if (code !== null && code !== 0) {
+          clearInterval(healthCheckInterval);
+          reject(new Error(`Mastra server exited with code ${code}. Stderr: ${errorOutput}`));
+        }
+      });
+
+      setTimeout(() => {
+        clearInterval(healthCheckInterval);
+        reject(new Error(`Mastra server failed to start within 100s. Output: ${output}\nErrors: ${errorOutput}`));
+      }, 100000);
     });
 
     client = new MCPClient({
