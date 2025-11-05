@@ -4,7 +4,7 @@ import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflo
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
-import { isDataChunkType } from './utils';
+import { isAgentExecutionDataChunkType, isDataChunkType, isWorkflowExecutionDataChunkType } from './utils';
 
 type LanguageModelV2Usage = {
   /**
@@ -638,6 +638,22 @@ export function transformNetwork(
           );
         }
         return payload;
+      }
+      if (isAgentExecutionDataChunkType(payload)) {
+        if (!('data' in payload.payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload.payload;
+      }
+      if (isWorkflowExecutionDataChunkType(payload)) {
+        if (!('data' in payload.payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload.payload;
       }
       return null;
     }
