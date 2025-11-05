@@ -1,12 +1,16 @@
 import { MastraClient } from '@mastra/client-js';
 
 const client = new MastraClient({
-  baseUrl: 'https://millions-substantial-monit-studio.mastra.cloud',
+  baseUrl: 'http://localhost:4111',
 });
 
-const d = await client.listMemoryThreads({
-  resourceId: 'weatherAgent',
-  agentId: 'weatherAgent',
-});
+const agent = client.getAgent('errorAgent');
+const result = await agent.stream('Hey whats up?');
 
-console.log(d);
+result.processDataStream({
+  onChunk: async chunk => {
+    if (chunk.type === 'error') {
+      console.log('processDataStream error', chunk.payload.error);
+    }
+  },
+});
