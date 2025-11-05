@@ -41,7 +41,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.21.2-0 <0.24.0-0"
+    "@mastra/core": ">=0.21.2-0 <0.25.0-0"
   },
   "files": [
     "dist",

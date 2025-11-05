@@ -54,7 +54,7 @@
     "speech-recognition"
   ],
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.24.0-0",
+    "@mastra/core": ">=0.18.1-0 <0.25.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
