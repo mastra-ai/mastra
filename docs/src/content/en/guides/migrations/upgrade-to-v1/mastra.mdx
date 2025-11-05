@@ -54,6 +54,16 @@ To migrate, replace direct property access with the corresponding getter methods
 + const memory = mastra.getMemory();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/property-access .
+```
+
+:::
+
 ### `experimental_auth` to `auth`
 
 The experimental auth configuration has been promoted to stable. This change reflects that the auth API is now stable and production-ready.
