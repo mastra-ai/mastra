@@ -602,7 +602,7 @@
     },
     {
       "source": "/examples/workflows/agent-and-tool-interop",
-      "destination": "/examples/workflows/agent-as-step",
+      "destination": "/docs/workflows/agents-and-tools",
       "permanent": true
     },
     {
@@ -782,7 +782,7 @@
     },
     {
       "source": "/reference/observability/ai-tracing",
-      "destination": "/reference/observability/ai-tracing/ai-tracing",
+      "destination": "/docs/observability/ai-tracing/overview",
       "permanent": true
     },
     {
@@ -1132,7 +1132,7 @@
     },
     {
       "source": "/docs/evals",
-      "destination": "/docs/scorers/evals-old-api",
+      "destination": "/docs/scorers/overview",
       "permanent": true
     },
     {
