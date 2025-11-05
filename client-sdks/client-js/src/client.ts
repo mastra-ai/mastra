@@ -93,6 +93,7 @@ export class MastraClient extends BaseResource {
   public listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
     const queryParams = new URLSearchParams({
       resourceId: params.resourceId,
+      resourceid: params.resourceId,
       agentId: params.agentId,
       ...(params.page !== undefined && { page: params.page.toString() }),
       ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
