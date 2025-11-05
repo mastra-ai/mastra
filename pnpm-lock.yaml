@@ -1194,11 +1194,11 @@ importers:
         version: 1.1.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
-        version: 4.1.12
+        version: 3.25.76
     devDependencies:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.12
-        version: 3.0.12(zod@4.1.12)
+        version: 3.0.12(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1213,7 +1213,7 @@ importers:
         version: 20.19.23
       ai:
         specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@4.1.12)
+        version: 4.3.19(react@19.2.0)(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.38.0(jiti@2.6.1)
@@ -1520,7 +1520,7 @@ importers:
         version: 2.0.1
       '@mastra/observability':
         specifier: '>=0.0.2'
-        version: 0.0.4(@mastra/core@0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))
+        version: 0.0.4(@mastra/core@0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -3042,7 +3042,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251008.0
+        specifier: ^4.20251014.0
         version: 4.20251014.0
       '@internal/lint':
         specifier: workspace:*
@@ -3069,8 +3069,8 @@ importers:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251008.0
-        version: 4.20251011.0
+        specifier: ^4.20251011.1
+        version: 4.20251011.2
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -3088,7 +3088,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251008.0
+        specifier: ^4.20251014.0
         version: 4.20251014.0
       '@internal/lint':
         specifier: workspace:*
@@ -3115,8 +3115,8 @@ importers:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251008.0
-        version: 4.20251011.0
+        specifier: ^4.20251011.1
+        version: 4.20251011.2
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -3743,7 +3743,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251008.0
+        specifier: ^4.20251014.0
         version: 4.20251014.0
       '@internal/lint':
         specifier: workspace:*
@@ -4700,7 +4700,6 @@ packages:
   '@aws-sdk/credential-provider-web-identity@3.911.0':
     resolution: {integrity: sha512-urIbXWWG+cm54RwwTFQuRwPH0WPsMFSDF2/H9qO2J2fKoHRURuyblFCyYG3aVKZGvFBhOizJYexf5+5w3CJKBw==}
     engines: {node: '>=18.0.0'}
-    deprecated: This version contains a compilation TypeScript error https://github.com/aws/aws-sdk-js-v3/issues/7457 - please use @aws-sdk/credential-providers@3.918.0 or higher
 
   '@aws-sdk/endpoint-cache@3.893.0':
     resolution: {integrity: sha512-KSwTfyLZyNLszz5f/yoLC+LC+CRKpeJii/+zVAy7JUOQsKhSykiRUPYUx7o2Sdc4oJfqqUl26A/jSttKYnYtAA==}
@@ -11234,10 +11233,6 @@ packages:
     resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
     engines: {node: '>=18'}
 
-  commander@14.0.1:
-    resolution: {integrity: sha512-2JkV3gUZUVrbNA+1sjBOYLsMZ5cEEl8GTFP2a4AVz5hvasAMCQ1D2l2le/cX+pV4N6ZU17zjUahLpIXRrnWL8A==}
-    engines: {node: '>=20'}
-
   commander@14.0.2:
     resolution: {integrity: sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ==}
     engines: {node: '>=20'}
@@ -13824,8 +13819,8 @@ packages:
     resolution: {integrity: sha512-I9jwMn07Sy/IwOj3zVkVik2JTvgpaykDZEigL6Rx6N9LbMywwUSMtxET+7lVoDLLd3O3IXwJwvuuns8UB/HeAg==}
     engines: {node: '>=4'}
 
-  miniflare@4.20251011.0:
-    resolution: {integrity: sha512-DlZ7vR5q/RE9eLsxsrXzfSZIF2f6O5k0YsFrSKhWUtdefyGtJt4sSpR6V+Af/waaZ6+zIFy9lsknHBCm49sEYA==}
+  miniflare@4.20251011.2:
+    resolution: {integrity: sha512-5oAaz6lqZus4QFwzEJiNtgpjZR2TBVwBeIhOW33V4gu+l23EukpKja831tFIX2o6sOD/hqZmKZHplOrWl3YGtQ==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -20320,7 +20315,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)':
+  '@mastra/core@0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/anthropic-v5': '@ai-sdk/anthropic@2.0.33(zod@3.25.76)'
@@ -20337,7 +20332,7 @@ snapshots:
       '@mastra/schema-compat': 0.11.4(ai@4.3.19(react@19.2.0)(zod@3.25.76))(zod@3.25.76)
       '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@4.3.19(react@19.2.0)(zod@3.25.76))(zod@3.25.76)'
       '@opentelemetry/api': 1.9.0
-      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))
+      '@opentelemetry/auto-instrumentations-node': 0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-grpc': 0.203.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/exporter-trace-otlp-http': 0.203.0(@opentelemetry/api@1.9.0)
@@ -20385,9 +20380,9 @@ snapshots:
       - valibot
       - zod-openapi
 
-  '@mastra/observability@0.0.4(@mastra/core@0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))':
+  '@mastra/observability@0.0.4(@mastra/core@0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76))':
     dependencies:
-      '@mastra/core': 0.22.2(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)
+      '@mastra/core': 0.22.2(encoding@0.1.13)(openapi-types@12.1.3)(react@19.2.0)(zod@3.25.76)
 
   '@mastra/rag@1.3.1(@mastra/core@packages+core)(ai@4.3.19(react@19.2.0)(zod@3.25.76))(encoding@0.1.13)(zod@3.25.76)':
     dependencies:
@@ -20823,7 +20818,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))':
+  '@opentelemetry/auto-instrumentations-node@0.62.2(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
@@ -20872,7 +20867,7 @@ snapshots:
       '@opentelemetry/resource-detector-aws': 2.7.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-azure': 0.10.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/resource-detector-container': 0.7.10(@opentelemetry/api@1.9.0)
-      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/resource-detector-gcp': 0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)
       '@opentelemetry/resources': 2.2.0(@opentelemetry/api@1.9.0)
       '@opentelemetry/sdk-node': 0.203.0(@opentelemetry/api@1.9.0)
     transitivePeerDependencies:
@@ -22026,7 +22021,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)':
+  '@opentelemetry/resource-detector-gcp@0.37.0(@opentelemetry/api@1.9.0)(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 2.2.0(@opentelemetry/api@1.9.0)
@@ -25471,8 +25466,6 @@ snapshots:
 
   commander@12.1.0: {}
 
-  commander@14.0.1: {}
-
   commander@14.0.2: {}
 
   commander@4.1.1: {}
@@ -27991,7 +27984,7 @@ snapshots:
 
   lint-staged@16.2.5:
     dependencies:
-      commander: 14.0.1
+      commander: 14.0.2
       listr2: 9.0.5
       micromatch: 4.0.8
       nano-spawn: 2.0.0
@@ -28604,7 +28597,7 @@ snapshots:
 
   min-indent@1.0.1: {}
 
-  miniflare@4.20251011.0:
+  miniflare@4.20251011.2:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       acorn: 8.14.0
