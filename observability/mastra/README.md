@@ -1,10 +1,10 @@
-# AI Tracing
+# Mastra Observability
 
-A comprehensive tracing system for AI operations in Mastra, providing type-safe span tracking, event-driven exports, and OpenTelemetry-compatible tracing.
+A comprehensive observability system for AI operations in Mastra, providing type-safe span tracking, event-driven exports, and flexible tracing configuration.
 
 ## Overview
 
-The AI Tracing system enables detailed observability for AI-driven applications by tracking operations through spans that capture metadata, timing, and context. It's designed to work seamlessly with Mastra's architecture while providing flexible configuration and export options.
+The Mastra Observability system enables detailed observability for AI-driven applications by tracking operations through spans that capture metadata, timing, and context. It's designed to work seamlessly with Mastra's architecture while providing flexible configuration and export options.
 
 ## Key Features
 
@@ -21,15 +21,16 @@ The AI Tracing system enables detailed observability for AI-driven applications 
 ### Manual Tracing
 
 ```typescript
-import { DefaultAITracing, SpanType } from '@mastra/core/observability';
+import { DefaultObservabilityInstance, SpanType } from '@mastra/observability';
 
-// Create tracing instance
-const tracing = new DefaultAITracing({
+// Create observability instance
+const observability = new DefaultObservabilityInstance({
+  name: 'my-app',
   serviceName: 'my-app',
 });
 
 // Start an agent span
-const agentSpan = tracing.startSpan({
+const agentSpan = observability.startSpan({
   type: SpanType.AGENT_RUN,
   name: 'customer-support-agent',
   attributes: {
@@ -66,22 +67,26 @@ agentSpan.end();
 - **`MODEL_GENERATION`**: Individual model API calls with token usage
 - **`TOOL_CALL`**: Function/tool execution
 - **`MCP_TOOL_CALL`**: Model Context Protocol tool execution
+- **`PROCESSOR_RUN`**: Input/output processor execution
 - **`GENERIC`**: Custom spans for other operations
 
 ### Basic Configuration
 
-Enable AI Observability in your Mastra instance:
+Enable observability in your Mastra instance:
 
 ```typescript
+import { Mastra } from '@mastra/core';
+import { Observability } from '@mastra/observability';
+
 export const mastra = new Mastra({
   // ... other config
-  observability: {
+  observability: new Observability({
     default: { enabled: true },
-  },
+  }),
 });
 ```
 
-This enables the Default and Cloud exporters, with the SensitiveDataFilter, and 'Always' Sampling.
+This enables the `DefaultExporter` and `CloudExporter`, with the `SensitiveDataFilter` span output processor, and `always` sampling.
 
 ## Performance Considerations
 
@@ -92,10 +97,3 @@ The current implementation prioritizes correctness and ease of use:
 - **Automatic Lifecycle Management**: All spans automatically emit events through method wrapping
 - **Real-time Export**: Events are exported immediately when they occur
 - **Memory Overhead**: Each span maintains references to tracing instance
-
-### Future Optimization Opportunities
-
-When performance becomes a concern, consider these optimizations:
-
-1. **Sampling at Creation**: Move sampling decision earlier to avoid creating unnecessary spans
-2. **Async Export Queues**: Buffer events and export in batches to reduce I/O overhead
