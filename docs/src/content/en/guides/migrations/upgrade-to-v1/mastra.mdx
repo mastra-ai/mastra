@@ -79,6 +79,16 @@ To migrate, rename the `experimental_auth` key to `auth` in your Mastra configur
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/experimental-auth .
+```
+
+:::
+
 ## Removed
 
 ### `memory` property from Mastra class
