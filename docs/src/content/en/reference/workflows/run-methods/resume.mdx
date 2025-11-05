@@ -55,16 +55,16 @@ if (result.status === "suspended") {
       type: "TracingContext",
       isOptional: true,
       description:
-        "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
           parameters: [
             {
               name: "currentSpan",
-              type: "AISpan",
+              type: "Span",
               isOptional: true,
               description:
-                "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
             },
           ],
         },
@@ -74,7 +74,7 @@ if (result.status === "suspended") {
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for Tracing configuration.",
       properties: [
         {
           parameters: [
@@ -93,7 +93,7 @@ if (result.status === "suspended") {
       name: "outputOptions",
       type: "OutputOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for output configuration.",
       properties: [
         {
           parameters: [
@@ -126,7 +126,7 @@ if (result.status === "suspended") {
       type: "string",
       isOptional: true,
       description:
-        "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />

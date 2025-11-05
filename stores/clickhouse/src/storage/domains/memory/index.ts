@@ -21,6 +21,36 @@ import {
 import type { StoreOperationsClickhouse } from '../operations';
 import { transformRow, transformRows } from '../utils';
 
+/**
+ * Serialize metadata object to JSON string for storage in ClickHouse.
+ * Ensures we always store valid JSON, defaulting to '{}' for null/undefined.
+ */
+function serializeMetadata(metadata: Record<string, unknown> | undefined): string {
+  if (!metadata || Object.keys(metadata).length === 0) {
+    return '{}';
+  }
+  return JSON.stringify(metadata);
+}
+
+/**
+ * Parse metadata JSON string from ClickHouse back to object.
+ * Handles empty strings and malformed JSON gracefully.
+ */
+function parseMetadata(metadata: unknown): Record<string, unknown> {
+  if (!metadata) return {};
+  if (typeof metadata === 'object') return metadata as Record<string, unknown>;
+  if (typeof metadata !== 'string') return {};
+
+  const trimmed = metadata.trim();
+  if (trimmed === '' || trimmed === 'null') return {};
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return {};
+  }
+}
+
 export class MemoryStorageClickhouse extends MemoryStorage {
   protected client: ClickHouseClient;
   protected operations: StoreOperationsClickhouse;
@@ -525,7 +555,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             id: thread.id,
             resourceId: thread.resourceId,
             title: thread.title,
-            metadata: thread.metadata,
+            metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt,
             updatedAt: new Date().toISOString(),
           })),
@@ -563,8 +593,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           toDateTime64(createdAt, 3) as createdAt,
           toDateTime64(updatedAt, 3) as updatedAt
         FROM "${TABLE_THREADS}"
-        FINAL
-        WHERE id = {var_id:String}`,
+        WHERE id = {var_id:String}
+        ORDER BY updatedAt DESC
+        LIMIT 1`,
         query_params: { var_id: threadId },
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
@@ -584,7 +615,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       return {
         ...thread,
-        metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+        metadata: parseMetadata(thread.metadata),
         createdAt: thread.createdAt,
         updatedAt: thread.updatedAt,
       };
@@ -603,11 +634,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
+      // ClickHouse's ReplacingMergeTree may create duplicate rows until background merges run
+      // We handle this by always querying for the newest row (ORDER BY updatedAt DESC LIMIT 1)
       await this.client.insert({
         table: TABLE_THREADS,
         values: [
           {
             ...thread,
+            metadata: serializeMetadata(thread.metadata),
             createdAt: thread.createdAt.toISOString(),
             updatedAt: thread.updatedAt.toISOString(),
           },
@@ -672,7 +706,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             id: updatedThread.id,
             resourceId: updatedThread.resourceId,
             title: updatedThread.title,
-            metadata: updatedThread.metadata,
+            metadata: serializeMetadata(updatedThread.metadata),
             createdAt: updatedThread.createdAt,
             updatedAt: updatedThread.updatedAt.toISOString(),
           },
@@ -753,9 +787,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      // Get total count
+      // Get total count - count distinct thread IDs to handle duplicates
       const countResult = await this.client.query({
-        query: `SELECT count() as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
+        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
         query_params: { resourceId },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
@@ -777,18 +811,30 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         };
       }
 
-      // Get paginated threads with dynamic sorting
+      // Get paginated threads - get newest version of each thread by using row number
       const dataResult = await this.client.query({
         query: `
+              WITH ranked_threads AS (
+                SELECT
+                  id,
+                  resourceId,
+                  title,
+                  metadata,
+                  toDateTime64(createdAt, 3) as createdAt,
+                  toDateTime64(updatedAt, 3) as updatedAt,
+                  ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
+                FROM ${TABLE_THREADS}
+                WHERE resourceId = {resourceId:String}
+              )
               SELECT
                 id,
                 resourceId,
                 title,
                 metadata,
-                toDateTime64(createdAt, 3) as createdAt,
-                toDateTime64(updatedAt, 3) as updatedAt
-              FROM ${TABLE_THREADS}
-              WHERE resourceId = {resourceId:String}
+                createdAt,
+                updatedAt
+              FROM ranked_threads
+              WHERE row_num = 1
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
@@ -806,7 +852,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       });
 
       const rows = await dataResult.json();
-      const threads = transformRows<StorageThreadType>(rows.data);
+      const threads = transformRows<StorageThreadType>(rows.data).map(thread => ({
+        ...thread,
+        metadata: parseMetadata(thread.metadata),
+      }));
 
       return {
         threads,
@@ -1018,7 +1067,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
             if (needsRetry) {
               console.info('Update not applied correctly, retrying with DELETE + INSERT for message:', id);
-
               // Use DELETE + INSERT as fallback
               await this.client.command({
                 query: `DELETE FROM ${TABLE_MESSAGES} WHERE id = {messageId:String}`,
@@ -1090,9 +1138,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
         // Get existing threads to preserve their data
         const threadUpdatePromises = Array.from(threadIdsToUpdate).map(async threadId => {
-          // Get existing thread data
+          // Get existing thread data - get newest version by updatedAt
           const threadResult = await this.client.query({
-            query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} WHERE id = {threadId:String}`,
+            query: `SELECT id, resourceId, title, metadata, createdAt FROM ${TABLE_THREADS} WHERE id = {threadId:String} ORDER BY updatedAt DESC LIMIT 1`,
             query_params: { threadId },
             clickhouse_settings: {
               date_time_input_format: 'best_effort',
@@ -1126,7 +1174,10 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   id: existingThread.id,
                   resourceId: existingThread.resourceId,
                   title: existingThread.title,
-                  metadata: existingThread.metadata,
+                  metadata:
+                    typeof existingThread.metadata === 'string'
+                      ? existingThread.metadata
+                      : serializeMetadata(existingThread.metadata as Record<string, unknown>),
                   createdAt: existingThread.createdAt,
                   updatedAt: now,
                 },
@@ -1192,7 +1243,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
       const result = await this.client.query({
-        query: `SELECT id, workingMemory, metadata, createdAt, updatedAt FROM ${TABLE_RESOURCES} WHERE id = {resourceId:String}`,
+        query: `SELECT id, workingMemory, metadata, createdAt, updatedAt FROM ${TABLE_RESOURCES} WHERE id = {resourceId:String} ORDER BY updatedAt DESC LIMIT 1`,
         query_params: { resourceId },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',

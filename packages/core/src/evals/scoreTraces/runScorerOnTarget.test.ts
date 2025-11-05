@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import { SpanType } from '../../observability';
-import type { SpanRecord, AITraceRecord, MastraStorage } from '../../storage';
+import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import type { MastraScorer } from '../base';
 
 vi.mock('./utils', () => ({
@@ -57,7 +57,7 @@ class TestContext {
 
   reset() {
     this.mockStorage = {
-      getAITrace: vi.fn(),
+      getTrace: vi.fn(),
       saveScore: vi.fn(),
       updateSpan: vi.fn(),
     } as unknown as MastraStorage;
@@ -84,7 +84,7 @@ class TestContext {
   }
 
   setupSuccessfulScenario(target: { traceId: string; spanId?: string } = { traceId: 'trace-1' }) {
-    const mockTrace: AITraceRecord = {
+    const mockTrace: TraceRecord = {
       traceId: target.traceId,
       spans: target.spanId
         ? [
@@ -127,7 +127,7 @@ class TestContext {
       createdAt: new Date(),
     };
 
-    (this.mockStorage.getAITrace as any).mockResolvedValue(mockTrace);
+    (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
     (this.mockScorer.run as any).mockResolvedValue(mockScorerResult);
     (this.mockStorage.saveScore as any).mockResolvedValue({ score: mockSavedScore });
     (this.mockStorage.updateSpan as any).mockResolvedValue(undefined);
@@ -141,11 +141,11 @@ class TestContext {
   ) {
     switch (scenarioType) {
       case 'trace-not-found':
-        (this.mockStorage.getAITrace as any).mockResolvedValue(null);
+        (this.mockStorage.getTrace as any).mockResolvedValue(null);
         break;
 
       case 'span-not-found':
-        const mockTrace: AITraceRecord = {
+        const mockTrace: TraceRecord = {
           traceId: errorDetails?.traceId || 'trace-1',
           spans: [
             createMockSpanRecord({
@@ -157,11 +157,11 @@ class TestContext {
             }),
           ],
         };
-        (this.mockStorage.getAITrace as any).mockResolvedValue(mockTrace);
+        (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
         break;
 
       case 'no-root-span':
-        const mockTraceNoRoot: AITraceRecord = {
+        const mockTraceNoRoot: TraceRecord = {
           traceId: errorDetails?.traceId || 'trace-1',
           spans: [
             createMockSpanRecord({
@@ -173,7 +173,7 @@ class TestContext {
             }),
           ],
         };
-        (this.mockStorage.getAITrace as any).mockResolvedValue(mockTraceNoRoot);
+        (this.mockStorage.getTrace as any).mockResolvedValue(mockTraceNoRoot);
         break;
 
       case 'scorer-failure':
@@ -182,7 +182,7 @@ class TestContext {
         break;
 
       case 'storage-failure':
-        (this.mockStorage.getAITrace as any).mockRejectedValue(errorDetails?.error || new Error('Storage error'));
+        (this.mockStorage.getTrace as any).mockRejectedValue(errorDetails?.error || new Error('Storage error'));
         break;
     }
     return this;
@@ -217,7 +217,7 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.getAITrace).toHaveBeenCalledWith('trace-1');
+      expect(testContext.mockStorage.getTrace).toHaveBeenCalledWith('trace-1');
       expect(testContext.mockScorer.run).toHaveBeenCalled();
       expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({

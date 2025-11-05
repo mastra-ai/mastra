@@ -14,8 +14,8 @@ import type {
   WorkflowRuns,
   StorageDomains,
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 
@@ -376,12 +376,12 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.observability!.updateSpan(params);
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    return this.stores.observability!.getAITrace(traceId);
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    return this.stores.observability!.getTrace(traceId);
   }
 
-  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    return this.stores.observability!.getAITracesPaginated(args);
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    return this.stores.observability!.getTracesPaginated(args);
   }
 
   async listScoresBySpan({

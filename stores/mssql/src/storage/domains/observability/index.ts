@@ -1,10 +1,10 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { AI_SPAN_SCHEMA, ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
+import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
@@ -55,11 +55,11 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         // Note: createdAt/updatedAt will be set by default values
       };
 
-      return this.operations.insert({ tableName: TABLE_AI_SPANS, record });
+      return this.operations.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_CREATE_AI_SPAN_FAILED',
+          id: 'MSSQL_STORE_CREATE_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -74,10 +74,10 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
     try {
       const tableName = getTableName({
-        indexName: TABLE_AI_SPANS,
+        indexName: TABLE_SPANS,
         schemaName: getSchemaName(this.schema),
       });
 
@@ -102,7 +102,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         traceId,
         spans: result.recordset.map(span =>
           transformFromSqlRow<SpanRecord>({
-            tableName: TABLE_AI_SPANS,
+            tableName: TABLE_SPANS,
             sqlRow: span,
           }),
         ),
@@ -110,7 +110,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_GET_AI_TRACE_FAILED',
+          id: 'MSSQL_STORE_GET_TRACE_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -142,14 +142,14 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       // Note: updatedAt will be set automatically
 
       await this.operations.update({
-        tableName: TABLE_AI_SPANS,
+        tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_UPDATE_AI_SPAN_FAILED',
+          id: 'MSSQL_STORE_UPDATE_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -162,10 +162,10 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async getAITracesPaginated({
+  async getTracesPaginated({
     filters,
     pagination,
-  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const { entityId, entityType, ...actualFilters } = filters || {};
@@ -176,7 +176,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       parentSpanId: null, // Only get root spans for traces
     };
 
-    const whereClause = prepareWhereClause(filtersWithDateRange, AI_SPAN_SCHEMA);
+    const whereClause = prepareWhereClause(filtersWithDateRange, SPAN_SCHEMA);
 
     let actualWhereClause = whereClause.sql;
     const params = { ...whereClause.params };
@@ -191,7 +191,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         name = `agent run: '${entityId}'`;
       } else {
         const error = new MastraError({
-          id: 'MSSQL_STORE_GET_AI_TRACES_PAGINATED_FAILED',
+          id: 'MSSQL_STORE_GET_TRACES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -212,7 +212,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
 
     const tableName = getTableName({
-      indexName: TABLE_AI_SPANS,
+      indexName: TABLE_SPANS,
       schemaName: getSchemaName(this.schema),
     });
 
@@ -255,7 +255,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
       const spans = dataResult.recordset.map(row =>
         transformFromSqlRow<SpanRecord>({
-          tableName: TABLE_AI_SPANS,
+          tableName: TABLE_SPANS,
           sqlRow: row,
         }),
       );
@@ -272,7 +272,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_GET_AI_TRACES_PAGINATED_FAILED',
+          id: 'MSSQL_STORE_GET_TRACES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -288,7 +288,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
     try {
       await this.operations.batchInsert({
-        tableName: TABLE_AI_SPANS,
+        tableName: TABLE_SPANS,
         records: args.records.map(span => ({
           ...span,
           startedAt: span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt,
@@ -298,7 +298,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_BATCH_CREATE_AI_SPANS_FAILED',
+          id: 'MSSQL_STORE_BATCH_CREATE_SPANS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -338,13 +338,13 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       });
 
       await this.operations.batchUpdate({
-        tableName: TABLE_AI_SPANS,
+        tableName: TABLE_SPANS,
         updates,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_BATCH_UPDATE_AI_SPANS_FAILED',
+          id: 'MSSQL_STORE_BATCH_UPDATE_SPANS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -356,7 +356,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (!args.traceIds || args.traceIds.length === 0) {
       return;
     }
@@ -365,13 +365,13 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       const keys = args.traceIds.map(traceId => ({ traceId }));
 
       await this.operations.batchDelete({
-        tableName: TABLE_AI_SPANS,
+        tableName: TABLE_SPANS,
         keys,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_BATCH_DELETE_AI_TRACES_FAILED',
+          id: 'MSSQL_STORE_BATCH_DELETE_TRACES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {

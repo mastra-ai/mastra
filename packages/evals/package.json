@@ -63,7 +63,6 @@
   "license": "Apache-2.0",
   "dependencies": {
     "compromise": "^14.14.4",
-    "difflib": "^0.2.4",
     "fs-extra": "^11.3.2",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
@@ -79,7 +78,6 @@
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
