@@ -3138,7 +3138,7 @@ refer to our [getting started guide](/docs/getting-started/installation)
 - A domain name with an A record pointing to your instance
 - A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
 - SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
-- Node.js 18+ installed on your instance
+- Node.js 22.13.0 or later installed on your instance
 
 ## Deployment Steps
 
@@ -3831,7 +3831,7 @@ Deploy your Mastra application to Digital Ocean's Droplets.
 - A domain name with an A record pointing to your droplet
 - A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
 - SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
-- Node.js 18+ installed on your droplet
+- Node.js 22.13.0 or later installed on your droplet
 
 ### Deployment Steps
 
@@ -3971,7 +3971,7 @@ For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/d
 Before deploying to a cloud provider, ensure you have:
 
 - A [Mastra application](/docs/getting-started/installation)
-- Node.js `v20.0` or higher
+- Node.js `v22.13.0` or later
 - A GitHub repository for your application (required for most CI/CD setups)
 - Domain name management access (for SSL and HTTPS)
 - Basic familiarity with server setup (e.g. Nginx, environment variables)
@@ -4131,7 +4131,7 @@ Mastra offers multiple deployment options to suit your application's needs, from
 
 ### Runtime support
 
-- Node.js `v20.0` or higher
+- Node.js `v22.13.0` or later
 - Bun
 - Deno
 - [Cloudflare](../deployment/serverless-platforms/cloudflare-deployer)
@@ -4388,7 +4388,7 @@ For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/d
 
 Before you begin, ensure you have:
 
-- Node.js `v20.0` or higher
+- Node.js `v22.13.0` or later
 - If using a platform-specific deployer:
   - An account with your chosen platform
   - Required API keys or credentials
@@ -6228,7 +6228,7 @@ In this guide you'll learn how to install the necessary Mastra dependencies, cre
 ## Prerequisites
 
 - An existing Express app set up with TypeScript
-- Node.js `v20.0` or higher
+- Node.js `v22.13.0` or later
 - An API key from a supported [Model Provider](/models)
 
 ## Adding Mastra
@@ -8191,7 +8191,7 @@ For more control over setup, or to add Mastra to an existing project, see the [m
 ## Before you start
 
 - You'll need an API key from a [model provider](/models) to complete setup. We suggest starting with [OpenAI](https://platform.openai.com/api-keys), but if you need a provider that doesn't require a credit card, Google's [Gemini](https://aistudio.google.com/app/api-keys) is also an option.
-- [Install](https://nodejs.org/en/download) Node.js 20 or later.
+- [Install](https://nodejs.org/en/download) Node.js 22.13.0 or later.
 
 ## Install with `create mastra`
 
@@ -15809,7 +15809,7 @@ The Mastra Client SDK provides a simple and type-safe interface for interacting 
 
 To ensure smooth local development, make sure you have:
 
-- Node.js `v18` or higher
+- Node.js `v22.13.0` or later
 - TypeScript `v4.7` or higher (if using TypeScript)
 - Your local Mastra server running (typically on port `4111`)
 
@@ -17019,10 +17019,18 @@ Captures OpenTelemetry traces for monitoring and debugging.
 Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
 
 ```typescript copy
-// Get messages for a thread
-const messages = await mastra
+// Get messages for a thread with pagination
+const result = await mastra
   .getStorage()
-  .getMessages({ threadId: "your-thread-id" });
+  .listMessages({
+    threadId: "your-thread-id",
+    page: 0,
+    perPage: 50
+  });
+
+console.log(result.messages); // MastraDBMessage[]
+console.log(result.total); // Total count
+console.log(result.hasMore); // Whether more pages exist
 
 // Get messages by their IDs
 const messages = await mastra
@@ -17035,12 +17043,12 @@ All message queries return `MastraDBMessage[]` format. If you need to convert me
 ```typescript copy
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
-const messages = await mastra
+const result = await mastra
   .getStorage()
-  .getMessages({ threadId: "your-thread-id" });
+  .listMessages({ threadId: "your-thread-id" });
 
 // Convert to AI SDK v5 UIMessage format for UI rendering
-const uiMessages = toAISdkV5Messages(messages);
+const uiMessages = toAISdkV5Messages(result.messages);
 ```
 
 ## Storage Providers
@@ -24364,8 +24372,7 @@ This example demonstrates how to set up basic AI tracing in a Mastra application
 
 ## Prerequisites
 
-- Mastra v0.14.0 or higher
-- Node.js 18+
+- Node.js v22.13.0 or later
 - A configured storage backend (libsql or memory)
 
 ## Setup
@@ -30763,7 +30770,7 @@ You'll create a workflow that gathers information from a candidate's resume, the
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -31033,7 +31040,7 @@ You'll learn how to create the agent and register it with Mastra. Next, you'll i
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -31306,7 +31313,7 @@ In this guide, you'll learn how to build a complete MCP (Model Context Protocol)
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -31751,7 +31758,7 @@ You'll use the foundational Transformer paper ["Attention Is All You Need"](http
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -32142,7 +32149,7 @@ In this guide, you're going to create a simple agent that fetches the last day's
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -32332,7 +32339,7 @@ When building a web search agent, you have two main strategies to consider:
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -32769,733 +32776,1779 @@ await agent.network("Find me the weather in Tokyo.");
 ```
 
 
+This template is a styleguide on how to populate individual migration guides. Use this as guidance on how to structure files in this directory. You're not allowed to deviate from this structure.
+
+Follow the `.cursor/rules/writing-documentation.mdc` instructions on how to write the prose content.
+
+After you found all the changes that need to be documented, you should group them in two big groups: "Changed" and "Removed".
+
+Example:
+
+```md
+## Changed
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/_template
+
+## Removed
+```
+
+All changes MUST go under these two sections.
+
+Each change (be it "changed" or "removed") should be a h3 heading. You must follow that format exactly.
+
+Example:
+
+```md
+## Changed
+
+### `oldFunction` to `newFunction`
+```
+
+Now that the headings are in place, you need to follow an EXACT structure for each change. You're not allowed to deviate from this structure.
+
+Provide a brief description of the change in one or two sentences. Next, explain in one sentence why it was changed.
+
+The third element of each change has to be the explanation how to migrate existing code to the new version. Keep it concise but clear, try not to cut too much information. Afterwards a code block MUST be provided using the "diff" syntax. Inside the code block you need to show a "before" and "after" example of the code that needs to be changed with that diff syntax.
+
+Example:
+
+````md
+## Changed
+
+### `oldFunction` to `newFunction`
+
+The `oldFunction` has been renamed to `newFunction`. This change improves clarity and consistency across the API.
+
+To migrate, replace all instances of `oldFunction` with `newFunction` in your codebase.
+
+```diff
+- const result = oldFunction(args);
++ const result = newFunction(args);
+```
+````
+
+If the migration requires more steps than just a simple find-and-replace, you can add additional explanation before the code block. If it requires multiple steps, use a numbered list to explain each step clearly.
+
 ---
-title: "Migration: Upgrade to Mastra v1 | Migration Guide"
-description: "Learn how to upgrade through breaking changes in pre-v1 versions of Mastra."
+title: "Agent Class | v1 Migration Guide"
+description: "Learn how to migrate Agent class changes when upgrading to v1."
 ---
 
-# Upgrade to Mastra v1
-[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1
+# Agent Class
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/agent
 
-In this guide you'll learn how to upgrade through breaking changes in pre-v1 versions of Mastra. It'll also help you upgrade to Mastra v1.
+The Agent class has been updated with reorganized voice methods, updated property access patterns, and streamlined streaming APIs.
 
-Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time.
+## Changed
 
-:::info
+### `RuntimeContext` to `RequestContext`
 
-Versions mentioned in the headings refer to the `@mastra/core` package. If necessary, versions of other Mastra packages are called out in the detailed description.
+The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.
 
-All Mastra packages have a peer dependency on `@mastra/core` so your package manager can inform you about compatibility.
+To migrate, update all imports and parameter names from `RuntimeContext`/`runtimeContext` to `RequestContext`/`requestContext`.
+
+```diff
+- import { RuntimeContext } from '@mastra/core/runtime-context';
++ import { RequestContext } from '@mastra/core/request-context';
+
+- const runtimeContext = new RuntimeContext();
+- runtimeContext.set('userTier', 'enterprise');
++ const requestContext = new RequestContext();
++ requestContext.set('userTier', 'enterprise');
+
+- await agent.generate(messages, { runtimeContext });
++ await agent.generate(messages, { requestContext });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/runtime-context .
+```
 
 :::
 
-## Migrate to v1.0.0-beta
+### Direct property access to getter methods
 
-### Removed: Memory.rememberMessages() and Renamed: Memory.query() to Memory.recall()
+Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. This change provides better encapsulation and consistency with the broader API design.
 
-**Breaking Changes:**
+To migrate, replace property access with the corresponding getter methods.
 
-1. `Memory.rememberMessages()` method has been removed
-2. `Memory.query()` has been renamed to `Memory.recall()`
-3. Parameter `vectorMessageSearch` is now `vectorSearchString`
-
-**Why these changes?**
-
-- "Remember" could imply persisting data, not just retrieving, which was confusing
-- `query` and `rememberMessages` performed the same function - consolidating to one method simplifies the API
-- `recall` better describes the action of retrieving messages from memory
-- `vectorSearchString` is more consistent with the rest of the codebase
-
-**Migration:**
-
-If you were using `rememberMessages()`, switch to `recall()`:
-
-```typescript
-// Before
-const { messages } = await memory.rememberMessages({
-  threadId,
-  resourceId,
-});
-
-// After
-const { messages } = await memory.recall({
-  threadId,
-  resourceId,
-});
+```diff
+- const llm = agent.llm;
+- const tools = agent.tools;
+- const instructions = agent.instructions;
++ const llm = agent.getLLM();
++ const tools = agent.getTools();
++ const instructions = agent.getInstructions();
 ```
 
-If you were using `query()`, rename it to `recall()`:
+### Voice methods moved to `agent.voice` namespace
 
-```typescript
-// Before
-const { messages } = await memory.query({
-  threadId,
-  vectorMessageSearch: "What did we discuss?",
-  threadConfig: { semanticRecall: true },
-});
+Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.
 
-// After
-const { messages } = await memory.recall({
-  threadId,
-  vectorSearchString: "What did we discuss?",
-  threadConfig: { semanticRecall: true },
-});
+To migrate, update voice method calls to use the `agent.voice` namespace.
+
+```diff
+- await agent.speak('Hello');
+- await agent.listen();
+- const speakers = agent.getSpeakers();
++ await agent.voice.speak('Hello');
++ await agent.voice.listen();
++ const speakers = agent.voice.getSpeakers();
 ```
 
-### Changed: Thread Title Generation Location and Default
+### `agent.fetchMemory()` to `(await agent.getMemory()).recall()`
 
-**Breaking Changes:**
+The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
 
-1. `generateTitle` has been moved from `threads.generateTitle` to the top-level of memory options
-2. The default value has changed from `true` to `false`
-3. Using `threads.generateTitle` will now throw an error
+To migrate, replace `fetchMemory()` calls with the new API.
 
-**Why these changes?**
-
-- Simplify the API by moving `generateTitle` to the top level where it logically belongs
-- Avoid unexpected LLM API calls and associated costs
-- Give developers explicit control over when title generation occurs
-- Improve predictability of memory behavior
-
-**Migration:**
-
-If your application uses `threads.generateTitle`, you must update it to use the top-level `generateTitle` option:
-
-```typescript
-// Before (v0.22 and earlier)
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      threads: {
-        generateTitle: true, // ❌ This will now throw an error
-      },
-    },
-  }),
-});
-
-// After (v0.23+)
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      generateTitle: true, // ✅ Now at the top level
-    },
-  }),
-});
+```diff
+- const messages = await agent.fetchMemory({ threadId: 'thread-123' });
++ const memory = await agent.getMemory();
++ const result = await memory.recall({ threadId: 'thread-123' });
++ const messages = result.messages;
 ```
 
-If your application relied on the old default behavior (automatic title generation), explicitly enable it:
+### Processor method names from `get*` to `list*`
 
-```typescript
-// Before (implicit true in v0.22)
-const agent = new Agent({
-  memory: new Memory({
-    // generateTitle was true by default
-  }),
-});
+Agent processor methods have been renamed from `get*` to `list*` pattern for consistency with the broader API. This change aligns with the convention that `list*` methods return collections.
 
-// After (explicit true in v0.23+)
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      generateTitle: true, // Explicitly enable title generation
-    },
-  }),
-});
+To migrate, update processor method names and the parameter from `runtimeContext` to `requestContext`.
+
+```diff
+- const inputProcessors = await agent.getInputProcessors(runtimeContext);
+- const outputProcessors = await agent.getOutputProcessors(runtimeContext);
++ const inputProcessors = await agent.listInputProcessors(requestContext);
++ const outputProcessors = await agent.listOutputProcessors(requestContext);
 ```
 
-You can also customize the model and instructions used for title generation:
+### Default options method renames for AI SDK versions
 
-```typescript
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      generateTitle: {
-        model: openai("gpt-4o-mini"),
-        instructions:
-          "Generate a concise title (max 5 words) that summarizes the conversation",
-      },
-    },
-  }),
-});
+Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
+
+To migrate, update method names based on which AI SDK version you're using.
+
+```diff
+  // For legacy AI SDK v4
+- const options = await agent.getDefaultGenerateOptions();
+- const streamOptions = await agent.getDefaultStreamOptions();
++ const options = await agent.getDefaultGenerateOptionsLegacy();
++ const streamOptions = await agent.getDefaultStreamOptionsLegacy();
+
+  // For new AI SDK v5 (default)
+  const streamOptions = await agent.getDefaultStreamOptions();
 ```
 
-### Changed: Memory Default Settings
+### `modelSettings.abortSignal` to top-level `abortSignal`
 
-The default settings for semantic recall have been optimized based on RAG research:
+The `abortSignal` option has been moved from `modelSettings` to the top level of stream/generate options. This change provides a clearer separation between model-specific settings and execution control.
 
-- **`topK`** increased from `2` to `4` - Retrieves 4 most relevant messages instead of 2
-- **`messageRange`** changed from `{before: 2, after: 2}` to `{before: 1, after: 1}` - Includes 1 message before and after each retrieved message instead of 2
+To migrate, move `abortSignal` from `modelSettings` to the top level.
 
-**Impact:**
-
-When semantic recall is enabled, you'll now retrieve up to 12 messages total (4 × 3) instead of 10 messages (2 × 5). This provides ~8% better accuracy while only increasing message count by 20%.
-
-**Action Required:**
-
-If you were relying on the previous defaults and want to maintain the old behavior, explicitly set these values:
-
-```typescript
-const agent = new Agent({
-  memory: {
-    semanticRecall: {
-      topK: 2,
-      messageRange: { before: 2, after: 2 },
-    },
-  },
-});
+```diff
+  agent.stream('Hello', {
+-   modelSettings: {
+-     abortSignal: abortController.signal,
+-   },
++   abortSignal: abortController.signal,
+  });
 ```
 
-If you're not using semantic recall (it's disabled by default), no changes are needed.
+### `output` to `structuredOutput.schema`
 
-### Removed: Legacy Watch Events (Client SDK)
+The deprecated `output` and `experimental_output` options have been removed. This change consolidates on a single, stable API for structured output.
 
-**Breaking Changes:**
+To migrate, update from `output` or `experimental_output` to `structuredOutput.schema`.
 
-- The `.watch()` method has been removed from the client-js SDK's `Workflow` and `AgentBuilder` classes
-- The `/api/workflows/:workflowId/watch` and `/api/agent-builder/:actionId/watch` HTTP endpoints have been removed
-- Server-side code using `watch-v2` event types should update to the simplified `watch` API
-
-**Why this change?**
-
-- Simplify the workflow streaming API by consolidating on one implementation
-- Remove legacy v1 event system that was superseded by v2
-- Improve performance by eliminating duplicate event handling code
-- Reduce API surface area and maintenance burden
-
-**Migration:**
-
-If you were using `run.watch()` from `@mastra/client-js`, switch to using `run.stream()`:
-
-```typescript
-// Before (v0.22 and earlier)
-const workflow = mastraClient.getWorkflow('my-workflow');
-const run = await workflow.createRun();
-
-await run.watch((event) => {
-  console.log('Step completed:', event);
-});
-
-// After (v0.23+)
-const workflow = mastraClient.getWorkflow('my-workflow');
-const run = await workflow.createRun();
-
-const stream = await run.stream({
-  inputData: { /* your input */ }
-});
-
-for await (const chunk of stream) {
-  console.log('Step completed:', chunk);
-}
+```diff
+  agent.stream('Hello', {
+-   output: z.object({ result: z.string() }),
++   structuredOutput: {
++     schema: z.object({ result: z.string() }),
++   },
+  });
 ```
 
-### Changed: Message Format
+## Removed
 
-An internal intermediary format has been removed. Messages now convert directly between `MastraMessageV2` (storage format) and AI SDK v5 `UIMessage`, simplifying the architecture and improving accuracy.
+### `generateVNext` and `streamVNext` methods
 
-**Action required only if** you have messages stored in the old `MastraMessageV1` format **and** you:
+The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
 
-1. **Directly inspect message metadata** - `__originalContent` is no longer present
-2. **Rely on exact V1 message shape preservation** - Shape may differ after conversion (content is still preserved)
-3. **Have custom message processing logic** - Verify it works with the new direct conversion flow
+To migrate, use the standard `generate()` and `stream()` methods.
 
-The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
-
-### Agent class
-
-- Removed `generateVNext()` method. Use `generate()` instead.
-- Removed `streamVNext()` method. Use `stream()` instead.
-- `agent.llm` → `agent.getLLM()`
-- `agent.tools` → `agent.listTools()`
-- `agent.instructions` → `agent.getInstructions()`
-- `agent.speak()` → `agent.voice.speak()`
-- `agent.getSpeakers()` → `agent.voice.getSpeakers()`
-- `agent.listen` → `agent.voice.listen()`
-- `agent.fetchMemory` → `(await agent.getMemory()).recall()`
-- `agent.toStep` → Add agent directly to the step, workflows handle the transformation
-- `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
-- `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
-- `getDefaultVNextStreamOptions()` → `getDefaultOptions()`
-
-#### Output Options
-
-- Removed deprecated `output` field from `generate()`/`stream()` options. Use `structuredOutput.schema` instead:
-
-```typescript
-// Before
-const result = await agent.generate(messages, {
-  output: z.object({
-    answer: z.string(),
-  }),
-});
-
-// After
-const result = await agent.generate(messages, {
-  structuredOutput: {
-    schema: z.object({
-      answer: z.string(),
-    }),
-  },
-});
+```diff
+- const result = await agent.generateVNext('Hello');
+- const stream = await agent.streamVNext('Hello');
++ const result = await agent.generate('Hello');
++ const stream = await agent.stream('Hello');
 ```
 
-#### Abort Signal
+### `format` parameter from `stream()` and `generate()`
 
-- Removed `modelSettings.abortSignal`. Use the top-level `abortSignal` option instead:
+The `format` parameter has been removed from `agent.stream()` and `agent.generate()` methods. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package. This change improves tree-shaking by moving AI SDK-specific code to a dedicated package.
 
-```typescript
-// Before
-const result = await agent.stream(messages, {
-  modelSettings: {
-    abortSignal: controller.signal,
-    temperature: 0.7,
-  },
-});
+To migrate, use the `toAISdkStream()` function from `@mastra/ai-sdk` for AI SDK format conversion.
 
-// After
-const result = await agent.stream(messages, {
-  abortSignal: controller.signal,
-  modelSettings: {
-    temperature: 0.7,
-  },
-});
+```diff
+- const stream = await agent.stream(messages, {
+-   format: 'aisdk',
+- });
+
++ import { toAISdkStream } from '@mastra/ai-sdk';
++ 
++ const stream = await agent.stream(messages);
++ const aiSdkStream = toAISdkStream(stream, { from: 'agent' });
 ```
 
-#### Tool execute signature
+### `agent.toStep()` method
 
-**Breaking Change:**
+The `toStep()` method has been removed from the Agent class. Agents can now be added directly to workflow steps without explicit conversion.
 
-The tool `execute` function signature has been updated to use separate `input` and `context` parameters instead of a single destructured object.
+To migrate, add agents directly to workflow steps. Workflows handle the transformation automatically.
 
-```typescript
-// Before
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context }) => {
-    return getWeather(context.location);
-  },
-});
+```diff
+- const step = agent.toStep();
+- const workflow = new Workflow({
+-   steps: [step],
+- });
 
-// After
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async (inputData) => {
-    return getWeather(inputData.location);
-  },
-});
++ const workflow = new Workflow({
++   steps: [agent],
++ });
 ```
 
-**Accessing execution context:**
+### `TMetrics` generic parameter from Agent
 
-Context properties like `mastra`, `requestContext`, `agent`, `workflow`, and `mcp` are now passed as the second parameter:
+The `TMetrics` generic parameter has been removed from `AgentConfig` and the `Agent` constructor. Metrics/scorers are now configured using the scorers API instead of being part of the Agent type system.
 
-```typescript
-// Before
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context, requestContext, mastra }) => {
-    const userTier = requestContext.get("userTier");
-    const location = context.location;
-    return getWeather(location, userTier);
-  },
-});
+To migrate, remove the `TMetrics` generic parameter and configure scorers using the new API.
 
-// After
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async (inputData, context) => {
-    const userTier = context?.requestContext?.get("userTier");
-    return getWeather(inputData.location, userTier);
-  },
-});
+```diff
+- const agent = new Agent<AgentId, Tools, Metrics>({
++ const agent = new Agent<AgentId, Tools>({
+    // ...
+  });
 ```
 
-**Agent-specific context:**
+### `experimental_generateMessageId` option
 
-Agent-specific properties like `toolCallId`, `messages`, `suspend`, and `resumeData` are nested under `context.agent`:
+The `experimental_generateMessageId` option has been removed from agent generate/stream methods. Message IDs are now automatically generated internally.
 
-```typescript
-// After
-export const suspendableTool = createTool({
-  id: "suspendable-tool",
-  suspendSchema: z.object({
-    message: z.string(),
-  }),
-  resumeSchema: z.object({
-    approval: z.boolean(),
-  }),
-  execute: async (inputData, context) => {
-    if (!context?.agent?.resumeData) {
-      return await context?.agent?.suspend({
-        message: "Waiting for approval",
-      });
-    }
+To migrate, remove the `experimental_generateMessageId` option. Message ID generation is handled automatically by the Memory layer.
 
-    if (context.agent.resumeData.approval) {
-      return { success: true };
-    }
-  },
-});
+```diff
+  agent.generate('Hello', {
+-   experimental_generateMessageId: () => 'custom-id',
+  });
 ```
 
-**Workflow-specific context:**
 
-Workflow-specific properties like `workflowId`, `runId`, `state`, and `setState` are nested under `context.workflow`:
+---
+title: "CLI | v1 Migration Guide"
+description: "Learn how to migrate CLI changes when upgrading to v1."
+---
 
-```typescript
-// After
-export const workflowTool = createTool({
-  id: "workflow-tool",
-  execute: async (inputData, context) => {
-    const currentState = context?.workflow?.state;
-    context?.workflow?.setState({ step: "completed" });
-    return { result: "done" };
-  },
-});
+# CLI
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/cli
+
+The CLI has been simplified by removing deployment commands, configuration flags, and starter files.
+
+## Removed
+
+### `mastra deploy` command
+
+The `mastra deploy` command has been removed from the CLI. This change simplifies the CLI by removing vendor-specific deployment logic.
+
+To migrate, choose one of the [deployment platforms](/docs/deployment/overview) of your choice.
+
+### `--env` flag from `mastra build`
+
+The `--env` flag has been removed from the `mastra build` command. This change simplifies the build command.
+
+To migrate, use `mastra start --env <env>` to start the build output with a custom environment.
+
+```diff
+- mastra build --env production
++ mastra build
++ mastra start --env production
 ```
 
-**MCP tools:**
+### `--port` flag from `mastra dev`
 
-MCP-specific properties `elicitation` and `extra` are nested under `context.mcp`:
+The `--port` flag has been removed from the `mastra dev` command. Port configuration is now handled through the Mastra instance configuration. This change centralizes port configuration.
 
-```typescript
-export const accountBalance = createTool({
-  id: "account-balance",
-  description: "Fetches the current account balance for a given account",
-  inputSchema: z.object({
-    accountId: z.string(),
-  }),
-  outputSchema: z.object({
-    balance: z.number(),
-  }),
-  execute: async (inputData, context) => {
-    if (context?.mcp) {
-      await checkAuth(context.mcp.extra.authInfo);
+To migrate, use `server.port` on the Mastra instance instead of the CLI flag.
 
-      const result = await context.mcp.elicitation.sendRequest({
-        message: `Is it ok to fetch the account balance for account ${inputData.accountId}?`,
-        requestedSchema: {
-          type: "object",
-          properties: {
-            confirm: { type: "boolean" },
-          },
-          required: ["confirm"],
-        },
-      });
-
-      if (result.action === "accept") {
-        return {
-          balance: getAccountBalance(inputData.accountId),
-        };
-      }
-    }
-  },
-});
-```
-
-#### Input processors
-
-- Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
-- `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
-
-### Removed: `format` Parameter from `agent.stream()`
-
-**Breaking Changes:**
-
-The `format` parameter has been removed from `agent.stream()`/`agent.generate()`. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package.
-
-**Why this change?**
-
-- **Better separation of concerns**: AI SDK-specific formatting logic is now in a dedicated package
-- **Improved tree-shaking**: Applications that don't use AI SDK don't bundle conversion code
-- **Clearer API**: Stream methods focus on generation, while formatting is handled explicitly
-- **Framework flexibility**: Makes it easier to support different UI frameworks without bloating the core
-
-**Migration:**
-
-If you were using `format: "aisdk"` for streaming, update your code to use `toAISdkStream` from `@mastra/ai-sdk`:
-
-```typescript
-// Before
-const stream = await agent.stream(messages, {
-  format: "aisdk", // ❌ No longer supported
-});
-
-// After
-import { toAISdkStream } from "@mastra/ai-sdk";
-
-const stream = await agent.stream(messages);
-const aiSdkStream = toAISdkStream(stream, { from: "agent" }); // ✅ Explicit conversion
-```
-
-**Working with AI SDK UI components:**
-
-The `@mastra/ai-sdk` package provides the `chatRoute()` utility for seamless integration with Vercel AI SDK. Instead of manually handling stream conversion, register a chat route in your Mastra server configuration:
-
-```typescript
-// src/mastra/index.ts
-import { Mastra } from "@mastra/core";
-import { chatRoute } from "@mastra/ai-sdk";
-
-export const mastra = new Mastra({
+```ts
+const mastra = new Mastra({
   server: {
-    apiRoutes: [
-      chatRoute({
-        path: "/chat",
-        agent: "weatherAgent", // Fixed agent
-      }),
-      // Or use dynamic agents:
-      chatRoute({
-        path: "/chat/:agentId", // Dynamic agent ID
-      }),
-    ],
+    port: 3001,
   },
 });
 ```
 
-Then use the `useChat()` hook in your frontend:
+### Telemetry options from CLI
 
-```typescript
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+The `telemetry` option has been removed from CLI commands including the `--no-telemetry` / `-nt` flag. Telemetry configuration has been removed from the CLI. This change reflects the move of telemetry features to the observability package.
 
-const { messages, sendMessage } = useChat({
-  transport: new DefaultChatTransport({
-    api: "http://localhost:4111/chat/weatherAgent",
-  }),
-});
+To migrate, remove telemetry flags from CLI commands. Use `@mastra/observability` for tracing features.
+
+
+---
+title: "Client SDK | v1 Migration Guide"
+description: "Learn how to migrate client SDK changes when upgrading to v1."
+---
+
+# Client SDK
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/client
+
+Client SDK changes align with server-side API updates including renamed utilities, updated pagination, and type naming conventions.
+
+## Changed
+
+### `RuntimeContext` utilities to `RequestContext`
+
+Client SDK utility functions have been renamed from `RuntimeContext` to `RequestContext`. This change aligns with the global rename for clarity about request-specific context.
+
+To migrate, update utility function imports and calls.
+
+```diff
+- import {
+-   parseClientRuntimeContext,
+-   base64RuntimeContext,
+-   runtimeContextQueryString,
+- } from '@mastra/client-js';
++ import {
++   parseClientRequestContext,
++   base64RequestContext,
++   requestContextQueryString,
++ } from '@mastra/client-js';
+
+- const context = parseClientRuntimeContext(data);
+- const encoded = base64RuntimeContext(context);
+- const qs = runtimeContextQueryString(context);
++ const context = parseClientRequestContext(data);
++ const encoded = base64RequestContext(context);
++ const qs = requestContextQueryString(context);
 ```
 
-**Advanced: Manual transformation**
+### Pagination parameters from `offset/limit` to `page/perPage`
 
-If you need more control over the stream conversion, you can manually transform streams using `toAISdkStream`. See the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk) for details.
+All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
 
-**Note:** The `/api/agents/:agentId/stream/ui` HTTP endpoint has also been deprecated. Use the standard `/api/agents/:agentId/stream` endpoint with `@mastra/ai-sdk` transformations instead.
+To migrate, update pagination parameters in all client SDK method calls.
 
-
-### Changed: `RuntimeContext` renamed to `RequestContext`
-
-The `RuntimeContext` class has been renamed to `RequestContext`, and all parameter names have been updated from `runtimeContext` to `requestContext` across all APIs.
-
-**Why this change?**
-
-- **Clearer naming**: "requestContext" better describes its purpose as request-specific data
-- **Consistency**: Aligns with web framework conventions where "request context" is a common pattern
-- **Less confusion**: Avoids ambiguity with "runtime" which could refer to execution environment
-
-**Migration:**
-
-Update imports, class instantiation, and parameter names:
-
-```typescript
-// Before
-import { RuntimeContext } from "@mastra/core/runtime-context"; // ❌
-
-const runtimeContext = new RuntimeContext(); // ❌
-runtimeContext.set("userTier", "enterprise");
-
-// After
-import { RequestContext } from "@mastra/core/request-context"; // ✅
-
-const requestContext = new RequestContext(); // ✅
-requestContext.set("userTier", "enterprise");
+```diff
+  client.memory.listMessages({
+    threadId: 'thread-123',
+-   offset: 0,
+-   limit: 20,
++   page: 0,
++   perPage: 20,
+  });
 ```
 
-**Agents:**
+### Client SDK types from `Get*` to `List*`
 
-```typescript
-// Before
-await agent.generate(messages, {
-  runtimeContext, // ❌
-});
+Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.
 
-// After
-await agent.generate(messages, {
-  requestContext, // ✅
-});
+To migrate, update type imports to use the new naming pattern.
+
+```diff
+- import type {
+-   GetWorkflowRunsParams,
+-   GetWorkflowRunsResponse,
+-   GetMemoryThreadParams,
+- } from '@mastra/client-js';
++ import type {
++   ListWorkflowRunsParams,
++   ListWorkflowRunsResponse,
++   ListMemoryThreadsParams,
++ } from '@mastra/client-js';
 ```
 
-**Note**: This also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext`/`requestContext` as a parameter. See the "Tool execute signature" section above for the updated tool signature pattern.
+### `getMemoryThread` parameter structure
 
-### Changed: `@mastra/core` subpath imports
+The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
 
-The `@mastra/core` package no longer allows top-level imports except for `Mastra` and `type Config`. You must use subpath imports for all other imports.
+To migrate, update the method call with the new parameter structure. Check the updated API documentation for the specific changes.
 
-Here are some examples of how to migrate your imports:
-
-```typescript
-// Before
-import { Mastra, type Config } from "@mastra/core"; // ✅
-import { Agent } from "@mastra/core"; // ❌
-import { createTool } from "@mastra/core"; // ❌
-import { createStep } from "@mastra/core"; // ❌
-
-// After
-import { Mastra, type Config } from "@mastra/core"; // ✅
-import { Agent } from "@mastra/core/agent"; // ✅
-import { createTool } from "@mastra/core/tools"; // ✅
-import { createStep } from "@mastra/core/workflows"; // ✅
+```diff
+- const thread = await client.memory.getMemoryThread({ threadId, agentId });
++ const thread = await client.memory.getMemoryThread({ threadId });
 ```
 
-Read the [package README](https://github.com/mastra-ai/mastra/blob/main/packages/core/README.md) or the [package.json](https://github.com/mastra-ai/mastra/blob/main/packages/core/package.json) for a full list of available subpath imports.
+## Removed
 
-## Migrate to v0.22
+### `toAISdkFormat` function
 
-### Changed: Memory Scope Defaults
+The `toAISdkFormat()` function has been removed from `@mastra/ai-sdk`. This change provides clearer naming for stream conversion utilities.
 
-`@mastra/memory` - `0.16.0`
-`@mastra/core` - `0.22.0`
+To migrate, use `toAISdkStream()` instead.
 
-The default memory scope for both **working memory** and **semantic recall** has changed from `'thread'` to `'resource'`.
+```diff
+- import { toAISdkFormat } from '@mastra/ai-sdk';
+- const stream = toAISdkFormat(agentStream, { from: 'agent' });
++ import { toAISdkStream } from '@mastra/ai-sdk';
++ const stream = toAISdkStream(agentStream, { from: 'agent' });
+```
 
-**Before:**
+### Network memory methods
 
-- Working memory defaulted to `scope: 'thread'` (isolated per conversation)
-- Semantic recall defaulted to `scope: 'thread'` (search within current conversation only)
+Network memory methods have been removed from `@mastra/client-js`. The `NetworkMemoryThread` class and all network memory-related methods are no longer available. This change simplifies the memory API by removing specialized network memory functionality.
 
-**After:**
+To migrate, use regular memory APIs instead of network memory.
 
-- Working memory defaults to `scope: 'resource'` (persists across all user conversations)
-- Semantic recall defaults to `scope: 'resource'` (search across all user conversations)
+```diff
+- import { MastraClient } from '@mastra/client-js';
+- 
+- const client = new MastraClient({ baseUrl: '...' });
+- const networkThread = client.networkMemory.getThread('thread-id');
+- const networkThread = client.memory.networkThread('thread-id', 'network-id');
+- await networkThread.get();
+- await networkThread.getMessages();
 
-**Why this change?**
++ // Use regular memory thread APIs instead
++ const client = new MastraClient({ baseUrl: '...' });
++ const thread = client.memory.getThread('thread-id');
++ await thread.get();
++ const messages = await thread.listMessages();
+```
 
-1. **Better user experience**: Most applications want to remember user information across conversations, not just within a single thread
-2. **More intuitive default**: Users expect AI agents to "remember" them, which requires resource-scoped memory
-3. **Alignment with common use cases**: The majority of production applications use resource-scoped memory
+### Watch-related types
 
-**Migration:**
+Watch-related types have been removed from `@mastra/client-js`. This includes `WorkflowWatchResult`, `WatchEvent`, and related types. This change reflects the removal of the watch API in favor of streaming.
 
-If you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'` in your memory configuration:
+To migrate, use workflow streaming APIs instead of watch.
 
-```typescript showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
+```diff
+- import type { WorkflowWatchResult, WatchEvent } from '@mastra/client-js';
+- 
+- const workflow = client.getWorkflow('my-workflow');
+- const run = await workflow.createRun();
+- await run.watch((event: WatchEvent) => {
+-   console.log('Event:', event);
+- });
 
-const memory = new Memory({
-  storage: new LibSQLStore({ url: "file:local.db" }),
-  options: {
-    workingMemory: {
-      enabled: true,
-      scope: "thread", // Explicitly set to thread-scoped
-      template: `# User Profile
-- **Name**:
-- **Interests**:
-`,
++ const workflow = client.getWorkflow('my-workflow');
++ const run = await workflow.createRun();
++ const stream = await run.stream({ inputData: { ... } });
++ for await (const chunk of stream) {
++   console.log('Event:', chunk);
++ }
+```
+
+### Deprecated stream endpoints
+
+Some stream endpoints are deprecated and will be removed. The `/api/agents/:agentId/stream/vnext` endpoint returns 410 Gone, and `/api/agents/:agentId/stream/ui` is deprecated. This change consolidates on standard streaming endpoints.
+
+To migrate, use the standard stream endpoint or `@mastra/ai-sdk` for UI message transformations.
+
+```diff
+- const response = await fetch('/api/agents/my-agent/stream/vnext', {
+-   method: 'POST',
+-   body: JSON.stringify({ messages: [...] }),
+- });
+
++ const response = await fetch('/api/agents/my-agent/stream', {
++   method: 'POST',
++   body: JSON.stringify({ messages: [...] }),
++ });
++ 
++ // Or use @mastra/ai-sdk for UI message transformations
+```
+
+### Network memory API endpoints
+
+Network memory API endpoints have been removed including `/api/memory/network/*`. This change simplifies the memory API surface.
+
+To migrate, use regular memory API endpoints.
+
+```diff
+- const networkThread = await fetch('/api/memory/network/threads/thread-123');
++ const thread = await fetch('/api/memory/threads/thread-123');
+```
+
+### Eval-related client SDK types
+
+Several eval-related types have been removed from the client SDK including `GetEvalsByAgentIdResponse`, `GetTelemetryResponse`, and `GetTelemetryParams`. This change reflects the removal of legacy evals functionality.
+
+To migrate, use the new scorers API instead of legacy evals.
+
+
+---
+title: "Evals & Scorers | v1 Migration Guide"
+description: "Learn how to migrate evals and scorers changes when upgrading to v1."
+---
+
+# Evals & Scorers
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/evals
+
+The evaluation API has been consolidated on the new scorers system with updated naming conventions and configuration requirements.
+
+## Changed
+
+### `runExperiment` to `runEvals`
+
+The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.
+
+To migrate, update function calls from `runExperiment` to `runEvals`.
+
+```diff
+  import { createScorer, runEvals } from '@mastra/core/evals';
+  
+  const scorer = createScorer({
+    id: 'helpfulness-scorer',
+    // ...
+  });
+  
+- const result = await runExperiment({ agent, scorer, inputs });
++ const result = await runEvals({ agent, scorer, inputs });
+```
+
+### `getScorerByName` to `getScorerById`
+
+The `getScorerByName()` method has been renamed to `getScorerById()`. Scorers now require an `id` field instead of `name`. This change aligns with the broader API pattern of using `id` for entity identification.
+
+To migrate, update method calls and scorer configuration to use `id` instead of `name`.
+
+```diff
+  const scorer = createScorer({
+-   name: 'helpfulness-scorer',
++   id: 'helpfulness-scorer',
+    // ...
+  });
+  
+- const scorer = mastra.getScorerByName('helpfulness-scorer');
++ const scorer = mastra.getScorerById('helpfulness-scorer');
+```
+
+### Scorer configuration from `name` to `id`
+
+Scorers now require an `id` field instead of `name`. The `name` field is now optional. This change provides consistency with other Mastra entities.
+
+To migrate, update scorer definitions to use `id` as the required field.
+
+```diff
+  const scorer = createScorer({
+-   name: 'helpfulness-scorer',
++   id: 'helpfulness-scorer',
++   name: 'Helpfulness Scorer', // optional
+    // ...
+  });
+```
+
+### Storage score APIs to `listScoresBy*` pattern
+
+Score storage APIs have been renamed to follow the `listScoresBy*` pattern. This change aligns with the broader storage API naming conventions.
+
+To migrate, update score query methods to use the new naming pattern.
+
+```diff
+- const scores = await storage.getScores({ scorerName: 'helpfulness-scorer' });
++ const scores = await storage.listScoresByScorerId({
++   scorerId: 'helpfulness-scorer',
++ });
+
+// Also available:
+// - listScoresByRunId
+// - listScoresByEntityId  
+// - listScoresBySpan
+```
+
+### Processor interface requirements
+
+Processors now require an `id` field instead of `name`. The `name` field is now optional. Message types have changed from `MastraMessageV2` to `MastraDBMessage`. This change provides consistency with scorer configuration and better type safety.
+
+To migrate, update processor definitions to use `id` as the required field and update message types.
+
+```diff
+  import type { InputProcessor } from '@mastra/core/processors';
+- import type { MastraMessageV2 } from '@mastra/core/agent';
++ import type { MastraDBMessage } from '@mastra/core/agent';
+  
+  const processor: InputProcessor = {
+-   name: 'my-processor',
++   id: 'my-processor',
++   name: 'My Processor', // optional
+-   processInput: async ({ messages }: { messages: MastraMessageV2[] }) => {
++   processInput: async ({ messages }: { messages: MastraDBMessage[] }) => {
+      // ...
     },
-    semanticRecall: {
-      topK: 3,
-      scope: "thread", // Explicitly set to thread-scoped
+  };
+```
+
+## Removed
+
+### Legacy evals code
+
+Legacy evals code has been removed from `@mastra/core`. This includes legacy evaluation metrics, scorer/judge modules, and hook-based automatic evaluation code. This change simplifies the codebase by removing outdated evaluation approaches.
+
+To migrate, use the new evals/scorers API in `@mastra/core/evals` or `@mastra/evals`.
+
+```diff
+- // Legacy evals APIs
++ import { createScorer, runEvals } from '@mastra/core/evals';
++ 
++ const scorer = createScorer({
++   id: 'my-scorer',
++   // Use new scorer API
++ });
+```
+
+### Agent `TMetrics` generic parameter
+
+The `TMetrics` generic parameter has been removed from `AgentConfig` and the `Agent` constructor. Metrics/scorers are now configured using the scorers API instead of being part of the Agent type system. This change simplifies the Agent type signature.
+
+To migrate, remove the `TMetrics` generic parameter and configure scorers using the scorers API.
+
+```diff
+- const agent = new Agent<AgentId, Tools, Metrics>({
++ const agent = new Agent<AgentId, Tools>({
+    // ...
+  });
+```
+
+### Deprecated input processor exports
+
+Deprecated input-processor exports have been removed from `@mastra/core`. This change consolidates processor types under the unified `Processor` interface.
+
+To migrate, use the new `Processor` interface.
+
+```diff
+- import { InputProcessor } from '@mastra/core/processors'; // old exports
++ import type { Processor, InputProcessor } from '@mastra/core/processors';
+```
+
+### Evals-related type exports
+
+Several evals-related type exports have been removed including `DeprecatedOutputOptions`, `Metric`, and processor option types. These types are now internal or have been replaced by the new scorers API. This change reduces API surface area.
+
+To migrate, remove references to these removed types and use the new scorers API.
+
+```diff
+- import type {
+-   DeprecatedOutputOptions,
+-   Metric,
+-   LanguageDetectorOptions,
+-   ModerationOptions,
+- } from '@mastra/core';
++ // Use new scorers API types
++ import type { Scorer } from '@mastra/core/evals';
+```
+
+
+---
+title: "Mastra Class | v1 Migration Guide"
+description: "Learn how to migrate Mastra class changes when upgrading to v1."
+---
+
+# Mastra Class
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/mastra
+
+The Mastra class has been restructured to restrict top-level imports and replace direct property access with getter methods.
+
+## Changed
+
+### Top-level imports to subpath imports
+
+The main `@mastra/core` index file now only exports `Mastra` and `Config`. All other exports have been moved to subpath imports. This change improves tree-shaking and reduces bundle size by allowing bundlers to eliminate unused code.
+
+To migrate, update all imports from `@mastra/core` to use the appropriate subpath.
+
+```diff
+- import { Mastra, Agent, Workflow, createTool } from '@mastra/core';
++ import { Mastra, type Config } from '@mastra/core';
++ import { Agent } from '@mastra/core/agent';
++ import { Workflow } from '@mastra/core/workflows';
++ import { createTool } from '@mastra/core/tools';
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mastra-core-imports .
+```
+
+:::
+
+### Direct property access to getter methods
+
+Direct property access on the Mastra instance is deprecated. Methods like `mastra.logger`, `mastra.storage`, `mastra.agents`, etc. now show deprecation warnings and will be removed in a future version. This change provides better encapsulation and allows for dynamic configuration based on request context.
+
+To migrate, replace direct property access with the corresponding getter methods.
+
+```diff
+- const logger = mastra.logger;
+- const storage = mastra.storage;
+- const agents = mastra.agents;
+- const tts = mastra.tts;
+- const vectors = mastra.vectors;
+- const memory = mastra.memory;
++ const logger = mastra.getLogger();
++ const storage = mastra.getStorage();
++ const agents = mastra.listAgents();
++ const tts = mastra.getTTS();
++ const vectors = mastra.getVectors();
++ const memory = mastra.getMemory();
+```
+
+### `experimental_auth` to `auth`
+
+The experimental auth configuration has been promoted to stable. This change reflects that the auth API is now stable and production-ready.
+
+To migrate, rename the `experimental_auth` key to `auth` in your Mastra configuration.
+
+```diff
+  const mastra = new Mastra({
+-   experimental_auth: {
++   auth: {
+      provider: workos,
     },
-  },
-});
+  });
 ```
 
-If you want to adopt the new default behavior, you can optionally remove explicit `scope: 'resource'` declarations as they're now redundant.
+## Removed
 
-### Changed: Message Format Unification
+### `memory` property from Mastra class
 
-**Breaking Changes:**
+The `memory` property has been removed from the Mastra class. Memory is now configured at the Agent level rather than globally.
 
-1. `MastraMessageV2` type renamed to `MastraDBMessage`
-2. `format` parameter removed from all get methods, `MastraDBMessage` is always the returned format, which can then be converted as needed via helper utils in `@mastra/ai-sdk`
-3. MessageList `.v2()` methods renamed to `.db()`
-4. AI SDK format conversion moved to `@mastra/ai-sdk/ui`
+To migrate, move memory configuration from the Mastra constructor to individual Agent constructors.
 
-**Why these changes?**
+```diff
+- const mastra = new Mastra({
+-   memory: new Memory({
+-     storage: libsqlStore,
+-     vector: libsqlVector,
+-     embedder: fastembed,
+-   }),
+- });
+- 
+- const agent = new Agent({
+-   name: 'my-agent',
+- });
 
-- Provide a consistent and predictable API across all memory methods
-- Clarify the purpose of message types with better naming
-- Simplify the API by removing unnecessary format parameters
-- Enable better tree-shaking by separating UI conversion utilities
-
-**Migration:**
-
-#### 1. Update Type Imports
-
-Replace all instances of `MastraMessageV2` with `MastraDBMessage`:
-
-```typescript
-// Before
-import { MastraMessageV2 } from "@mastra/core";
-function yourCustomFunction(input: MastraMessageV2) {}
-// After
-import { MastraDBMessage } from "@mastra/core";
-function yourCustomFunction(input: MastraDBMessage) {}
++ const mastra = new Mastra({
++   // memory removed from here
++ });
++ 
++ const agent = new Agent({
++   name: 'my-agent',
++   memory: new Memory({
++     storage: libsqlStore,
++     vector: libsqlVector,
++     embedder: fastembed,
++   }),
++ });
 ```
 
-#### 2. Update Memory Method Return Types
 
-The `recall` method (previously `rememberMessages`) now returns an object wrapper for consistency between all methods:
+---
+title: "Memory | v1 Migration Guide"
+description: "Learn how to migrate memory-related changes when upgrading to v1."
+---
 
-```typescript
-// Before
-const messages = await memory.rememberMessages({ threadId, resourceId });
+# Memory
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/memory
 
-// After
-const { messages } = await memory.recall({ threadId, resourceId });
+Memory configuration now requires explicit parameters, and default settings have been updated for better performance and predictability.
+
+## Changed
+
+### Required configuration parameters
+
+The Memory constructor now requires `storage`, `vector`, and `embedder` parameters. These parameters no longer have defaults. This change makes dependencies explicit and prevents unexpected behavior from implicit defaults.
+
+To migrate, explicitly provide `storage`, `vector`, and `embedder` when creating a Memory instance.
+
+```diff
+  import { Memory } from '@mastra/memory';
++ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
++ import { fastembed } from '@mastra/fastembed';
+
+  const memory = new Memory({
+-   // storage, vector, embedder were optional with defaults
++   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
++   vector: new LibSQLVector({ url: 'file:./mastra.db' }),
++   embedder: fastembed,
+  });
 ```
 
-#### 4. Update AI SDK Format Conversion
+### Default settings for semantic recall and last messages
 
-Message format conversion for AI SDK compatibility has moved to dedicated utility functions:
+Default settings have changed to more reasonable values based on usage patterns. The `lastMessages` default decreased from 40 to 10, `semanticRecall` is now disabled by default, and thread title generation is disabled by default. These changes improve performance and reduce unexpected LLM API calls.
 
-```typescript
-// Before
-import { convertMessages } from '@mastra/core';
-const uiMessages = convertMessages(messages).to('AI.V5');
+To migrate, if you were relying on the old defaults, explicitly configure these settings.
 
-// After
-import { toAISdkV5Messages, toAISdkV4Messages } from '@mastra/ai-sdk/ui';
-
-// For AI SDK v5
-const v5Messages = toAISdkV5Messages(messages);
-
-// For AI SDK v4
-const v4Messages = toAISdkV4Messages(messages);
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
++   options: {
++     lastMessages: 40, // Was default before
++     semanticRecall: {
++       topK: 2,
++       messageRange: 2,
++       scope: 'thread',
++     }, // Was enabled by default before
++     generateTitle: true, // Was enabled by default before
++   },
+  });
 ```
 
-#### 5. Remove Format Parameters
+### Default memory scope from `thread` to `resource`
 
-The `format` parameter has been removed from all get methods. `MastraDBMessage` is now the default return format everywhere:
+The default scope for both working memory and semantic recall has changed from `'thread'` to `'resource'`. This change aligns with common use cases where applications want to remember user information across conversations. When semantic recall is enabled, it now defaults to searching across all user conversations rather than just the current thread.
 
-```typescript
-// Before
-const messages = await memory.getMessages({ threadId, format: "v2" });
-const uiMessages = await memory.getMessages({ threadId, format: "ui" });
+To migrate, if you want to maintain the old behavior where memory is isolated per conversation thread, explicitly set `scope: 'thread'`.
 
-// After
-const result = await memory.recall({ threadId });
-const messages = result.messages; // Always MastraDBMessage[]
-
-// Use conversion functions for AI SDK formats
-import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
-const uiMessages = toAISdkV5Messages(messages);
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
+    options: {
+      workingMemory: {
+        enabled: true,
++       scope: 'thread', // Explicitly set to thread-scoped
+        template: `# User Profile...`,
+      },
+      semanticRecall: {
+        topK: 3,
++       scope: 'thread', // Explicitly set to thread-scoped
+      },
+    },
+  });
 ```
 
-### Removed: MCP Classes
+### Thread title generation location
 
-`@mastra/mcp` - `0.14.0`
+The `generateTitle` option has been moved from `threads.generateTitle` to the top-level of memory options. This change simplifies the API by moving the option to where it logically belongs.
 
-- Removed `MastraMCPClient` class. Use [`MCPClient`](/reference/tools/mcp-client) class instead.
-- Removed `MCPConfigurationOptions` type. Use [`MCPClientOptions`](/reference/tools/mcp-client#mcpclientoptions) type instead. The API is identical.
-- Removed `MCPConfiguration` class. Use [`MCPClient`](/reference/tools/mcp-client) class instead.
+To migrate, move `generateTitle` from the `threads` config to the top level of options.
 
-### Removed: CLI flags & commands
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
+    options: {
+-     threads: {
+-       generateTitle: true,
+-     },
++     generateTitle: true,
+    },
+  });
+```
 
-`mastra` - `0.17.0`
+### Semantic recall default settings optimization
 
-- Removed the `mastra deploy` CLI command. Use the deploy instructions of your individual platform.
-- Removed `--env` flag from `mastra build` command. To start the build output with a custom env use `mastra start --env <env>` instead.
-- Remove `--port` flag from `mastra dev`. Use `server.port` on the `new Mastra()` class instead.
+The default settings for semantic recall have been optimized based on RAG research. The `topK` increased from 2 to 4, and `messageRange` changed from `{before: 2, after: 2}` to `{before: 1, after: 1}`. These changes provide better accuracy while only slightly increasing message count.
 
-## Migrate to v0.21
+To migrate, if you were relying on the previous defaults, explicitly set these values.
 
-No changes needed.
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
+    options: {
+      semanticRecall: {
++       topK: 2, // Was default before
++       messageRange: { before: 2, after: 2 }, // Was default before
+      },
+    },
+  });
+```
 
-## Migrate to v0.20
+### `Memory.query()` renamed to `Memory.recall()`
 
-- [VNext to Standard APIs](./vnext-to-standard-apis)
-- [AgentNetwork to .network()](./agentnetwork)
+The `Memory.query()` method has been renamed to `Memory.recall()`. The new method returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change better describes the action of retrieving messages from memory and simplifies the API.
+
+To migrate, rename `query()` to `recall()` and update code that expects the old return format.
+
+```diff
+- const result = await memory.query({ threadId: 'thread-123' });
++ const result = await memory.recall({ threadId: 'thread-123' });
+- // result: { messages: CoreMessage[], uiMessages: UIMessageWithMetadata[], messagesV2: MastraMessageV2[] }
++ // result: { messages: MastraDBMessage[] }
++ const messages = result.messages;
+```
+
+### `Memory.recall()` parameter changes
+
+The `Memory.recall()` method now uses `StorageListMessagesInput` format with pagination, and the `vectorMessageSearch` parameter has been renamed to `vectorSearchString`. These changes align the memory API with the storage pagination API and provide more consistent naming.
+
+To migrate, update method name, query parameters, and the vector search parameter.
+
+```diff
+- memory.query({
++ memory.recall({
+    threadId: 'thread-123',
+-   vectorMessageSearch: 'What did we discuss?',
+-   selectBy: { ... },
++   vectorSearchString: 'What did we discuss?',
++   page: 0,
++   perPage: 20,
++   orderBy: 'createdAt',
++   filter: { ... },
++   threadConfig: { semanticRecall: true },
+  });
+```
+
+### `MastraMessageV2` type renamed to `MastraDBMessage`
+
+The `MastraMessageV2` type has been renamed to `MastraDBMessage` for clarity. This change better describes the purpose of this type as the database message format.
+
+To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
+
+```diff
+- import { MastraMessageV2 } from '@mastra/core';
+- function yourCustomFunction(input: MastraMessageV2) {}
++ import { MastraDBMessage } from '@mastra/core';
++ function yourCustomFunction(input: MastraDBMessage) {}
+```
+
+
+
+## Removed
+
+### Working memory `text-stream` mode
+
+Working memory `use: "text-stream"` option has been removed. Only `tool-call` mode is supported. This change simplifies the working memory API by removing the less reliable streaming mode.
+
+To migrate, remove the `use: "text-stream"` option. Working memory will default to tool-call mode.
+
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
+    options: {
+      workingMemory: {
+        enabled: true,
+-       use: 'text-stream',
+        template: '...',
+      },
+    },
+  });
+```
+
+### `Memory.rememberMessages()` method
+
+The `Memory.rememberMessages()` method has been removed. This method performed the same function as `query()` (now `recall()`), and consolidating to one method simplifies the API.
+
+To migrate, replace `rememberMessages()` calls with `recall()`.
+
+```diff
+- const { messages } = await memory.rememberMessages({
++ const { messages } = await memory.recall({
+    threadId,
+    resourceId,
+  });
+```
+
+### `format` parameter from memory methods
+
+The `format` parameter has been removed from all memory get methods. `MastraDBMessage` is now the default return format everywhere. AI SDK format conversion has moved to dedicated utility functions in `@mastra/ai-sdk/ui`. This change improves tree-shaking by moving UI-specific conversion code to a separate package.
+
+To migrate, remove the `format` parameter and use conversion functions for AI SDK formats.
+
+```diff
+- const messages = await memory.getMessages({ threadId, format: 'v2' });
+- const uiMessages = await memory.getMessages({ threadId, format: 'ui' });
+
++ const result = await memory.recall({ threadId });
++ const messages = result.messages; // Always MastraDBMessage[]
++ 
++ // Use conversion functions for AI SDK formats
++ import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
++ const uiMessages = toAISdkV5Messages(messages);
+```
+
+### `MastraMessageV3` type
+
+The `MastraMessageV3` type and related conversion methods have been removed. Messages now convert directly between `MastraMessageV2` (now `MastraDBMessage`) and AI SDK v5 formats. This change simplifies the architecture by removing an intermediary format.
+
+To migrate, use `MastraDBMessage` for storage or AI SDK v5 message formats directly.
+
+```diff
+- import type { MastraMessageV3 } from '@mastra/core/agent';
+- const v3Messages = messageList.get.all.v3();
+
++ // For storage
++ const v2Messages = messageList.get.all.v2();
++ 
++ // For AI SDK v5
++ const uiMessages = messageList.get.all.aiV5.ui();
++ const modelMessages = messageList.get.all.aiV5.model();
+```
+
+### `processors` config from Memory constructor
+
+The `processors` config option in the Memory constructor has been deprecated and now throws an error. Processors should be configured at the Agent level instead. This change provides clearer configuration boundaries and better encapsulation.
+
+To migrate, move processor configuration from Memory to Agent.
+
+```diff
+  const memory = new Memory({
+    storage,
+    vector,
+    embedder,
+-   processors: [/* ... */],
+  });
+  
+  const agent = new Agent({
+    memory,
++   processors: [/* ... */],
+  });
+```
+
+
+---
+title: "Overview | v1 Migration Guide"
+description: "Overview of breaking changes when upgrading to Mastra v1."
+---
+
+# Upgrade to Mastra v1
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/overview
+
+This guide provides a comprehensive overview of breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
+
+:::tip[Need help?]
+Need help with the migration? Join our [Discord community](https://discord.gg/BTYqqHKUrf) to ask questions.
+:::
+
+## Migration Strategy
+
+### Update all Mastra packages
+
+Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility.
+
+### Update Node.js version
+
+Mastra v1 requires Node.js 22.13.0 or higher. Update your development and production environments accordingly.
+
+## Breaking Changes by Area
+
+- **[Mastra Class](/guides/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
+- **[Agent Class](/guides/migrations/upgrade-to-v1/agent)** - Voice methods moved to namespace and streaming API updates.
+- **[Tools](/guides/migrations/upgrade-to-v1/tools)** - Execute signature changed to separate input and context.
+- **[Workflows](/guides/migrations/upgrade-to-v1/workflows)** - Step execution signature updated and legacy features removed.
+- **[Memory](/guides/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
+- **[Storage](/guides/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
+- **[Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
+- **[CLI](/guides/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
+- **[Client SDKs](/guides/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
+- **[Voice Packages](/guides/migrations/upgrade-to-v1/voice)** - Packages renamed from speech to voice.
+
+## Migration Checklist
+
+Work through this checklist in order, starting with high-impact changes that affect most applications.
+
+### High Impact Changes
+
+- Update tool signatures to `(inputData, context)` format - [Tools](/guides/migrations/upgrade-to-v1/tools)
+- Update workflow step signatures to `(inputData, context)` format - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra)
+- Add required `storage`, `vector`, and `embedder` to Memory configuration - [Memory](/guides/migrations/upgrade-to-v1/memory)
+- Update pagination from `offset/limit` to `page/perPage` - [Storage](/guides/migrations/upgrade-to-v1/storage)
+
+### Medium Impact Changes
+
+- Rename `RuntimeContext` to `RequestContext` throughout codebase - [Agent Class](/guides/migrations/upgrade-to-v1/agent), [Tools](/guides/migrations/upgrade-to-v1/tools), [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update storage methods from `get*` to `list*` pattern - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Replace direct property access with getter methods - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra), [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Update memory scope if relying on default `thread` scope - [Memory](/guides/migrations/upgrade-to-v1/memory)
+- Update vector store calls to use named arguments - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Remove `format` parameter from agent methods - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Update voice methods to use `agent.voice` namespace - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+
+### Low Impact Changes
+
+- Rename `createRunAsync` to `createRun` - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update voice package names from `@mastra/speech-*` to `@mastra/voice-*` - [Voice Packages](/guides/migrations/upgrade-to-v1/voice)
+- Update scorer methods: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById` - [Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)
+- Remove deprecated CLI flags - [CLI](/guides/migrations/upgrade-to-v1/cli)
+- Update client SDK types from `Get*` to `List*` - [Client SDKs](/guides/migrations/upgrade-to-v1/client)
+- Replace `runCount` with `retryCount` - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+
+
+---
+title: "Storage | v1 Migration Guide"
+description: "Learn how to migrate storage-related changes when upgrading to v1."
+---
+
+# Storage
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/storage
+
+Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
+
+## Changed
+
+### Pagination from `offset/limit` to `page/perPage`
+
+All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`. This change provides a more intuitive pagination model that aligns with common web pagination patterns.
+
+To migrate, update all pagination parameters from `offset/limit` to `page/perPage`. Note that `page` is 0-indexed.
+
+```diff
+  storage.listMessages({
+    threadId: 'thread-123',
+-   offset: 0,
+-   limit: 20,
++   page: 0,
++   perPage: 20,
+  });
+```
+
+### `getMessagesPaginated` to `listMessages`
+
+The `getMessagesPaginated()` method has been replaced with `listMessages()`. The new method supports `perPage: false` to fetch all records without pagination. This change aligns with the `list*` naming convention and adds flexibility for fetching all records.
+
+To migrate, rename the method and update pagination parameters. You can now use `perPage: false` to fetch all records.
+
+```diff
+  // Paginated
+- const result = await storage.getMessagesPaginated({
++ const result = await storage.listMessages({
+    threadId: 'thread-123',
+-   offset: 0,
+-   limit: 20,
++   page: 0,
++   perPage: 20,
+  });
+  
+  // Fetch all records (no pagination limit)
++ const allMessages = await storage.listMessages({
++   threadId: 'thread-123',
++   page: 0,
++   perPage: false,
++ });
+```
+
+### `getThreadsByResourceId` to `listThreadsByResourceId`
+
+The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
+
+To migrate, rename the method call and update pagination parameters.
+
+```diff
+- const threads = await storage.getThreadsByResourceId({
++ const threads = await storage.listThreadsByResourceId({
+    resourceId: 'res-123',
++   page: 0,
++   perPage: 20,
+  });
+```
+
+### `getWorkflowRuns` to `listWorkflowRuns`
+
+The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
+
+To migrate, rename the method call and update pagination parameters.
+
+```diff
+- const runs = await storage.getWorkflowRuns({
++ const runs = await storage.listWorkflowRuns({
+    fromDate,
+    toDate,
++   page: 0,
++   perPage: 20,
+  });
+```
+
+### `getMessagesById` to `listMessagesById`
+
+The `getMessagesById()` method has been renamed to `listMessagesById()`. This change aligns with the convention that `list*` methods return collections.
+
+To migrate, rename the method call.
+
+```diff
+- const result = await storage.getMessagesById({
++ const result = await storage.listMessagesById({
+    messageIds: ['msg-1', 'msg-2'],
+  });
+```
+
+### Storage `getMessages` and `saveMessages` signatures
+
+The `getMessages()` and `saveMessages()` methods have changed signatures and return types. Format overloads have been removed, and the methods now always work with `MastraDBMessage`. This change simplifies the API by removing format variations.
+
+To migrate, remove format parameters and update code to work with the consistent return type.
+
+```diff
+  // Always returns { messages: MastraDBMessage[] }
+- const v1Messages = await storage.getMessages({ threadId, format: 'v1' });
+- const v2Messages = await storage.getMessages({ threadId, format: 'v2' });
++ const result = await storage.getMessages({ threadId });
++ const messages = result.messages; // MastraDBMessage[]
+  
+  // SaveMessages always uses MastraDBMessage
+- await storage.saveMessages({ messages: v1Messages, format: 'v1' });
+- await storage.saveMessages({ messages: v2Messages, format: 'v2' });
++ const result = await storage.saveMessages({ messages: mastraDBMessages });
++ const saved = result.messages; // MastraDBMessage[]
+```
+
+### Vector store API from positional to named arguments
+
+All vector store methods now use named arguments instead of positional arguments. This change improves code readability and makes method signatures more maintainable.
+
+To migrate, update all vector store method calls to use named arguments.
+
+```diff
+- await vectorDB.createIndex(indexName, 3, 'cosine');
++ await vectorDB.createIndex({
++   indexName: indexName,
++   dimension: 3,
++   metric: 'cosine',
++ });
+
+- await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
++ await vectorDB.upsert({
++   indexName: indexName,
++   vectors: [[1, 2, 3]],
++   metadata: [{ test: 'data' }],
++ });
+
+- await vectorDB.query(indexName, [1, 2, 3], 5);
++ await vectorDB.query({
++   indexName: indexName,
++   queryVector: [1, 2, 3],
++   topK: 5,
++ });
+```
+
+### Vector store method renames
+
+The `updateIndexById` and `deleteIndexById` methods have been renamed to `updateVector` and `deleteVector` respectively. This change provides clearer naming that better describes the operations.
+
+To migrate, rename the methods and use named arguments.
+
+```diff
+- await vectorDB.updateIndexById(indexName, id, update);
+- await vectorDB.deleteIndexById(indexName, id);
++ await vectorDB.updateVector({ indexName, id, update });
++ await vectorDB.deleteVector({ indexName, id });
+```
+
+### PGVector constructor from connection string to object
+
+The PGVector constructor now requires object parameters instead of a connection string. This change provides a more consistent API across all storage adapters.
+
+To migrate, pass the connection string as an object property.
+
+```diff
+- const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
++ const pgVector = new PgVector({
++   connectionString: process.env.POSTGRES_CONNECTION_STRING,
++ });
+```
+
+### PGVector `defineIndex` to `buildIndex`
+
+The `defineIndex()` method has been removed in favor of `buildIndex()`. This change provides clearer naming for the index building operation.
+
+To migrate, rename the method and use named arguments.
+
+```diff
+- await vectorDB.defineIndex(indexName, 'cosine', { type: 'flat' });
++ await vectorDB.buildIndex({
++   indexName: indexName,
++   metric: 'cosine',
++   indexConfig: { type: 'flat' },
++ });
+```
+
+### PostgresStore `schema` to `schemaName`
+
+The `schema` parameter has been renamed to `schemaName` in the PostgresStore constructor. This change provides clearer naming to avoid confusion with database schema concepts.
+
+To migrate, rename the parameter.
+
+```diff
+  const pgStore = new PostgresStore({
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+-   schema: customSchema,
++   schemaName: customSchema,
+  });
+```
+
+### Score storage methods to `listScoresBy*` pattern
+
+Score storage APIs have been renamed to follow the `listScoresBy*` pattern. This change provides consistency with the broader API naming conventions.
+
+To migrate, update method names from `getScores` to `listScoresByScorerId` and related variants.
+
+```diff
+- const scores = await storage.getScores({ scorerName: 'helpfulness-scorer' });
++ const scores = await storage.listScoresByScorerId({
++   scorerId: 'helpfulness-scorer',
++ });
++ // Also available: listScoresByRunId, listScoresByEntityId, listScoresBySpan
+```
+
+## Removed
+
+### Non-paginated storage functions
+
+Non-paginated storage functions have been removed in favor of paginated versions. All list operations now use pagination, though you can fetch all records with `perPage: false`. This change provides consistency across the API and prevents accidental loading of large datasets.
+
+To migrate, use paginated methods. For fetching all records, use `perPage: false`.
+
+```diff
+- // Non-paginated direct access
+- const messages = await storage.getMessages({ threadId });
+
++ // Use paginated methods
++ const result = await storage.listMessages({ threadId, page: 0, perPage: 20 });
++ // Or fetch all
++ const allMessages = await storage.listMessages({
++   threadId,
++   page: 0,
++   perPage: false,
++ });
+```
+
+### `getTraces` and `getTracesPaginated`
+
+The `getTraces()` and `getTracesPaginated()` methods have been removed from storage. Traces are now handled through the observability package rather than core storage. This change provides better separation of concerns between core storage and observability features.
+
+To migrate, use observability storage methods instead.
+
+```diff
+- const traces = await storage.getTraces({ traceId: 'trace-123' });
+- const paginated = await storage.getTracesPaginated({ page: 0, perPage: 20 });
+
++ // Use observability API for traces
++ import { initObservability } from '@mastra/observability';
++ const observability = initObservability({ config: { ... } });
++ // Access traces through observability API
+```
+
+### Evals test utilities
+
+Evals domain test utilities have been removed from `@internal/test-utils`. This change reflects the removal of legacy evals functionality.
+
+To migrate, use storage APIs directly for testing instead of specialized evals test utilities.
+
+```diff
+- import { createEvalsTests } from '@internal/test-utils/domains/evals';
+- createEvalsTests({ storage });
+
++ // Use storage APIs directly for testing
+```
+
+### TABLE_EVALS from MSSQL storage
+
+The `TABLE_EVALS` table has been removed from MSSQL storage implementations. This change reflects the removal of legacy evals functionality.
+
+If you were using MSSQL storage with evals, migrate to a different storage adapter or remove evals functionality.
+
+
+---
+title: "Tools | v1 Migration Guide"
+description: "Learn how to migrate tool-related changes when upgrading to v1."
+---
+
+# Tools
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/tools
+
+Tool execution signatures have been updated to use separate input and context parameters with reorganized context properties.
+
+## Changed
+
+### Tool `execute` signature to `(inputData, context)` format
+
+All tool `execute` functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
+
+To migrate, update tool signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
+
+```diff
+  createTool({
+    id: 'weather-tool',
+-   execute: async ({ context, requestContext, mastra }) => {
+-     const location = context.location;
+-     const userTier = requestContext.get('userTier');
+-     return getWeather(location, userTier);
+-   },
++   execute: async (inputData, context) => {
++     const location = inputData.location;
++     const userTier = context?.requestContext?.get('userTier');
++     return getWeather(location, userTier);
++   },
+  });
+```
+
+### Context properties organization
+
+Context properties are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
+
+To migrate for agent tools, access agent-specific properties through `context.agent`.
+
+```diff
+  createTool({
+    id: 'suspendable-tool',
+    suspendSchema: z.object({ message: z.string() }),
+    resumeSchema: z.object({ approval: z.boolean() }),
+-   execute: async ({ context, suspend, resumeData }) => {
+-     if (!resumeData) {
+-       return await suspend({ message: 'Waiting for approval' });
+-     }
+-     if (resumeData.approval) {
+-       return { success: true };
+-     }
+-   },
++   execute: async (inputData, context) => {
++     if (!context?.agent?.resumeData) {
++       return await context?.agent?.suspend({
++         message: 'Waiting for approval',
++       });
++     }
++     if (context.agent.resumeData.approval) {
++       return { success: true };
++     }
++   },
+  });
+```
+
+For workflow tools, access workflow-specific properties through `context.workflow`.
+
+```diff
+  createTool({
+    id: 'workflow-tool',
+-   execute: async ({ workflowId, runId, state, setState }) => {
+-     const currentState = state;
+-     setState({ step: 'completed' });
+-     return { result: 'done' };
+-   },
++   execute: async (inputData, context) => {
++     const currentState = context?.workflow?.state;
++     context?.workflow?.setState({ step: 'completed' });
++     return { result: 'done' };
++   },
+  });
+```
+
+For MCP tools, access MCP-specific properties through `context.mcp`.
+
+```diff
+  createTool({
+    id: 'account-balance',
+-   execute: async ({ context, elicitation, extra }) => {
+-     await checkAuth(extra.authInfo);
+-     const result = await elicitation.sendRequest({
+-       message: `Is it ok to fetch account ${context.accountId}?`,
+-     });
+-   },
++   execute: async (inputData, context) => {
++     await checkAuth(context?.mcp?.extra.authInfo);
++     const result = await context?.mcp?.elicitation.sendRequest({
++       message: `Is it ok to fetch account ${inputData.accountId}?`,
++     });
++   },
+  });
+```
+
+### `RuntimeContext` to `RequestContext`
+
+The `RuntimeContext` class has been renamed to `RequestContext` throughout the tool execution context. This change provides clearer naming that better describes its purpose as request-specific data.
+
+To migrate, update references from `runtimeContext` to `requestContext` in tool execution functions.
+
+```diff
+  createTool({
+    id: 'my-tool',
+    execute: async (inputData, context) => {
+-     const userTier = context?.runtimeContext?.get('userTier');
++     const userTier = context?.requestContext?.get('userTier');
+      return { result: userTier };
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod v1/runtime-context .
+```
+
+:::
+
+## Removed
+
+### Deprecated MCP client classes
+
+The `MastraMCPClient` and related deprecated APIs have been removed from `@mastra/mcp`. This change consolidates on the new MCP client API.
+
+To migrate, use the new `MCPClient` class instead of deprecated classes.
+
+```diff
+- import { MastraMCPClient, MCPConfiguration } from '@mastra/mcp/client';
++ import { MCPClient } from '@mastra/mcp/client';
+
+- const client = new MastraMCPClient({ ... });
+- const config = new MCPConfiguration({ ... });
++ const client = new MCPClient({ ... });
+```
+
+
+---
+title: "Voice | v1 Migration Guide"
+description: "Learn how to migrate voice package changes when upgrading to v1."
+---
+
+# Voice Packages
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/voice
+
+Voice packages have been renamed from speech to voice with updated class names and API methods.
+
+## Changed
+
+### Class names from `*TTS` to `*Voice`
+
+TTS class names have been renamed to Voice classes. `MurfTTS`, `SpeechifyTTS`, and `PlayAITTS` are now `MurfVoice`, `SpeechifyVoice`, and `PlayAIVoice` respectively. This change aligns class names with the package rename.
+
+To migrate, update class names in your code.
+
+```diff
+- import { MurfTTS } from '@mastra/voice-murf';
+- import { SpeechifyTTS } from '@mastra/voice-speechify';
+- import { PlayAITTS } from '@mastra/voice-playai';
++ import { MurfVoice } from '@mastra/voice-murf';
++ import { SpeechifyVoice } from '@mastra/voice-speechify';
++ import { PlayAIVoice } from '@mastra/voice-playai';
+
+- const tts = new MurfTTS({ apiKey: '...' });
++ const voice = new MurfVoice({ apiKey: '...' });
+```
+
+### `generate` and `stream` methods to `speak`
+
+The `generate()` and `stream()` methods have been combined into a single `speak()` method. This change simplifies the voice API by consolidating speech generation methods.
+
+To migrate, replace `generate()` and `stream()` calls with `speak()`.
+
+```diff
+- await tts.generate('Hello');
+- await tts.stream('Hello');
++ await voice.speak('Hello');
+```
+
+### `voices` method to `getSpeakers`
+
+The `voices()` method has been renamed to `getSpeakers()`. This change provides clearer naming that better describes the method's purpose.
+
+To migrate, rename method calls from `voices` to `getSpeakers`.
+
+```diff
+- const voices = await tts.voices();
++ const speakers = await voice.getSpeakers();
+```
+
+### Voice configuration property names
+
+Voice configuration properties have been renamed for consistency. `speakProvider` is now `output`, `listenProvider` is now `input`, and `realtimeProvider` is now `realtime`. This change provides more intuitive property names.
+
+To migrate, update configuration property names when configuring agents with voice capabilities.
+
+```diff
+  const agent = new Agent({
+    voice: {
+-     speakProvider: murfVoice,
+-     listenProvider: deepgramVoice,
+-     realtimeProvider: openaiRealtime,
++     output: murfVoice,
++     input: deepgramVoice,
++     realtime: openaiRealtime,
+    },
+  });
+```
+
+## Removed
+
+### TTS exports from `@mastra/core`
+
+TTS exports have been removed from `@mastra/core`. All TTS functionality is now in dedicated voice packages. This change improves tree-shaking by removing voice-specific code from the core package.
+
+To migrate, import voice functionality from dedicated voice packages instead of `@mastra/core`.
+
+```diff
+- import { TTS } from '@mastra/core/tts';
++ import { MurfVoice } from '@mastra/voice-murf';
++ // or other voice packages as needed
+```
+
+
+---
+title: "Workflows | v1 Migration Guide"
+description: "Learn how to migrate workflow-related changes when upgrading to v1."
+---
+
+# Workflows
+[EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/workflows
+
+Workflow step execution signatures have been updated to match tool signatures, and legacy workflow features have been removed.
+
+## Changed
+
+### Workflow step `execute` signature to `(inputData, context)` format
+
+Workflow step `execute` functions now receive `inputData` as the first parameter and `context` as the second parameter. This change aligns with the tool signature changes and provides clearer separation between step inputs and execution context.
+
+To migrate, update step signatures to use `inputData` as the first parameter (typed from `inputSchema`) and access context properties through the `context` parameter.
+
+```diff
+  createStep({
+-   execute: async ({ inputData, mastra, requestContext, tracingContext }) => {
+-     // inputData was wrapped in an object
+-   },
++   execute: async (inputData, context) => {
++     // inputData is the first parameter
++     // context contains: { mastra, requestContext, tracingContext, suspend, resumeData, workflow }
++   },
+  });
+```
+
+### `RuntimeContext` to `RequestContext` in step context
+
+The parameter name `runtimeContext` has been changed to `requestContext` in workflow step execution context. This change aligns with the global rename for clarity.
+
+To migrate, update references from `runtimeContext` to `requestContext` in step execution functions.
+
+```diff
+  createStep({
+    execute: async (inputData, context) => {
+-     const userTier = context.runtimeContext.get('userTier');
++     const userTier = context.requestContext.get('userTier');
+      return { result: userTier };
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod v1/runtime-context .
+```
+
+:::
+
+### `createRunAsync` to `createRun`
+
+The `createRunAsync()` method has been renamed to `createRun()`. This change simplifies the API by removing the redundant "Async" suffix since all run creation is asynchronous.
+
+To migrate, rename method calls from `createRunAsync` to `createRun`.
+
+```diff
+- await workflow.createRunAsync({ input: { ... } });
++ await workflow.createRun({ input: { ... } });
+```
+
+### `runCount` to `retryCount` (deprecated)
+
+The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. This change provides clearer naming that better describes retry behavior. The old `runCount` still works but shows deprecation warnings.
+
+To migrate, rename `runCount` to `retryCount` in step execution functions.
+
+```diff
+  createStep({
+    execute: async (inputData, context) => {
+-     console.log(`Step run ${context.runCount} times`);
++     console.log(`Step retry count: ${context.retryCount}`);
+    },
+  });
+```
+
+### `getWorkflowRuns` to `listWorkflowRuns`
+
+The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
+
+To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
+
+```diff
+- const runs = await workflow.getWorkflowRuns({ fromDate, toDate });
++ const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
+```
+
+## Removed
+
+### Legacy workflows export
+
+The `./workflows/legacy` export path has been removed from `@mastra/core`. Legacy workflows are no longer supported.
+
+To migrate, use the new workflow API. There is no direct migration path from legacy workflows.
+
+```diff
+- import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
++ // Legacy workflows are no longer supported
++ // Migrate to the new workflow API
+```
+
+### `pipeThrough` and `pipeTo` methods from WorkflowRunOutput
+
+The `pipeThrough()` and `pipeTo()` methods on `WorkflowRunOutput` are deprecated. These methods still work but show console warnings.
+
+To migrate, use the `fullStream` property instead of calling methods directly on the run output.
+
+```diff
+  const run = await workflow.createRun({ input: { ... } });
+- await run.pipeTo(writableStream);
+- const transformed = run.pipeThrough(transformStream);
++ await run.fullStream.pipeTo(writableStream);
++ const transformed = run.fullStream.pipeThrough(transformStream);
+```
+
+### Watch events API
+
+Legacy watch events have been removed and consolidated on the v2 events API. The `watch()` method and related watch endpoints are no longer available.
+
+To migrate, use the workflow events API or streaming instead of watch events.
+
+```diff
+- const workflow = mastraClient.getWorkflow('my-workflow');
+- const run = await workflow.createRun();
+- await run.watch((event) => {
+-   console.log('Step completed:', event);
+- });
+
++ const workflow = mastraClient.getWorkflow('my-workflow');
++ const run = await workflow.createRun();
++ const stream = await run.stream({ inputData: { ... } });
++ for await (const chunk of stream) {
++   console.log('Step completed:', chunk);
++ }
+```
+
+### `waitForEvent` API
+
+The `waitForEvent` API has been removed from workflows. Use the streaming API or events system instead.
+
+To migrate, use workflow streaming or the events API for waiting on workflow execution milestones.
+
+```diff
+- await workflow.waitForEvent('step-complete');
++ // Use streaming API instead
++ const stream = await run.stream({ inputData: { ... } });
++ for await (const chunk of stream) {
++   if (chunk.type === 'step-complete') {
++     // Handle step completion
++   }
++ }
+```
 
 
 ---
@@ -48217,7 +49270,7 @@ description: "Documentation for the legacy `Agent.generateLegacy()` method in Ma
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate) method instead. See the [migration guide](../../guides/migrations/vnext-to-standard-apis) for details on upgrading.
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate) method instead.
 
 :::
 
@@ -48830,7 +49883,7 @@ description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` me
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead. See the [migration guide](../../guides/migrations/upgrade-to-v1) for details on upgrading.
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead.
 
 :::
 
@@ -48980,7 +50033,7 @@ description: "Documentation for the `Agent.getDefaultStreamOptionsLegacy()` meth
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead. See the [migration guide](../../guides/migrations/upgrade-to-v1) for details on upgrading.
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead.
 
 :::
 
@@ -51688,33 +52741,40 @@ const savedMessages = await mastraClient.saveMessageToMemory({
 Get messages associated with a memory thread:
 
 ```typescript
-// Get all messages in the thread
-const { messages } = await thread.getMessages();
+// Get all messages in the thread (paginated)
+const result = await thread.listMessages();
+console.log(result.messages); // Array of messages
+console.log(result.total); // Total count
+console.log(result.hasMore); // Whether more pages exist
 
-// Limit the number of messages retrieved
-const { messages } = await thread.getMessages({ limit: 10 });
+// Get messages with pagination
+const result = await thread.listMessages({
+  page: 0,
+  perPage: 20
+});
+
+// Get messages with ordering
+const result = await thread.listMessages({
+  orderBy: { field: 'createdAt', direction: 'ASC' }
+});
 ```
 
-### Delete a Message
+### Delete Messages
 
-Delete a specific message from a thread:
-
-```typescript
-const result = await thread.deleteMessage("message-id");
-// Returns: { success: true, message: "Message deleted successfully" }
-```
-
-### Delete Multiple Messages
-
-Delete multiple messages from a thread in a single operation:
+Delete one or more messages from a thread:
 
 ```typescript
+// Delete a single message
+const result = await thread.deleteMessages("message-id");
+
+// Delete multiple messages
 const result = await thread.deleteMessages([
   "message-1",
   "message-2",
   "message-3",
 ]);
-// Returns: { success: true, message: "3 messages deleted successfully" }
+
+// Returns: { success: true, message: "Message deleted successfully" }
 ```
 
 ### Get Memory Status
@@ -54340,7 +55400,7 @@ description: "Documentation for the `Memory.query()` method in Mastra, which ret
 [EN] Source: https://mastra.ai/en/reference/memory/query
 
 :::warning[Deprecated]
-The `Memory.query()` method has been renamed to [`Memory.recall()`](/reference/memory/recall). This page is kept for reference, but please use `recall()` in new code. See the [migration guide](/guides/migrations/upgrade-to-v1#removed-memoryremembermessages-and-renamed-memoryquery-to-memoryrecall) for details.
+The `Memory.query()` method has been renamed to [`Memory.recall()`](/reference/memory/recall). This page is kept for reference, but please use `recall()` in new code.
 :::
 
 the `.query()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
@@ -74165,7 +75225,7 @@ Templates must be:
 - **Framework-free** - No Next.js, Express, or other web framework boilerplate
 - **Mastra-focused** - Demonstrate Mastra functionality without additional layers
 - **Mergeable** - Structure code for easy integration into existing projects
-- **Node.js compatible** - Support Node.js 18 and higher
+- **Node.js compatible** - Support Node.js v22.13.0 and later
 - **ESM modules** - Use ES modules (`"type": "module"` in package.json)
 
 ### Documentation Requirements

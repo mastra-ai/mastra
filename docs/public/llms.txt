@@ -176,7 +176,18 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Guide: Building an Agent that can search the web | Mastra Guide](https://mastra.ai/en/guides/guide/web-search): A step-by-step guide to creating an agent that can search the web.
 - [Overview](https://mastra.ai/en/guides): Guides on building with Mastra
 - [Migration: AgentNetwork to .network() | Migration Guide](https://mastra.ai/en/guides/migrations/agentnetwork): Learn how to migrate from AgentNetwork primitives to .network() in Mastra.
-- [Migration: Upgrade to Mastra v1 | Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1): Learn how to upgrade through breaking changes in pre-v1 versions of Mastra.
+- [_template](https://mastra.ai/en/guides/migrations/upgrade-to-v1/_template)
+- [Agent Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/agent): Learn how to migrate Agent class changes when upgrading to v1.
+- [CLI | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/cli): Learn how to migrate CLI changes when upgrading to v1.
+- [Client SDK | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/client): Learn how to migrate client SDK changes when upgrading to v1.
+- [Evals & Scorers | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/evals): Learn how to migrate evals and scorers changes when upgrading to v1.
+- [Mastra Class | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/mastra): Learn how to migrate Mastra class changes when upgrading to v1.
+- [Memory | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/memory): Learn how to migrate memory-related changes when upgrading to v1.
+- [Overview | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/overview): Overview of breaking changes when upgrading to Mastra v1.
+- [Storage | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/storage): Learn how to migrate storage-related changes when upgrading to v1.
+- [Tools | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/tools): Learn how to migrate tool-related changes when upgrading to v1.
+- [Voice | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/voice): Learn how to migrate voice package changes when upgrading to v1.
+- [Workflows | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/workflows): Learn how to migrate workflow-related changes when upgrading to v1.
 - [Migration: VNext to Standard APIs | Migration Guide](https://mastra.ai/en/guides/migrations/vnext-to-standard-apis): Learn how to migrate from VNext methods to the new standard agent APIs in Mastra.
 
 ## EN - models
