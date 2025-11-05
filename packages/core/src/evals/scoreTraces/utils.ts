@@ -161,28 +161,6 @@ function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
 }
 
 /**
- * Create message parts array including tool invocations and text
- */
-function createMessageParts(toolInvocations: SpanRecord[], textContent: string) {
-  const parts: { type: 'tool-invocation' | 'text'; toolInvocation?: SpanRecord; text?: string }[] = [];
-  for (const toolInvocation of toolInvocations) {
-    parts.push({
-      type: 'tool-invocation',
-      toolInvocation,
-    });
-  }
-
-  if (textContent.trim()) {
-    parts.push({
-      type: 'text',
-      text: textContent,
-    });
-  }
-
-  return parts;
-}
-
-/**
  * Validate trace structure and throw descriptive errors
  */
 export function validateTrace(trace: AITraceRecord): void {
