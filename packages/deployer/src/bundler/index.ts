@@ -159,7 +159,7 @@ export abstract class Bundler extends MastraBundler {
       analyzedBundleInfo,
       'node',
       {
-        'process.env.NODE_ENV': JSON.stringify('production'),
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
       },
       { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim },
     );
