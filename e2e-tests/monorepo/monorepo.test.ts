@@ -54,7 +54,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       await mkdir(join(corePath, 'runtime-context'), { recursive: true });
       await writeFile(
         join(corePath, 'runtime-context', 'index.js'),
-        `export { RequestContext as RuntimeContext } from '../request-context';`,
+        `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
       );
     },
     10 * 60 * 1000,
