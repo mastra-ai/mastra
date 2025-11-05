@@ -498,26 +498,26 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Scorers",
+      label: "Evals",
       items: [
         {
           type: "doc",
-          id: "scorers/overview",
+          id: "evals/overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "scorers/off-the-shelf-scorers",
+          id: "evals/off-the-shelf-scorers",
           label: "Off the Shelf Scorers",
         },
         {
           type: "doc",
-          id: "scorers/custom-scorers",
+          id: "evals/custom-scorers",
           label: "Custom Scorers",
         },
         {
           type: "doc",
-          id: "scorers/running-in-ci",
+          id: "evals/running-in-ci",
           label: "Running in CI",
         },
       ],

@@ -1,4 +1,4 @@
-import type { AISpanProcessor, AnyAISpan } from '@mastra/core/observability';
+import type { SpanOutputProcessor, AnySpan } from '@mastra/core/observability';
 
 export type RedactionStyle = 'full' | 'partial';
 
@@ -34,7 +34,7 @@ export interface SensitiveDataFilterOptions {
 /**
  * SensitiveDataFilter
  *
- * An AISpanProcessor that redacts sensitive information from span fields.
+ * An SpanOutputProcessor that redacts sensitive information from span fields.
  *
  * - Sensitive keys are matched case-insensitively, normalized to remove separators.
  * - Sensitive values are redacted using either full or partial redaction.
@@ -42,7 +42,7 @@ export interface SensitiveDataFilterOptions {
  * - If filtering a field fails, the field is replaced with:
  *   `{ error: { processor: "sensitive-data-filter" } }`
  */
-export class SensitiveDataFilter implements AISpanProcessor {
+export class SensitiveDataFilter implements SpanOutputProcessor {
   name = 'sensitive-data-filter';
   private sensitiveFields: string[];
   private redactionToken: string;
@@ -80,7 +80,7 @@ export class SensitiveDataFilter implements AISpanProcessor {
    * @param span - The input span to filter
    * @returns A new span with sensitive values redacted
    */
-  process(span: AnyAISpan): AnyAISpan {
+  process(span: AnySpan): AnySpan {
     span.attributes = this.tryFilter(span.attributes);
     span.metadata = this.tryFilter(span.metadata);
     span.input = this.tryFilter(span.input);

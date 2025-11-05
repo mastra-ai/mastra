@@ -5,8 +5,8 @@ import type { IErrorDefinition } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { MastraScorers } from '../evals';
 import { runScorer } from '../evals/hooks';
-import { AISpanType, wrapMastra } from '../observability';
-import type { AISpan, TracingContext } from '../observability';
+import { SpanType, wrapMastra } from '../observability';
+import type { Span, TracingContext } from '../observability';
 import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
@@ -188,7 +188,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     requestContext: RequestContext;
-    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
     format?: 'legacy' | 'vnext' | undefined;
@@ -206,7 +206,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       initialState,
       resume,
       retryConfig,
-      workflowAISpan,
+      workflowSpan,
       disableScorers,
       restart,
     } = params;
@@ -224,7 +224,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         category: ErrorCategory.USER,
       });
 
-      workflowAISpan?.error({ error: empty_graph_error });
+      workflowSpan?.error({ error: empty_graph_error });
       throw empty_graph_error;
     }
 
@@ -268,7 +268,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resume,
           restart,
           tracingContext: {
-            currentSpan: workflowAISpan,
+            currentSpan: workflowSpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
@@ -302,14 +302,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           if (result.error) {
-            workflowAISpan?.error({
+            workflowSpan?.error({
               error: result.error,
               attributes: {
                 status: result.status,
               },
             });
           } else {
-            workflowAISpan?.end({
+            workflowSpan?.end({
               output: result.result,
               attributes: {
                 status: result.status,
@@ -348,7 +348,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           requestContext: params.requestContext,
         });
 
-        workflowAISpan?.error({
+        workflowSpan?.error({
           error,
           attributes: {
             status: result.status,
@@ -374,7 +374,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContext: params.requestContext,
     });
 
-    workflowAISpan?.end({
+    workflowSpan?.end({
       output: result.result,
       attributes: {
         status: result.status,
@@ -450,7 +450,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let { duration, fn } = entry;
 
     const sleepSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
         durationMs: duration,
@@ -555,7 +555,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let { date, fn } = entry;
 
     const sleepUntilSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
         untilDate: date,
@@ -635,7 +635,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext?: TracingContext;
   }): Promise<any> {
     const waitSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_WAIT_EVENT,
+      type: SpanType.WORKFLOW_WAIT_EVENT,
       name: `wait: ${event}`,
       attributes: {
         eventName: event,
@@ -741,9 +741,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
-    const stepAISpan = tracingContext.currentSpan?.createChildSpan({
+    const stepSpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
-      type: AISpanType.WORKFLOW_STEP,
+      type: SpanType.WORKFLOW_STEP,
       input: inputData,
       attributes: {
         stepId: step.id,
@@ -811,7 +811,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId,
           resourceId,
           workflowId,
-          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
+          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepSpan }) : undefined,
           requestContext,
           inputData,
           state: executionContext.state,
@@ -820,7 +820,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           retryCount,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: { currentSpan: stepAISpan },
+          tracingContext: { currentSpan: stepSpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
@@ -889,7 +889,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             stepId: step.id,
             requestContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan },
+            tracingContext: { currentSpan: stepSpan },
           });
         }
 
@@ -914,7 +914,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           `Error executing step ${step.id}: `,
         );
 
-        stepAISpan?.error({
+        stepSpan?.error({
           error,
           attributes: {
             status: 'failed',
@@ -967,7 +967,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (execResults.status != 'failed') {
-      stepAISpan?.end({
+      stepSpan?.end({
         output: execResults.output,
         attributes: {
           status: execResults.status,
@@ -1092,7 +1092,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const parallelSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_PARALLEL,
+      type: SpanType.WORKFLOW_PARALLEL,
       name: `parallel: '${entry.steps.length} branches'`,
       input: this.getStepOutput(stepResults, prevStep),
       attributes: {
@@ -1244,7 +1244,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_CONDITIONAL,
+      type: SpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: '${entry.conditions.length} conditions'`,
       input: prevOutput,
       attributes: {
@@ -1258,7 +1258,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       await Promise.all(
         entry.conditions.map(async (cond, index) => {
           const evalSpan = conditionalSpan?.createChildSpan({
-            type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+            type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
             name: `condition '${index}'`,
             input: prevOutput,
             attributes: {
@@ -1484,7 +1484,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { step, condition } = entry;
 
     const loopSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_LOOP,
+      type: SpanType.WORKFLOW_LOOP,
       name: `loop: '${entry.loopType}'`,
       input: prevOutput,
       attributes: {
@@ -1543,7 +1543,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       const evalSpan = loopSpan?.createChildSpan({
-        type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+        type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
         name: `condition: '${entry.loopType}'`,
         input: selectFields(result.output, ['stepResult', 'output.text', 'output.object', 'messages']),
         attributes: {
@@ -1676,7 +1676,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
 
     const loopSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_LOOP,
+      type: SpanType.WORKFLOW_LOOP,
       name: `loop: 'foreach'`,
       input: prevOutput,
       attributes: {

@@ -11,7 +11,7 @@ import type { MastraScorers } from '../evals';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import { AISpanType, getOrCreateSpan } from '../observability';
+import { SpanType, getOrCreateSpan } from '../observability';
 import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
@@ -1646,8 +1646,8 @@ export class Run<
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
       attributes: {
@@ -1664,7 +1664,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
-    const traceId = workflowAISpan?.externalTraceId;
+    const traceId = workflowSpan?.externalTraceId;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
@@ -1699,7 +1699,7 @@ export class Run<
       requestContext: requestContext ?? new RequestContext(),
       abortController: this.abortController,
       writableStream,
-      workflowAISpan,
+      workflowSpan,
       format,
       outputOptions,
     });
@@ -2345,8 +2345,8 @@ export class Run<
     });
 
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: resumeDataToUse,
       attributes: {
@@ -2363,7 +2363,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
-    const traceId = workflowAISpan?.externalTraceId;
+    const traceId = workflowSpan?.externalTraceId;
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -2401,7 +2401,7 @@ export class Run<
         },
         requestContext: requestContextToUse,
         abortController: this.abortController,
-        workflowAISpan,
+        workflowSpan,
         outputOptions: params.outputOptions,
         writableStream: params.writableStream,
       })
@@ -2485,8 +2485,8 @@ export class Run<
       stepResults: snapshot.context,
       state: snapshot.value,
     };
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       attributes: {
         workflowId: this.workflowId,
@@ -2502,7 +2502,7 @@ export class Run<
       mastra: this.#mastra,
     });
 
-    const traceId = workflowAISpan?.externalTraceId;
+    const traceId = workflowSpan?.externalTraceId;
 
     const result = await this.executionEngine.execute<
       z.infer<TState>,
@@ -2534,7 +2534,7 @@ export class Run<
       requestContext: requestContext ?? new RequestContext(),
       abortController: this.abortController,
       writableStream,
-      workflowAISpan,
+      workflowSpan,
     });
 
     if (result.status !== 'suspended') {
