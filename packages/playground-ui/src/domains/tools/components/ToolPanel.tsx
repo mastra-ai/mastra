@@ -7,13 +7,33 @@ import { parse } from 'superjson';
 import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from './ToolExecutor';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useMemo } from 'react';
 
 export interface ToolPanelProps {
   toolId: string;
 }
 
 export const ToolPanel = ({ toolId }: ToolPanelProps) => {
-  const { data: tool, isLoading } = useTool(toolId!);
+  const { data: agents = {} } = useAgents();
+
+  // Check if tool exists in any agent's tools
+  const agentTool = useMemo(() => {
+    for (const agent of Object.values(agents)) {
+      if ((agent as any).tools) {
+        const tool = Object.values((agent as any).tools).find((t: any) => t.id === toolId);
+        if (tool) {
+          return tool as any;
+        }
+      }
+    }
+    return null;
+  }, [agents, toolId]);
+
+  // Only fetch from API if tool not found in agents
+  const { data: apiTool, isLoading, error } = useTool(toolId!, { enabled: !agentTool });
+
+  const tool: any = agentTool || apiTool;
 
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
   const { requestContext: playgroundRequestContext } = usePlaygroundStore();

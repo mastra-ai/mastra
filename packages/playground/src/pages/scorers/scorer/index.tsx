@@ -21,15 +21,18 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
+  HeaderGroup,
+  Combobox,
+  useScorers,
 } from '@mastra/playground-ui';
-import { useParams, Link, useSearchParams } from 'react-router';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router';
 import { GaugeIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
   const [scoresPage, setScoresPage] = useState<number>(0);
@@ -44,6 +47,7 @@ export default function Scorer() {
   const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+  const { data: scorers = {} } = useScorers();
   const {
     data: scoresData,
     isLoading: isLoadingScores,
@@ -71,6 +75,13 @@ export default function Scorer() {
     ...workflowOptions,
   ];
 
+  const scorerOptions = useMemo(() => {
+    return Object.keys(scorers).map(key => ({
+      label: scorers[key]?.scorer.config.name || key,
+      value: key,
+    }));
+  }, [scorers]);
+
   useEffect(() => {
     if (entityOptions) {
       const entityName = searchParams.get('entity');
@@ -80,6 +91,8 @@ export default function Scorer() {
       }
     }
   }, [searchParams, selectedEntityOption, entityOptions]);
+
+  if (isScorerLoading) return null;
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {
@@ -114,6 +127,12 @@ export default function Scorer() {
     },
   ];
 
+  const handleScorerChange = (newScorerId: string) => {
+    if (newScorerId && newScorerId !== scorerId) {
+      navigate(`/scorers/${newScorerId}`);
+    }
+  };
+
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
     option?.value && setSearchParams({ entity: option?.value });
   };
@@ -134,17 +153,27 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
+            <Crumb as={Link} to={`/scorers`} isCurrent>
               <Icon>
                 <GaugeIcon />
               </Icon>
               Scorers
             </Crumb>
-
-            <Crumb as={Link} to={`/scorers/${scorerId}`} isCurrent>
-              {isScorerLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
-            </Crumb>
           </Breadcrumb>
+
+          <HeaderGroup>
+            <div className="w-[240px]">
+              <Combobox
+                options={scorerOptions}
+                value={scorerId}
+                onValueChange={handleScorerChange}
+                placeholder="Select a scorer..."
+                searchPlaceholder="Search scorers..."
+                emptyText="No scorers found."
+                buttonClassName="h-8"
+              />
+            </div>
+          </HeaderGroup>
 
           <HeaderAction>
             <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank">
