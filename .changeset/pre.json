@@ -82,5 +82,21 @@
     "@mastra/voice-speechify": "0.11.11",
     "@mastra/inngest": "0.18.3"
   },
-  "changesets": []
+  "changesets": [
+    "all-rooms-report",
+    "bold-cooks-grow",
+    "fancy-buses-care",
+    "fix-workflow-input-property",
+    "khaki-garlics-poke",
+    "kind-bees-unite",
+    "lemon-nails-wait",
+    "little-buttons-smile",
+    "ripe-coats-sip",
+    "sixty-areas-grab",
+    "slimy-donkeys-count",
+    "some-rivers-jog",
+    "swift-paths-allow",
+    "thirty-spiders-visit",
+    "yellow-glasses-refuse"
+  ]
 }
