@@ -36,8 +36,8 @@ const serializedStepFlowEntrySchema = z
  * Returned by getWorkflowByIdHandler and listWorkflowsHandler
  */
 export const workflowInfoSchema = z.object({
-  steps: z.record(serializedStepSchema),
-  allSteps: z.record(serializedStepSchema),
+  steps: z.record(z.string(), serializedStepSchema),
+  allSteps: z.record(z.string(), serializedStepSchema),
   name: z.string().optional(),
   description: z.string().optional(),
   stepGraph: z.array(serializedStepFlowEntrySchema),
@@ -50,7 +50,7 @@ export const workflowInfoSchema = z.object({
  * Schema for list workflows endpoint response
  * Returns a record of workflow ID to workflow info
  */
-export const listWorkflowsResponseSchema = z.record(workflowInfoSchema);
+export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSchema);
 
 /**
  * Schema for workflow run object

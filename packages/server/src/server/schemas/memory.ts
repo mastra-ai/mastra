@@ -39,7 +39,7 @@ const threadSchema = z.object({
   resourceId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -98,7 +98,7 @@ export const getMessagesQuerySchema = z.object({
 export const getWorkingMemoryQuerySchema = z.object({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  memoryConfig: z.record(z.unknown()).optional(), // Complex config object
+  memoryConfig: z.record(z.string(), z.unknown()).optional(), // Complex config object
 });
 
 // ============================================================================

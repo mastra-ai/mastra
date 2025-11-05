@@ -32,4 +32,4 @@ const scorerEntrySchema = z.object({
  * Response schema for list scorers endpoint
  * Returns a record of scorer ID to scorer entry with associations
  */
-export const listScorersResponseSchema = z.record(scorerEntrySchema);
+export const listScorersResponseSchema = z.record(z.string(), scorerEntrySchema);

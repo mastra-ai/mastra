@@ -43,6 +43,7 @@ export const serializedWorkflowSchema = z.object({
   name: z.string(),
   steps: z
     .record(
+      z.string(),
       z.object({
         id: z.string(),
         description: z.string().optional(),
@@ -89,18 +90,18 @@ export const serializedAgentSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   instructions: systemMessageSchema.optional(),
-  tools: z.record(serializedToolSchema),
-  agents: z.record(serializedAgentDefinitionSchema),
-  workflows: z.record(serializedWorkflowSchema),
+  tools: z.record(z.string(), serializedToolSchema),
+  agents: z.record(z.string(), serializedAgentDefinitionSchema),
+  workflows: z.record(z.string(), serializedWorkflowSchema),
   inputProcessors: z.array(serializedProcessorSchema),
   outputProcessors: z.array(serializedProcessorSchema),
   provider: z.string().optional(),
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
   modelList: z.array(modelConfigSchema).optional(),
-  defaultOptions: z.record(z.unknown()).optional(),
-  defaultGenerateOptionsLegacy: z.record(z.unknown()).optional(),
-  defaultStreamOptionsLegacy: z.record(z.unknown()).optional(),
+  defaultOptions: z.record(z.string(), z.unknown()).optional(),
+  defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
+  defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -133,13 +134,13 @@ export const providersResponseSchema = z.object({
  * Schema for list agents endpoint response
  * Returns a record of agent ID to serialized agent
  */
-export const listAgentsResponseSchema = z.record(serializedAgentSchema);
+export const listAgentsResponseSchema = z.record(z.string(), serializedAgentSchema);
 
 /**
  * Schema for list tools endpoint response
  * Returns a record of tool ID to serialized tool
  */
-export const listToolsResponseSchema = z.record(serializedToolSchema);
+export const listToolsResponseSchema = z.record(z.string(), serializedToolSchema);
 
 // ============================================================================
 // Agent Execution Body Schemas
@@ -154,7 +155,7 @@ const agentMemoryOptionSchema = z.object({
     z.object({ id: z.string() }).passthrough(),
   ]),
   resource: z.string(),
-  options: z.record(z.unknown()).optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
   readOnly: z.boolean().optional(),
 });
 
@@ -162,7 +163,7 @@ const agentMemoryOptionSchema = z.object({
  * Schema for tracing options
  */
 const tracingOptionsSchema = z.object({
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   requestContextKeys: z.array(z.string()).optional(),
   traceId: z.string().optional(),
   parentSpanId: z.string().optional(),
@@ -206,7 +207,7 @@ export const agentExecutionBodySchema = z
     savePerStep: z.boolean().optional(),
 
     // Request Context (handler-specific field)
-    requestContext: z.record(z.unknown()).optional(),
+    requestContext: z.record(z.string(), z.unknown()).optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),
@@ -215,10 +216,10 @@ export const agentExecutionBodySchema = z
     // Model Configuration
     providerOptions: z
       .object({
-        anthropic: z.record(z.unknown()).optional(),
-        google: z.record(z.unknown()).optional(),
-        openai: z.record(z.unknown()).optional(),
-        xai: z.record(z.unknown()).optional(),
+        anthropic: z.record(z.string(), z.unknown()).optional(),
+        google: z.record(z.string(), z.unknown()).optional(),
+        openai: z.record(z.string(), z.unknown()).optional(),
+        xai: z.record(z.string(), z.unknown()).optional(),
       })
       .passthrough()
       .optional(),
@@ -226,8 +227,8 @@ export const agentExecutionBodySchema = z
 
     // Tool Configuration
     activeTools: z.array(z.string()).optional(),
-    toolsets: z.record(z.unknown()).optional(),
-    clientTools: z.record(z.unknown()).optional(),
+    toolsets: z.record(z.string(), z.unknown()).optional(),
+    clientTools: z.record(z.string(), z.unknown()).optional(),
     toolChoice: toolChoiceSchema.optional(),
     requireToolApproval: z.boolean().optional(),
 
@@ -236,6 +237,7 @@ export const agentExecutionBodySchema = z
       .union([
         z.array(z.unknown()),
         z.record(
+          z.string(),
           z.object({
             scorer: z.string(),
             sampling: z.object({}).passthrough().optional(),
