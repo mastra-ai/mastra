@@ -562,7 +562,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() <= toDate.getTime());
       }
 
-      // Determine sort field and direction, default to DESC (newest first)
+      // Determine sort field and direction, default to ASC (oldest first)
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
       // Type-safe field accessor helper
@@ -582,12 +582,15 @@ export class StoreMemoryUpstash extends MemoryStorage {
         return 0;
       };
 
-      // Sort messages by orderBy field and direction (defaults to createdAt DESC)
-      messagesData.sort((a, b) => {
-        const aValue = getFieldValue(a);
-        const bValue = getFieldValue(b);
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+      // Sort messages by orderBy field and direction only if orderBy is specified
+      // If orderBy is undefined, keep messages in sorted-set order for correct pagination
+      if (orderBy) {
+        messagesData.sort((a, b) => {
+          const aValue = getFieldValue(a);
+          const bValue = getFieldValue(b);
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        });
+      }
 
       const total = messagesData.length;
 

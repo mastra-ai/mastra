@@ -197,7 +197,8 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     try {
       // First, delete all messages associated with this thread
-      const { messages } = await this.listMessages({ threadId });
+      // Use perPage: false to fetch ALL messages, not just the first page
+      const { messages } = await this.listMessages({ threadId, perPage: false });
       if (messages.length > 0) {
         // Delete messages in batches
         const batchSize = 25; // DynamoDB batch limits

@@ -912,7 +912,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Remove _index and ensure dates before returning
       const prepared = filteredMessages.map(({ _index, ...message }) => ({
         ...message,
-        type: message.type === (`v2` as `text`) ? undefined : message.type,
+        type: message.type !== ('v2' as string) ? message.type : undefined,
         createdAt: ensureDate(message.createdAt)!,
       }));
 
@@ -920,17 +920,19 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
       let finalMessages = list.get.all.db();
 
-      // Sort final messages again to ensure correct order
+      // Sort final messages with type-aware comparator and stable tiebreaker
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aVal = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bVal = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
 
-        // Handle tiebreaker for stable sorting
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          const cmp = direction === 'ASC' ? aVal - bVal : bVal - aVal;
+          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
         }
-
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        const cmp =
+          direction === 'ASC' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
       });
 
       // Calculate hasMore based on pagination window

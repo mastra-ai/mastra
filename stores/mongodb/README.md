@@ -93,7 +93,7 @@ await store.saveMessages({
 
 // Query threads and messages
 const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.listMessages({ threadId: 'thread-123' });
+const { messages } = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration

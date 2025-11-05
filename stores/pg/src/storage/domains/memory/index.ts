@@ -562,11 +562,23 @@ export class MemoryPG extends MemoryStorage {
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
       let finalMessages = list.get.all.db();
 
-      // Sort all messages (paginated + included) for final output
+      // Sort all messages (paginated + included) for final output with type-safe comparator
       finalMessages = finalMessages.sort((a, b) => {
         const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
         const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
       });
 
       // Calculate hasMore based on pagination window

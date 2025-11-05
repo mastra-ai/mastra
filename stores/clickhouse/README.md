@@ -51,7 +51,7 @@ await store.saveMessages({
 
 // Query threads and messages
 const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.listMessages({ threadId: 'thread-123' });
+const { messages } = await store.listMessages({ threadId: 'thread-123' });
 
 // Clean up
 await store.close();
@@ -116,8 +116,6 @@ The store uses different table engines for different types of data:
 - `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
 - `listWorkflowRuns({ workflowName, pagination })`: List workflow runs with pagination
 - `getWorkflowRunById({ workflowName, runId })`: Get a specific workflow run
-- `updateWorkflowState({ workflowName, runId, state })`: Update workflow state
-- `updateWorkflowResults({ workflowName, runId, results })`: Update workflow results
 
 ### Evaluation/Scoring Operations
 

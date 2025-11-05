@@ -4508,11 +4508,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
         const mockMemory = new MockMemory();
 
-        let messages = await mockMemory.recall({
-          threadId: `thread-2-${version}-generate`,
-          resourceId: `resource-2-${version}-generate`,
-        });
-
         let saveCallCount = 0;
 
         mockMemory.saveMessages = async function (...args) {
@@ -4546,7 +4541,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
         });
-        messages = result?.messages || [];
+        const messages = result?.messages ?? [];
 
         expect(messages.length).toBe(1);
         expect(messages[0].role).toBe('user');

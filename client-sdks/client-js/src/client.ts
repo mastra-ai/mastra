@@ -141,6 +141,9 @@ export class MastraClient extends BaseResource {
     threadId: string,
     opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
+    if (!opts.agentId && !opts.networkId) {
+      throw new Error('Either agentId or networkId must be provided');
+    }
     let url = '';
     if (opts.agentId) {
       url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;

@@ -654,6 +654,9 @@ describe('Memory Handlers', () => {
     it('should throw error when threadId is not provided', async () => {
       const mastra = new Mastra({
         logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
         storage,
       });
       await expect(listMessagesHandler({ mastra, threadId: undefined as any })).rejects.toThrow(
@@ -664,8 +667,16 @@ describe('Memory Handlers', () => {
     it('should throw error when storage is not initialized', async () => {
       const mastra = new Mastra({
         logger: false,
+        agents: {
+          testAgent: new Agent({
+            id: 'test-agent',
+            name: 'test-agent',
+            instructions: 'test-instructions',
+            model: {} as any,
+          }),
+        },
       });
-      await expect(listMessagesHandler({ mastra, threadId: 'test-thread' })).rejects.toThrow(
+      await expect(listMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'testAgent' })).rejects.toThrow(
         new HTTPException(400, { message: 'Storage is not initialized' }),
       );
     });
@@ -673,6 +684,9 @@ describe('Memory Handlers', () => {
     it('should throw 404 when thread is not found', async () => {
       const mastra = new Mastra({
         logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
         storage,
       });
       storage.getThreadById = vi.fn().mockResolvedValue(null);
@@ -702,6 +716,9 @@ describe('Memory Handlers', () => {
 
       const mastra = new Mastra({
         logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
         storage,
       });
 

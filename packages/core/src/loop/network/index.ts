@@ -580,8 +580,6 @@ export async function createNetworkLoop({
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
-        // resourceId: inputData.resourceId,
-        // threadId: inputData.threadId,
         requestContext: requestContext,
         runId,
       });
