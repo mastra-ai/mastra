@@ -37,7 +37,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         try {
           // Try to fetch the MCP servers list endpoint to check if server is ready
           const response = await fetch(`http://localhost:${port}/api/mcp/v0/servers`, {
-            signal: AbortSignal.timeout(1000)
+            signal: AbortSignal.timeout(1000),
           });
           if (response.ok || response.status === 404) {
             // 404 is also ok - means server is up but no servers configured
@@ -81,12 +81,12 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         }
       });
 
-      mastraServer.on('error', (err) => {
+      mastraServer.on('error', err => {
         clearInterval(healthCheckInterval);
         reject(new Error(`Failed to spawn Mastra server: ${err.message}`));
       });
 
-      mastraServer.on('exit', (code) => {
+      mastraServer.on('exit', code => {
         if (code !== null && code !== 0) {
           clearInterval(healthCheckInterval);
           reject(new Error(`Mastra server exited with code ${code}. Stderr: ${errorOutput}`));
