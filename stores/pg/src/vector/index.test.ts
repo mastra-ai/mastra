@@ -3330,7 +3330,7 @@ describe('Validation', () => {
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
   describe('Connection String Config', () => {
     it('throws if connectionString is empty', () => {
-      expect(() => new PgVector({ connectionString: '' })).toThrow(
+      expect(() => new PgVector({ id: 'test-vector', connectionString: '' })).toThrow(
         /connectionString must be provided and cannot be empty/,
       );
     });
@@ -3341,6 +3341,7 @@ describe('Validation', () => {
 
   describe('TCP Host Config', () => {
     const validConfig = {
+      id: 'test-vector',
       host: 'localhost',
       port: 5434,
       database: 'mastra',
@@ -3575,11 +3576,11 @@ describe('Validation', () => {
 
   describe('Invalid Config', () => {
     it('throws on invalid config (missing required fields)', () => {
-      expect(() => new PgVector({ user: 'test' } as any)).toThrow(/invalid config/);
+      expect(() => new PgVector({ user: 'test' } as any)).toThrow(/id must be provided and cannot be empty/);
     });
 
     it('throws on completely empty config', () => {
-      expect(() => new PgVector({} as any)).toThrow(/invalid config/);
+      expect(() => new PgVector({} as any)).toThrow(/id must be provided and cannot be empty/);
     });
   });
 
