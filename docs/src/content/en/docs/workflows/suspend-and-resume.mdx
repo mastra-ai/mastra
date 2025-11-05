@@ -5,11 +5,14 @@ description: "Suspend and resume in Mastra workflows allows you to pause executi
 
 # Suspend & Resume
 
-Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle expensive operations, or wait for [Human in the Loop](/docs/workflows/human-in-the-loop) input. When a workflow is suspended, its current state can be persisted as a [snapshot](/docs/workflows/snapshots) and later resumed from a [specific step ID](/docs/workflows/snapshots#retrieving-snapshots). Snapshots are stored in the configured storage system and persist across deployments and application restarts.
+Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle costly operations, or request [human-in-the-loop](/docs/workflows/human-in-the-loop) input. When a workflow is suspended, its current execution state is saved as a snapshot. You can later resume the workflow from a [specific step ID](/docs/workflows/snapshots#retrieving-snapshots), restoring the exact state captured in that snapshot. [Snapshots](/docs/workflows/snapshots) are stored in your configured storage provider and across deployments and application restarts.
 
 ## Pausing a workflow with `suspend()`
 
-Use `suspend()` to pause workflow execution at a specific step. If a `resumeSchema` condition isn’t met, the workflow suspends at `return suspend()`. No further logic runs, and only the values passed to `suspend()` are returned. The step’s main return block is skipped, and workflow execution doesn’t continue.
+Use `suspend()` to pause workflow execution at a specific step. You can define a condition in the step’s `execute` block using values from `resumeData`.
+
+- If the condition isn’t met, the workflow pauses and returns `suspend()`.
+- If the condition is met, the workflow continues with the remaining logic in the step.
 
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
 
@@ -59,7 +62,7 @@ export const testWorkflow = createWorkflow({
 
 ## Restarting a workflow with `resume()`
 
-Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from where it left off.
+Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
 
 ![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
 

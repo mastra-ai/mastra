@@ -26,15 +26,6 @@ Mastra workflows operate using these principles:
 - Composing **steps** with `createWorkflow` to define the execution flow.
 - Running **workflows** to execute the entire sequence, with built-in support for suspension, resumption, and streaming results.
 
-## Workflow status types
-
-When running a workflow, its `status` can be one of the following:
-
-- `running` - The workflow is currently running
-- `suspended` - The workflow is suspended
-- `success` - The workflow has completed
-- `failed` - The workflow has failed
-
 ## Creating a workflow step
 
 Steps are the building blocks of workflows. Create a step using `createStep()` with `inputSchema` and `outputSchema` to define the data it accepts and returns.
@@ -230,6 +221,7 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 `mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 :::
 
+
 ## Running workflows
 
 Workflows can be run in two modes: start waits for all steps to complete before returning, and stream emits events during execution. Choose the approach that fits your use case: start when you only need the final result, and stream when you want to monitor progress or trigger actions as steps complete.
@@ -269,7 +261,11 @@ for await (const chunk of result.stream) {
   </TabItem>
 </Tabs>
 
-## Workflow output
+### Workflow status types
+
+When running a workflow, its `status` can be `running`, `suspended`, `success`, or `failed`.
+
+### Workflow output
 
 The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
 
