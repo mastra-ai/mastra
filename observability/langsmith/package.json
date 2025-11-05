@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langsmith",
-  "version": "0.1.2",
+  "version": "0.1.3-alpha.0",
   "description": "Langsmith observability provider for Mastra - includes AI tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
