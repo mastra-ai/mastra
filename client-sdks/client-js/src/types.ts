@@ -24,7 +24,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
   AITraceRecord,
-  AISpanRecord,
+  SpanRecord,
   PaginationInfo,
   WorkflowRun,
   WorkflowRuns,
@@ -487,7 +487,7 @@ export interface GetAITraceResponse {
 }
 
 export interface GetAITracesResponse {
-  spans: AISpanRecord[];
+  spans: SpanRecord[];
   pagination: PaginationInfo;
 }
 

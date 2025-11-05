@@ -1,4 +1,4 @@
-import type { AISpanType } from '@mastra/core/observability';
+import type { SpanType } from '@mastra/core/observability';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 
@@ -109,7 +109,7 @@ describe('Observability Methods', () => {
 
       await client.getAITraces({
         filters: {
-          spanType: 'agent_run' as AISpanType,
+          spanType: 'agent_run' as SpanType,
         },
       });
 
@@ -212,7 +212,7 @@ describe('Observability Methods', () => {
         },
         filters: {
           name: 'test-trace',
-          spanType: 'agent_run' as AISpanType,
+          spanType: 'agent_run' as SpanType,
           entityId: 'entity-123',
           entityType: 'agent',
         },

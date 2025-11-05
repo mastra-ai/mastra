@@ -288,7 +288,7 @@ export class StoreOperationsPG extends StoreOperations {
         ifNotExists: timeZColumnNames,
       });
 
-      // Set up timestamp triggers for AI spans table
+      // Set up timestamp triggers for Spans table
       if (tableName === TABLE_AI_SPANS) {
         await this.setupTimestampTriggers(tableName);
       }
@@ -743,7 +743,7 @@ export class StoreOperationsPG extends StoreOperations {
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       },
-      // AI Spans indexes for optimal trace querying
+      // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
         table: TABLE_AI_SPANS,

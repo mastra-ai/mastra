@@ -1,7 +1,7 @@
-import { AISpanType, AITracingEventType } from '@mastra/core/observability';
-import type { AnyExportedAISpan } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
+import type { AnyExportedSpan } from '@mastra/core/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { OtelExporter } from './ai-tracing';
+import { OtelExporter } from './tracing';
 
 // Mock the OpenTelemetry modules
 vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
@@ -75,16 +75,16 @@ describe('OtelExporter', () => {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'Test Span',
         startTime: new Date(),
         endTime: new Date(),
         input: { test: 'input' },
         output: { test: 'output' },
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan,
       });
 
@@ -106,16 +106,16 @@ describe('OtelExporter', () => {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'Test Span',
         startTime: new Date(),
         endTime: new Date(),
         input: { test: 'input' },
         output: { test: 'output' },
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan,
       });
 
@@ -135,16 +135,16 @@ describe('OtelExporter', () => {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'Test Span',
         startTime: new Date(),
         endTime: new Date(),
         input: { test: 'input' },
         output: { test: 'output' },
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan,
       });
 
@@ -166,37 +166,37 @@ describe('OtelExporter', () => {
         id: 'root-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'Root Span',
         startTime: new Date(),
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
       const childSpan = {
         id: 'child-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.WORKFLOW_STEP,
+        type: SpanType.WORKFLOW_STEP,
         name: 'Child Span',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
       // Process child first (should buffer)
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: childSpan,
       });
 
       // Process incomplete root (should buffer)
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
 
       // Complete root
       const completedRoot = { ...rootSpan, endTime: new Date() };
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: completedRoot,
       });
 
@@ -220,28 +220,28 @@ describe('OtelExporter', () => {
         id: 'root-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.WORKFLOW_RUN,
+        type: SpanType.WORKFLOW_RUN,
         name: 'Workflow 1',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
       const trace2Root = {
         id: 'root-2',
         traceId: 'trace-2',
         parent: undefined,
-        type: AISpanType.WORKFLOW_RUN,
+        type: SpanType.WORKFLOW_RUN,
         name: 'Workflow 2',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: trace1Root,
       });
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: trace2Root,
       });
 
@@ -266,7 +266,7 @@ describe('OtelExporter', () => {
         id: 'llm-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         name: 'LLM Generation',
         startTime: new Date(),
         endTime: new Date(),
@@ -279,10 +279,10 @@ describe('OtelExporter', () => {
           completionTokens: 5,
           totalTokens: 15,
         },
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: llmSpan,
       });
 
@@ -303,16 +303,16 @@ describe('OtelExporter', () => {
         id: 'tool-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: 'Calculator',
         startTime: new Date(),
         endTime: new Date(),
         input: { operation: 'add', a: 2, b: 3 },
         output: { result: 5 },
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: toolSpan,
       });
 
@@ -335,7 +335,7 @@ describe('OtelExporter', () => {
         id: 'error-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'Failed Operation',
         startTime: new Date(),
         endTime: new Date(),
@@ -345,10 +345,10 @@ describe('OtelExporter', () => {
             stack: 'Error: Invalid input\n  at validate()',
           },
         },
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: errorSpan,
       });
       vi.advanceTimersByTime(5000);
@@ -367,18 +367,18 @@ describe('OtelExporter', () => {
         },
       });
 
-      const exportedSpan: AnyExportedAISpan = {
+      const exportedSpan: AnyExportedSpan = {
         id: 'span-1',
         traceId: 'trace-1',
         parent: undefined,
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         name: 'Test Span',
         startTime: new Date(),
         endTime: new Date(),
-      } as unknown as AnyExportedAISpan;
+      } as unknown as AnyExportedSpan;
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan,
       });
 

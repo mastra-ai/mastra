@@ -369,7 +369,7 @@ export function pgTests() {
       });
 
       it('should create trigger function in the correct schema namespace', async () => {
-        const aiSpansSchema = {
+        const SpansSchema = {
           id: { type: 'text', primaryKey: true, nullable: false },
           name: { type: 'text', nullable: true },
           createdAt: { type: 'timestamp', nullable: false },
@@ -378,7 +378,7 @@ export function pgTests() {
 
         await testStore.createTable({
           tableName: 'mastra_ai_spans' as TABLE_NAMES,
-          schema: aiSpansSchema,
+          schema: SpansSchema,
         });
 
         // Verify trigger function exists in the correct schema
