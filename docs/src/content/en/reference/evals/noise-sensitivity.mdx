@@ -1,11 +1,11 @@
 ---
-title: "Reference: Noise Sensitivity Scorer (CI/Testing Only) | Scorers | Mastra Docs"
+title: "Reference: Noise Sensitivity Scorer | Evals | Mastra Docs"
 description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Noise Sensitivity Scorer (CI/Testing Only)
+# Noise Sensitivity Scorer
 
 The `createNoiseSensitivityScorerLLM()` function creates a **CI/testing scorer** that evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information. Unlike live scorers that evaluate single production runs, this scorer requires predetermined test data including both baseline responses and noisy variations.
 
@@ -811,7 +811,7 @@ jobs:
 
 ## Related
 
-- [Scorers Overview](/docs/scorers/overview) - Setting up scorer pipelines
-- [Hallucination Scorer](/reference/scorers/hallucination) - Evaluates fabricated content
-- [Answer Relevancy Scorer](/reference/scorers/answer-relevancy) - Measures response focus
-- [Custom Scorers](/docs/scorers/custom-scorers) - Creating your own evaluation metrics
+- [Scorers Overview](/docs/evals/overview) - Setting up scorer pipelines
+- [Hallucination Scorer](/reference/evals/hallucination) - Evaluates fabricated content
+- [Answer Relevancy Scorer](/reference/evals/answer-relevancy) - Measures response focus
+- [Custom Scorers](/docs/evals/custom-scorers) - Creating your own evaluation metrics
