@@ -418,7 +418,7 @@ const result = await scorer.run({
 In this example, the response fully addresses the user's prompt with all requirements met.
 
 ```typescript title="src/example-excellent-prompt-alignment.ts" showLineNumbers copy
-import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
   model: "openai/gpt-4o-mini",
@@ -466,7 +466,7 @@ The output receives a high score because it perfectly addresses the intent, fulf
 In this example, the response addresses the core intent but misses some requirements or has format issues.
 
 ```typescript title="src/example-partial-prompt-alignment.ts" showLineNumbers copy
-import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
   model: "openai/gpt-4o-mini",
@@ -507,7 +507,7 @@ The output receives a lower score because while the content is accurate, it does
 In this example, the response fails to address the user's specific requirements.
 
 ```typescript title="src/example-poor-prompt-alignment.ts" showLineNumbers copy
-import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/llm";
+import { createPromptAlignmentScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createPromptAlignmentScorerLLM({
   model: "openai/gpt-4o-mini",

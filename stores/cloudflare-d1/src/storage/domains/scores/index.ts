@@ -1,7 +1,13 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import {
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '../../sql-builder';
@@ -126,7 +132,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -140,6 +146,10 @@ export class ScoresStorageD1 extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
 
       // Get total count
@@ -160,13 +170,16 @@ export class ScoresStorageD1 extends ScoresStorage {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
+
+      const end = perPageInput === false ? total : start + perPage;
+      const limitValue = perPageInput === false ? total : perPage;
 
       // Get paginated results
       const selectQuery = createSqlBuilder().select('*').from(fullTableName).where('scorerId = ?', scorerId);
@@ -180,7 +193,7 @@ export class ScoresStorageD1 extends ScoresStorage {
       if (source) {
         selectQuery.andWhere('source = ?', source);
       }
-      selectQuery.limit(pagination.perPage).offset(pagination.page * pagination.perPage);
+      selectQuery.limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.operations.executeQuery({ sql, params });
@@ -190,9 +203,9 @@ export class ScoresStorageD1 extends ScoresStorage {
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: total > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores,
       };
@@ -208,7 +221,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -216,6 +229,10 @@ export class ScoresStorageD1 extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
 
       // Get total count
@@ -227,21 +244,24 @@ export class ScoresStorageD1 extends ScoresStorage {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const end = perPageInput === false ? total : start + perPage;
+      const limitValue = perPageInput === false ? total : perPage;
+
       // Get paginated results
       const selectQuery = createSqlBuilder()
         .select('*')
         .from(fullTableName)
         .where('runId = ?', runId)
-        .limit(pagination.perPage)
-        .offset(pagination.page * pagination.perPage);
+        .limit(limitValue)
+        .offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.operations.executeQuery({ sql, params });
@@ -251,9 +271,9 @@ export class ScoresStorageD1 extends ScoresStorage {
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: total > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores,
       };
@@ -269,7 +289,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -279,6 +299,10 @@ export class ScoresStorageD1 extends ScoresStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
 
       // Get total count
@@ -294,13 +318,16 @@ export class ScoresStorageD1 extends ScoresStorage {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
+
+      const end = perPageInput === false ? total : start + perPage;
+      const limitValue = perPageInput === false ? total : perPage;
 
       // Get paginated results
       const selectQuery = createSqlBuilder()
@@ -308,8 +335,8 @@ export class ScoresStorageD1 extends ScoresStorage {
         .from(fullTableName)
         .where('entityId = ?', entityId)
         .andWhere('entityType = ?', entityType)
-        .limit(pagination.perPage)
-        .offset(pagination.page * pagination.perPage);
+        .limit(limitValue)
+        .offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.operations.executeQuery({ sql, params });
@@ -319,9 +346,9 @@ export class ScoresStorageD1 extends ScoresStorage {
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: total > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores,
       };
@@ -337,7 +364,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -347,6 +374,10 @@ export class ScoresStorageD1 extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const fullTableName = this.operations.getTableName(TABLE_SCORERS);
 
       // Get total count
@@ -362,37 +393,37 @@ export class ScoresStorageD1 extends ScoresStorage {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const end = perPageInput === false ? total : start + perPage;
+      const limitValue = perPageInput === false ? total : perPage;
+
       // Get paginated results
-      const limit = pagination.perPage + 1;
       const selectQuery = createSqlBuilder()
         .select('*')
         .from(fullTableName)
         .where('traceId = ?', traceId)
         .andWhere('spanId = ?', spanId)
         .orderBy('createdAt', 'DESC')
-        .limit(limit)
-        .offset(pagination.page * pagination.perPage);
+        .limit(limitValue)
+        .offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.operations.executeQuery({ sql, params });
-      const rows = Array.isArray(results) ? results : [];
-
-      const scores = rows.slice(0, pagination.perPage).map(transformScoreRow);
+      const scores = Array.isArray(results) ? results.map(transformScoreRow) : [];
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: rows.length > pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores,
       };

@@ -52,7 +52,7 @@ async function main() {
     },
   });
 
-  const tools = await mcpClient.listTools();
+  const tools = 'listTools' in mcpClient ? await mcpClient.listTools() : await mcpClient.getTools();
 
   const octokit = new Octokit({
     auth: GITHUB_PERSONAL_ACCESS_TOKEN,
@@ -77,15 +77,18 @@ async function main() {
             Issue Title: ${issue.data.title}
             Issue Body: ${issue.data.body}
         `,
-    output: {
-      type: 'object',
-      properties: {
-        assignee: { type: 'string' },
-        reason: { type: 'string' },
-        product_area: { type: 'string' },
-        github_username: { type: 'string' },
+    structuredOutput: {
+      schema: {
+        type: 'object',
+        properties: {
+          assignee: { type: 'string' },
+          reason: { type: 'string' },
+          product_area: { type: 'string' },
+          github_username: { type: 'string' },
+        },
+        required: ['assignee', 'reason', 'product_area', 'github_username'],
+        additionalProperties: false,
       },
-      required: ['assignee', 'reason', 'product_area', 'github_username'],
     },
   });
 

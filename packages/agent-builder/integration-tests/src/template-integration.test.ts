@@ -112,7 +112,7 @@ describe('Template Workflow Integration Tests', () => {
     const templateWorkflow = mastraInstance.getWorkflow(`agentBuilderTemplateWorkflow`);
 
     // Run the merge template workflow
-    const workflowRun = await templateWorkflow.createRunAsync();
+    const workflowRun = await templateWorkflow.createRun();
     const result = await workflowRun.start({
       inputData: {
         repo: csvTemplate!.githubUrl,
@@ -309,7 +309,7 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Testing duplicate template merge...');
 
     const templateWorkflow = mastraInstance.getWorkflow(`agentBuilderTemplateWorkflow`);
-    const workflowRun = await templateWorkflow.createRunAsync();
+    const workflowRun = await templateWorkflow.createRun();
     const result = await workflowRun.start({
       inputData: {
         repo: csvTemplate!.githubUrl,

@@ -13,9 +13,9 @@ Use tools when an agent needs additional context or information from remote reso
 
 ## Creating a tool
 
-This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool’s `inputSchema`. The tool accesses this data through its `context` argument, which in this example includes the `location` used in the weather API query.
+This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
-```typescript {14,16} title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```typescript {14} title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -28,8 +28,8 @@ export const weatherTool = createTool({
   outputSchema: z.object({
     weather: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { location } = context;
+  execute: async (inputData) => {
+    const { location } = inputData;
 
     const response = await fetch(`https://wttr.in/${location}?format=3`);
     const weather = await response.text();
@@ -49,7 +49,8 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
-  name: "weather-agent",
+  id: "weather-agent",
+  name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant.
       Use the weatherTool to fetch current weather data.`,
@@ -60,7 +61,7 @@ export const weatherAgent = new Agent({
 
 ## Calling an agent
 
-The agent uses the tool’s `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and makes it available to the tool’s context.
+The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.
 
 ```typescript {5} title="src/test-tool.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -81,6 +82,8 @@ import { weatherTool } from "../tools/weather-tool";
 import { activitiesTool } from "../tools/activities-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
+  name: "Weather Agent",
   // ..
   tools: { weatherTool, activitiesTool },
 });

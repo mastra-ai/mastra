@@ -211,6 +211,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { weatherTool } from '../tools/weather-tool';
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \${instructions},
   model: openai('gpt-4o-mini'),
@@ -245,8 +246,8 @@ export const weatherTool = createTool({
     conditions: z.string(),
     location: z.string(),
   }),
-  execute: async ({ context }) => {
-    return await getWeather(context.location);
+  execute: async (inputData) => {
+    return await getWeather(inputData.location);
   },
 });
 \`\`\`
@@ -264,7 +265,7 @@ const fetchWeather = createStep({
     city: z.string().describe('The city to get the weather for'),
   }),
   outputSchema: forecastSchema,
-  execute: async ({ inputData }) => {
+  execute: async (inputData) => {
     if (!inputData) {
       throw new Error('Input data not found');
     }
@@ -318,7 +319,8 @@ const planActivities = createStep({
   outputSchema: z.object({
     activities: z.string(),
   }),
-  execute: async ({ inputData, mastra }) => {
+  execute: async (inputData, context) => {
+    const mastra = context?.mastra;
     const forecast = inputData;
 
     if (!forecast) {
@@ -432,8 +434,8 @@ export const mastra = new Mastra({
             .optional(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.readFile({ ...context, projectPath });
+        execute: async inputData => {
+          return await AgentBuilderDefaults.readFile({ ...inputData, projectPath });
         },
       }),
 
@@ -453,8 +455,8 @@ export const mastra = new Mastra({
           message: z.string(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.writeFile({ ...context, projectPath });
+        execute: async inputData => {
+          return await AgentBuilderDefaults.writeFile({ ...inputData, projectPath });
         },
       }),
 
@@ -486,8 +488,8 @@ export const mastra = new Mastra({
           message: z.string(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.listDirectory({ ...context, projectPath });
+        execute: async inputData => {
+          return await AgentBuilderDefaults.listDirectory({ ...inputData, projectPath });
         },
       }),
 
@@ -512,10 +514,10 @@ export const mastra = new Mastra({
           executionTime: z.number().optional(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
+        execute: async inputData => {
           return await AgentBuilderDefaults.executeCommand({
-            ...context,
-            workingDirectory: context.workingDirectory || projectPath,
+            ...inputData,
+            workingDirectory: inputData.workingDirectory || projectPath,
           });
         },
       }),
@@ -557,8 +559,8 @@ export const mastra = new Mastra({
           ),
           message: z.string(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.manageTaskList(context);
+        execute: async inputData => {
+          return await AgentBuilderDefaults.manageTaskList(inputData);
         },
       }),
 
@@ -597,8 +599,8 @@ export const mastra = new Mastra({
           ),
           message: z.string(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.performMultiEdit({ ...context, projectPath });
+        execute: async inputData => {
+          return await AgentBuilderDefaults.performMultiEdit({ ...inputData, projectPath });
         },
       }),
 
@@ -630,8 +632,8 @@ export const mastra = new Mastra({
           backup: z.string().optional(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.replaceLines({ ...context, projectPath });
+        execute: async inputData => {
+          return await AgentBuilderDefaults.replaceLines({ ...inputData, projectPath });
         },
       }),
 
@@ -667,8 +669,8 @@ export const mastra = new Mastra({
           message: z.string(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.showFileLines({ ...context, projectPath });
+        execute: async inputData => {
+          return await AgentBuilderDefaults.showFileLines({ ...inputData, projectPath });
         },
       }),
 
@@ -716,8 +718,8 @@ export const mastra = new Mastra({
             patterns: z.array(z.string()),
           }),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.performSmartSearch(context, projectPath);
+        execute: async inputData => {
+          return await AgentBuilderDefaults.performSmartSearch(inputData, projectPath);
         },
       }),
 
@@ -757,8 +759,8 @@ export const mastra = new Mastra({
             validationsFailed: z.array(z.string()),
           }),
         }),
-        execute: async ({ context }) => {
-          const { projectPath: validationProjectPath, validationType, files } = context;
+        execute: async inputData => {
+          const { projectPath: validationProjectPath, validationType, files } = inputData;
           const targetPath = validationProjectPath || projectPath;
 
           // BEST PRACTICE: Always provide files array for optimal performance
@@ -803,8 +805,8 @@ export const mastra = new Mastra({
           suggestions: z.array(z.string()).optional(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.webSearch(context);
+        execute: async inputData => {
+          return await AgentBuilderDefaults.webSearch(inputData);
         },
       }),
 
@@ -838,8 +840,8 @@ export const mastra = new Mastra({
           summary: z.string(),
           confidence: z.number().min(0).max(100),
         }),
-        execute: async ({ context }) => {
-          return await AgentBuilderDefaults.signalCompletion(context);
+        execute: async inputData => {
+          return await AgentBuilderDefaults.signalCompletion(inputData);
         },
       }),
 
@@ -872,8 +874,8 @@ export const mastra = new Mastra({
           details: z.string().optional(),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          const { action, features, packages } = context;
+        execute: async inputData => {
+          const { action, features, packages } = inputData;
           try {
             switch (action) {
               case 'create':
@@ -935,8 +937,8 @@ export const mastra = new Mastra({
           stdout: z.array(z.string()).optional().describe('Server output lines captured during startup'),
           error: z.string().optional(),
         }),
-        execute: async ({ context }) => {
-          const { action, port } = context;
+        execute: async inputData => {
+          const { action, port } = inputData;
           try {
             switch (action) {
               case 'start':
@@ -1021,8 +1023,8 @@ export const mastra = new Mastra({
           url: z.string(),
           method: z.string(),
         }),
-        execute: async ({ context }) => {
-          const { method, url, baseUrl, headers, body, timeout } = context;
+        execute: async inputData => {
+          const { method, url, baseUrl, headers, body, timeout } = inputData;
           try {
             return await AgentBuilderDefaults.makeHttpRequest({
               method,

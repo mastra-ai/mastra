@@ -15,6 +15,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./ui": {
+      "import": {
+        "types": "./dist/ui.d.ts",
+        "default": "./dist/ui.js"
+      },
+      "require": {
+        "types": "./dist/ui.d.ts",
+        "default": "./dist/ui.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -58,5 +68,8 @@
   },
   "dependencies": {
     "ai": "^5.0.60"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

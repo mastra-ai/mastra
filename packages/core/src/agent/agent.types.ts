@@ -1,13 +1,13 @@
 import type { ModelMessage, ToolChoice } from 'ai-v5';
-import type { TracingContext, TracingOptions } from '../ai-tracing';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
+import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream/base/schema';
 import type { ChunkType } from '../stream/types';
 import type { MessageListInput } from './message-list';
@@ -36,12 +36,6 @@ export type AgentExecutionOptions<
   OUTPUT extends OutputSchema = undefined,
   FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
 > = {
-  /**
-   * Determines the output stream format.
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
-
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 

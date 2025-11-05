@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Configure the scorer
 const scorer = createAnswerRelevancyScorer({

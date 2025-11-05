@@ -15,7 +15,7 @@
   "description": "A Mastra template that processes CSV files from URLs and generates comprehensive questions from their content using OpenAI GPT-4o. Features smart CSV parsing, data analysis, and CSV-specific question generation for tabular data insights.",
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",

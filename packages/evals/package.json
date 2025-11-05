@@ -29,24 +29,14 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./scorers/llm": {
+    "./scorers/prebuilt": {
       "import": {
-        "types": "./dist/scorers/llm/index.d.ts",
-        "default": "./dist/scorers/llm/index.js"
+        "types": "./dist/scorers/prebuilt/index.d.ts",
+        "default": "./dist/scorers/prebuilt/index.js"
       },
       "require": {
-        "types": "./dist/scorers/llm/index.d.ts",
-        "default": "./dist/scorers/llm/index.cjs"
-      }
-    },
-    "./scorers/code": {
-      "import": {
-        "types": "./dist/scorers/code/index.d.ts",
-        "default": "./dist/scorers/code/index.js"
-      },
-      "require": {
-        "types": "./dist/scorers/code/index.d.ts",
-        "default": "./dist/scorers/code/index.cjs"
+        "types": "./dist/scorers/prebuilt/index.d.ts",
+        "default": "./dist/scorers/prebuilt/index.cjs"
       }
     },
     "./scorers/utils": {
@@ -101,5 +91,8 @@
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
     "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

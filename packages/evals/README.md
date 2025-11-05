@@ -16,8 +16,7 @@ npm install @mastra/evals
 ## Quick Start
 
 ```ts
-import { createFaithfulnessScorer } from '@mastra/evals/scorers/llm';
-import { createContentSimilarityScorer } from '@mastra/evals/scorers/code';
+import { createFaithfulnessScorer, createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
 
 const faithfulness = createFaithfulnessScorer({
    model: 'openai/gpt-4o-mini')

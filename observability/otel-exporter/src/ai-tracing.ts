@@ -2,8 +2,9 @@
  * OpenTelemetry AI Tracing Exporter for Mastra
  */
 
-import type { AITracingEvent, AnyExportedAISpan, TracingConfig } from '@mastra/core/ai-tracing';
-import { AITracingEventType, BaseExporter } from '@mastra/core/ai-tracing';
+import type { AITracingEvent, AnyExportedAISpan, InitExporterOptions, TracingConfig } from '@mastra/core/observability';
+import { AITracingEventType } from '@mastra/core/observability';
+import { BaseExporter } from '@mastra/observability';
 import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
@@ -46,8 +47,8 @@ export class OtelExporter extends BaseExporter {
   /**
    * Initialize with tracing configuration
    */
-  init(config: TracingConfig): void {
-    this.tracingConfig = config;
+  init(options: InitExporterOptions) {
+    this.tracingConfig = options.config;
   }
 
   private async setupExporter() {

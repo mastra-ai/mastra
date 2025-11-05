@@ -83,6 +83,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/aihubmix",
+          label: "AIHubMix",
+        },
+        {
+          type: "doc",
           id: "providers/alibaba",
           label: "Alibaba",
         },
@@ -155,6 +160,11 @@ const sidebars = {
           type: "doc",
           id: "providers/huggingface",
           label: "Hugging Face",
+        },
+        {
+          type: "doc",
+          id: "providers/iflowcn",
+          label: "iFlow",
         },
         {
           type: "doc",

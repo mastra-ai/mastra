@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, normalizePerPage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
@@ -367,8 +367,8 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
@@ -412,16 +412,19 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         }
       });
 
-      if (limit !== undefined && offset !== undefined) {
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
+      if (usePagination) {
         const countQuery = `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`;
         const countResult = await request.query(countQuery);
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
       let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
-      if (limit !== undefined && offset !== undefined) {
-        query += ` OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-        request.input('limit', limit);
+      if (usePagination) {
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page! * normalizedPerPage;
+        query += ` OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+        request.input('perPage', normalizedPerPage);
         request.input('offset', offset);
       }
       const result = await request.query(query);
@@ -430,7 +433,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

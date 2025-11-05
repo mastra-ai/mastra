@@ -22,7 +22,6 @@ const sidebars = {
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
         { type: "doc", id: "core/getWorkflow", label: ".getWorkflow()" },
         { type: "doc", id: "core/listWorkflows", label: ".listWorkflows()" },
-        { type: "doc", id: "core/getMemory", label: ".getMemory()" },
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
         { type: "doc", id: "core/getServer", label: ".getServer()" },
         { type: "doc", id: "core/getMCPServer", label: ".getMCPServer()" },
@@ -45,8 +44,8 @@ const sidebars = {
         { type: "doc", id: "core/getScorer", label: ".getScorer()" },
         {
           type: "doc",
-          id: "core/getScorerByName",
-          label: ".getScorerByName()",
+          id: "core/getScorerById",
+          label: ".getScorerById()",
         },
         { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
       ],
@@ -181,7 +180,7 @@ const sidebars = {
             {
               type: "doc",
               id: "workflows/workflow-methods/create-run",
-              label: ".createRunAsync()",
+              label: ".createRun()",
             },
           ],
         },
@@ -189,7 +188,7 @@ const sidebars = {
         { type: "doc", id: "workflows/run", label: "Run Class" },
         {
           type: "category",
-          label: "Methods",
+          label: "Run Methods",
           items: [
             {
               type: "doc",
@@ -302,17 +301,13 @@ const sidebars = {
       items: [
         { type: "doc", id: "memory/memory-class", label: "Memory Class" },
         { type: "doc", id: "memory/createThread", label: ".createThread()" },
-        { type: "doc", id: "memory/query", label: ".query()" },
+        { type: "doc", id: "memory/recall", label: ".recall()" },
+        { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
         { type: "doc", id: "memory/getThreadById", label: ".getThreadById()" },
         {
           type: "doc",
-          id: "memory/getThreadsByResourceId",
-          label: ".getThreadsByResourceId()",
-        },
-        {
-          type: "doc",
-          id: "memory/getThreadsByResourceIdPaginated",
-          label: ".getThreadsByResourceIdPaginated()",
+          id: "memory/listThreadsByResourceId",
+          label: ".listThreadsByResourceId()",
         },
         {
           type: "doc",
@@ -661,7 +656,7 @@ const sidebars = {
           id: "evals/content-similarity",
           label: "Content Similarity Scorer",
         },
-        { type: "doc", id: "evals/run-experiment", label: "runExperiment" },
+        { type: "doc", id: "evals/run-evals", label: "runEvals" },
         {
           type: "doc",
           id: "evals/answer-relevancy",

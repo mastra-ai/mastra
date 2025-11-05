@@ -1,5 +1,4 @@
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -108,6 +107,7 @@ function toolsTest(version: 'v1' | 'v2') {
   describe(`agents using tools ${version}`, () => {
     it('should call testTool from TestIntegration', async () => {
       const testAgent = new Agent({
+        id: 'test-agent',
         name: 'Test agent',
         instructions: 'You are an agent that call testTool',
         model: mockModel,
@@ -228,12 +228,13 @@ function toolsTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           name: z.string(),
         }),
-        execute: ({ context }) => {
-          return mockFindUser(context) as Promise<Record<string, any>>;
+        execute: (input, _context) => {
+          return mockFindUser(input) as Promise<Record<string, any>>;
         },
       });
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using findUserTool.',
         model: findUserToolModel,
@@ -348,6 +349,7 @@ function toolsTest(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: clientToolModel,
@@ -467,6 +469,7 @@ function toolsTest(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'You are an agent that can get list of users using client side tools.',
         model: clientToolModel,
@@ -601,19 +604,20 @@ function toolsTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ requestContext }) => {
-          capturedValue = requestContext.get('test-value')!;
+        execute: (input, context) => {
+          capturedValue = context.requestContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            requestContextAvailable: !!requestContext,
+            requestContextAvailable: !!context.requestContext,
             requestContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'requestContext-test-agent',
+        id: 'requestContext-test-agent',
+        name: 'Request Context Test Agent',
         instructions: 'You are an agent that tests requestContext availability.',
         model: requestContextModel,
         tools: { testTool },
@@ -737,19 +741,20 @@ function toolsTest(version: 'v1' | 'v2') {
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ requestContext }) => {
-          capturedValue = requestContext.get('test-value')!;
+        execute: (_input, context) => {
+          capturedValue = context.requestContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            requestContextAvailable: !!requestContext,
+            requestContextAvailable: !!context.requestContext,
             requestContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'requestContext-test-agent',
+        id: 'requestContext-test-agent',
+        name: 'Request Context Test Agent',
         instructions: 'You are an agent that tests requestContext availability.',
         model: requestContextModel,
         tools: { testTool },

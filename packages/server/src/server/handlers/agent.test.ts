@@ -46,6 +46,7 @@ class MockAgent extends Agent {
 const makeMockAgent = (config?: Partial<AgentConfig>) =>
   new MockAgent({
     name: 'test-agent',
+    description: 'A test agent for unit testing',
     instructions: 'test instructions',
     model: openai('gpt-4o'),
     ...(config || {}),
@@ -78,6 +79,7 @@ describe('Agent Handlers', () => {
 
     mockMultiModelAgent = makeMockAgent({
       name: 'test-multi-model-agent',
+      description: 'A test agent with multiple model configurations',
       model: [{ model: openaiV5('gpt-4o-mini') }, { model: openaiV5('gpt-4o') }, { model: openaiV5('gpt-4.1') }],
     });
 
@@ -96,6 +98,7 @@ describe('Agent Handlers', () => {
       expect(result).toEqual({
         'test-agent': {
           name: 'test-agent',
+          description: 'A test agent for unit testing',
           instructions: 'test instructions',
           tools: {},
           agents: {},
@@ -112,6 +115,7 @@ describe('Agent Handlers', () => {
         },
         'test-multi-model-agent': {
           name: 'test-multi-model-agent',
+          description: 'A test agent with multiple model configurations',
           instructions: 'test instructions',
           tools: {},
           agents: {},
@@ -154,6 +158,7 @@ describe('Agent Handlers', () => {
 
       const agentWithCoreProcessors = makeMockAgent({
         name: 'agent-with-core-processors',
+        description: 'A test agent with input and output processors',
         inputProcessors: [unicodeNormalizer],
         outputProcessors: [tokenLimiter],
       });
@@ -168,14 +173,17 @@ describe('Agent Handlers', () => {
 
       expect(result['agent-with-core-processors']).toMatchObject({
         name: 'agent-with-core-processors',
+        description: 'A test agent with input and output processors',
         inputProcessors: [
           {
-            name: 'unicode-normalizer',
+            id: 'unicode-normalizer',
+            name: 'Unicode Normalizer',
           },
         ],
         outputProcessors: [
           {
-            name: 'token-limiter',
+            id: 'token-limiter',
+            name: 'Token Limiter',
           },
         ],
       });
@@ -222,6 +230,7 @@ describe('Agent Handlers', () => {
 
       expect(result).toEqual({
         name: 'test-agent',
+        description: 'A test agent for unit testing',
         instructions: 'test instructions',
         tools: {},
         agents: {},

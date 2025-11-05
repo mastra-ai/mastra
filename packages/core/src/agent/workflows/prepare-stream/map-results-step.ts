@@ -1,7 +1,7 @@
-import type { AISpan, AISpanType, TracingContext } from '../../../ai-tracing';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
+import type { AISpan, AISpanType, TracingContext } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';

@@ -665,10 +665,9 @@ describe('MCPClient', () => {
       const stockTool = tools['stockPrice_getStockPrice'];
       expect(stockTool).toBeDefined();
 
-      await stockTool.execute({
-        context: { symbol: 'MSFT' },
-        requestContext: testContextInstance,
-      });
+      await stockTool.execute!({
+        symbol: 'MSFT',
+      }, { requestContext: testContextInstance });
 
       expect(loggerFn).toHaveBeenCalled();
       const callWithContext = loggerFn.mock.calls.find(call => {
@@ -707,6 +706,7 @@ describe('MCPClient', () => {
 
       const agentName = 'stockAgentForContextTest';
       const agent = new Agent({
+        id: agentName,
         name: agentName,
         model: 'openai/gpt-4o',
         instructions: 'Use the getStockPrice tool to find the price of MSFT.',
@@ -754,7 +754,7 @@ describe('MCPClient', () => {
       type ContextA = { callId: string };
       const requestContextA = new RequestContext<ContextA>();
       requestContextA.set('callId', 'call-A-111');
-      await stockTool.execute({ context: { symbol: 'MSFT' }, requestContext: requestContextA });
+      await stockTool.execute({ symbol: 'MSFT' }, { requestContext: requestContextA });
 
       expect(loggerFn).toHaveBeenCalled();
       let callsAfterA = [...loggerFn.mock.calls];
@@ -769,7 +769,7 @@ describe('MCPClient', () => {
       type ContextB = { sessionId: string };
       const requestContextB = new RequestContext<ContextB>();
       requestContextB.set('sessionId', 'session-B-222');
-      await stockTool.execute({ context: { symbol: 'GOOG' }, requestContext: requestContextB });
+      await stockTool.execute({ symbol: 'GOOG' }, { requestContext: requestContextB });
 
       expect(loggerFn).toHaveBeenCalled();
       let callsAfterB = [...loggerFn.mock.calls];
@@ -818,7 +818,7 @@ describe('MCPClient', () => {
       const requestContextX = new RequestContext<ContextX>();
       requestContextX.set('requestId', 'req-X-001');
 
-      await toolX.execute({ context: { symbol: 'AAA' }, requestContext: requestContextX });
+      await toolX.execute({ symbol: 'AAA' }, { requestContext: requestContextX });
 
       expect(sharedLoggerFn).toHaveBeenCalled();
       let callsAfterToolX = [...sharedLoggerFn.mock.calls];
@@ -836,7 +836,7 @@ describe('MCPClient', () => {
       const requestContextY = new RequestContext<ContextY>();
       requestContextY.set('customerId', 'cust-Y-002');
 
-      await toolY.execute({ context: { symbol: 'BBB' }, requestContext: requestContextY });
+      await toolY.execute({ symbol: 'BBB' }, { requestContext: requestContextY });
 
       expect(sharedLoggerFn).toHaveBeenCalled();
       let callsAfterToolY = [...sharedLoggerFn.mock.calls];

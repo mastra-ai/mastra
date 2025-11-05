@@ -1,7 +1,7 @@
-import type { TextStreamPart } from 'ai';
+import type { TextStreamPart } from '@internal/ai-sdk-v4/model';
 import type { z } from 'zod';
-import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';

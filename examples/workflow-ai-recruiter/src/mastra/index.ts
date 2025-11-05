@@ -5,6 +5,7 @@ import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const recruiter = new Agent({
+  id: 'recruiter-agent',
   name: 'Recruiter Agent',
   instructions: `You are a recruiter.`,
   model: openai('gpt-4o-mini'),
@@ -110,7 +111,7 @@ const mastra = new Mastra({
 });
 
 (async () => {
-  const run = await mastra.getWorkflow('candidateWorkflow').createRunAsync();
+  const run = await mastra.getWorkflow('candidateWorkflow').createRun();
   const { runId, start } = run;
 
   console.log('Run', runId);

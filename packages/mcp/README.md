@@ -235,6 +235,7 @@ import { Agent } from '@mastra/core/agent';
 import { openai } from '@ai-sdk/openai';
 
 const agent = new Agent({
+  id: 'cli-assistant',
   name: 'CLI Assistant',
   instructions: 'You help users with CLI tasks',
   model: openai('gpt-4'),
@@ -321,7 +322,7 @@ const mcp = new MCPClient({
 });
 
 // Get resources from all connected MCP servers
-const resources = await mcp.getResources();
+const resources = await mcp.resources.get();
 
 // Resources are grouped by server name
 console.log(Object.keys(resources)); // ['weather', 'dataService']
@@ -557,5 +558,4 @@ The client includes comprehensive error handling:
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/specification)
 - [@modelcontextprotocol/sdk Documentation](https://github.com/modelcontextprotocol/typescript-sdk)
 - [Mastra Docs: Using MCP With Mastra](/docs/agents/mcp-guide)
-- [Mastra Docs: MCPConfiguration Reference](/reference/tools/mcp-configuration)
 - [Mastra Docs: MastraMCPClient Reference](/reference/tools/client)

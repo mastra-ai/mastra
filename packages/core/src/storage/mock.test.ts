@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, beforeEach } from 'vitest';
 import { MessageList } from '../agent';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import { deepMerge } from '../utils';
 import { InMemoryStore } from './mock';
 
@@ -46,86 +46,9 @@ describe('InMemoryStore - Thread Sorting', () => {
     }
   });
 
-  describe('getThreadsByResourceId', () => {
-    it('should sort by createdAt DESC by default', async () => {
-      const threads = await store.getThreadsByResourceId({ resourceId });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-3'); // 2024-01-03 (latest)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-1'); // 2024-01-01 (earliest)
-    });
-
-    it('should sort by createdAt ASC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId,
-        orderBy: 'createdAt',
-        sortDirection: 'ASC',
-      });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-1'); // 2024-01-01 (earliest)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-3'); // 2024-01-03 (latest)
-    });
-
-    it('should sort by updatedAt DESC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId,
-        orderBy: 'updatedAt',
-        sortDirection: 'DESC',
-      });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
-    });
-
-    it('should sort by updatedAt ASC when specified', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId,
-        orderBy: 'updatedAt',
-        sortDirection: 'ASC',
-      });
-
-      expect(threads).toHaveLength(3);
-      expect(threads[0].id).toBe('thread-3'); // 2024-01-01 (earliest updatedAt)
-      expect(threads[1].id).toBe('thread-2'); // 2024-01-02
-      expect(threads[2].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
-    });
-
-    it('should handle empty results', async () => {
-      const threads = await store.getThreadsByResourceId({
-        resourceId: 'non-existent-resource',
-      });
-
-      expect(threads).toHaveLength(0);
-    });
-
-    it('should filter by resourceId correctly', async () => {
-      // Add a thread with different resourceId
-      await store.saveThread({
-        thread: {
-          id: 'thread-other',
-          resourceId: 'other-resource',
-          title: 'Other Thread',
-          createdAt: new Date('2024-01-04T10:00:00Z'),
-          updatedAt: new Date('2024-01-04T10:00:00Z'),
-          metadata: {},
-        },
-      });
-
-      const threads = await store.getThreadsByResourceId({ resourceId });
-
-      expect(threads).toHaveLength(3);
-      expect(threads.every(t => t.resourceId === resourceId)).toBe(true);
-    });
-  });
-
-  describe('getThreadsByResourceIdPaginated', () => {
+  describe('listThreadsByResourceId', () => {
     it('should sort by createdAt DESC by default with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.listThreadsByResourceId({
         resourceId,
         page: 0,
         perPage: 2,
@@ -140,13 +63,29 @@ describe('InMemoryStore - Thread Sorting', () => {
       expect(result.hasMore).toBe(true);
     });
 
-    it('should sort by updatedAt ASC with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+    it('should sort by createdAt ASC when specified', async () => {
+      const result = await store.listThreadsByResourceId({
         resourceId,
         page: 0,
         perPage: 2,
-        orderBy: 'updatedAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
+      expect(result.threads).toHaveLength(2);
+      expect(result.threads[0].id).toBe('thread-1'); // 2024-01-01 (earliest)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.total).toBe(3);
+      expect(result.page).toBe(0);
+      expect(result.perPage).toBe(2);
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('should sort by updatedAt ASC with pagination', async () => {
+      const result = await store.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: 2,
+        orderBy: { field: 'updatedAt', direction: 'ASC' },
       });
 
       expect(result.threads).toHaveLength(2);
@@ -156,23 +95,36 @@ describe('InMemoryStore - Thread Sorting', () => {
       expect(result.hasMore).toBe(true);
     });
 
-    it('should maintain sort order across pages', async () => {
-      // First page
-      const page1 = await store.getThreadsByResourceIdPaginated({
+    it('should sort by updatedAt DESC when specified', async () => {
+      const result = await store.listThreadsByResourceId({
         resourceId,
         page: 0,
         perPage: 2,
-        orderBy: 'createdAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      expect(result.threads).toHaveLength(2);
+      expect(result.threads[0].id).toBe('thread-1'); // 2024-01-03 (latest updatedAt)
+      expect(result.threads[1].id).toBe('thread-2'); // 2024-01-02
+      expect(result.total).toBe(3);
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('should maintain sort order across pages', async () => {
+      // First page
+      const page1 = await store.listThreadsByResourceId({
+        resourceId,
+        page: 0,
+        perPage: 2,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       // Second page
-      const page2 = await store.getThreadsByResourceIdPaginated({
+      const page2 = await store.listThreadsByResourceId({
         resourceId,
         page: 1,
         perPage: 2,
-        orderBy: 'createdAt',
-        sortDirection: 'ASC',
+        orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
       expect(page1.threads).toHaveLength(2);
@@ -184,12 +136,11 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should calculate pagination info correctly after sorting', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.listThreadsByResourceId({
         resourceId,
         page: 1,
         perPage: 2,
-        orderBy: 'updatedAt',
-        sortDirection: 'DESC',
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(1);
@@ -201,7 +152,7 @@ describe('InMemoryStore - Thread Sorting', () => {
     });
 
     it('should handle empty results with pagination', async () => {
-      const result = await store.getThreadsByResourceIdPaginated({
+      const result = await store.listThreadsByResourceId({
         resourceId: 'non-existent-resource',
         page: 0,
         perPage: 10,
@@ -210,6 +161,28 @@ describe('InMemoryStore - Thread Sorting', () => {
       expect(result.threads).toHaveLength(0);
       expect(result.total).toBe(0);
       expect(result.hasMore).toBe(false);
+    });
+    it('should filter by resourceId correctly', async () => {
+      // Add a thread with different resourceId
+      await store.saveThread({
+        thread: {
+          id: 'thread-other',
+          resourceId: 'other-resource',
+          title: 'Other Thread',
+          createdAt: new Date('2024-01-04T10:00:00Z'),
+          updatedAt: new Date('2024-01-04T10:00:00Z'),
+          metadata: {},
+        },
+      });
+
+      const result = await store.listThreadsByResourceId({ resourceId, page: 0, perPage: 2 });
+
+      expect(result.threads).toHaveLength(2);
+      expect(result.threads.every(t => t.resourceId === resourceId)).toBe(true);
+      expect(result.total).toBe(3);
+      expect(result.page).toBe(0);
+      expect(result.perPage).toBe(2);
+      expect(result.hasMore).toBe(true);
     });
   });
 });
@@ -222,19 +195,17 @@ describe('InMemoryStore - Message Fetching', () => {
   });
 
   it('getMessages should return empty array if threadId is an empty string or whitespace only', async () => {
-    const messages = await store.getMessages({ threadId: '' });
-    expect(messages).toHaveLength(0);
-
-    const messages2 = await store.getMessages({ threadId: '   ' });
-    expect(messages2).toHaveLength(0);
-  });
-
-  it('getMessagesPaginated should return empty array if threadId is an empty string or whitespace only', async () => {
-    const result = await store.getMessagesPaginated({ threadId: '' });
+    const result = await store.getMessages({ threadId: '' });
     expect(result.messages).toHaveLength(0);
 
-    const result2 = await store.getMessagesPaginated({ threadId: '   ' });
+    const result2 = await store.getMessages({ threadId: '   ' });
     expect(result2.messages).toHaveLength(0);
+  });
+
+  it('listMessages should throw error if threadId is an empty string or whitespace only', async () => {
+    await expect(store.listMessages({ threadId: '' })).rejects.toThrow('threadId must be a non-empty string');
+
+    await expect(store.listMessages({ threadId: '   ' })).rejects.toThrow('threadId must be a non-empty string');
   });
 });
 
@@ -322,8 +293,8 @@ describe('InMemoryStore - listMessagesById', () => {
   });
 
   it('should return an empty array if no message IDs are provided', async () => {
-    const messages = await store.listMessagesById({ messageIds: [] });
-    expect(messages).toHaveLength(0);
+    const result = await store.listMessagesById({ messageIds: [] });
+    expect(result.messages).toHaveLength(0);
   });
 
   it('should return messages sorted by createdAt DESC', async () => {
@@ -334,40 +305,38 @@ describe('InMemoryStore - listMessagesById', () => {
       thread1Messages[0]!.id,
       thread2Messages[1]!.id,
     ];
-    const messages = await store.listMessagesById({
+    const result = await store.listMessagesById({
       messageIds,
     });
 
-    expect(messages).toHaveLength(thread1Messages.length + thread2Messages.length + resource2Messages.length);
-    expect(messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
+    expect(result.messages).toHaveLength(thread1Messages.length + thread2Messages.length + resource2Messages.length);
+    expect(result.messages.every((msg, i, arr) => i === 0 || msg.createdAt >= arr[i - 1]!.createdAt)).toBe(true);
   });
 
-  it('should return V2 messages', async () => {
-    const messages: MastraMessageV2[] = await store.listMessagesById({
-      messageIds: thread1Messages.map(msg => msg.id),
-    });
+  it('should return messages by ID', async () => {
+    const result = await store.listMessagesById({ messageIds: thread1Messages.map(msg => msg.id) });
 
-    expect(messages.length).toBeGreaterThan(0);
-    expect(messages.every(MessageList.isMastraMessageV2)).toBe(true);
+    expect(result.messages.length).toBeGreaterThan(0);
+    expect(result.messages.every(MessageList.isMastraDBMessage)).toBe(true);
   });
 
   it('should return messages from multiple threads', async () => {
-    const messages = await store.listMessagesById({
+    const result = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
     });
 
-    expect(messages.length).toBeGreaterThan(0);
-    expect(messages.some(msg => msg.threadId === threads[0]?.id)).toBe(true);
-    expect(messages.some(msg => msg.threadId === threads[1]?.id)).toBe(true);
+    expect(result.messages.length).toBeGreaterThan(0);
+    expect(result.messages.some(msg => msg.threadId === threads[0]?.id)).toBe(true);
+    expect(result.messages.some(msg => msg.threadId === threads[1]?.id)).toBe(true);
   });
 
   it('should return messages from multiple resources', async () => {
-    const messages = await store.listMessagesById({
+    const result = await store.listMessagesById({
       messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
     });
 
-    expect(messages).toHaveLength(thread1Messages.length + resource2Messages.length);
-    expect(messages.some(msg => msg.resourceId === threads[0]?.resourceId)).toBe(true);
-    expect(messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
+    expect(result.messages).toHaveLength(thread1Messages.length + resource2Messages.length);
+    expect(result.messages.some(msg => msg.resourceId === threads[0]?.resourceId)).toBe(true);
+    expect(result.messages.some(msg => msg.resourceId === threads[2]?.resourceId)).toBe(true);
   });
 });

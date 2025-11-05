@@ -160,7 +160,7 @@ To use this scorer effectively, you need to prepare:
 
 ```typescript
 import { describe, it, expect } from "vitest";
-import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/llm";
+import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agents";
 
 describe("Agent Noise Resistance Tests", () => {
@@ -352,7 +352,7 @@ Based on noise sensitivity results:
 
 ```typescript title="agent-noise.test.ts"
 import { describe, it, expect, beforeAll } from "vitest";
-import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/llm";
+import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agents";
 
 // Test data preparation
@@ -467,7 +467,7 @@ console.log(result);
 This example shows an agent partially distracted by irrelevant requests:
 
 ```typescript
-import { createNoiseSensitivityScorerLLM } from "@mastra/evals";
+import { createNoiseSensitivityScorerLLM } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createNoiseSensitivityScorerLLM({
   model: "openai/gpt-4o-mini",

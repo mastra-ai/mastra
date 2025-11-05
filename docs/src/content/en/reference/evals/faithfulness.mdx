@@ -129,7 +129,7 @@ A faithfulness score between 0 and 1:
 In this example, the response closely aligns with the context. Each statement in the output is verifiable and supported by the provided context entries, resulting in a high score.
 
 ```typescript title="src/example-high-faithfulness.ts" showLineNumbers copy
-import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
@@ -166,7 +166,7 @@ The output receives a score of 1 because all the information it provides can be 
 In this example, there are a mix of supported and unsupported claims. Some parts of the response are backed by the context, while others introduce new information not found in the source material.
 
 ```typescript title="src/example-mixed-faithfulness.ts" showLineNumbers copy
-import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
@@ -203,7 +203,7 @@ The score is lower because only a portion of the response is verifiable. While s
 In this example, the response directly contradicts the context. None of the claims are supported, and several conflict with the facts provided.
 
 ```typescript title="src/example-low-faithfulness.ts" showLineNumbers copy
-import { createFaithfulnessScorer } from "@mastra/evals/scorers/llm";
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
 
 const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [

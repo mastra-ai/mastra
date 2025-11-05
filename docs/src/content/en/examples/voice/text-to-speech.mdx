@@ -25,6 +25,7 @@ const instructions = `
 `;
 
 export const storyTellerAgent = new Agent({
+  id: "story-teller-agent",
   name: "Story Teller Agent",
   instructions: instructions,
   model: openai("gpt-4o"),

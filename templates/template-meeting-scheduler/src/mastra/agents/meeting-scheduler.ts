@@ -7,8 +7,8 @@ import Arcade from '@arcadeai/arcadejs';
 import { executeOrAuthorizeZodTool, toZodToolSet } from '@arcadeai/arcadejs/lib';
 
 export const meetingSchedulerAgent = new Agent({
+  id: 'meeting-scheduler-agent',
   name: 'meetingSchedulerAgent',
-  id: 'meetingSchedulerAgent',
   instructions: () => `
 You're an intelligent email assistant that helps manage Gmail and Google Calendar integration. Your primary focus is identifying meeting requests in emails and automating calendar event creation.
 

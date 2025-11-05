@@ -102,7 +102,7 @@ export function workflowLoopStream<
         });
       }
 
-      const run = await agenticLoopWorkflow.createRunAsync({
+      const run = await agenticLoopWorkflow.createRun({
         runId,
       });
 
