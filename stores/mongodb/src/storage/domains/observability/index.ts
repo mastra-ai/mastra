@@ -1,10 +1,10 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
+import { ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
@@ -42,11 +42,11 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         updatedAt: new Date().toISOString(),
       };
 
-      return this.operations.insert({ tableName: TABLE_AI_SPANS, record });
+      return this.operations.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_CREATE_AI_SPAN_FAILED',
+          id: 'MONGODB_STORE_CREATE_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -61,9 +61,9 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_AI_SPANS);
+      const collection = await this.operations.getCollection(TABLE_SPANS);
 
       const spans = await collection.find({ traceId }).sort({ startedAt: -1 }).toArray();
 
@@ -78,7 +78,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_GET_AI_TRACE_FAILED',
+          id: 'MONGODB_STORE_GET_TRACE_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -115,14 +115,14 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       };
 
       await this.operations.update({
-        tableName: TABLE_AI_SPANS,
+        tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data: updateData,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_UPDATE_AI_SPAN_FAILED',
+          id: 'MONGODB_STORE_UPDATE_SPAN_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -135,16 +135,16 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async getAITracesPaginated({
+  async getTracesPaginated({
     filters,
     pagination,
-  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const { entityId, entityType, ...actualFilters } = filters || {};
 
     try {
-      const collection = await this.operations.getCollection(TABLE_AI_SPANS);
+      const collection = await this.operations.getCollection(TABLE_SPANS);
 
       // Build MongoDB query filter
       const mongoFilter: Record<string, any> = {
@@ -181,7 +181,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
           name = `agent run: '${entityId}'`;
         } else {
           const error = new MastraError({
-            id: 'MONGODB_STORE_GET_AI_TRACES_PAGINATED_FAILED',
+            id: 'MONGODB_STORE_GET_TRACES_PAGINATED_FAILED',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: {
@@ -229,7 +229,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_GET_AI_TRACES_PAGINATED_FAILED',
+          id: 'MONGODB_STORE_GET_TRACES_PAGINATED_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -254,13 +254,13 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       });
 
       return this.operations.batchInsert({
-        tableName: TABLE_AI_SPANS,
+        tableName: TABLE_SPANS,
         records,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_BATCH_CREATE_AI_SPANS_FAILED',
+          id: 'MONGODB_STORE_BATCH_CREATE_SPANS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -278,7 +278,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }): Promise<void> {
     try {
       return this.operations.batchUpdate({
-        tableName: TABLE_AI_SPANS,
+        tableName: TABLE_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateSpanRecord> = { ...record.updates };
 
@@ -304,7 +304,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_BATCH_UPDATE_AI_SPANS_FAILED',
+          id: 'MONGODB_STORE_BATCH_UPDATE_SPANS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -313,9 +313,9 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_AI_SPANS);
+      const collection = await this.operations.getCollection(TABLE_SPANS);
 
       await collection.deleteMany({
         traceId: { $in: args.traceIds },
@@ -323,7 +323,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_BATCH_DELETE_AI_TRACES_FAILED',
+          id: 'MONGODB_STORE_BATCH_DELETE_TRACES_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

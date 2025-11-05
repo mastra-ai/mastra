@@ -1,5 +1,5 @@
 import { SpanType } from '@mastra/core/observability';
-import { MastraStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
+import { MastraStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type { SpanRecord } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createRootSpan, createChildSpan } from './data';
@@ -7,7 +7,7 @@ import { createRootSpan, createChildSpan } from './data';
 export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
   describe('Span Operations', () => {
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TABLE_AI_SPANS });
+      await storage.clearTable({ tableName: TABLE_SPANS });
     });
 
     describe('single span', () => {
@@ -21,7 +21,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
         await storage.createSpan(span);
 
-        const trace = await storage.getAITrace(span.traceId);
+        const trace = await storage.getTrace(span.traceId);
 
         expect(trace?.traceId).toBe(span.traceId);
         expect(trace?.spans).toHaveLength(1);
@@ -31,7 +31,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
         await storage.createSpan(span);
 
-        const trace = await storage.getAITrace(span.traceId);
+        const trace = await storage.getTrace(span.traceId);
         const retrievedSpan = trace?.spans[0];
 
         expect(retrievedSpan).toMatchObject({
@@ -66,7 +66,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         await storage.createSpan(span);
 
-        const trace = await storage.getAITrace(span.traceId);
+        const trace = await storage.getTrace(span.traceId);
         const retrievedSpan = trace?.spans[0];
 
         expect(retrievedSpan).toBeDefined();
@@ -104,7 +104,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         await storage.createSpan(rootSpan);
         await storage.createSpan(childSpan);
 
-        const trace = await storage.getAITrace(traceId);
+        const trace = await storage.getTrace(traceId);
 
         expect(trace).toBeDefined();
         expect(trace!.spans).toHaveLength(2);
@@ -131,7 +131,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           },
         });
 
-        const updatedSpan = await storage.getAITrace(span.traceId);
+        const updatedSpan = await storage.getTrace(span.traceId);
         expect(updatedSpan?.spans[0]?.name).toBe('updated-root-span');
       });
 
@@ -147,7 +147,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           },
         });
 
-        const updatedSpan = await storage.getAITrace(span.traceId);
+        const updatedSpan = await storage.getTrace(span.traceId);
         expect(updatedSpan?.spans[0]?.name).toBe('updated-root-span');
         expect(updatedSpan?.spans[0]?.spanType).toBe(span.spanType);
       });
@@ -164,7 +164,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         await storage.batchCreateSpans({ records: spans });
 
         for (const span of spans) {
-          const trace = await storage.getAITrace(span.traceId);
+          const trace = await storage.getTrace(span.traceId);
           expect(trace).toBeDefined();
           expect(trace!.spans).toHaveLength(1);
           expect(trace!.spans[0]?.name).toBe(span.name);
@@ -185,7 +185,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         await storage.batchCreateSpans({ records: [span] });
 
-        const trace = await storage.getAITrace(span.traceId);
+        const trace = await storage.getTrace(span.traceId);
         const retrievedSpan = trace!.spans[0];
 
         expect(retrievedSpan).toMatchObject({
@@ -210,7 +210,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
           records: [{ traceId: span.traceId, spanId: span.spanId, updates: { name: 'updated-root-span' } }],
         });
 
-        const updatedSpan = await storage.getAITrace(span.traceId);
+        const updatedSpan = await storage.getTrace(span.traceId);
         expect(updatedSpan?.spans[0]?.name).toBe('updated-root-span');
       });
 
@@ -229,8 +229,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         await storage.batchUpdateSpans({ records: updates });
 
-        const updatedSpan1 = await storage.getAITrace(spans[0]!.traceId);
-        const updatedSpan2 = await storage.getAITrace(spans[1]!.traceId);
+        const updatedSpan1 = await storage.getTrace(spans[0]!.traceId);
+        const updatedSpan2 = await storage.getTrace(spans[1]!.traceId);
         expect(updatedSpan1?.spans[0]?.name).toBe('updated-root-span-1');
         expect(updatedSpan2?.spans[0]?.name).toBe('updated-root-span-2');
       });
@@ -245,15 +245,15 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         await storage.batchCreateSpans({ records: spans });
 
-        const beforeTrace1 = await storage.getAITrace(spans[0]!.traceId);
-        const beforeTrace2 = await storage.getAITrace(spans[1]!.traceId);
+        const beforeTrace1 = await storage.getTrace(spans[0]!.traceId);
+        const beforeTrace2 = await storage.getTrace(spans[1]!.traceId);
         expect(beforeTrace1?.spans).toHaveLength(1);
         expect(beforeTrace2?.spans).toHaveLength(1);
 
-        await storage.batchDeleteAITraces({ traceIds: [spans[0]!.traceId, spans[1]!.traceId] });
+        await storage.batchDeleteTraces({ traceIds: [spans[0]!.traceId, spans[1]!.traceId] });
 
-        const afterTrace1 = await storage.getAITrace(spans[0]!.traceId);
-        const afterTrace2 = await storage.getAITrace(spans[1]!.traceId);
+        const afterTrace1 = await storage.getTrace(spans[0]!.traceId);
+        const afterTrace2 = await storage.getTrace(spans[1]!.traceId);
         expect(afterTrace1).toBeNull();
         expect(afterTrace2).toBeNull();
       });
@@ -275,17 +275,17 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
         await storage.batchCreateSpans({ records: [rootSpan, childSpan1, childSpan2] });
 
-        const beforeTrace = await storage.getAITrace(rootSpan.traceId);
+        const beforeTrace = await storage.getTrace(rootSpan.traceId);
         expect(beforeTrace?.spans).toHaveLength(3);
 
-        await storage.batchDeleteAITraces({ traceIds: [rootSpan.traceId] });
+        await storage.batchDeleteTraces({ traceIds: [rootSpan.traceId] });
 
-        const afterTrace = await storage.getAITrace(rootSpan.traceId);
+        const afterTrace = await storage.getTrace(rootSpan.traceId);
         expect(afterTrace).toBeNull();
       });
     });
 
-    describe('getAITracesPaginated', () => {
+    describe('getTracesPaginated', () => {
       beforeEach(async () => {
         // Create test traces with different properties for filtering
         const traces = [
@@ -324,7 +324,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       describe('basic pagination', () => {
         it('should return root spans with pagination info', async () => {
-          const result = await storage.getAITracesPaginated({
+          const result = await storage.getTracesPaginated({
             pagination: { page: 0, perPage: 10 },
           });
 
@@ -334,7 +334,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should respect perPage limit', async () => {
-          const result = await storage.getAITracesPaginated({
+          const result = await storage.getTracesPaginated({
             pagination: { page: 0, perPage: 2 },
           });
 
@@ -343,11 +343,11 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should handle page navigation', async () => {
-          const page1 = await storage.getAITracesPaginated({
+          const page1 = await storage.getTracesPaginated({
             pagination: { page: 0, perPage: 2 },
           });
 
-          const page2 = await storage.getAITracesPaginated({
+          const page2 = await storage.getTracesPaginated({
             pagination: { page: 1, perPage: 2 },
           });
 
@@ -360,7 +360,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       describe('filtering', () => {
         it('should filter by span type', async () => {
-          const result = await storage.getAITracesPaginated({
+          const result = await storage.getTracesPaginated({
             filters: { spanType: SpanType.WORKFLOW_RUN },
             pagination: { page: 0, perPage: 10 },
           });
@@ -375,7 +375,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should filter by name', async () => {
-          const result = await storage.getAITracesPaginated({
+          const result = await storage.getTracesPaginated({
             filters: { name: 'workflow-trace-1' },
             pagination: { page: 0, perPage: 10 },
           });
@@ -387,7 +387,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should return empty results for non-matching filters', async () => {
-          const result = await storage.getAITracesPaginated({
+          const result = await storage.getTracesPaginated({
             filters: { name: 'non-existent-trace' },
             pagination: { page: 0, perPage: 10 },
           });
@@ -399,7 +399,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       describe('date range filtering', () => {
         it('should filter by date range', async () => {
-          const result = await storage.getAITracesPaginated({
+          const result = await storage.getTracesPaginated({
             pagination: {
               dateRange: {
                 start: new Date('2024-01-01T00:00:00Z'),
@@ -420,7 +420,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should handle start date only', async () => {
-          const result = await storage.getAITracesPaginated({
+          const result = await storage.getTracesPaginated({
             pagination: {
               dateRange: { start: new Date('2024-01-03T00:00:00Z') },
               page: 0,
