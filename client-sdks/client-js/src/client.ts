@@ -101,8 +101,6 @@ export class MastraClient extends BaseResource {
       ...(params.sortDirection && { sortDirection: params.sortDirection }),
     });
 
-    console.log(queryParams.toString());
-
     return this.request(
       `/api/memory/threads?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
     );
