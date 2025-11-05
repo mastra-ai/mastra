@@ -47,6 +47,6 @@ jobs:
           fi
 
       - name: Publish packages
-        run: echo "pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public"
+        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
