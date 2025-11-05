@@ -68,5 +68,8 @@
   },
   "dependencies": {
     "ai": "^5.0.60"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

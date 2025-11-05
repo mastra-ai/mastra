@@ -202,12 +202,10 @@ describe('InMemoryStore - Message Fetching', () => {
     expect(result2.messages).toHaveLength(0);
   });
 
-  it('listMessages should return empty array if threadId is an empty string or whitespace only', async () => {
-    const result = await store.listMessages({ threadId: '' });
-    expect(result.messages).toHaveLength(0);
+  it('listMessages should throw error if threadId is an empty string or whitespace only', async () => {
+    await expect(store.listMessages({ threadId: '' })).rejects.toThrow('threadId must be a non-empty string');
 
-    const result2 = await store.listMessages({ threadId: '   ' });
-    expect(result2.messages).toHaveLength(0);
+    await expect(store.listMessages({ threadId: '   ' })).rejects.toThrow('threadId must be a non-empty string');
   });
 });
 

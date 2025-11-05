@@ -129,7 +129,7 @@ describe('Memory Streaming Tests', () => {
     });
 
     const agentMemory = (await agent.getMemory())!;
-    const { messages } = await agentMemory.query({ threadId });
+    const { messages } = await agentMemory.recall({ threadId });
 
     console.log('Custom IDs: ', customIds);
     console.log('Messages: ', messages);
@@ -267,7 +267,7 @@ describe('Memory Streaming Tests', () => {
       });
 
       const agentMemory = (await weatherAgent.getMemory())!;
-      const dbMessages = (await agentMemory.query({ threadId })).messages;
+      const dbMessages = (await agentMemory.recall({ threadId })).messages;
       const initialMessages = dbMessages.map(m => MessageList.mastraDBMessageToAIV5UIMessage(m));
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
@@ -376,7 +376,7 @@ describe('Memory Streaming Tests', () => {
         responseContains: [state.clipboard],
       });
 
-      const messagesResult = await agentMemory.query({ threadId, resourceId });
+      const messagesResult = await agentMemory.recall({ threadId, resourceId });
 
       const clipboardToolInvocation = messagesResult.messages.filter(
         m =>
