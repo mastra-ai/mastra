@@ -1,0 +1,183 @@
+---
+title: "Reference: SensitiveDataFilter | Observability | Mastra Docs"
+description: API reference for the SensitiveDataFilter processor
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# SensitiveDataFilter
+
+A SpanOutputProcessor that redacts sensitive information from span fields.
+
+## Constructor
+
+```typescript
+new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
+```
+
+## SensitiveDataFilterOptions
+
+```typescript
+interface SensitiveDataFilterOptions {
+  /**
+   * List of sensitive field names to redact.
+   * Matching is case-insensitive and normalizes separators
+   * (api-key, api_key, Api Key → apikey).
+   * Defaults include: password, token, secret, key, apikey, auth,
+   * authorization, bearer, bearertoken, jwt, credential,
+   * clientsecret, privatekey, refresh, ssn.
+   */
+  sensitiveFields?: string[];
+
+  /**
+   * The token used for full redaction.
+   * Default: "[REDACTED]"
+   */
+  redactionToken?: string;
+
+  /**
+   * Style of redaction to use:
+   * - "full": always replace with redactionToken
+   * - "partial": show 3 characters from the start and end, redact the middle
+   * Default: "full"
+   */
+  redactionStyle?: RedactionStyle;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "sensitiveFields",
+      type: "string[]",
+      description:
+        "Field names to redact (case-insensitive, separator-agnostic)",
+      required: false,
+    },
+    {
+      name: "redactionToken",
+      type: "string",
+      description: "Replacement token for full redaction",
+      required: false,
+    },
+    {
+      name: "redactionStyle",
+      type: "'full' | 'partial'",
+      description: "Redaction style",
+      required: false,
+    },
+  ]}
+/>
+
+## RedactionStyle
+
+```typescript
+type RedactionStyle = "full" | "partial";
+```
+
+## Methods
+
+### process
+
+```typescript
+process(span: AnySpan): AnySpan
+```
+
+Process a span by filtering sensitive data across its key fields: attributes, metadata, input, output, and errorInfo.
+
+<PropertiesTable
+  props={[
+    {
+      name: "span",
+      type: "AnySpan",
+      description: "The input span to filter",
+      required: true,
+    },
+  ]}
+/>
+
+**Returns:** A new span with sensitive values redacted.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+No cleanup needed for this processor.
+
+## Properties
+
+```typescript
+readonly name = 'sensitive-data-filter';
+```
+
+## Default Sensitive Fields
+
+When no custom fields are provided:
+
+```typescript
+[
+  "password",
+  "token",
+  "secret",
+  "key",
+  "apikey",
+  "auth",
+  "authorization",
+  "bearer",
+  "bearertoken",
+  "jwt",
+  "credential",
+  "clientsecret",
+  "privatekey",
+  "refresh",
+  "ssn",
+];
+```
+
+## Processing Behavior
+
+### Field Matching
+
+- **Case-insensitive**: `APIKey`, `apikey`, `ApiKey` all match
+- **Separator-agnostic**: `api-key`, `api_key`, `apiKey` are treated identically
+- **Exact matching**: After normalization, fields must match exactly
+  - `token` matches `token`, `Token`, `TOKEN`
+  - `token` does NOT match `promptTokens` or `tokenCount`
+
+### Redaction Styles
+
+#### Full Redaction (default)
+
+All matched values replaced with redactionToken.
+
+#### Partial Redaction
+
+- Shows first 3 and last 3 characters
+- Values ≤ 6 characters are fully redacted
+- Non-string values are converted to strings before partial redaction
+
+### Error Handling
+
+If filtering a field fails, the field is replaced with:
+
+```typescript
+{
+  error: {
+    processor: "sensitive-data-filter";
+  }
+}
+```
+
+### Processed Fields
+
+The filter recursively processes:
+
+- `span.attributes` - Span metadata and properties
+- `span.metadata` - Custom metadata
+- `span.input` - Input data
+- `span.output` - Output data
+- `span.errorInfo` - Error information
+
+Handles nested objects, arrays, and circular references safely.

@@ -6,7 +6,7 @@ export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
-export const TABLE_AI_SPANS = 'mastra_ai_spans';
+export const TABLE_SPANS = 'mastra_ai_spans';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -15,7 +15,7 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  | typeof TABLE_AI_SPANS;
+  | typeof TABLE_SPANS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -55,7 +55,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp' },
 };
 
-export const AI_SPAN_SCHEMA: Record<string, StorageColumn> = {
+export const SPAN_SCHEMA: Record<string, StorageColumn> = {
   // Composite primary key of traceId and spanId
   traceId: { type: 'text', nullable: false },
   spanId: { type: 'text', nullable: false },
@@ -113,7 +113,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     resourceId: { type: 'text', nullable: true },
   },
-  [TABLE_AI_SPANS]: AI_SPAN_SCHEMA,
+  [TABLE_SPANS]: SPAN_SCHEMA,
   [TABLE_TRACES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
     parentSpanId: { type: 'text', nullable: true },

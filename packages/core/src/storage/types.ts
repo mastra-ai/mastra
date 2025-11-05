@@ -185,12 +185,12 @@ export interface SpanRecord {
 export type CreateSpanRecord = Omit<SpanRecord, 'createdAt' | 'updatedAt'>;
 export type UpdateSpanRecord = Omit<CreateSpanRecord, 'spanId' | 'traceId'>;
 
-export interface AITraceRecord {
+export interface TraceRecord {
   traceId: string;
   spans: SpanRecord[];
 }
 
-export interface AITracesPaginatedArg {
+export interface TracesPaginatedArg {
   filters?: {
     name?: string;
     spanType?: SpanType;

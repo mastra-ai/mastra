@@ -177,7 +177,7 @@
     },
     {
       "source": "/docs/deployment/logging-and-tracing",
-      "destination": "/docs/observability/logging",
+      "destination": "/docs/logging",
       "permanent": true
     },
     {
@@ -257,7 +257,7 @@
     },
     {
       "source": "/docs/guide/deployment/logging-and-tracing",
-      "destination": "/docs/observability/logging",
+      "destination": "/docs/logging",
       "permanent": true
     },
     {
@@ -772,97 +772,87 @@
     },
     {
       "source": "/docs/observability/tracing",
-      "destination": "/docs/observability/otel-tracing",
-      "permanent": true
-    },
-    {
-      "source": "/docs/observability/ai-tracing",
-      "destination": "/docs/observability/ai-tracing/overview",
-      "permanent": true
-    },
-    {
-      "source": "/reference/observability/ai-tracing",
-      "destination": "/reference/observability/ai-tracing/ai-tracing",
+      "destination": "/docs/observability/tracing/overview",
       "permanent": true
     },
     {
       "source": "/reference/observability/logger",
-      "destination": "/reference/observability/logging/pino-logger",
+      "destination": "/reference/logging/pino-logger",
       "permanent": true
     },
     {
       "source": "/reference/observability/otel-config",
-      "destination": "/reference/observability/otel-tracing/otel-config",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/arize-ax",
-      "destination": "/reference/observability/otel-tracing/providers/arize-ax",
+      "destination": "/docs/observability/tracing/exporters/arize",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/arize-phoenix",
-      "destination": "/reference/observability/otel-tracing/providers/arize-phoenix",
+      "destination": "/docs/observability/tracing/exporters/arize",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/braintrust",
-      "destination": "/reference/observability/otel-tracing/providers/braintrust",
+      "destination": "/docs/observability/tracing/exporters/braintrust",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/dash0",
-      "destination": "/reference/observability/otel-tracing/providers/dash0",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/keywordsai",
-      "destination": "/reference/observability/otel-tracing/providers/keywordsai",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/laminar",
-      "destination": "/reference/observability/otel-tracing/providers/laminar",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/langfuse",
-      "destination": "/reference/observability/otel-tracing/providers/langfuse",
+      "destination": "/docs/observability/tracing/exporters/langfuse",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/langsmith",
-      "destination": "/reference/observability/otel-tracing/providers/langsmith",
+      "destination": "/docs/observability/tracing/exporters/langsmith",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/langwatch",
-      "destination": "/reference/observability/otel-tracing/providers/langwatch",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/new-relic",
-      "destination": "/reference/observability/otel-tracing/providers/new-relic",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/signoz",
-      "destination": "/reference/observability/otel-tracing/providers/signoz",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/traceloop",
-      "destination": "/reference/observability/otel-tracing/providers/traceloop",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers",
-      "destination": "/reference/observability/otel-tracing/providers",
+      "destination": "/docs/observability/tracing/overview",
       "permanent": true
     },
     {
       "source": "/reference/observability/providers/index",
-      "destination": "/reference/observability/otel-tracing/providers",
+      "destination": "/docs/observability/tracing/overview",
       "permanent": true
     },
     {
@@ -1458,6 +1448,181 @@
     {
       "source": "/reference/core/getMemory",
       "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing",
+      "destination": "/docs/observability/tracing/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/exporters/arize",
+      "destination": "/docs/observability/tracing/exporters/arize",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/exporters/braintrust",
+      "destination": "/docs/observability/tracing/exporters/braintrust",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/exporters/cloud",
+      "destination": "/docs/observability/tracing/exporters/cloud",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/exporters/default",
+      "destination": "/docs/observability/tracing/exporters/default",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/exporters/langfuse",
+      "destination": "/docs/observability/tracing/exporters/langfuse",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/exporters/langsmith",
+      "destination": "/docs/observability/tracing/exporters/langsmith",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/exporters/otel",
+      "destination": "/docs/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/ai-tracing/processors/sensitive-data-filter",
+      "destination": "/docs/observability/tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/nextjs-tracing",
+      "destination": "/docs/observability/tracing/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/observability/basic-ai-tracing",
+      "destination": "/examples/observability/basic-tracing",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/configuration",
+      "destination": "/reference/observability/tracing/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/arize",
+      "destination": "/reference/observability/tracing/exporters/arize",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/braintrust",
+      "destination": "/reference/observability/tracing/exporters/braintrust",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/cloud-exporter",
+      "destination": "/reference/observability/tracing/exporters/cloud-exporter",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/console-exporter",
+      "destination": "/reference/observability/tracing/exporters/console-exporter",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/default-exporter",
+      "destination": "/reference/observability/tracing/exporters/default-exporter",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/langfuse",
+      "destination": "/reference/observability/tracing/exporters/langfuse",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/langsmith",
+      "destination": "/reference/observability/tracing/exporters/langsmith",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/exporters/otel",
+      "destination": "/reference/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/interfaces",
+      "destination": "/reference/observability/tracing/interfaces",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/processors/sensitive-data-filter",
+      "destination": "/reference/observability/tracing/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/span",
+      "destination": "/reference/observability/tracing/spans",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/ai-tracing/ai-tracing",
+      "destination": "/reference/observability/tracing/instances",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/tracing",
+      "destination": "/reference/observability/tracing/instances",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/span",
+      "destination": "/reference/observability/tracing/spans",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/arize-ax",
+      "destination": "/docs/observability/tracing/exporters/arize",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/arize-phoenix",
+      "destination": "/docs/observability/tracing/exporters/arize",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/dash0",
+      "destination": "/docs/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/keywordsai",
+      "destination": "/docs/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/laminar",
+      "destination": "/docs/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/new-relic",
+      "destination": "/docs/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/signoz",
+      "destination": "/docs/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/traceloop",
+      "destination": "/docs/observability/tracing/exporters/otel",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/otel-tracing/providers/langwatch",
+      "destination": "/docs/observability/tracing/exporters/otel",
       "permanent": true
     }
   ]

@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '../../agent';
 import { SpanType } from '../../observability';
-import type { SpanRecord, AITraceRecord } from '../../storage';
+import type { SpanRecord, TraceRecord } from '../../storage';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 
 // // Span tree structure for efficient lookups
@@ -163,7 +163,7 @@ function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
 /**
  * Validate trace structure and throw descriptive errors
  */
-export function validateTrace(trace: AITraceRecord): void {
+export function validateTrace(trace: TraceRecord): void {
   if (!trace) {
     throw new Error('Trace is null or undefined');
   }
@@ -201,7 +201,7 @@ function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: SpanRecord): Span
 /**
  * Extract common trace validation and span tree building logic
  */
-function prepareTraceForTransformation(trace: AITraceRecord) {
+function prepareTraceForTransformation(trace: TraceRecord) {
   validateTrace(trace);
   const spanTree = buildSpanTree(trace.spans);
 
@@ -215,7 +215,7 @@ function prepareTraceForTransformation(trace: AITraceRecord) {
   return { spanTree, rootAgentSpan };
 }
 
-export function transformTraceToScorerInputAndOutput(trace: AITraceRecord): {
+export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
   input: ScorerRunInputForAgent;
   output: ScorerRunOutputForAgent;
 } {
