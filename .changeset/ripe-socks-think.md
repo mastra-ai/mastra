@@ -1,6 +1,6 @@
 ---
 '@mastra/voice-google-gemini-live': minor
-'@mastra/google-cloud-pubsub': major
+'@mastra/google-cloud-pubsub': minor
 '@mastra/longmemeval': major
 '@mastra/agent-builder': major
 'create-mastra': major
