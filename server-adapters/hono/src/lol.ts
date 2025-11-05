@@ -425,7 +425,7 @@ const honoServerAdapter = new HonoServerAdapter({ mastra });
 await honoServerAdapter.registerRoutes(app);
 
 // Add Swagger UI
-app.get('/swagger-ui', swaggerUI({ url: '/openapi.json' }));
+app.use('/swagger-ui/*', swaggerUI({ url: '/openapi.json' }));
 
 serve(
   {
