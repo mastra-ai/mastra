@@ -25,6 +25,7 @@ const sidebars = {
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
         { type: "doc", id: "core/getServer", label: ".getServer()" },
         { type: "doc", id: "core/getMCPServer", label: ".getMCPServer()" },
+        { type: "doc", id: "core/getMCPServerById", label: ".getMCPServerById()" },
         { type: "doc", id: "core/getVector", label: ".getVector()" },
         { type: "doc", id: "core/listVectors", label: ".listVectors()" },
         { type: "doc", id: "core/getDeployer", label: ".getDeployer()" },
