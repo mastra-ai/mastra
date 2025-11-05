@@ -10,16 +10,16 @@
  */
 
 import type {
-  AITracingEvent,
-  AnyExportedAISpan,
+  TracingEvent,
+  AnyExportedSpan,
   ModelGenerationAttributes,
   ToolCallAttributes,
 } from '@mastra/core/observability';
-import { AISpanType, AITracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { initLogger } from 'braintrust';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BraintrustExporter } from './ai-tracing';
-import type { BraintrustExporterConfig } from './ai-tracing';
+import { BraintrustExporter } from './tracing';
+import type { BraintrustExporterConfig } from './tracing';
 
 // Mock Braintrust initLogger function (must be at the top level)
 vi.mock('braintrust');
@@ -85,13 +85,13 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'test-span',
         name: 'test',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: true,
         attributes: {},
       });
 
-      await disabledExporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await disabledExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
 
@@ -104,7 +104,7 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'root-span-id',
         name: 'root-agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {
           agentId: 'agent-123',
@@ -113,15 +113,15 @@ describe('BraintrustExporter', () => {
         metadata: { userId: 'user-456', sessionId: 'session-789' },
       });
 
-      const event: AITracingEvent = {
-        type: AITracingEventType.SPAN_STARTED,
+      const event: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       };
 
       // Ensure traceId differs from span id
       expect(rootSpan.traceId).not.toBe(rootSpan.id);
 
-      await exporter.exportEvent(event);
+      await exporter.exportTracingEvent(event);
 
       // Should create Braintrust logger with correct parameters
       expect(mockInitLogger).toHaveBeenCalledWith({
@@ -156,13 +156,13 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'root-span-id',
         name: 'root-agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
 
@@ -172,15 +172,15 @@ describe('BraintrustExporter', () => {
       const childSpan = createMockSpan({
         id: 'child-span-id',
         name: 'child-tool',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         isRoot: false,
         attributes: { toolId: 'calculator' },
       });
       childSpan.traceId = rootSpan.traceId;
       childSpan.parentSpanId = 'root-span-id';
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: childSpan,
       });
 
@@ -210,13 +210,13 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: llmSpan,
       });
 
@@ -231,13 +231,13 @@ describe('BraintrustExporter', () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
-        type: AISpanType.MODEL_CHUNK,
+        type: SpanType.MODEL_CHUNK,
         isRoot: true,
         attributes: { chunkType: 'text-delta' },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: chunkSpan,
       });
 
@@ -252,13 +252,13 @@ describe('BraintrustExporter', () => {
       const toolSpan = createMockSpan({
         id: 'tool-span',
         name: 'calculator',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         isRoot: true,
         attributes: { toolId: 'calc' },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: toolSpan,
       });
 
@@ -273,13 +273,13 @@ describe('BraintrustExporter', () => {
       const mcpSpan = createMockSpan({
         id: 'mcp-span',
         name: 'mcp-tool',
-        type: AISpanType.MCP_TOOL_CALL,
+        type: SpanType.MCP_TOOL_CALL,
         isRoot: true,
         attributes: { toolId: 'file-reader', mcpServer: 'fs-server' },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: mcpSpan,
       });
 
@@ -294,13 +294,13 @@ describe('BraintrustExporter', () => {
       const condSpan = createMockSpan({
         id: 'cond-span',
         name: 'condition-eval',
-        type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+        type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
         isRoot: true,
         attributes: { conditionIndex: 0, result: true },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: condSpan,
       });
 
@@ -315,13 +315,13 @@ describe('BraintrustExporter', () => {
       const waitSpan = createMockSpan({
         id: 'wait-span',
         name: 'wait-event',
-        type: AISpanType.WORKFLOW_WAIT_EVENT,
+        type: SpanType.WORKFLOW_WAIT_EVENT,
         isRoot: true,
         attributes: { eventName: 'user-input', timeoutMs: 30000 },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: waitSpan,
       });
 
@@ -336,13 +336,13 @@ describe('BraintrustExporter', () => {
       const genericSpan = createMockSpan({
         id: 'generic-span',
         name: 'generic',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: genericSpan,
       });
 
@@ -356,14 +356,14 @@ describe('BraintrustExporter', () => {
       const agentSpan = createMockSpan({
         id: 'agent-span',
         name: 'agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: { agentId: 'test-agent' },
       });
 
       vi.clearAllMocks();
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: agentSpan,
       });
 
@@ -380,7 +380,7 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
@@ -401,8 +401,8 @@ describe('BraintrustExporter', () => {
         },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: llmSpan,
       });
 
@@ -442,15 +442,15 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'minimal-llm',
         name: 'simple-llm',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: {
           model: 'gpt-3.5-turbo',
         },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: llmSpan,
       });
 
@@ -479,13 +479,13 @@ describe('BraintrustExporter', () => {
       const toolSpan = createMockSpan({
         id: 'tool-span',
         name: 'calculator',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         isRoot: true,
         attributes: { toolId: 'calc', success: false },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: toolSpan,
       });
 
@@ -496,8 +496,8 @@ describe('BraintrustExporter', () => {
       } as ToolCallAttributes;
       toolSpan.output = { result: 42 };
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_UPDATED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
         exportedSpan: toolSpan,
       });
 
@@ -515,13 +515,13 @@ describe('BraintrustExporter', () => {
       const llmSpan = createMockSpan({
         id: 'llm-span',
         name: 'gpt-4-call',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         isRoot: true,
         attributes: { model: 'gpt-4' },
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: llmSpan,
       });
 
@@ -532,8 +532,8 @@ describe('BraintrustExporter', () => {
       } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_UPDATED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
         exportedSpan: llmSpan,
       });
 
@@ -553,21 +553,21 @@ describe('BraintrustExporter', () => {
       const span = createMockSpan({
         id: 'test-span',
         name: 'test',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: span,
       });
 
       span.endTime = new Date();
       span.output = { result: 'success' };
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: span,
       });
 
@@ -585,7 +585,7 @@ describe('BraintrustExporter', () => {
       const errorSpan = createMockSpan({
         id: 'error-span',
         name: 'failing-operation',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         isRoot: true,
         attributes: { toolId: 'failing-tool' },
         errorInfo: {
@@ -597,13 +597,13 @@ describe('BraintrustExporter', () => {
 
       errorSpan.endTime = new Date();
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: errorSpan,
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: errorSpan,
       });
 
@@ -627,13 +627,13 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'root-span',
         name: 'root',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
 
@@ -642,8 +642,8 @@ describe('BraintrustExporter', () => {
 
       rootSpan.endTime = new Date();
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: rootSpan,
       });
 
@@ -657,7 +657,7 @@ describe('BraintrustExporter', () => {
       const eventSpan = createMockSpan({
         id: 'event-span',
         name: 'user-feedback',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: true,
         attributes: {
           eventType: 'user_feedback',
@@ -670,8 +670,8 @@ describe('BraintrustExporter', () => {
       // Ensure traceId differs from span id
       expect(eventSpan.traceId).not.toBe(eventSpan.id);
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: eventSpan,
       });
 
@@ -710,13 +710,13 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'root-span',
         name: 'root-agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
 
@@ -724,7 +724,7 @@ describe('BraintrustExporter', () => {
       const childEventSpan = createMockSpan({
         id: 'child-event',
         name: 'tool-result',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: false,
         attributes: {
           toolName: 'calculator',
@@ -736,8 +736,8 @@ describe('BraintrustExporter', () => {
       childEventSpan.traceId = rootSpan.traceId;
       childEventSpan.parentSpanId = 'root-span';
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: childEventSpan,
       });
 
@@ -764,7 +764,7 @@ describe('BraintrustExporter', () => {
       const orphanEventSpan = createMockSpan({
         id: 'orphan-event',
         name: 'orphan',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: false,
         attributes: {},
       });
@@ -773,8 +773,8 @@ describe('BraintrustExporter', () => {
 
       // Should not throw
       await expect(
-        exporter.exportEvent({
-          type: AITracingEventType.SPAN_STARTED,
+        exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
           exportedSpan: orphanEventSpan,
         }),
       ).resolves.not.toThrow();
@@ -790,15 +790,15 @@ describe('BraintrustExporter', () => {
       const orphanSpan = createMockSpan({
         id: 'orphan-span',
         name: 'orphan',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         isRoot: false,
         attributes: { toolId: 'orphan-tool' },
       });
 
       // Should not throw when trying to create child span without parent
       await expect(
-        exporter.exportEvent({
-          type: AITracingEventType.SPAN_STARTED,
+        exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
           exportedSpan: orphanSpan,
         }),
       ).resolves.not.toThrow();
@@ -811,23 +811,23 @@ describe('BraintrustExporter', () => {
       const span = createMockSpan({
         id: 'missing-span',
         name: 'missing',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: true,
         attributes: {},
       });
 
       // Try to update non-existent span
       await expect(
-        exporter.exportEvent({
-          type: AITracingEventType.SPAN_UPDATED,
+        exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_UPDATED,
           exportedSpan: span,
         }),
       ).resolves.not.toThrow();
 
       // Try to end non-existent span
       await expect(
-        exporter.exportEvent({
-          type: AITracingEventType.SPAN_ENDED,
+        exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
           exportedSpan: span,
         }),
       ).resolves.not.toThrow();
@@ -840,13 +840,13 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'root-span',
         name: 'root',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_STARTED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
 
@@ -877,33 +877,33 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'root-span-oOO',
         name: 'root-agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, exportedSpan: rootSpan });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: rootSpan });
 
       // Start child span
       const childSpan = createMockSpan({
         id: 'child-span-oOO',
         name: 'child-step',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: false,
         attributes: { stepId: 'child-step' },
       });
       childSpan.traceId = rootSpan.traceId;
       childSpan.parentSpanId = rootSpan.id;
 
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, exportedSpan: childSpan });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: childSpan });
 
       // End root BEFORE child ends (out-of-order end sequence)
       rootSpan.endTime = new Date();
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, exportedSpan: rootSpan });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: rootSpan });
 
       // Now end child
       childSpan.endTime = new Date();
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, exportedSpan: childSpan });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: childSpan });
 
       // Both Braintrust spans should be ended (root then child)
       expect(mockSpan.end).toHaveBeenCalledTimes(2);
@@ -918,47 +918,47 @@ describe('BraintrustExporter', () => {
       const rootSpan = createMockSpan({
         id: 'root-span-keepalive',
         name: 'root-agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
       });
 
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, exportedSpan: rootSpan });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: rootSpan });
 
       // Start first child to keep the trace alive
       const childA = createMockSpan({
         id: 'child-A',
         name: 'child-A',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: false,
         attributes: { stepId: 'A' },
       });
       childA.traceId = rootSpan.traceId;
       childA.parentSpanId = rootSpan.id;
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, exportedSpan: childA });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: childA });
 
       // End root while childA is still active
       rootSpan.endTime = new Date();
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, exportedSpan: rootSpan });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: rootSpan });
 
       // Start another child AFTER root has ended
       const childB = createMockSpan({
         id: 'child-B',
         name: 'child-B',
-        type: AISpanType.GENERIC,
+        type: SpanType.GENERIC,
         isRoot: false,
         attributes: { stepId: 'B' },
       });
       childB.traceId = rootSpan.traceId;
       childB.parentSpanId = rootSpan.id;
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_STARTED, exportedSpan: childB });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: childB });
 
       // Finish both children
       childA.endTime = new Date();
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, exportedSpan: childA });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: childA });
 
       childB.endTime = new Date();
-      await exporter.exportEvent({ type: AITracingEventType.SPAN_ENDED, exportedSpan: childB });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: childB });
 
       // Ends: root, childA, childB
       expect(mockSpan.end).toHaveBeenCalledTimes(3);
@@ -984,14 +984,14 @@ function createMockSpan({
 }: {
   id: string;
   name: string;
-  type: AISpanType;
+  type: SpanType;
   isRoot: boolean;
   attributes: any;
   metadata?: Record<string, any>;
   input?: any;
   output?: any;
   errorInfo?: any;
-}): AnyExportedAISpan {
+}): AnyExportedSpan {
   const mockSpan = {
     id,
     name,
@@ -1009,7 +1009,7 @@ function createMockSpan({
     },
     parentSpanId: isRoot ? undefined : 'parent-id',
     isEvent: false,
-  } as AnyExportedAISpan;
+  } as AnyExportedSpan;
 
   return mockSpan;
 }

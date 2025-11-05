@@ -1,0 +1,146 @@
+---
+title: "Tools | v1 Migration Guide"
+description: "Learn how to migrate tool-related changes when upgrading to v1."
+---
+
+# Tools
+
+Tool execution signatures have been updated to use separate input and context parameters with reorganized context properties.
+
+## Changed
+
+### Tool `execute` signature to `(inputData, context)` format
+
+All tool `execute` functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
+
+To migrate, update tool signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
+
+```diff
+  createTool({
+    id: 'weather-tool',
+-   execute: async ({ context, requestContext, mastra }) => {
+-     const location = context.location;
+-     const userTier = requestContext.get('userTier');
+-     return getWeather(location, userTier);
+-   },
++   execute: async (inputData, context) => {
++     const location = inputData.location;
++     const userTier = context?.requestContext?.get('userTier');
++     return getWeather(location, userTier);
++   },
+  });
+```
+
+### Context properties organization
+
+Context properties are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
+
+To migrate for agent tools, access agent-specific properties through `context.agent`.
+
+```diff
+  createTool({
+    id: 'suspendable-tool',
+    suspendSchema: z.object({ message: z.string() }),
+    resumeSchema: z.object({ approval: z.boolean() }),
+-   execute: async ({ context, suspend, resumeData }) => {
+-     if (!resumeData) {
+-       return await suspend({ message: 'Waiting for approval' });
+-     }
+-     if (resumeData.approval) {
+-       return { success: true };
+-     }
+-   },
++   execute: async (inputData, context) => {
++     if (!context?.agent?.resumeData) {
++       return await context?.agent?.suspend({
++         message: 'Waiting for approval',
++       });
++     }
++     if (context.agent.resumeData.approval) {
++       return { success: true };
++     }
++   },
+  });
+```
+
+For workflow tools, access workflow-specific properties through `context.workflow`.
+
+```diff
+  createTool({
+    id: 'workflow-tool',
+-   execute: async ({ workflowId, runId, state, setState }) => {
+-     const currentState = state;
+-     setState({ step: 'completed' });
+-     return { result: 'done' };
+-   },
++   execute: async (inputData, context) => {
++     const currentState = context?.workflow?.state;
++     context?.workflow?.setState({ step: 'completed' });
++     return { result: 'done' };
++   },
+  });
+```
+
+For MCP tools, access MCP-specific properties through `context.mcp`.
+
+```diff
+  createTool({
+    id: 'account-balance',
+-   execute: async ({ context, elicitation, extra }) => {
+-     await checkAuth(extra.authInfo);
+-     const result = await elicitation.sendRequest({
+-       message: `Is it ok to fetch account ${context.accountId}?`,
+-     });
+-   },
++   execute: async (inputData, context) => {
++     await checkAuth(context?.mcp?.extra.authInfo);
++     const result = await context?.mcp?.elicitation.sendRequest({
++       message: `Is it ok to fetch account ${inputData.accountId}?`,
++     });
++   },
+  });
+```
+
+### `RuntimeContext` to `RequestContext`
+
+The `RuntimeContext` class has been renamed to `RequestContext` throughout the tool execution context. This change provides clearer naming that better describes its purpose as request-specific data.
+
+To migrate, update references from `runtimeContext` to `requestContext` in tool execution functions.
+
+```diff
+  createTool({
+    id: 'my-tool',
+    execute: async (inputData, context) => {
+-     const userTier = context?.runtimeContext?.get('userTier');
++     const userTier = context?.requestContext?.get('userTier');
+      return { result: userTier };
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod v1/runtime-context .
+```
+
+:::
+
+## Removed
+
+### Deprecated MCP client classes
+
+The `MastraMCPClient` and related deprecated APIs have been removed from `@mastra/mcp`. This change consolidates on the new MCP client API.
+
+To migrate, use the new `MCPClient` class instead of deprecated classes.
+
+```diff
+- import { MastraMCPClient, MCPConfiguration } from '@mastra/mcp/client';
++ import { MCPClient } from '@mastra/mcp/client';
+
+- const client = new MastraMCPClient({ ... });
+- const config = new MCPConfiguration({ ... });
++ const client = new MCPClient({ ... });
+```

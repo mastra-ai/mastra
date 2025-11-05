@@ -3242,7 +3242,7 @@ describe('MessageList', () => {
         resourceId: 'weatherAgent',
       });
 
-      // Step 2: Add memory messages (from rememberMessages)
+      // Step 2: Add memory messages
       const memoryMessagesV2: MastraDBMessage[] = [
         {
           id: 'fbd2f506-90e6-4f52-8ba4-633abe9e8442',

@@ -1056,7 +1056,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'seq_id DESC'],
       },
-      // AI Spans indexes for optimal trace querying
+      // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
         table: TABLE_AI_SPANS,

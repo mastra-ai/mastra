@@ -1,13 +1,13 @@
 /**
- * Braintrust Exporter for Mastra AI Tracing
+ * Braintrust Exporter for Mastra Tracing
  *
  * This exporter sends tracing data to Braintrust for AI observability.
  * Root spans become top-level Braintrust spans (no trace wrapper).
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/observability';
-import { AISpanType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -36,17 +36,17 @@ type SpanData = {
 const DEFAULT_SPAN_TYPE = 'task';
 
 // Exceptions to the default mapping
-const SPAN_TYPE_EXCEPTIONS: Partial<Record<AISpanType, string>> = {
-  [AISpanType.MODEL_GENERATION]: 'llm',
-  [AISpanType.MODEL_CHUNK]: 'llm',
-  [AISpanType.TOOL_CALL]: 'tool',
-  [AISpanType.MCP_TOOL_CALL]: 'tool',
-  [AISpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
-  [AISpanType.WORKFLOW_WAIT_EVENT]: 'function',
+const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, string>> = {
+  [SpanType.MODEL_GENERATION]: 'llm',
+  [SpanType.MODEL_CHUNK]: 'llm',
+  [SpanType.TOOL_CALL]: 'tool',
+  [SpanType.MCP_TOOL_CALL]: 'tool',
+  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
+  [SpanType.WORKFLOW_WAIT_EVENT]: 'function',
 };
 
 // Mapping function - returns valid Braintrust span types
-function mapSpanType(spanType: AISpanType): 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool' {
+function mapSpanType(spanType: SpanType): 'llm' | 'score' | 'function' | 'eval' | 'task' | 'tool' {
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
@@ -67,7 +67,7 @@ export class BraintrustExporter extends BaseExporter {
     this.config = config;
   }
 
-  protected async _exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     if (event.exportedSpan.isEvent) {
       await this.handleEventSpan(event.exportedSpan);
       return;
@@ -86,7 +86,7 @@ export class BraintrustExporter extends BaseExporter {
     }
   }
 
-  private async handleSpanStarted(span: AnyExportedAISpan): Promise<void> {
+  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
     if (span.isRootSpan) {
       await this.initLogger(span);
     }
@@ -122,7 +122,7 @@ export class BraintrustExporter extends BaseExporter {
     spanData.spans.set(span.id, braintrustSpan);
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyExportedAISpan, isEnd: boolean): Promise<void> {
+  private async handleSpanUpdateOrEnd(span: AnyExportedSpan, isEnd: boolean): Promise<void> {
     const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
 
     const spanData = this.getSpanData({ span, method });
@@ -166,7 +166,7 @@ export class BraintrustExporter extends BaseExporter {
     }
   }
 
-  private async handleEventSpan(span: AnyExportedAISpan): Promise<void> {
+  private async handleEventSpan(span: AnyExportedSpan): Promise<void> {
     if (span.isRootSpan) {
       this.logger.debug('Braintrust exporter: Creating logger for event', {
         traceId: span.traceId,
@@ -205,7 +205,7 @@ export class BraintrustExporter extends BaseExporter {
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
   }
 
-  private async initLogger(span: AnyExportedAISpan): Promise<void> {
+  private async initLogger(span: AnyExportedSpan): Promise<void> {
     const logger = await initLogger({
       projectName: this.config.projectName ?? 'mastra-tracing',
       apiKey: this.config.apiKey,
@@ -216,7 +216,7 @@ export class BraintrustExporter extends BaseExporter {
     this.traceMap.set(span.traceId, { logger, spans: new Map(), activeIds: new Set() });
   }
 
-  private getSpanData(options: { span: AnyExportedAISpan; method: string }): SpanData | undefined {
+  private getSpanData(options: { span: AnyExportedSpan; method: string }): SpanData | undefined {
     const { span, method } = options;
     if (this.traceMap.has(span.traceId)) {
       return this.traceMap.get(span.traceId);
@@ -235,7 +235,7 @@ export class BraintrustExporter extends BaseExporter {
 
   private getBraintrustParent(options: {
     spanData: SpanData;
-    span: AnyExportedAISpan;
+    span: AnyExportedSpan;
     method: string;
   }): Logger<true> | Span | undefined {
     const { spanData, span, method } = options;
@@ -270,7 +270,7 @@ export class BraintrustExporter extends BaseExporter {
     });
   }
 
-  private buildSpanPayload(span: AnyExportedAISpan): Record<string, any> {
+  private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
     // Core span data
@@ -291,7 +291,7 @@ export class BraintrustExporter extends BaseExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    if (span.type === AISpanType.MODEL_GENERATION) {
+    if (span.type === SpanType.MODEL_GENERATION) {
       const modelAttr = attributes as ModelGenerationAttributes;
 
       // Model goes to metadata

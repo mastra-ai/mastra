@@ -15,7 +15,7 @@ import {
   GaugeIcon,
 } from 'lucide-react';
 import { SpanDetails } from './span-details';
-import { AISpanRecord } from '@mastra/core/storage';
+import { SpanRecord } from '@mastra/core/storage';
 import { useLinkComponent } from '@/lib/framework';
 import { Tabs } from '@/components/ui/elements/tabs/tabs';
 import { Sections } from '@/components/ui/containers';
@@ -27,8 +27,8 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 
 type SpanDialogProps = {
-  trace: AISpanRecord;
-  span?: AISpanRecord;
+  trace: SpanRecord;
+  span?: SpanRecord;
   spanScoresData?: ListScoresResponse | null;
   onSpanScoresPageChange?: (page: number) => void;
   isLoadingSpanScoresData?: boolean;
