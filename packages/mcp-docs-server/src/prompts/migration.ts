@@ -1,5 +1,5 @@
-import type { Prompt, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 import type { MCPServerPrompts } from '@mastra/mcp';
+import type { Prompt, PromptMessage } from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Migration prompts provide guided workflows for upgrading Mastra versions.
