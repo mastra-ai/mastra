@@ -19,7 +19,7 @@
   "description": "A Mastra agent that consumes tools from an MCP server for documentation assistance",
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",
