@@ -9,7 +9,10 @@ Some workflows need to pause for a human decision before continuing. When a work
 
 ## Requesting human approval with `suspend()`
 
-Use `suspend()` to pause workflow execution at a specific step while waiting for human approval. If a `resumeSchema` condition isn’t met, the workflow suspends at `return suspend()`. No further logic runs, and only the values validated against the optional `suspendSchema` and passed to `suspend()` are returned. The step’s main return block is skipped, and workflow execution doesn’t continue.
+Use `suspend()` to pause workflow execution at a specific step while waiting for human input. You can define a condition using values from `resumeData` to determine whether to continue or pause the workflow.
+
+- If the condition isn’t met, the workflow pauses at `return suspend()`, and values can be returned to provide feedback to the user.
+- If the condition is met, the workflow continues with the remaining logic in the step.
 
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
 
