@@ -58,7 +58,7 @@ To migrate, update voice method calls to use the `agent.voice` namespace.
 + const speakers = agent.voice.getSpeakers();
 ```
 
-### `agent.fetchMemory()` to `(await agent.getMemory()).query()`
+### `agent.fetchMemory()` to `(await agent.getMemory()).recall()`
 
 The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
 
@@ -67,7 +67,7 @@ To migrate, replace `fetchMemory()` calls with the new API.
 ```diff
 - const messages = await agent.fetchMemory({ threadId: 'thread-123' });
 + const memory = await agent.getMemory();
-+ const result = await memory.query({ threadId: 'thread-123' });
++ const result = await memory.recall({ threadId: 'thread-123' });
 + const messages = result.messages;
 ```
 

@@ -116,33 +116,38 @@ To migrate, if you were relying on the previous defaults, explicitly set these v
   });
 ```
 
-### `Memory.query()` return format
+### `Memory.query()` renamed to `Memory.recall()`
 
-The `Memory.query()` method now returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change simplifies the API and makes the return type more predictable.
+The `Memory.query()` method has been renamed to `Memory.recall()`. The new method returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change better describes the action of retrieving messages from memory and simplifies the API.
 
-To migrate, update code that expects the old return format to use the new format.
+To migrate, rename `query()` to `recall()` and update code that expects the old return format.
 
 ```diff
-  const result = await memory.query({ threadId: 'thread-123' });
+- const result = await memory.query({ threadId: 'thread-123' });
++ const result = await memory.recall({ threadId: 'thread-123' });
 - // result: { messages: CoreMessage[], uiMessages: UIMessageWithMetadata[], messagesV2: MastraMessageV2[] }
 + // result: { messages: MastraDBMessage[] }
 + const messages = result.messages;
 ```
 
-### `Memory.query()` parameter format
+### `Memory.recall()` parameter changes
 
-The `Memory.query()` method now uses `StorageListMessagesInput` format with pagination. This change aligns the memory query API with the storage pagination API.
+The `Memory.recall()` method now uses `StorageListMessagesInput` format with pagination, and the `vectorMessageSearch` parameter has been renamed to `vectorSearchString`. These changes align the memory API with the storage pagination API and provide more consistent naming.
 
-To migrate, update query parameters to use the new pagination format.
+To migrate, update method name, query parameters, and the vector search parameter.
 
 ```diff
-  memory.query({
+- memory.query({
++ memory.recall({
     threadId: 'thread-123',
+-   vectorMessageSearch: 'What did we discuss?',
 -   selectBy: { ... },
++   vectorSearchString: 'What did we discuss?',
 +   page: 0,
 +   perPage: 20,
 +   orderBy: 'createdAt',
 +   filter: { ... },
++   threadConfig: { semanticRecall: true },
   });
 ```
 
@@ -159,16 +164,7 @@ To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
 + function yourCustomFunction(input: MastraDBMessage) {}
 ```
 
-### `rememberMessages` return format
 
-The `rememberMessages` method now returns an object wrapper `{ messages }` for consistency between all memory methods. This change provides a consistent API across all memory operations.
-
-To migrate, destructure the returned messages from the object wrapper.
-
-```diff
-- const messages = await memory.rememberMessages({ threadId, resourceId });
-+ const { messages } = await memory.rememberMessages({ threadId, resourceId });
-```
 
 ## Removed
 
@@ -193,6 +189,20 @@ To migrate, remove the `use: "text-stream"` option. Working memory will default 
   });
 ```
 
+### `Memory.rememberMessages()` method
+
+The `Memory.rememberMessages()` method has been removed. This method performed the same function as `query()` (now `recall()`), and consolidating to one method simplifies the API.
+
+To migrate, replace `rememberMessages()` calls with `recall()`.
+
+```diff
+- const { messages } = await memory.rememberMessages({
++ const { messages } = await memory.recall({
+    threadId,
+    resourceId,
+  });
+```
+
 ### `format` parameter from memory methods
 
 The `format` parameter has been removed from all memory get methods. `MastraDBMessage` is now the default return format everywhere. AI SDK format conversion has moved to dedicated utility functions in `@mastra/ai-sdk/ui`. This change improves tree-shaking by moving UI-specific conversion code to a separate package.
@@ -203,7 +213,7 @@ To migrate, remove the `format` parameter and use conversion functions for AI SD
 - const messages = await memory.getMessages({ threadId, format: 'v2' });
 - const uiMessages = await memory.getMessages({ threadId, format: 'ui' });
 
-+ const result = await memory.query({ threadId });
++ const result = await memory.recall({ threadId });
 + const messages = result.messages; // Always MastraDBMessage[]
 + 
 + // Use conversion functions for AI SDK formats
