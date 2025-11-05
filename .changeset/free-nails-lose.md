@@ -1,7 +1,7 @@
 ---
-'@mastra/voice-google-gemini-live': major
-'@mastra/google-cloud-pubsub': major
-'@mastra/voice-openai-realtime': major
+'@mastra/voice-google-gemini-live': minor
+'@mastra/google-cloud-pubsub': minor
+'@mastra/voice-openai-realtime': minor
 '@mastra/mcp-docs-server': major
 '@mastra/agent-builder': major
 '@mastra/playground-ui': major
