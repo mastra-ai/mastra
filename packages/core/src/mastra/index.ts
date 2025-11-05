@@ -934,11 +934,15 @@ export class Mastra<
 
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
+    if (activeRuns.runs.length > 0) {
+      this.#logger.debug(`Restarting ${activeRuns.runs.length} active workflow runs`);
+    }
     for (const runSnapshot of activeRuns.runs) {
       const workflow = this.getWorkflowById(runSnapshot.workflowName);
       try {
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();
+        this.#logger.debug(`Restarted ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}`);
       } catch (error) {
         this.#logger.error(`Failed to restart ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}: ${error}`);
       }

@@ -18,6 +18,7 @@ import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2
 import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
+import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
 import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
@@ -441,6 +442,16 @@ export async function createHonoServer(
         hide: true,
       }),
       swaggerUI({ url: '/openapi.json' }),
+    );
+  }
+
+  if (options?.isDev) {
+    app.post(
+      '/__restart-active-workflow-runs',
+      describeRoute({
+        hide: true,
+      }),
+      restartAllActiveWorkflowRunsHandler,
     );
   }
 
