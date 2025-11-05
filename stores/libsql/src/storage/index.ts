@@ -59,6 +59,9 @@ export class LibSQLStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: LibSQLConfig) {
+    if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+      throw new Error('LibSQLStore: id must be provided and cannot be empty.');
+    }
     super({ id: config.id, name: `LibSQLStore` });
 
     this.maxRetries = config.maxRetries ?? 5;

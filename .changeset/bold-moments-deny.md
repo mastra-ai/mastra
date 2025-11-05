@@ -18,6 +18,6 @@
 '@mastra/pg': major
 ---
 
-Every mastra primitive (agent, MCPServer, workflow, tool, processor, scorer, and vector) now has a get, list, and add method associated with it. Each primitive also now requires an id to be set.
+Every Mastra primitive (agent, MCPServer, workflow, tool, processor, scorer, and vector) now has a get, list, and add method associated with it. Each primitive also now requires an id to be set.
 
-Primitives that get added to other primitives are also automatically added to the mastra instance
+Primitives that are added to other primitives are also automatically added to the Mastra instance
