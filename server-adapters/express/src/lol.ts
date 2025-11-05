@@ -424,7 +424,7 @@ const expressServerAdapter = new ExpressServerAdapter({ mastra });
 await expressServerAdapter.registerRoutes(app);
 
 app.listen(3001, () => {
-  console.log('Server is running on port 3000');
+  console.log('Server is running on port 3001');
 });
 
 // TODOs

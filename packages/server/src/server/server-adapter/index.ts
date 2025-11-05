@@ -40,13 +40,4 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
 
     return bodySchema.parseAsync(body);
   }
-
-  async parseResponse(route: ServerRoute, response: unknown): Promise<unknown> {
-    const responseSchema = route.responseSchema;
-    if (!responseSchema) {
-      return response;
-    }
-
-    return responseSchema.parseAsync(response);
-  }
 }

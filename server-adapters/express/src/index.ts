@@ -54,8 +54,8 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
   }
 
   async registerRoute(app: Application, route: ServerRoute): Promise<void> {
-    console.log('registering route', route);
     app[route.method.toLowerCase() as keyof Application](route.path, async (req: Request, res: Response) => {
+      console.log('got request', req.method, req.url);
       const params = await this.getParams(route, req);
 
       if (params.queryParams) {
@@ -97,6 +97,6 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
       res.locals.requestContext = new RequestContext();
       next();
     });
-    super.registerRoutes(app);
+    await super.registerRoutes(app);
   }
 }
