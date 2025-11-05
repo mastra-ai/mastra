@@ -11,20 +11,25 @@ The evaluation API has been consolidated on the new scorers system with updated 
 
 ### `runExperiment` to `runEvals`
 
-The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.
+The `runExperiment()` function has been renamed to `runEvals()`. Additionally, the parameter names have changed: `agent` is now `target`, `inputs` is now `data`, and `scorer` is now `scorers` (plural, accepts an array). This change provides clearer naming that better describes the evaluation functionality.
 
-To migrate, update function calls from `runExperiment` to `runEvals`.
+To migrate, update function calls from `runExperiment` to `runEvals` and update the parameter names.
 
 ```diff
   import { createScorer, runEvals } from '@mastra/core/evals';
-  
++ import { myAgent } from './agents/my-agent';
+
   const scorer = createScorer({
     id: 'helpfulness-scorer',
     // ...
   });
-  
+
 - const result = await runExperiment({ agent, scorer, inputs });
-+ const result = await runEvals({ agent, scorer, inputs });
++ const result = await runEvals({
++   target: myAgent,
++   scorers: [scorer],
++   data: inputs
++ });
 ```
 
 ### `getScorerByName` to `getScorerById`
@@ -77,6 +82,26 @@ To migrate, update score query methods to use the new naming pattern.
 // - listScoresBySpan
 ```
 
+### Prebuilt scorer imports to `scorers/prebuilt` path
+
+Prebuilt scorer imports have been consolidated under a single `@mastra/evals/scorers/prebuilt` path instead of separate `scorers/llm` and `scorers/code` paths. This change simplifies imports and provides a clearer organization of prebuilt scorers.
+
+To migrate, update import statements to use the new `scorers/prebuilt` path.
+
+```diff
+  // LLM-based scorers
+- import { createHallucinationScorer } from '@mastra/evals/scorers/llm';
+- import { createFaithfulnessScorer } from '@mastra/evals/scorers/llm';
++ import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
++ import { createFaithfulnessScorer } from '@mastra/evals/scorers/prebuilt';
+
+  // Code-based scorers
+- import { createContentSimilarityScorer } from '@mastra/evals/scorers/code';
+- import { createCompletenessScorer } from '@mastra/evals/scorers/code';
++ import { createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
++ import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+```
+
 ### Scorer message types from `UIMessage` to `MastraDBMessage`
 
 Scorer input and output types now use `MastraDBMessage[]` instead of `UIMessage`. This change aligns scorers with the database-persisted message format for consistency across the framework.
@@ -117,28 +142,6 @@ To migrate, access tool invocations via `message.content.toolInvocations` and te
 + const toolCalls = message.content.toolInvocations;
 ```
 
-### Processor interface requirements
-
-Processors now require an `id` field instead of `name`. The `name` field is now optional. Message types have changed from `MastraMessageV2` to `MastraDBMessage`. This change provides consistency with scorer configuration and better type safety.
-
-To migrate, update processor definitions to use `id` as the required field and update message types.
-
-```diff
-  import type { InputProcessor } from '@mastra/core/processors';
-- import type { MastraMessageV2 } from '@mastra/core/agent';
-+ import type { MastraDBMessage } from '@mastra/core/agent';
-
-  const processor: InputProcessor = {
--   name: 'my-processor',
-+   id: 'my-processor',
-+   name: 'My Processor', // optional
--   processInput: async ({ messages }: { messages: MastraMessageV2[] }) => {
-+   processInput: async ({ messages }: { messages: MastraDBMessage[] }) => {
-      // ...
-    },
-  };
-```
-
 ## Removed
 
 ### Legacy evals code
@@ -168,17 +171,6 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
 + const agent = new Agent<AgentId, Tools>({
     // ...
   });
-```
-
-### Deprecated input processor exports
-
-Deprecated input-processor exports have been removed from `@mastra/core`. This change consolidates processor types under the unified `Processor` interface.
-
-To migrate, use the new `Processor` interface.
-
-```diff
-- import { InputProcessor } from '@mastra/core/processors'; // old exports
-+ import type { Processor, InputProcessor } from '@mastra/core/processors';
 ```
 
 ### Evals-related type exports
