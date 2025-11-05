@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { TestCaseWithContext } from '../../utils';
 
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createHallucinationScorer } from './index';
 
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
@@ -199,8 +199,8 @@ describe('HallucinationMetric', () => {
   it('should handle perfect alignment', async () => {
     const testCase = testCases[0]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -208,8 +208,8 @@ describe('HallucinationMetric', () => {
   it('should handle complete hallucination', async () => {
     const testCase = testCases[1]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -217,8 +217,8 @@ describe('HallucinationMetric', () => {
   it('should handle partial hallucination', async () => {
     const testCase = testCases[2]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -226,8 +226,8 @@ describe('HallucinationMetric', () => {
   it('should handle empty output', async () => {
     const testCase = testCases[3]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(testCase.expectedResult.score);
   });
@@ -235,8 +235,8 @@ describe('HallucinationMetric', () => {
   it('should handle speculative language', async () => {
     const testCase = testCases[4]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -244,8 +244,8 @@ describe('HallucinationMetric', () => {
   it('should handle empty context', async () => {
     const testCase = testCases[5]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(testCase.expectedResult.score);
   });
@@ -253,8 +253,8 @@ describe('HallucinationMetric', () => {
   it('should handle implicit contradictions', async () => {
     const testCase = testCases[6]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -262,8 +262,8 @@ describe('HallucinationMetric', () => {
   it('should handle numerical approximations', async () => {
     const testCase = testCases[7]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -271,8 +271,8 @@ describe('HallucinationMetric', () => {
   it('should handle out of scope additions', async () => {
     const testCase = testCases[8]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -280,8 +280,8 @@ describe('HallucinationMetric', () => {
   it('should handle temporal contradictions', async () => {
     const testCase = testCases[9]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -289,8 +289,8 @@ describe('HallucinationMetric', () => {
   it('should handle numerical contradiction despite approximation', async () => {
     const testCase = testCases[10]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -299,8 +299,8 @@ describe('HallucinationMetric', () => {
   it('should detect additional information as hallucination', async () => {
     const testCase = testCases[11]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -308,8 +308,8 @@ describe('HallucinationMetric', () => {
   it('should detect speculative claims about unknown facts as hallucination', async () => {
     const testCase = testCases[12]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -317,8 +317,8 @@ describe('HallucinationMetric', () => {
   it('should enforce strict date matching', async () => {
     const testCase = testCases[13]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -326,8 +326,8 @@ describe('HallucinationMetric', () => {
   it('should enforce strict numerical matching', async () => {
     const testCase = testCases[14]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -335,8 +335,8 @@ describe('HallucinationMetric', () => {
   it('should handle mixed precision levels', async () => {
     const testCase = testCases[15]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
   });
@@ -344,8 +344,8 @@ describe('HallucinationMetric', () => {
   it('should handle relative comparisons', async () => {
     const testCase = testCases[16]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });
-    const inputMessages = [createUIMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
-    const output = [createUIMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+    const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+    const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
