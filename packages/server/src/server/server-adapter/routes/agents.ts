@@ -5,9 +5,9 @@ import {
   listAgentsHandler,
   streamGenerateHandler,
 } from '../../handlers/agents';
+import { executeAgentToolHandler } from '../../handlers/tools';
 import { getSpeakersHandler } from '../../handlers/voice';
 import type { ServerRoute, ServerRouteHandler } from '.';
-import { executeAgentToolHandler } from '../../handlers/tools';
 
 export const AGENTS_ROUTES: ServerRoute[] = [
   {
