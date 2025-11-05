@@ -29,7 +29,6 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   StorageListMessagesInput,
-  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 
@@ -286,20 +285,11 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export interface GetMemoryThreadMessagesParams {
-  /**
-   * Limit the number of messages to retrieve (default: 40)
-   */
-  limit?: number;
-}
-
 export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
 
-export interface GetMemoryThreadMessagesResponse {
+export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
-}
-
-export type ListMemoryThreadMessagesResponse = StorageListMessagesOutput;
+};
 
 export interface GetLogsParams {
   transportId: string;
