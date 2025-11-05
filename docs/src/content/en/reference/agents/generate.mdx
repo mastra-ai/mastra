@@ -118,7 +118,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
-      description: "AI tracing context for span hierarchy and metadata.",
+      description: "Tracing context for span hierarchy and metadata.",
     },
     {
       name: "returnScorerData",
@@ -348,7 +348,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for OTLP telemetry collection during generation (not AI tracing).",
+        "Settings for OTLP telemetry collection during generation (not Tracing).",
       properties: [
         {
           parameters: [
@@ -618,16 +618,16 @@ const aiSdkResult = await agent.generate("message for agent", {
       type: "TracingContext",
       isOptional: true,
       description:
-        "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
           parameters: [
             {
               name: "currentSpan",
-              type: "AISpan",
+              type: "Span",
               isOptional: true,
               description:
-                "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
             },
           ],
         },
@@ -637,7 +637,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for Tracing configuration.",
       properties: [
         {
           parameters: [
@@ -677,7 +677,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       type: "string",
       isOptional: true,
       description:
-        "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />

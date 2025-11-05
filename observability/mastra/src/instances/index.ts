@@ -1,5 +1,5 @@
 /**
- * Mastra AI Tracers
+ * Mastra Observability Instances
  */
 
 export * from './base';

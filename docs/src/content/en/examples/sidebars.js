@@ -292,8 +292,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "observability/basic-ai-tracing",
-          label: "Basic AI Tracing",
+          id: "observability/basic-tracing",
+          label: "Basic Tracing",
         },
       ],
     },
