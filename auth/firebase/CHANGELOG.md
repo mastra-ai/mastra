@@ -1,5 +1,11 @@
 # @mastra/auth-firebase
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- update peerdeps ([`5ca1cca`](https://github.com/mastra-ai/mastra/commit/5ca1ccac61ffa7141e6d9fa8f22d3ad4d03bf5dc))
+
 ## 0.10.5
 
 ### Patch Changes
