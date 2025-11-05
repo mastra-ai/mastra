@@ -68,7 +68,7 @@ async function assertToolStream(page: Page) {
   // Asset streaming result
   await expect(page.getByTestId('thread-wrapper').getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
 
-  await page.getByTestId('thread-wrapper').getByRole('button', { name: `weatherInfo` }).click();
+  await page.getByRole('button', { name: `weatherInfo` }).click();
   await expect(page.getByTestId('tool-args')).toContainText('{  \"location\": \"paris\"}');
 
   await expect(page.getByTestId('tool-result')).toContainText(`"temperature":`);
