@@ -7,11 +7,11 @@ description: Learn how to use logging in Mastra to monitor execution, capture ap
 
 Mastra's logging system captures function execution, input data, and output responses in a structured format.
 
-When deploying to Mastra Cloud, logs are shown on the [Logs](../mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## PinoLogger
 
-When [initializing a new Mastra project](../getting-started/installation) using the CLI, `PinoLogger` is included by default.
+When [initializing a new Mastra project](/docs/getting-started/installation) using the CLI, `PinoLogger` is included by default.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";

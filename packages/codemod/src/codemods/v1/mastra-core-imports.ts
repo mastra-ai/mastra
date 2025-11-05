@@ -47,8 +47,8 @@ const EXPORT_TO_SUBPATH: Record<string, string> = {
   registerApiRoute: '@mastra/core/server',
 
   // Tracing
-  DefaultExporter: '@mastra/core/ai-tracing',
-  CloudExporter: '@mastra/core/ai-tracing',
+  DefaultExporter: '@mastra/observability',
+  CloudExporter: '@mastra/observability',
 
   // Streaming
   ChunkType: '@mastra/core/stream',

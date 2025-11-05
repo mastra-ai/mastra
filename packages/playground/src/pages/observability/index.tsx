@@ -164,7 +164,7 @@ export default function Observability() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/observability/ai-tracing/overview" target="_blank">
+            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
               <Icon>
                 <DocsIcon />
               </Icon>
