@@ -23,6 +23,16 @@ To migrate, update all imports from `@mastra/core` to use the appropriate subpat
 + import { createTool } from '@mastra/core/tools';
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mastra-core-imports .
+```
+
+:::
+
 ### Direct property access to getter methods
 
 Direct property access on the Mastra instance is deprecated. Methods like `mastra.logger`, `mastra.storage`, `mastra.agents`, etc. now show deprecation warnings and will be removed in a future version. This change provides better encapsulation and allows for dynamic configuration based on request context.

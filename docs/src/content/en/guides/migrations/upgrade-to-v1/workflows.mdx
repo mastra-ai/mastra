@@ -43,6 +43,16 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod v1/runtime-context .
+```
+
+:::
+
 ### `createRunAsync` to `createRun`
 
 The `createRunAsync()` method has been renamed to `createRun()`. This change simplifies the API by removing the redundant "Async" suffix since all run creation is asynchronous.

@@ -28,6 +28,16 @@ To migrate, update all imports and parameter names from `RuntimeContext`/`runtim
 + await agent.generate(messages, { requestContext });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/runtime-context .
+```
+
+:::
+
 ### Direct property access to getter methods
 
 Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. This change provides better encapsulation and consistency with the broader API design.

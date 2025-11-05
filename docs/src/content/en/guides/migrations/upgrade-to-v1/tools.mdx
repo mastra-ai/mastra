@@ -118,6 +118,16 @@ To migrate, update references from `runtimeContext` to `requestContext` in tool 
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod v1/runtime-context .
+```
+
+:::
+
 ## Removed
 
 ### Deprecated MCP client classes
