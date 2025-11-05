@@ -40,7 +40,7 @@ export function toAISdkV5Stream(
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream<TOutput extends OutputSchema>(
   stream: MastraModelOutput<TOutput>,
-  options: { from: 'agent' },
+  options: { from: 'agent'; lastMessageId?: string },
 ): ReadableStream<InferUIMessageChunk<UIMessage>>;
 export function toAISdkV5Stream(
   stream:
@@ -48,7 +48,7 @@ export function toAISdkV5Stream(
     | MastraWorkflowStream<any, any, any, any>
     | MastraModelOutput
     | WorkflowRunOutput<WorkflowResult<any, any, any, any>>,
-  options: { from: ToAISDKFrom } = { from: 'agent' },
+  options: { from: ToAISDKFrom; lastMessageId?: string } = { from: 'agent' },
 ): ReadableStream<InferUIMessageChunk<UIMessage>> {
   const from = options?.from;
 
@@ -66,7 +66,7 @@ export function toAISdkV5Stream(
 
   const agentReadable: ReadableStream<ChunkType> =
     'fullStream' in stream ? (stream as MastraModelOutput).fullStream : (stream as ReadableStream<ChunkType>);
-  return agentReadable.pipeThrough(AgentStreamToAISDKTransformer<any>()) as ReadableStream<
+  return agentReadable.pipeThrough(AgentStreamToAISDKTransformer<any>(options?.lastMessageId)) as ReadableStream<
     InferUIMessageChunk<UIMessage>
   >;
 }

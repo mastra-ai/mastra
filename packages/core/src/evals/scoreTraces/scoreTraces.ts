@@ -12,7 +12,7 @@ export async function scoreTraces({
 }) {
   const workflow = mastra.__getInternalWorkflow('__batch-scoring-traces');
   try {
-    const run = await workflow.createRunAsync();
+    const run = await workflow.createRun();
 
     await run.start({ inputData: { targets, scorerId } });
   } catch (error) {

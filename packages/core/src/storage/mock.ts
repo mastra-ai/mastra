@@ -20,7 +20,6 @@ import type {
   AITraceRecord,
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StoragePagination,
   StorageResourceType,
   WorkflowRun,
@@ -227,14 +226,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
   }
 
-  async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy }).catch(() => ({ messages: [] }));
-  }
-
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
   }
@@ -249,14 +240,6 @@ export class InMemoryStore extends MastraStorage {
 
   async deleteMessages(messageIds: string[]): Promise<void> {
     return this.stores.memory.deleteMessages(messageIds);
-  }
-
-  async getMessagesPaginated({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated({ threadId, resourceId, selectBy });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

@@ -9,7 +9,6 @@ import type {
   TABLE_SCHEMAS,
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -249,11 +248,11 @@ export class ClickhouseStore extends MastraStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, perPage, page, resourceId });
   }
 
   async getWorkflowRunById({
@@ -290,20 +289,8 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
-  }
-
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
-  }
-
-  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async updateMessages(args: {

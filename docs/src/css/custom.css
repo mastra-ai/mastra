@@ -176,6 +176,8 @@
   --prism-color-function: #9829c7;
   --prism-color-comment: #939393;
   --prism-color-variable: #0a0a0a;
+  --prism-color-inserted: #177326;
+  --prism-color-deleted: #d81717;
 
   /* Border radius */
   --ifm-global-radius: 0.5rem;
@@ -252,6 +254,8 @@
   --prism-color-function: #d06bee;
   --prism-color-comment: #939393;
   --prism-color-variable: #fff;
+  --prism-color-inserted: #62f69d;
+  --prism-color-deleted: #d81717;
 
   /* Override Docusaurus text colors for dark mode */
   --ifm-font-color-base: var(--mastra-text-secondary);
@@ -1356,4 +1360,13 @@ p {
 /* Hide sidebar items with sidebar-hidden class */
 .sidebar-hidden {
   display: none !important;
+}
+
+/* Code block overrides */
+.language-diff .inserted {
+  color: var(--prism-color-inserted) !important;
+}
+
+.language-diff .deleted {
+  color: var(--prism-color-deleted) !important;
 }

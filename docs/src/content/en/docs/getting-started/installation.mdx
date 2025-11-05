@@ -18,7 +18,7 @@ For more control over setup, or to add Mastra to an existing project, see the [m
 ## Before you start
 
 - You'll need an API key from a [model provider](/models) to complete setup. We suggest starting with [OpenAI](https://platform.openai.com/api-keys), but if you need a provider that doesn't require a credit card, Google's [Gemini](https://aistudio.google.com/app/api-keys) is also an option.
-- [Install](https://nodejs.org/en/download) Node.js 20 or later.
+- [Install](https://nodejs.org/en/download) Node.js 22.13.0 or later.
 
 ## Install with `create mastra`
 
@@ -30,28 +30,28 @@ The wizard will guide you through setup, create a new directory for your project
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm create mastra@latest -y
+npm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm create mastra@latest -y
+pnpm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn create mastra@latest -y
+yarn create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun create mastra@latest -y
+bun create mastra@latest
 ```
 
 </TabItem>
@@ -65,7 +65,7 @@ You can use flags with `create mastra` like `--no-example` to skip the example w
 
 ### Test your agent
 
-Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open the Playground at http://localhost:4111.
+Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open Studio at http://localhost:4111.
 
 Try asking about the weather. If your API key is set up correctly, you'll get a response:
 
@@ -77,7 +77,7 @@ If you encounter an error, your API key may not be configured correctly. Double-
 
 :::
 
-The [Playground](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
+[Studio](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
 
 ### Next steps
 
@@ -310,7 +310,7 @@ export const mastra = new Mastra({
 
 <StepItem>
 
-You can now launch the [Playground](/docs/getting-started/studio) and test your agent.
+You can now launch [Studio](/docs/getting-started/studio) and test your agent.
 
 <Tabs>
 <TabItem value="npm" label="npm">

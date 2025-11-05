@@ -209,9 +209,9 @@ export const convertToText = async (
 
   const chunks: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    input.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
-    input.on("error", reject);
-    input.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    inputData.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    inputData.on("error", reject);
+    inputData.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
   });
 };
 
@@ -1567,9 +1567,9 @@ export const testAgent = new Agent({
 
 > See [Request Context](/docs/server-db/request-context) for more information.
 
-## Testing with Mastra Playground
+## Testing with Studio
 
-Use the Mastra [Playground](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
@@ -1595,9 +1595,9 @@ Use tools when an agent needs additional context or information from remote reso
 
 ## Creating a tool
 
-This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool’s `inputSchema`. The tool accesses this data through its `context` argument, which in this example includes the `location` used in the weather API query.
+This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
-```typescript {14,16} title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```typescript {14} title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -1610,8 +1610,8 @@ export const weatherTool = createTool({
   outputSchema: z.object({
     weather: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { location } = context;
+  execute: async (inputData) => {
+    const { location } = inputData;
 
     const response = await fetch(`https://wttr.in/${location}?format=3`);
     const weather = await response.text();
@@ -1643,7 +1643,7 @@ export const weatherAgent = new Agent({
 
 ## Calling an agent
 
-The agent uses the tool’s `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and makes it available to the tool’s context.
+The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.
 
 ```typescript {5} title="src/test-tool.ts" showLineNumbers copy
 import { mastra } from "./mastra";
@@ -1690,7 +1690,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthAuth0 Class
 [EN] Source: https://mastra.ai/en/docs/auth/auth0
 
-The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -1729,7 +1729,7 @@ import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0(),
+    auth: new MastraAuthAuth0(),
   },
 });
 ```
@@ -1743,7 +1743,7 @@ import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0({
+    auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
       audience: process.env.AUTH0_AUDIENCE,
     }),
@@ -1835,7 +1835,7 @@ export const useAuth0Token = () => {
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Auth0 access token in the `Authorization` header:
 
 ```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -1929,7 +1929,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthClerk Class
 [EN] Source: https://mastra.ai/en/docs/auth/clerk
 
-The `MastraAuthClerk` class provides authentication for Mastra using Clerk. It verifies incoming requests using Clerk's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthClerk` class provides authentication for Mastra using Clerk. It verifies incoming requests using Clerk's authentication system and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -1960,7 +1960,7 @@ import { MastraAuthClerk } from "@mastra/auth-clerk";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthClerk({
+    auth: new MastraAuthClerk({
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
       jwksUri: process.env.CLERK_JWKS_URI,
@@ -2000,7 +2000,7 @@ export const useClerkAuth = () => {
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2076,7 +2076,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthFirebase Class
 [EN] Source: https://mastra.ai/en/docs/auth/firebase
 
-The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -2118,7 +2118,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase(),
+    auth: new MastraAuthFirebase(),
   },
 });
 ```
@@ -2132,7 +2132,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase({
+    auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account.json",
       databaseId: "your-database-id",
     }),
@@ -2241,7 +2241,7 @@ export const signOutUser = async () => {
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Firebase ID token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Firebase ID token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2389,7 +2389,7 @@ import TabItem from "@theme/TabItem";
 # MastraJwtAuth Class
 [EN] Source: https://mastra.ai/en/docs/auth/jwt
 
-The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `auth` option.
 
 ## Installation
 
@@ -2408,7 +2408,7 @@ import { MastraJwtAuth } from "@mastra/auth";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraJwtAuth({
+    auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
     }),
   },
@@ -2419,7 +2419,7 @@ export const mastra = new Mastra({
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2439,7 +2439,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured, you can send authenticated requests from your frontend application, or use `curl` for quick local testing:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -2459,7 +2459,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -2495,7 +2495,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthSupabase Class
 [EN] Source: https://mastra.ai/en/docs/auth/supabase
 
-The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -2525,7 +2525,7 @@ import { MastraAuthSupabase } from "@mastra/auth-supabase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthSupabase({
+    auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
       anonKey: process.env.SUPABASE_ANON_KEY,
     }),
@@ -2562,7 +2562,7 @@ const accessToken = authTokenResponse.data?.session?.access_token;
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2584,7 +2584,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured with the Supabase access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+    <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -2604,7 +2604,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -2628,7 +2628,7 @@ import TabItem from "@theme/TabItem";
 # MastraAuthWorkos Class
 [EN] Source: https://mastra.ai/en/docs/auth/workos
 
-The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
 
 ## Prerequisites
 
@@ -2667,7 +2667,7 @@ import { MastraAuthWorkos } from "@mastra/auth-workos";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthWorkos(),
+    auth: new MastraAuthWorkos(),
   },
 });
 ```
@@ -2681,7 +2681,7 @@ import { MastraAuthWorkos } from "@mastra/auth-workos";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthWorkos({
+    auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
       clientId: process.env.WORKOS_CLIENT_ID,
     }),
@@ -2755,7 +2755,7 @@ export const authenticateWithWorkos = async (
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
 ```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -2779,7 +2779,7 @@ export const createMastraClient = (accessToken: string) => {
 Once `MastraClient` is configured with the WorkOS access token, you can send authenticated requests:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```typescript title="src/api/agents.ts" showLineNumbers copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
@@ -2811,7 +2811,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -5317,7 +5317,7 @@ const weatherTool = createTool({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     return {
       temperature: 72,
       conditions: "sunny",
@@ -5356,7 +5356,7 @@ const tools = {
     outputSchema: z.object({
       result: z.number(),
     }),
-    execute: async ({ context }) => {
+    execute: async (inputData) => {
       // implementation...
       return { result: 0 };
     },
@@ -6120,7 +6120,7 @@ npm run dev
 
 This will start the Mastra development server.
 
-You can now test your agent by visiting [http://localhost:4111](http://localhost:4111) for the playground or via the Mastra API at [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream).
+You can now test your agent by visiting [http://localhost:4111](http://localhost:4111) and using Studio or via the Mastra API at [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream).
 
 </StepItem>
 
@@ -6297,7 +6297,7 @@ export const weatherAgent = new Agent({
 
       Your primary function is to help users get weather details for specific locations. When responding:
       - Always ask for a location if none is provided
-      - If the location name isn’t in English, please translate it
+      - If the location name isn't in English, please translate it
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
@@ -6413,7 +6413,7 @@ Add a script to your `package.json`:
 }
 ```
 
-Start the Mastra playground:
+Start the Mastra dev server:
 
 ```bash copy
 npm run mastra:dev
@@ -6638,7 +6638,7 @@ export const server = {
       city: z.string(),
     }),
     handler: async (input) => {
-      const city = input.city;
+      const city = inputData.city;
       const agent = mastra.getAgent("weatherAgent");
 
       const result = await agent.generate(
@@ -8203,28 +8203,28 @@ The wizard will guide you through setup, create a new directory for your project
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm create mastra@latest -y
+npm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm create mastra@latest -y
+pnpm create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn create mastra@latest -y
+yarn create mastra@latest
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun create mastra@latest -y
+bun create mastra@latest
 ```
 
 </TabItem>
@@ -8238,7 +8238,7 @@ You can use flags with `create mastra` like `--no-example` to skip the example w
 
 ### Test your agent
 
-Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open the Playground at http://localhost:4111.
+Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open Studio at http://localhost:4111.
 
 Try asking about the weather. If your API key is set up correctly, you'll get a response:
 
@@ -8250,7 +8250,7 @@ If you encounter an error, your API key may not be configured correctly. Double-
 
 :::
 
-The [Playground](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
+[Studio](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
 
 ### Next steps
 
@@ -8483,7 +8483,7 @@ export const mastra = new Mastra({
 
 <StepItem>
 
-You can now launch the [Playground](/docs/getting-started/studio) and test your agent.
+You can now launch [Studio](/docs/getting-started/studio) and test your agent.
 
 <Tabs>
 <TabItem value="npm" label="npm">
@@ -8860,7 +8860,7 @@ Run tools in isolation to observe their behavior. Test them before assigning the
 ### MCP List the MCP servers attached to your Mastra instance and explore their
 available tools.
 
-![MCP Servers Playground](/img/local-dev/local-dev-mcp-server-playground.jpg)
+![MCP Servers Studio](/img/local-dev/local-dev-mcp-server-playground.jpg)
 
 ### Observability
 
@@ -9074,7 +9074,7 @@ import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
 # Navigating the Dashboard
 [EN] Source: https://mastra.ai/en/docs/mastra-cloud/dashboard
 
-This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Playground](/docs/mastra-cloud/dashboard#playground).
+This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Studio](/docs/mastra-cloud/dashboard#studio).
 
 <MastraCloudCallout />
 
@@ -9120,13 +9120,13 @@ You can manage environment variables, edit key project settings like the name an
 
 > Changes to configuration require a new deployment before taking effect.
 
-## Playground
+## Studio
 
 ### Agents
 
 On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
 
-![Dashboard playground agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
+![Dashboard Studio agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
 
 Key features:
 
@@ -9136,7 +9136,7 @@ Test your agents in real time using the chat interface, review traces of each in
 
 On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
 
-![Dashboard playground workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
+![Dashboard Studio workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
 
 Key features:
 
@@ -9146,7 +9146,7 @@ Visualize your workflow with a step-by-step graph, view execution traces, and ru
 
 On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
 
-![Dashboard playground tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
+![Dashboard Studio tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
 
 Key features:
 
@@ -9156,7 +9156,7 @@ Test your tools by providing an input that matches the schema and viewing the st
 
 The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
 
-![Dashboard playground mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
+![Dashboard Studio mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
 
 Key features:
 
@@ -9197,7 +9197,7 @@ More detailed traces are available for both agents and workflows by using a [log
 
 ### Agents
 
-With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your agents in the **Traces** section of the Agents Playground.
+With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
 
 ![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
 
@@ -9207,7 +9207,7 @@ Tools passed to the agent during generation are standardized using `convertTools
 
 ### Workflows
 
-With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your workflows in the **Traces** section of the Workflows Playground.
+With a [logger](/docs/observability/logging) enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
 
 ![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
 
@@ -9253,7 +9253,7 @@ Monitor and debug your applications with detailed output logs, deployment state,
 
 Key features:
 
-The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a built-in playground for testing agents and workflows.
+The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
 
 ## Project structure
 
@@ -9390,7 +9390,7 @@ Your project is now configured with automatic deployments which occur whenever y
 
 ## Testing your application
 
-After a successful deployment you can test your agents and workflows from the [Playground](/docs/mastra-cloud/dashboard#playground) in Mastra Cloud, or interact with them using our [Client SDK](/docs/server-db/mastra-client).
+After a successful deployment you can test your agents and workflows [Studio](/docs/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/server-db/mastra-client).
 
 ## Next steps
 
@@ -9637,7 +9637,7 @@ To persist and recall information between conversations, memory requires a stora
 
 Supported options include [LibSQL](/docs/memory/storage/memory-with-libsql), [MongoDB](/examples/memory/memory-with-mongodb), [Postgres](/docs/memory/storage/memory-with-pg), and [Upstash](/docs/memory/storage/memory-with-upstash)
 
-We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with the playground.
+We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with Studio.
 
 ## Dedicated storage
 
@@ -10385,7 +10385,7 @@ Even with memory configured, agents won’t store or recall information unless b
 
 :::
 
-> Mastra Playground sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
+> Studio sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
 
 ### Thread title generation
 
@@ -11259,7 +11259,7 @@ description: "Store traces locally for development and debugging"
 # Default Exporter
 [EN] Source: https://mastra.ai/en/docs/observability/ai-tracing/exporters/default
 
-The `DefaultExporter` persists traces to your configured storage backend, making them accessible through the Mastra Playground. It's automatically enabled when using the default observability configuration and requires no external services.
+The `DefaultExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
 
 ## When to Use DefaultExporter
 
@@ -11268,14 +11268,14 @@ DefaultExporter is ideal for:
 - **Local development** - Debug and analyze traces offline
 - **Data ownership** - Complete control over your trace data
 - **Zero dependencies** - No external services required
-- **Playground integration** - View traces in Mastra Playground UI
+- **Studio integration** - View traces in Studio
 
 ## Configuration
 
 ### Prerequisites
 
 1. **Storage Backend**: Configure a storage provider (LibSQL, PostgreSQL, etc.)
-2. **Mastra Playground**: Install for viewing traces locally
+2. **Studio**: Install for viewing traces locally
 
 ### Basic Setup
 
@@ -11316,11 +11316,11 @@ export const mastra = new Mastra({
 
 ## Viewing Traces
 
-### Mastra Playground
+### Studio
 
-Access your traces through the local Playground:
+Access your traces through Studio:
 
-1. Start the Playground
+1. Start Studio
 2. Navigate to Observability
 3. Filter and search your local traces
 4. Inspect detailed span information
@@ -11985,7 +11985,7 @@ Exporters determine where your AI trace data is sent and how it's stored. Choosi
 
 Mastra provides two built-in exporters that work out of the box:
 
-- **[Default](/docs/observability/ai-tracing/exporters/default)** - Persists traces to local storage for viewing in the Playground
+- **[Default](/docs/observability/ai-tracing/exporters/default)** - Persists traces to local storage for viewing in Studio
 - **[Cloud](/docs/observability/ai-tracing/exporters/cloud)** - Sends traces to Mastra Cloud for production monitoring and collaboration
 
 ### External Exporters
@@ -12222,9 +12222,9 @@ observability: {
 }
 ```
 
-#### Maintaining Playground and Cloud Access
+#### Maintaining Studio and Cloud Access
 
-When creating a custom config with external exporters, you might lose access to Mastra Playground and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
+When creating a custom config with external exporters, you might lose access to Studio and Cloud. To maintain access while adding external exporters, include the default exporters in your custom config:
 
 ```ts title="src/mastra/index.ts" showLineNumbers copy
 import { DefaultExporter, CloudExporter } from "@mastra/core/ai-tracing";
@@ -12242,7 +12242,7 @@ export const mastra = new Mastra({
             endpoint: process.env.PHOENIX_ENDPOINT,
             apiKey: process.env.PHOENIX_API_KEY,
           }),
-          new DefaultExporter(), // Keep Playground access
+          new DefaultExporter(), // Keep Studio access
           new CloudExporter(), // Keep Cloud access
         ],
       },
@@ -12254,7 +12254,7 @@ export const mastra = new Mastra({
 This configuration sends traces to all three destinations simultaneously:
 
 - **Arize Phoenix/AX** for external observability
-- **DefaultExporter** for local Playground access
+- **DefaultExporter** for Studio
 - **CloudExporter** for Mastra Cloud dashboard
 
 :::info
@@ -12415,17 +12415,17 @@ Child spans allow you to track fine-grained operations within your workflow step
 Create child spans inside a tool call or workflow step to track specific operations:
 
 ```ts showLineNumbers copy
-execute: async ({ input, tracingContext }) => {
+execute: async ({ inputData, tracingContext }) => {
   // Create another child span for the main database operation
   const querySpan = tracingContext.currentSpan?.createChildSpan({
     type: "generic",
     name: "database-query",
-    input: { query: input.query },
+    input: { query: inputData.query },
     metadata: { database: "production" },
   });
 
   try {
-    const results = await db.query(input.query);
+    const results = await db.query(inputData.query);
     querySpan?.end({
       output: results.data,
       metadata: {
@@ -12526,7 +12526,7 @@ Workflow executions also return trace IDs:
 
 ```ts showLineNumbers copy
 // Create a workflow run
-const run = await mastra.getWorkflow("myWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("myWorkflow").createRun();
 
 // Start the workflow
 const result = await run.start({
@@ -12549,7 +12549,7 @@ console.log("Trace ID:", finalState.traceId);
 
 Once you have a trace ID, you can:
 
-1. **Look up traces in Mastra Playground**: Navigate to the traces view and search by ID
+1. **Look up traces in Studio**: Navigate to the traces view and search by ID
 2. **Query traces in external platforms**: Use the ID in Langfuse, Braintrust, or your observability platform
 3. **Correlate with logs**: Include the trace ID in your application logs for cross-referencing
 4. **Share for debugging**: Provide trace IDs to support teams or developers for investigation
@@ -12607,7 +12607,7 @@ Workflows support the same pattern for trace propagation:
 
 ```ts showLineNumbers copy
 const workflow = mastra.getWorkflow("data-pipeline");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: { data: "..." },
@@ -12684,7 +12684,7 @@ Mastra automatically creates spans for:
 
 Traces are available in multiple locations:
 
-- **Mastra Playground** - Local development environment
+- **Studio** - Local development environment
 - **Mastra Cloud** - Production monitoring dashboard
 - **Arize Phoenix / Arize AX** - When using Arize exporter
 - **Braintrust Console** - When using Braintrust exporter
@@ -13494,7 +13494,7 @@ export const mastra = new Mastra({
 });
 ```
 
-With this basic setup, you will see Traces and Logs in both the Playground and in Mastra Cloud.
+With this basic setup, you will see Traces and Logs in both Studio and in Mastra Cloud.
 
 We also support various external tracing providers like Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [AI Tracing](/docs/observability/ai-tracing/overview) documentation.
 
@@ -15577,7 +15577,7 @@ To score traces, you must first configure observability in your Mastra instance 
 
 :::
 
-### Scoring traces with the playground
+### Scoring traces with Studio
 
 To score traces, you first need to register your scorers with your Mastra instance:
 
@@ -15591,19 +15591,19 @@ const mastra = new Mastra({
 });
 ```
 
-Once registered, you can score traces interactively within the Mastra playground under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
+Once registered, you can score traces interactively within Studio under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
 
 ## Testing scorers locally
 
-Mastra provides a CLI command `mastra dev` to test your scorers. The playground includes a scorers section where you can run individual scorers against test inputs and view detailed results.
+Mastra provides a CLI command `mastra dev` to test your scorers. Studio includes a scorers section where you can run individual scorers against test inputs and view detailed results.
 
-For more details, see the [Local Dev Playground](/docs/getting-started/studio) docs.
+For more details, see [Studio](/docs/getting-started/studio) docs.
 
 ## Next steps
 
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
 - Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
-- Test scorers with the [Local Dev Playground](/docs/getting-started/studio)
+- Test scorers with [Studio](/docs/getting-started/studio)
 
 
 ---
@@ -16010,8 +16010,8 @@ const handleClientTool = async () => {
       outputSchema: z.object({
         success: z.boolean(),
       }),
-      execute: async ({ context }) => {
-        const { color } = context;
+      execute: async (inputData) => {
+        const { color } = inputData;
 
         document.body.style.backgroundColor = color;
         return { success: true };
@@ -16196,15 +16196,15 @@ registerApiRoute("/my-custom-route", {
 ### Special Mastra headers
 
 When integrating with Mastra Cloud or custom clients the following headers can
-be inspected by middleware to tailor behaviour:
+be inspected by middleware to tailor behavior:
 
 ```typescript copy
 {
   handler: async (c, next) => {
     const isFromMastraCloud = c.req.header('x-mastra-cloud') === 'true';
     const clientType = c.req.header('x-mastra-client-type');
-    const isDevPlayground =
-      c.req.header('x-mastra-dev-playground') === 'true';
+    const isStudio =
+      c.req.header('x-studio') === 'true';
 
     if (isFromMastraCloud) {
       // Special handling
@@ -16216,7 +16216,7 @@ be inspected by middleware to tailor behaviour:
 
 - `x-mastra-cloud`: request originates from Mastra Cloud
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
-- `x-mastra-dev-playground`: request triggered from a local playground
+- `x-studio`: request triggered from Studio
 
 ### Setting `requestContext`
 
@@ -16395,7 +16395,7 @@ routingAgent.network("What's the weather in London?", {
   requestContext,
 });
 
-const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("weatherWorkflow").createRun();
 await run.start({
   inputData: {
     location: "London",
@@ -17150,7 +17150,7 @@ Iterate over the `stream` with a `for await` loop to inspect all emitted event c
 ```typescript {5,11} showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.stream({
   inputData: {
@@ -17409,14 +17409,14 @@ console.log("Token usage:", await networkStream.usage);
 
 ## Streaming with workflows
 
-Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRunAsync()`.
+Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRun()`.
 
 ### Using `Run.streamVNext()`
 
 This is the experimental API. It returns a `ReadableStream` of events directly.
 
 ```typescript {3,9} showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.streamVNext({
   inputData: {
@@ -17478,8 +17478,8 @@ Tool streaming in Mastra enables tools to send incremental results while they ru
 
 Streams can be written to in two main ways:
 
-- **From within a tool**: every tool receives a `writer` argument, which is a writable stream you can use to push updates as execution progresses.
-- **From an agent stream**: you can also pipe an agent’s `stream` output directly into a tool’s writer, making it easy to chain agent responses into tool results without extra glue code.
+- **From within a tool**: every tool receives a `context.writer` object, which is a writable stream you can use to push updates as execution progresses.
+- **From an agent stream**: you can also pipe an agent's `stream` output directly into a tool's writer, making it easy to chain agent responses into tool results without extra glue code.
 
 By combining writable tool streams with agent streaming, you gain fine grained control over how intermediate results flow through your system and into the user experience.
 
@@ -17502,9 +17502,9 @@ export const testAgent = new Agent({
 });
 ```
 
-### Using the `writer` argument
+### Using `context.writer`
 
-The `writer` argument is passed to a tool’s `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+The `context.writer` object is available in a tool's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
 
@@ -17517,17 +17517,17 @@ import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
   // ...
-  execute: async ({ context, writer }) => {
-    const { value } = context;
+  execute: async (inputData, context) => {
+    const { value } = inputData;
 
-   await writer?.write({
+   await context?.writer?.write({
       type: "custom-event",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await writer?.write({
+   await context?.writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -17547,17 +17547,17 @@ import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
   // ...
-  execute: async ({ context, writer }) => {
-    const { value } = context;
+  execute: async (inputData, context) => {
+    const { value } = inputData;
 
-   await writer?.custom({
+   await context?.writer?.custom({
       type: "data-tool-progress",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await writer?.custom({
+   await context?.writer?.custom({
       type: "data-tool-progress",
       status: "success"
     });
@@ -17596,13 +17596,13 @@ import { z } from "zod";
 
 export const testTool = createTool({
   // ...
-  execute: async ({ context, mastra, writer }) => {
-    const { city } = context;
+  execute: async (inputData, context) => {
+    const { city } = inputData;
 
-    const testAgent = mastra?.getAgent("testAgent");
+    const testAgent = context?.mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
-    await stream!.textStream.pipeTo(writer!);
+    await stream!.textStream.pipeTo(context?.writer!);
 
     return {
       value: await stream!.text,
@@ -17679,7 +17679,7 @@ Events written to the stream are included in the emitted chunks. These chunks ca
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.streamVNext({
   inputData: {
@@ -17767,20 +17767,20 @@ export const longRunningTool = createTool({
   id: "long-computation",
   description: "Performs a potentially long computation",
   inputSchema: z.object({ /* ... */ }),
-  execute: async ({ context }, { abortSignal }) => {
+  execute: async (inputData, context) => {
     // Example: Forwarding signal to fetch
     const response = await fetch("https://api.example.com/data", {
-      signal: abortSignal, // Pass the signal here
+      signal: context?.abortSignal, // Pass the signal here
     });
 
-    if (abortSignal?.aborted) {
+    if (context?.abortSignal?.aborted) {
       console.log("Tool execution aborted.");
       throw new Error("Aborted");
     }
 
     // Example: Checking signal during a loop
     for (let i = 0; i < 1000000; i++) {
-      if (abortSignal?.aborted) {
+      if (context?.abortSignal?.aborted) {
         console.log("Tool execution aborted during loop.");
         throw new Error("Aborted");
       }
@@ -17975,6 +17975,12 @@ export const testMcpServer = new MCPServer({
 ```
 
 > See [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
+
+### Serverless deployments
+
+`MCPServer` can be deployed in serverless environments (Cloudflare Workers, Vercel Edge Functions, AWS Lambda, etc.) by enabling the `serverless: true` option in `startHTTP()`. This runs the server in stateless mode, where each request is handled independently without session management.
+
+**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/tools/mcp-server#starthttp) in the API reference for full details and limitations.
 
 ## Registering an `MCPServer`
 
@@ -18279,9 +18285,9 @@ export const weatherTool = createTool({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async ({ context: { city } }) => {
-    console.log("Using tool to fetch weather information for", city);
-    return await getWeatherInfo(city);
+  execute: async (inputData) => {
+    console.log("Using tool to fetch weather information for", inputData.city);
+    return await getWeatherInfo(inputData.city);
   },
 });
 ```
@@ -18323,9 +18329,9 @@ export const testTool = createTool({
 
 > See [Request Context](/docs/server-db/request-context) for more information.
 
-## Testing with Mastra Playground
+## Testing with Studio
 
-Use the Mastra [Playground](/docs/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
+Use [Studio](/docs/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
 
 
 ---
@@ -19771,263 +19777,306 @@ description: "Control flow in Mastra workflows allows you to manage branching, m
 # Control Flow
 [EN] Source: https://mastra.ai/en/docs/workflows/control-flow
 
-When you build a workflow, you typically break down operations into smaller tasks that can be linked and reused. **Steps** provide a structured way to manage these tasks by defining inputs, outputs, and execution logic.
+Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially, in parallel, or follow different paths based on conditions.
 
-- If the schemas match, the `outputSchema` from each step is automatically passed to the `inputSchema` of the next step.
-- If the schemas don't match, use [Input data mapping](./input-data-mapping) to transform the `outputSchema` into the expected `inputSchema`.
+Each step connects to the next in the workflow through defined schemas that keep data controlled and consistent.
+
+## Core principles
+
+- The first step’s `inputSchema` must match the workflow’s `inputSchema`.
+- The final step’s `outputSchema` must match the workflow’s `outputSchema`.
+- Each step’s `outputSchema` must match the next step’s `inputSchema`.
+  - If it doesn’t, use [Input data mapping](#input-data-mapping) to transform the data into the required shape.
 
 ## Chaining steps with `.then()`
 
-Chain steps to execute sequentially using `.then()`:
+Use `.then()` to run steps in order, allowing each step to access the result of the step before it.
 
 ![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
 
-```typescript {8-9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {30-31} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  //...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    formatted: z.string()
+  })
+});
 
-const step1 = createStep({...});
-const step2 = createStep({...});
+const step2 = createStep({
+  // ...
+  inputSchema: z.object({
+    formatted: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+});
 
-export const testWorkflow = createWorkflow({...})
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
   .then(step1)
   .then(step2)
   .commit();
 ```
 
-This does what you'd expect: it executes `step1`, then it executes `step2`.
-
 ## Simultaneous steps with `.parallel()`
 
-Execute steps simultaneously using `.parallel()`:
+Use `.parallel()` to run steps at the same time. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {9,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {42} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  // ...
+});
 
-const step1 = createStep({...});
-const step2 = createStep({...});
-const step3 = createStep({...});
+const step2 = createStep({
+  id: "step-2",
+  // ...
+});
 
-export const testWorkflow = createWorkflow({...})
+const step3 = createStep({
+  id: "step-3",
+  inputSchema: z.object({
+    "step-1": z.object({
+      formatted: z.string()
+    }),
+    "step-2": z.object({
+      emphasized: z.string()
+    })
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { formatted } = inputData["step-1"];
+    const { emphasized } = inputData["step-2"];
+    return {
+      combined: `${formatted} | ${emphasized}`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  })
+})
   .parallel([step1, step2])
   .then(step3)
   .commit();
 ```
 
-This executes `step1` and `step2` concurrently, then continues to `step3` after both complete.
-
-> See [Parallel Execution with Steps](/docs/workflows/control-flow#simultaneous-steps-with-parallel) for more information.
-
 > 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
 
 ## Conditional logic with `.branch()`
 
-Execute steps conditionally using `.branch()`:
+Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
 ![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {8-11,4-5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript {33-36} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
 
-const lessThanStep = createStep({...});
-const greaterThanStep = createStep({...});
+const stepA = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
 
-export const testWorkflow = createWorkflow({...})
+const stepB = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+})
+  .then(step1)
   .branch([
-    [async ({ inputData: { value } }) => value <= 10, lessThanStep],
-    [async ({ inputData: { value } }) => value > 10, greaterThanStep]
+    [async ({ inputData: { value } }) => value > 10, stepA],
+    [async ({ inputData: { value } }) => value <= 10, stepB]
   ])
   .commit();
 ```
 
-Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
+## Input data mapping
 
-> See [Conditional Branching](/docs/workflows/control-flow#conditional-logic-with-branch) for more information.
+When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
 
-## Looping steps
+![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
-Workflows support two types of loops. When looping a step, or any step-compatible construct like a nested workflow, the initial `inputData` is sourced from the output of the previous step.
-
-To ensure compatibility, the loop’s initial input must either match the shape of the previous step’s output, or be explicitly transformed using the `map` function.
-
-- Match the shape of the previous step’s output, or
-- Be explicitly transformed using the `map` function.
-
-### Repeating with `.dowhile()`
-
-Executes step repeatedly while a condition is true.
-
-![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .dowhile(counterStep, async ({ inputData: { number } }) => number < 10)
-  .commit();
-```
-
-### Repeating with `.dountil()`
-
-Executes step repeatedly until a condition becomes true.
-
-![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .dountil(counterStep, async ({ inputData: { number } }) => number > 10)
-  .commit();
-```
-
-### Loop management
-
-Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
-
-#### Conditional loops
-
-The `inputData` for a loop step is the output of a previous step. Use the values in `inputData` to determine whether the loop should continue or stop.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse } }) => userResponse === "yes")
-.commit();
-```
-
-#### Limiting loops
-
-The `iterationCount` tracks how many times the loop step has run. You can use this to limit the number of iterations and prevent infinite loops. Combine it with `inputData` values to stop the loop after a set number of attempts.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => userResponse === "yes" || iterationCount >= 10)
-.commit();
-```
-
-#### Aborting loops
-
-Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const counterStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-.dountil(nestedWorkflowStep, async ({ inputData: { userResponse, iterationCount } }) => {
-  if (iterationCount >= 10) {
-    throw new Error("Maximum iterations reached");
-  }
-  return userResponse === "yes";
-})
-.commit();
-```
-
-### Repeating with `.foreach()`
-
-Sequentially executes the same step for each item from the `inputSchema`.
-
-![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const mapStep = createStep({...});
-
-export const testWorkflow = createWorkflow({...})
-  .foreach(mapStep)
-  .commit();
-```
-
-#### Setting concurrency limits
-
-Use `concurrency` to execute steps in parallel with a limit on the number of concurrent executions.
-
-```typescript {7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const mapStep = createStep({...})
-
-export const testWorkflow = createWorkflow({...})
-  .foreach(mapStep, { concurrency: 2 })
-  .commit();
-```
-
-## Using a nested workflow
-
-Use a nested workflow as a step by passing it to `.then()`. This runs each of its steps in sequence as part of the parent workflow.
-
-```typescript {4,7} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-export const nestedWorkflow = createWorkflow({...})
-
-export const testWorkflow = createWorkflow({...})
-  .then(nestedWorkflow)
-  .commit();
-```
-
-## Cloning a workflow
-
-Use `cloneWorkflow` to duplicate an existing workflow. This lets you reuse its structure while overriding parameters like `id`.
-
-```typescript {6,10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep, cloneWorkflow } from "@mastra/core/workflows";
-import { z } from "zod";
-
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
-const parentWorkflow = createWorkflow({...})
-const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
   .then(step1)
-  .then(clonedWorkflow)
+  .map(async ({ inputData }) => {
+    const { foo } = inputData;
+    return {
+      bar: `new ${foo}`,
+    };
+  })
+  .then(step2)
   .commit();
 ```
 
-## Example Run Instance
+The `.map()` method provides additional helper functions for more complex mapping scenarios.
 
-The following example demonstrates how to start a run with multiple inputs. Each input will pass through the `mapStep` sequentially.
+**Available helper functions:**
 
-```typescript {6} title="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+- [`getStepResult()`](/reference/workflows/workflow-methods/map#using-getstepresult): Access a specific step's full output
+- [`getInitData()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
+- [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+## Looping steps
 
-const result = await run.start({
-  inputData: [{ number: 10 }, { number: 100 }, { number: 200 }],
+Workflows support different looping methods that let you repeat steps until or while a condition is met, or iterate over arrays. Loops can be combined with other control methods like `.then()`.
+
+### Looping with `.dountil()`
+
+Use `.dountil()` to run a step repeatedly until a condition becomes true.
+
+![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
 });
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dountil(step2, async ({ inputData: { number } }) => number > 10)
+  .commit();
 ```
 
-To execute this run from your terminal:
+### Looping with `.dowhile()`
 
-```bash copy
-npx tsx src/test-workflow.ts
+Use `.dowhile()` to run a step repeatedly while a condition remains true.
+
+![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dowhile(step2, async ({ inputData: { number } }) => number < 10)
+  .commit();
+```
+
+### Looping with `.foreach()`
+
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
+
+![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  inputSchema: z.string(),
+  outputSchema: z.string(),
+  execute: async ({ inputData }) => {
+    return inputData.toUpperCase();
+  }
+});
+
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(z.string())
+})
+  .foreach(step1)
+  .then(step2)
+  .commit();
+```
+
+#### Concurrency limits
+
+Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(step1, { concurrency: 4 })
+  .commit();
+```
+
+## Loop management
+
+Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
+
+### Aborting loops
+
+Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .dountil(step1, async ({ inputData: { userResponse, iterationCount } }) => {
+    if (iterationCount >= 10) {
+      throw new Error("Maximum iterations reached");
+    }
+    return userResponse === "yes";
+  })
+  .commit();
 ```
 
 
@@ -20206,7 +20255,7 @@ import { mastra } from "../src/mastra";
 
 const workflow = mastra.getWorkflow("testWorkflow");
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = await run.stream({
   inputData: {
@@ -20994,7 +21043,7 @@ Workflows let you define complex sequences of tasks using clear, structured step
 
 Use workflows for tasks that are clearly defined upfront and involve multiple steps with a specific execution order. They give you fine-grained control over how data flows and transforms between steps, and which primitives are called at each stage.
 
-> **📹 Watch**: → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
+> **📹 Watch**:  → An introduction to workflows, and how they compare to agents [YouTube (7 minutes)](https://youtu.be/0jg2g3sNvgw)
 
 ## Core principles
 
@@ -21016,18 +21065,18 @@ import { createStep } from "@mastra/core/workflows";
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
-    message: z.string(),
+    message: z.string()
   }),
   outputSchema: z.object({
-    formatted: z.string(),
+    formatted: z.string()
   }),
   execute: async ({ inputData }) => {
     const { message } = inputData;
 
     return {
-      formatted: message.toUpperCase(),
+      formatted: message.toUpperCase()
     };
-  },
+  }
 });
 ```
 
@@ -21035,7 +21084,7 @@ const step1 = createStep({
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Agents and Tools](./agents-and-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
 
 ## Creating a workflow
 
@@ -21058,47 +21107,63 @@ export const testWorkflow = createWorkflow({
 })
   .then(step1)
   .commit();
-
 ```
 
 > See the [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](./control-flow) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
 
-#### Composing workflow steps
+## Workflow state
 
-When using `.then()`, steps run sequentially. Each step’s `inputSchema` must match the `outputSchema` of the previous step. The final step’s `outputSchema` should match the workflow’s `outputSchema` to ensure end-to-end type safety.
+Workflow state lets you share values across steps without passing them through every step’s inputSchema and outputSchema. All state values are defined in the workflow’s stateSchema, but each step only declares the values it needs. To set initial values, use initialState when running the workflow.
 
-```typescript {4,7,14,17,24,27} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
-  //...
-  inputSchema: z.object({
-    message: z.string(),
+  // ...
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
   }),
-  outputSchema: z.object({
-    formatted: z.string(),
-  }),
+  execute: async ({ inputData, state, setState }) => {
+    const { message } = inputData;
+    const { processedItems } = state;
+
+    setState({
+      ...state,
+      processedItems: [...processedItems, "item-1", "item-2"],
+    });
+
+    return {
+      formatted: message.toUpperCase(),
+    };
+  },
 });
 
 const step2 = createStep({
   // ...
-  inputSchema: z.object({
-    formatted: z.string(),
+  stateSchema: z.object({
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
   }),
-  outputSchema: z.object({
-    emphasized: z.string(),
-  }),
+  execute: async ({ inputData, state }) => {
+    const { formatted } = inputData;
+    const { metadata } = state;
+
+    return {
+      emphasized: `${formatted}!! ${metadata.processedBy}`,
+    };
+  },
 });
 
 export const testWorkflow = createWorkflow({
   // ...
-  inputSchema: z.object({
-    message: z.string(),
-  }),
-  outputSchema: z.object({
-    emphasized: z.string(),
+  stateSchema: z.object({
+    processedItems: z.array(z.string()),
+    metadata: z.object({
+      processedBy: z.string(),
+    }),
   }),
 })
   .then(step1)
@@ -21106,12 +21171,64 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-### Registering a workflow
+## Workflows as steps
+
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
+
+```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+const childWorkflow = createWorkflow({
+  id: "child-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(childWorkflow)
+  .commit();
+```
+
+### Cloning a workflow
+
+Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
+
+```typescript {6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { cloneWorkflow } from "@mastra/core/workflows";
+
+const step1 = createStep({...});
+
+const parentWorkflow = createWorkflow({...})
+const clonedWorkflow = cloneWorkflow(parentWorkflow, { id: "cloned-workflow" });
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .then(clonedWorkflow)
+  .commit();
+```
+
+## Registering a workflow
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
@@ -21127,14 +21244,9 @@ You can run workflows from agents, tools, the Mastra Client, or the command line
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
-
 :::info
-
 `mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
-
 :::
-
-> See [Running Workflows](/docs/workflows/overview) for more information.
 
 ## Running workflows
 
@@ -21142,40 +21254,36 @@ Workflows can be run in two modes: start waits for all steps to complete before 
 
 <Tabs>
   <TabItem value="start" label="Start">
-
-Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
+Create a workflow run instance using `createRun()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
 ```typescript showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const result = await run.start({
   inputData: {
-    message: "Hello world",
-  },
+    message: "Hello world"
+  }
 });
 
 console.log(result);
 ```
-
   </TabItem>
   <TabItem value="stream" label="Stream">
-
-Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
 
 ```typescript showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const result = await run.stream({
   inputData: {
-    message: "Hello world",
-  },
+    message: "Hello world"
+  }
 });
 
 for await (const chunk of result.stream) {
   console.log(chunk);
 }
 ```
-
   </TabItem>
 </Tabs>
 
@@ -21195,7 +21303,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "formatted": "HELLO WORLD"
-      }
+      },
     },
     "step-2": {
       "status": "success",
@@ -21204,7 +21312,7 @@ The workflow output includes the full execution lifecycle, showing the input and
       },
       "output": {
         "emphasized": "HELLO WORLD!!!"
-      }
+      },
     }
   },
   "input": {
@@ -21230,26 +21338,25 @@ const step1 = createStep({
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    const maxResults = userTier === "enterprise" ? 1000 : 50;
+    const maxResults = userTier === "enterprise"
+      ? 1000
+      : 50;
 
     return { maxResults };
-  },
+  }
 });
 ```
 
 > See [Request Context](/docs/server-db/request-context) for more information.
 
-## Testing with Mastra Playground
+## Testing with Studio
 
-Use the Mastra [Playground](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use [Studio](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 
 For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Inngest workflow example](/examples/workflows/inngest-workflow)
-- [Control Flow](/docs/workflows/control-flow)
-- [Suspend and Resume](/docs/workflows/suspend-and-resume)
 
 
 ---
@@ -21495,7 +21602,7 @@ Use `resumeData` to pass structured input when resuming a suspended step. It mus
 ```typescript {14-20} showLineNumbers copy
 const workflow = mastra.getWorkflow("approvalWorkflow");
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -21599,7 +21706,7 @@ To resume a suspended workflow, inspect the `suspended` array in the result to d
 ```typescript {15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRun();
 
 const result = await run.start({
   inputData: {
@@ -21702,7 +21809,7 @@ A workflow can be resumed by calling `resume` and providing the required `resume
 ```typescript {16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRun();
 
 const result = await run.start({
   inputData: {
@@ -21793,7 +21900,7 @@ const dowhileWorkflow = createWorkflow({
   )
   .commit();
 
-const run = await dowhileWorkflow.createRunAsync();
+const run = await dowhileWorkflow.createRun();
 const result = await run.start({ inputData: { value: 0 } });
 
 if (result.status === "suspended") {
@@ -21918,8 +22025,8 @@ export const weatherTool = createTool({
     conditions: z.string(),
     location: z.string(),
   }),
-  execute: async ({ context }) => {
-    return await getWeather(context.location);
+  execute: async (inputData) => {
+    return await getWeather(inputData.location);
   },
 });
 
@@ -23440,7 +23547,7 @@ export const mastra = new Mastra({
 
           const body = await c.req.json();
 
-          const workflowRun = await chatWorkflow.createRunAsync();
+          const workflowRun = await chatWorkflow.createRun();
           const runResult = await workflowRun.start({
             inputData: { userMessage: JSON.stringify(body) },
           });
@@ -23485,7 +23592,7 @@ const mockWebhookData = {
 };
 
 const workflow = mastra.getWorkflow("chatWorkflow");
-const workflowRun = await workflow.createRunAsync();
+const workflowRun = await workflow.createRun();
 
 const result = await workflowRun.start({
   inputData: { userMessage: JSON.stringify(mockWebhookData) },
@@ -24370,7 +24477,7 @@ AGENT_RUN (example-agent)
 
 ## Viewing Traces
 
-In the Playground or in Mastra Cloud, go to the Observability page, and click on a Trace. You can also click on individual spans to get input, output, attributes & metadata.
+In Studio or Mastra Cloud, go to the Observability page, and click on a Trace. You can also click on individual spans to get input, output, attributes & metadata.
 
 ## Adding Custom Metadata
 
@@ -27847,7 +27954,7 @@ const prompt = `
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-const { runId, start } = await ragWorkflow.createRunAsync();
+const { runId, start } = await ragWorkflow.createRun();
 
 console.log("Run:", runId);
 
@@ -29205,8 +29312,8 @@ export const speechToSpeechServer = new Agent({
       description: "Read the result of the tool",
       inputSchema: z.object({ name: z.string() }),
       outputSchema: z.object({ message: z.string() }),
-      execute: async ({ context }) => {
-        return { message: `Hello ${context.name}!` };
+      execute: async (inputData) => {
+        return { message: `Hello ${inputData.name}!` };
       },
     }),
   },
@@ -30490,7 +30597,7 @@ const srv = serve({
 });
 
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 // Start the workflow with the required input data (city name)
 // This will trigger the workflow steps and stream the result to the console
@@ -30857,7 +30964,7 @@ export const mastra = new Mastra({
 
 ## Testing the Workflow
 
-You can test your workflow inside Mastra's [playground](/docs/getting-started/studio) by starting the development server:
+You can test your workflow inside [Studio](/docs/getting-started/studio) by starting the development server:
 
 ```bash copy
 mastra dev
@@ -30871,12 +30978,12 @@ Knowledgeable Software Engineer with more than 10 years of experience in softwar
 
 After entering the resume text, press the **Run** button. You should now see two status boxes (`GatherCandidateInfo` and `AskAboutSpecialty`) which contain the output of the workflow steps.
 
-You can also test the workflow programmatically by calling [`.createRunAsync()`](/reference/workflows/workflow-methods/create-run) and [`.start()`](/reference/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
+You can also test the workflow programmatically by calling [`.createRun()`](/reference/workflows/workflow-methods/create-run) and [`.start()`](/reference/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
 
 ```ts copy title="src/test-workflow.ts"
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("candidateWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("candidateWorkflow").createRun();
 
 const res = await run.start({
   inputData: {
@@ -31136,7 +31243,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/getting-started/studio) you can test your agent through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your agent through a UI.
 
 </StepItem>
 
@@ -31434,9 +31541,9 @@ export const writeNoteTool = createTool({
       .describe("The markdown content of the note."),
   }),
   outputSchema: z.string().nonempty(),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     try {
-      const { title, content } = context;
+      const { title, content } = inputData;
       const filePath = path.join(NOTES_DIR, `${title}.md`);
       await fs.mkdir(NOTES_DIR, { recursive: true });
       await fs.writeFile(filePath, content, "utf-8");
@@ -31614,7 +31721,7 @@ export const notes = new MCPServer({
 
 ## Run the Server
 
-Great, you've authored your first MCP server! Now you can try it out by starting the [playground](/docs/getting-started/studio):
+Great, you've authored your first MCP server! Now you can try it out by starting the Mastra dev server and opening [Studio](/docs/getting-started/studio):
 
 ```bash copy
 npm run dev
@@ -32108,11 +32215,11 @@ export const stockPrices = createTool({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  execute: async ({ context: { symbol } }) => {
-    console.log("Using tool to fetch stock price for", symbol);
+  execute: async (inputData) => {
+    console.log("Using tool to fetch stock price for", inputData.symbol);
     return {
-      symbol,
-      currentPrice: await getStockPrice(symbol),
+      symbol: inputData.symbol,
+      currentPrice: await getStockPrice(inputData.symbol),
     };
   },
 });
@@ -32159,7 +32266,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](/docs/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
 
 </StepItem>
 
@@ -32359,13 +32466,13 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent inside Mastra's [Playground](/docs/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash copy
 mastra dev
 ```
 
-Inside Playground navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
+Inside Studio navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
 
 </StepItem>
 
@@ -32430,8 +32537,8 @@ export const webSearch = createTool({
       publishedDate: z.string().optional(),
     }),
   ),
-  execute: async ({ context }) => {
-    const { results } = await exa.searchAndContents(context.query, {
+  execute: async (inputData) => {
+    const { results } = await exa.searchAndContents(inputData.query, {
       livecrawl: "always",
       numResults: 2,
     });
@@ -32486,13 +32593,13 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent inside Mastra's [Playground](/docs/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash copy
 mastra dev
 ```
 
-Inside Playground navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
+Inside Studio navigate to the **"Search Agent"** and ask it: "What happened last week in AI news?"
 
 </StepItem>
 
@@ -32684,6 +32791,57 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 ## Migrate to v1.0.0-beta
 
+### Removed: Memory.rememberMessages() and Renamed: Memory.query() to Memory.recall()
+
+**Breaking Changes:**
+
+1. `Memory.rememberMessages()` method has been removed
+2. `Memory.query()` has been renamed to `Memory.recall()`
+3. Parameter `vectorMessageSearch` is now `vectorSearchString`
+
+**Why these changes?**
+
+- "Remember" could imply persisting data, not just retrieving, which was confusing
+- `query` and `rememberMessages` performed the same function - consolidating to one method simplifies the API
+- `recall` better describes the action of retrieving messages from memory
+- `vectorSearchString` is more consistent with the rest of the codebase
+
+**Migration:**
+
+If you were using `rememberMessages()`, switch to `recall()`:
+
+```typescript
+// Before
+const { messages } = await memory.rememberMessages({
+  threadId,
+  resourceId,
+});
+
+// After
+const { messages } = await memory.recall({
+  threadId,
+  resourceId,
+});
+```
+
+If you were using `query()`, rename it to `recall()`:
+
+```typescript
+// Before
+const { messages } = await memory.query({
+  threadId,
+  vectorMessageSearch: "What did we discuss?",
+  threadConfig: { semanticRecall: true },
+});
+
+// After
+const { messages } = await memory.recall({
+  threadId,
+  vectorSearchString: "What did we discuss?",
+  threadConfig: { semanticRecall: true },
+});
+```
+
 ### Changed: Thread Title Generation Location and Default
 
 **Breaking Changes:**
@@ -32811,7 +32969,7 @@ If you were using `run.watch()` from `@mastra/client-js`, switch to using `run.s
 ```typescript
 // Before (v0.22 and earlier)
 const workflow = mastraClient.getWorkflow('my-workflow');
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.watch((event) => {
   console.log('Step completed:', event);
@@ -32819,7 +32977,7 @@ await run.watch((event) => {
 
 // After (v0.23+)
 const workflow = mastraClient.getWorkflow('my-workflow');
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = await run.stream({
   inputData: { /* your input */ }
@@ -32852,7 +33010,7 @@ The storage format (`MastraMessageV2`) and all public APIs remain unchanged.
 - `agent.speak()` → `agent.voice.speak()`
 - `agent.getSpeakers()` → `agent.voice.getSpeakers()`
 - `agent.listen` → `agent.voice.listen()`
-- `agent.fetchMemory` → `(await agent.getMemory()).query()`
+- `agent.fetchMemory` → `(await agent.getMemory()).recall()`
 - `agent.toStep` → Add agent directly to the step, workflows handle the transformation
 - `getDefaultGenerateOptions()` → `getDefaultGenerateOptionsLegacy()`
 - `getDefaultStreamOptions()` → `getDefaultStreamOptionsLegacy()`
@@ -32902,9 +33060,102 @@ const result = await agent.stream(messages, {
 });
 ```
 
-#### MCP tools
+#### Tool execute signature
 
-- Removed `elicitation` and `extra` from top level arguments. Use the `mcp` property instead.
+**Breaking Change:**
+
+The tool `execute` function signature has been updated to use separate `input` and `context` parameters instead of a single destructured object.
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context }) => {
+    return getWeather(context.location);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (inputData) => {
+    return getWeather(inputData.location);
+  },
+});
+```
+
+**Accessing execution context:**
+
+Context properties like `mastra`, `requestContext`, `agent`, `workflow`, and `mcp` are now passed as the second parameter:
+
+```typescript
+// Before
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ context, requestContext, mastra }) => {
+    const userTier = requestContext.get("userTier");
+    const location = context.location;
+    return getWeather(location, userTier);
+  },
+});
+
+// After
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async (inputData, context) => {
+    const userTier = context?.requestContext?.get("userTier");
+    return getWeather(inputData.location, userTier);
+  },
+});
+```
+
+**Agent-specific context:**
+
+Agent-specific properties like `toolCallId`, `messages`, `suspend`, and `resumeData` are nested under `context.agent`:
+
+```typescript
+// After
+export const suspendableTool = createTool({
+  id: "suspendable-tool",
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    approval: z.boolean(),
+  }),
+  execute: async (inputData, context) => {
+    if (!context?.agent?.resumeData) {
+      return await context?.agent?.suspend({
+        message: "Waiting for approval",
+      });
+    }
+
+    if (context.agent.resumeData.approval) {
+      return { success: true };
+    }
+  },
+});
+```
+
+**Workflow-specific context:**
+
+Workflow-specific properties like `workflowId`, `runId`, `state`, and `setState` are nested under `context.workflow`:
+
+```typescript
+// After
+export const workflowTool = createTool({
+  id: "workflow-tool",
+  execute: async (inputData, context) => {
+    const currentState = context?.workflow?.state;
+    context?.workflow?.setState({ step: "completed" });
+    return { result: "done" };
+  },
+});
+```
+
+**MCP tools:**
+
+MCP-specific properties `elicitation` and `extra` are nested under `context.mcp`:
 
 ```typescript
 export const accountBalance = createTool({
@@ -32916,12 +33167,12 @@ export const accountBalance = createTool({
   outputSchema: z.object({
     balance: z.number(),
   }),
-  execute: async ({ context, mcp }) => {
-    if (mcp) {
-      await checkAuth(mcp.extra.authInfo);
+  execute: async (inputData, context) => {
+    if (context?.mcp) {
+      await checkAuth(context.mcp.extra.authInfo);
 
-      const result = await mcp.elicitation.sendRequest({
-        message: `Is it ok to fetch the account balance for account ${context.accountId}?`,
+      const result = await context.mcp.elicitation.sendRequest({
+        message: `Is it ok to fetch the account balance for account ${inputData.accountId}?`,
         requestedSchema: {
           type: "object",
           properties: {
@@ -32933,7 +33184,7 @@ export const accountBalance = createTool({
 
       if (result.action === "accept") {
         return {
-          balance: getAccountBalance(context.accountId),
+          balance: getAccountBalance(inputData.accountId),
         };
       }
     }
@@ -32945,6 +33196,81 @@ export const accountBalance = createTool({
 
 - Removed the `@mastra/core/agent/input-processors` exports. They can found at `@mastra/core/processors` now.
 - `InputProcessor` type removed in favour of `Processor` which implements a `processInput` function.
+
+### Removed: `format` Parameter from `agent.stream()`
+
+**Breaking Changes:**
+
+The `format` parameter has been removed from `agent.stream()`/`agent.generate()`. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package.
+
+**Why this change?**
+
+- **Better separation of concerns**: AI SDK-specific formatting logic is now in a dedicated package
+- **Improved tree-shaking**: Applications that don't use AI SDK don't bundle conversion code
+- **Clearer API**: Stream methods focus on generation, while formatting is handled explicitly
+- **Framework flexibility**: Makes it easier to support different UI frameworks without bloating the core
+
+**Migration:**
+
+If you were using `format: "aisdk"` for streaming, update your code to use `toAISdkStream` from `@mastra/ai-sdk`:
+
+```typescript
+// Before
+const stream = await agent.stream(messages, {
+  format: "aisdk", // ❌ No longer supported
+});
+
+// After
+import { toAISdkStream } from "@mastra/ai-sdk";
+
+const stream = await agent.stream(messages);
+const aiSdkStream = toAISdkStream(stream, { from: "agent" }); // ✅ Explicit conversion
+```
+
+**Working with AI SDK UI components:**
+
+The `@mastra/ai-sdk` package provides the `chatRoute()` utility for seamless integration with Vercel AI SDK. Instead of manually handling stream conversion, register a chat route in your Mastra server configuration:
+
+```typescript
+// src/mastra/index.ts
+import { Mastra } from "@mastra/core";
+import { chatRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: "/chat",
+        agent: "weatherAgent", // Fixed agent
+      }),
+      // Or use dynamic agents:
+      chatRoute({
+        path: "/chat/:agentId", // Dynamic agent ID
+      }),
+    ],
+  },
+});
+```
+
+Then use the `useChat()` hook in your frontend:
+
+```typescript
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
+
+const { messages, sendMessage } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/chat/weatherAgent",
+  }),
+});
+```
+
+**Advanced: Manual transformation**
+
+If you need more control over the stream conversion, you can manually transform streams using `toAISdkStream`. See the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk) for details.
+
+**Note:** The `/api/agents/:agentId/stream/ui` HTTP endpoint has also been deprecated. Use the standard `/api/agents/:agentId/stream` endpoint with `@mastra/ai-sdk` transformations instead.
+
 
 ### Changed: `RuntimeContext` renamed to `RequestContext`
 
@@ -32988,29 +33314,7 @@ await agent.generate(messages, {
 });
 ```
 
-**Tools:**
-
-```typescript
-// Before
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context, runtimeContext }) => {
-    // ❌
-    const userTier = runtimeContext.get("userTier");
-  },
-});
-
-// After
-export const weatherTool = createTool({
-  id: "weather-tool",
-  execute: async ({ context, requestContext }) => {
-    // ✅
-    const userTier = requestContext.get("userTier");
-  },
-});
-```
-
-This change also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext` as a parameter.
+**Note**: This also affects workflow steps, dynamic configuration functions (memory, model, etc.), and anywhere else you pass or receive `runtimeContext`/`requestContext` as a parameter. See the "Tool execute signature" section above for the updated tool signature pattern.
 
 ### Changed: `@mastra/core` subpath imports
 
@@ -33121,14 +33425,14 @@ function yourCustomFunction(input: MastraDBMessage) {}
 
 #### 2. Update Memory Method Return Types
 
-The `rememberMessages` method now returns an object wrapper for consistency between all methods:
+The `recall` method (previously `rememberMessages`) now returns an object wrapper for consistency between all methods:
 
 ```typescript
 // Before
 const messages = await memory.rememberMessages({ threadId, resourceId });
 
 // After
-const { messages } = await memory.rememberMessages({ threadId, resourceId });
+const { messages } = await memory.recall({ threadId, resourceId });
 ```
 
 #### 4. Update AI SDK Format Conversion
@@ -33160,17 +33464,13 @@ const messages = await memory.getMessages({ threadId, format: "v2" });
 const uiMessages = await memory.getMessages({ threadId, format: "ui" });
 
 // After
-const result = await memory.query({ threadId });
+const result = await memory.recall({ threadId });
 const messages = result.messages; // Always MastraDBMessage[]
 
 // Use conversion functions for AI SDK formats
 import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 const uiMessages = toAISdkV5Messages(messages);
 ```
-
-### Deprecated: `format: "aisdk"`
-
-The `format: "aisdk"` option in `stream()`/`generate()` methods is deprecated. Use the `@mastra/ai-sdk` package instead. Learn more in the [Using Vercel AI SDK documentation](/docs/frameworks/agentic-uis/ai-sdk).
 
 ### Removed: MCP Classes
 
@@ -33770,13 +34070,13 @@ Gateway providers aggregate multiple model providers and add features like cachi
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="118 models"
+      description="119 models"
       href="/models/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
     />    <CardGridItem
       title="Vercel"
-      description="84 models"
+      description="85 models"
       href="/models/gateways/vercel"
       logo="https://models.dev/logos/vercel.svg"
 
@@ -33884,7 +34184,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 118 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 119 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -33984,6 +34284,7 @@ ANTHROPIC_API_KEY=ant-...
 | `nousresearch/deephermes-3-llama-3-8b-preview` |
 | `nousresearch/hermes-4-405b` |
 | `nousresearch/hermes-4-70b` |
+| `nvidia/nemotron-nano-9b-v2` |
 | `openai/gpt-4.1` |
 | `openai/gpt-4.1-mini` |
 | `openai/gpt-4o-mini` |
@@ -34056,7 +34357,7 @@ description: "Use AI models through Vercel."
 # <img src="https://models.dev/logos/vercel.svg" alt="Vercel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vercel
 [EN] Source: https://mastra.ai/en/models/gateways/vercel
 
-Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 84 models through Mastra's model router.
+Vercel aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 85 models through Mastra's model router.
 
 Learn more in the [Vercel documentation](https://ai-sdk.dev/providers/ai-sdk-providers).
 
@@ -34130,6 +34431,7 @@ ANTHROPIC_API_KEY=ant-...
 | `meta/llama-3.3-70b` |
 | `meta/llama-4-maverick` |
 | `meta/llama-4-scout` |
+| `minimax/minimax-m2` |
 | `mistral/codestral` |
 | `mistral/magistral-medium` |
 | `mistral/magistral-small` |
@@ -34184,7 +34486,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 48+ AI providers and 833+ models through Mastra's model router."
+description: "Access 49+ AI providers and 858+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34197,7 +34499,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 833 models from 48 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 858 models from 49 providers through a single API.
 
 ## Features
 
@@ -34325,18 +34627,18 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 42 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 43 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
 
 :::info
 
-In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
+In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set `MASTRA_AUTO_REFRESH_PROVIDERS=false`. Auto-refresh is disabled by default in production.
 
 :::
 
@@ -37851,7 +38153,7 @@ const agent = new Agent({
 
 ---
 title: "Fireworks AI | Models | Mastra"
-description: "Use Fireworks AI models with Mastra. 10 models available."
+description: "Use Fireworks AI models with Mastra. 11 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -37864,7 +38166,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Fireworks AI
 [EN] Source: https://mastra.ai/en/models/providers/fireworks-ai
 
-Access 10 Fireworks AI models through Mastra's model router. Authentication is handled automatically using the `FIREWORKS_API_KEY` environment variable.
+Access 11 Fireworks AI models through Mastra's model router. Authentication is handled automatically using the `FIREWORKS_API_KEY` environment variable.
 
 Learn more in the [Fireworks AI documentation](https://fireworks.ai/docs/).
 
@@ -37997,6 +38299,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 1,
     "outputCost": 3
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/models/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "fireworks-ai/accounts/fireworks/models/qwen3-235b-a22b",
@@ -39874,6 +40188,303 @@ const agent = new Agent({
 
 
 ---
+title: "iFlow | Models | Mastra"
+description: "Use iFlow models with Mastra. 17 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+
+# <img src="https://models.dev/logos/iflowcn.svg" alt="iFlow logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />iFlow
+[EN] Source: https://mastra.ai/en/models/providers/iflowcn
+
+Access 17 iFlow models through Mastra's model router. Authentication is handled automatically using the `IFLOW_API_KEY` environment variable.
+
+Learn more in the [iFlow documentation](https://platform.iflow.cn/en/docs).
+
+```bash
+IFLOW_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "iflowcn/deepseek-r1"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [iFlow documentation](https://platform.iflow.cn/en/docs) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "iflowcn/deepseek-r1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/deepseek-v3.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/kimi-k2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/kimi-k2-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b-a22b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-coder",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-coder-plus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-max",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-max-preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/qwen3-vl-plus",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "iflowcn/tstars2.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 128000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://apis.iflow.cn/v1",
+    id: "iflowcn/deepseek-r1",
+    apiKey: process.env.IFLOW_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "iflowcn/tstars2.0"
+      : "iflowcn/deepseek-r1";
+  }
+});
+```
+
+
+
+
+---
 title: "Inception | Models | Mastra"
 description: "Use Inception models with Mastra. 2 models available."
 ---
@@ -40082,7 +40693,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/fastrouter.svg"
     />    <CardGridItem
       title="Fireworks AI"
-      description="10 models"
+      description="11 models"
       href="/models/providers/fireworks-ai"
       logo="https://models.dev/logos/fireworks-ai.svg"
     />    <CardGridItem
@@ -40095,6 +40706,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       description="14 models"
       href="/models/providers/huggingface"
       logo="https://models.dev/logos/huggingface.svg"
+    />    <CardGridItem
+      title="iFlow"
+      description="17 models"
+      href="/models/providers/iflowcn"
+      logo="https://models.dev/logos/iflowcn.svg"
     />    <CardGridItem
       title="Inception"
       description="2 models"
@@ -40147,7 +40763,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
       title="Nvidia"
-      description="16 models"
+      description="20 models"
       href="/models/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
@@ -40192,7 +40808,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="13 models"
+      description="14 models"
       href="/models/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -42028,7 +42644,7 @@ const agent = new Agent({
 
 ---
 title: "Nvidia | Models | Mastra"
-description: "Use Nvidia models with Mastra. 16 models available."
+description: "Use Nvidia models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -42041,7 +42657,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 [EN] Source: https://mastra.ai/en/models/providers/nvidia
 
-Access 16 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 20 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -42140,6 +42756,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/minimaxai/minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/moonshotai/kimi-k2-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -42212,6 +42840,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/nvidia/nvidia-nemotron-nano-9b-v2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/nvidia/parakeet-tdt-0.6b-v2",
     "imageInput": false,
     "audioInput": true,
@@ -42270,6 +42910,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 66536,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/qwen/qwen3-next-80b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -42302,7 +42966,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
+      ? "nvidia/qwen/qwen3-next-80b-a3b-thinking"
       : "nvidia/black-forest-labs/flux.1-dev";
   }
 });
@@ -42956,7 +43620,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode/an-gbt"
+  model: "opencode/an-gd4"
 });
 
 // Generate a response
@@ -42980,7 +43644,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "opencode/an-gbt",
+    "model": "opencode/an-gd4",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -42988,8 +43652,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 128000,
-    "inputCost": 1,
-    "outputCost": 3
+    "inputCost": 0.5,
+    "outputCost": 2
   },
   {
     "model": "opencode/big-pickle",
@@ -43073,7 +43737,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 204800,
     "maxOutput": 131072,
     "inputCost": 0.6,
-    "outputCost": 1.9
+    "outputCost": 2.2
   },
   {
     "model": "opencode/gpt-5",
@@ -43130,9 +43794,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
-    "inputCost": 1.2,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
     "outputCost": 1.2
   },
   {
@@ -43160,7 +43824,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/v1",
-    id: "opencode/an-gbt",
+    id: "opencode/an-gd4",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -43179,7 +43843,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode/qwen3-coder"
-      : "opencode/an-gbt";
+      : "opencode/an-gd4";
   }
 });
 ```
@@ -44690,7 +45354,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 13 models available."
+description: "Use Venice AI models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -44703,7 +45367,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 13 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 14 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -44896,6 +45560,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.5,
     "outputCost": 2
+  },
+  {
+    "model": "venice/zai-org-glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 202752,
+    "maxOutput": 8192,
+    "inputCost": 0.85,
+    "outputCost": 2.75
   }
 ]}
 />
@@ -44928,7 +45604,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "venice/venice-uncensored"
+      ? "venice/zai-org-glm-4.6"
       : "venice/deepseek-coder-v2-lite";
   }
 });
@@ -49425,7 +50101,7 @@ description: "API reference for the MastraAuthAuth0 class, which authenticates M
 # MastraAuthAuth0 Class
 [EN] Source: https://mastra.ai/en/reference/auth/auth0
 
-The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -49436,7 +50112,7 @@ import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0({
+    auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
       audience: process.env.AUTH0_AUDIENCE,
     }),
@@ -49549,7 +50225,7 @@ description: "API reference for the MastraAuthClerk class, which authenticates M
 # MastraAuthClerk Class
 [EN] Source: https://mastra.ai/en/reference/auth/clerk
 
-The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -49560,7 +50236,7 @@ import { MastraAuthClerk } from "@mastra/auth-clerk";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthClerk({
+    auth: new MastraAuthClerk({
       jwksUri: process.env.CLERK_JWKS_URI,
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
@@ -49626,7 +50302,7 @@ description: "API reference for the MastraAuthFirebase class, which authenticate
 # MastraAuthFirebase Class
 [EN] Source: https://mastra.ai/en/reference/auth/firebase
 
-The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage examples
 
@@ -49640,7 +50316,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase(),
+    auth: new MastraAuthFirebase(),
   },
 });
 ```
@@ -49654,7 +50330,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase({
+    auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account-key.json",
       databaseId: "your-database-id",
     }),
@@ -49764,7 +50440,7 @@ description: "API reference for the MastraJwtAuth class, which authenticates Mas
 # MastraJwtAuth Class
 [EN] Source: https://mastra.ai/en/reference/auth/jwt
 
-The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -49775,7 +50451,7 @@ import { MastraJwtAuth } from "@mastra/auth";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraJwtAuth({
+    auth: new MastraJwtAuth({
       secret: "<your-secret>",
     }),
   },
@@ -49809,7 +50485,7 @@ description: "API reference for the MastraAuthSupabase class, which authenticate
 # MastraAuthSupabase Class
 [EN] Source: https://mastra.ai/en/reference/auth/supabase
 
-The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -49820,7 +50496,7 @@ import { MastraAuthSupabase } from "@mastra/auth-supabase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthSupabase({
+    auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
       anonKey: process.env.SUPABASE_ANON_KEY,
     }),
@@ -49877,7 +50553,7 @@ description: "API reference for the MastraAuthWorkos class, which authenticates 
 # MastraAuthWorkos Class
 [EN] Source: https://mastra.ai/en/reference/auth/workos
 
-The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -49888,7 +50564,7 @@ import { MastraAuthWorkos } from "@mastra/auth-workos";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthWorkos({
+    auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
       clientId: process.env.WORKOS_CLIENT_ID,
     }),
@@ -50213,7 +50889,7 @@ You can use the Command-Line Interface (CLI) provided by Mastra to develop, buil
 
 ## `mastra dev`
 
-Starts a server which exposes a [local dev playground](/docs/getting-started/studio) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
+Starts a server which exposes [Studio](/docs/getting-started/studio) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
 
 You can also [configure the server](/docs/getting-started/studio#configuration).
 
@@ -50480,6 +51156,8 @@ Retrieve a list of all available agents:
 const agents = await mastraClient.listAgents();
 ```
 
+Returns a record of agent IDs to their serialized agent configurations. See the [Agent class reference](/reference/agents/agent) for details on agent properties.
+
 ## Working with a Specific Agent
 
 Get an instance of a specific agent:
@@ -50497,6 +51175,8 @@ Retrieve detailed information about an agent:
 ```typescript
 const details = await agent.details();
 ```
+
+Returns the serialized agent configuration. See the [Agent class reference](/reference/agents/agent) for details on agent properties.
 
 ### Generate Response
 
@@ -50562,8 +51242,8 @@ const colorChangeTool = createTool({
   inputSchema: z.object({
     color: z.string(),
   }),
-  execute: async ({ context }) => {
-    document.body.style.backgroundColor = context.color;
+  execute: async (inputData) => {
+    document.body.style.backgroundColor = inputData.color;
     return { success: true };
   },
 });
@@ -51340,7 +52020,7 @@ const details = await workflow.details();
 Start a workflow run with inputData and await full run results:
 
 ```typescript
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.startAsync({
   inputData: {
@@ -51354,7 +52034,7 @@ const result = await run.startAsync({
 Resume a suspended workflow step and await full run result:
 
 ```typescript
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.resumeAsync({
   step: "step-id",
@@ -51370,7 +52050,7 @@ Resume workflow run:
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync({ runId: prevRunId });
+  const run = await workflow.createRun({ runId: prevRunId });
 
   run.resume({
     step: "step-id",
@@ -51389,7 +52069,7 @@ Stream workflow execution for real-time updates:
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
 
   const stream = await run.stream({
     inputData: {
@@ -51413,7 +52093,7 @@ Get the result of a workflow run:
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
 
   // start the workflow run
   const startResult = await run.start({
@@ -53256,7 +53936,7 @@ import { MastraDBMessage } from "@mastra/core";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { messages } = await memory!.query({ threadId: "thread-123" });
+const { messages } = await memory!.recall({ threadId: "thread-123" });
 
 const messageIds = messages.map(
   (message: MastraDBMessage) => message.id,
@@ -53267,7 +53947,7 @@ await memory?.deleteMessages([...messageIds]);
 ## Related
 
 - [Memory Class Reference](/reference/memory/memory-class)
-- [query](/reference/memory/query)
+- [recall](/reference/memory/recall)
 - [Getting Started with Memory](/docs/memory/overview)
 
 
@@ -53336,8 +54016,8 @@ The `.listThreadsByResourceId()` method retrieves threads associated with a spec
 ```typescript copy
 await memory.listThreadsByResourceId({
   resourceId: "user-123",
-  offset: 0,
-  limit: 10,
+  page: 0,
+  perPage: 10,
 });
 ```
 
@@ -53352,15 +54032,15 @@ await memory.listThreadsByResourceId({
       isOptional: false,
     },
     {
-      name: "offset",
+      name: "page",
       type: "number",
-      description: "Number of items to skip",
+      description: "Page number (0-indexed) to retrieve",
       isOptional: false,
     },
     {
-      name: "limit",
+      name: "perPage",
       type: "number",
-      description: "Maximum number of threads to return",
+      description: "Maximum number of threads to return per page",
       isOptional: false,
     },
     {
@@ -53388,8 +54068,8 @@ await memory.listThreadsByResourceId({
 The return object contains:
 - `threads`: Array of thread objects
 - `total`: Total number of threads for this resource
-- `page`: Current page number (`Math.floor(offset / limit)` when `limit > 0`)
-- `perPage`: Items per page (same as limit)
+- `page`: Current page number (same as the input `page` parameter)
+- `perPage`: Items per page (same as the input `perPage` parameter)
 - `hasMore`: Boolean indicating if more results are available
 
 ## Extended usage example
@@ -53400,15 +54080,15 @@ import { mastra } from "./mastra";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-let currentOffset = 0;
-const limit = 25;
+let currentPage = 0;
+const perPage = 25;
 let hasMorePages = true;
 
 while (hasMorePages) {
   const result = await memory?.listThreadsByResourceId({
     resourceId: "user-123",
-    offset: currentOffset,
-    limit: limit,
+    page: currentPage,
+    perPage: perPage,
     orderBy: { field: "createdAt", direction: "ASC" },
   });
 
@@ -53422,7 +54102,7 @@ while (hasMorePages) {
   });
 
   hasMorePages = result.hasMore;
-  currentOffset += limit; // Increment by limit to get next page
+  currentPage++; // Move to next page
 }
 ```
 
@@ -53645,7 +54325,7 @@ export const agent = new Agent({
 - [Working Memory](/docs/memory/working-memory)
 - [Memory Processors](/docs/memory/memory-processors)
 - [createThread](/reference/memory/createThread)
-- [query](/reference/memory/query)
+- [recall](/reference/memory/recall)
 - [getThreadById](/reference/memory/getThreadById)
 - [listThreadsByResourceId](/reference/memory/listThreadsByResourceId)
 - [deleteMessages](/reference/memory/deleteMessages)
@@ -53658,6 +54338,10 @@ description: "Documentation for the `Memory.query()` method in Mastra, which ret
 
 # Memory.query()
 [EN] Source: https://mastra.ai/en/reference/memory/query
+
+:::warning[Deprecated]
+The `Memory.query()` method has been renamed to [`Memory.recall()`](/reference/memory/recall). This page is kept for reference, but please use `recall()` in new code. See the [migration guide](/guides/migrations/upgrade-to-v1#removed-memoryremembermessages-and-renamed-memoryquery-to-memoryrecall) for details.
+:::
 
 the `.query()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
 
@@ -53686,27 +54370,6 @@ await memory?.query({ threadId: "user-123" });
       isOptional: true,
     },
     {
-      name: "selectBy",
-      type: "object",
-      description: "Options for filtering and selecting messages",
-      isOptional: true,
-    },
-    {
-      name: "threadConfig",
-      type: "MemoryConfig",
-      description:
-        "Configuration options for message retrieval and semantic search",
-      isOptional: true,
-    },
-
-  ]}
-/>
-
-### selectBy parameters
-
-<PropertiesTable
-  content={[
-    {
       name: "vectorSearchString",
       type: "string",
       description:
@@ -53714,10 +54377,17 @@ await memory?.query({ threadId: "user-123" });
       isOptional: true,
     },
     {
-      name: "last",
+      name: "perPage",
       type: "number | false",
       description:
-        "Number of most recent messages to retrieve. Set to false to disable limit. Note: threadConfig.lastMessages (default: 10) will override this if smaller.",
+        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination.",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description:
+        "Zero-based page number for pagination. Used with perPage to retrieve messages in batches.",
       isOptional: true,
     },
     {
@@ -53728,12 +54398,27 @@ await memory?.query({ threadId: "user-123" });
       isOptional: true,
     },
     {
-      name: "pagination",
-      type: "{ dateRange?: { start?: Date; end?: Date }; page?: number; perPage?: number }",
+      name: "filter",
+      type: "{ dateRange?: { start?: Date; end?: Date } }",
       description:
-        "Pagination options for retrieving messages in batches. Includes `dateRange` (filter by date range), `page` (0-based page number), and `perPage` (messages per page).",
+        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date.",
       isOptional: true,
     },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
+      description:
+        "Sort order for retrieved messages. Defaults to descending by creation date.",
+      isOptional: true,
+    },
+    {
+      name: "threadConfig",
+      type: "MemoryConfig",
+      description:
+        "Configuration options for message retrieval and semantic search",
+      isOptional: true,
+    },
+
   ]}
 />
 
@@ -53797,28 +54482,221 @@ import { mastra } from "./mastra";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
+// Retrieve messages with pagination
 const { messages } = await memory!.query({
   threadId: "thread-123",
-  selectBy: {
-    last: 50,
-    vectorSearchString: "What messages are there?",
-    include: [
-      {
-        id: "msg-123",
-      },
-      {
-        id: "msg-456",
-        withPreviousMessages: 3,
-        withNextMessages: 1,
-      },
-    ],
-  },
+  perPage: 50,
+  vectorSearchString: "What messages are there?",
+  include: [
+    {
+      id: "msg-123",
+    },
+    {
+      id: "msg-456",
+      withPreviousMessages: 3,
+      withNextMessages: 1,
+    },
+  ],
   threadConfig: {
     semanticRecall: true,
   },
 });
 
 console.log(messages); // MastraDBMessage[]
+
+// Fetch all messages without pagination
+const allMessages = await memory!.query({
+  threadId: "thread-123",
+  perPage: false, // Fetch all
+});
+
+// Convert to AI SDK format if needed
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+const uiMessages = toAISdkV5Messages(messages);
+```
+
+### Related
+
+- [Memory Class Reference](/reference/memory/memory-class)
+- [Getting Started with Memory](/docs/memory/overview)
+- [Semantic Recall](/docs/memory/semantic-recall)
+- [createThread](/reference/memory/createThread)
+
+
+---
+title: "Reference: Memory.recall() | Memory | Mastra Docs"
+description: "Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
+---
+
+# Memory.recall()
+[EN] Source: https://mastra.ai/en/reference/memory/recall
+
+the `.recall()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
+
+## Usage Example
+
+```typescript copy
+await memory?.recall({ threadId: "user-123" });
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "The unique identifier of the thread to retrieve messages from",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Optional ID of the resource that owns the thread. If provided, validates thread ownership",
+      isOptional: true,
+    },
+    {
+      name: "vectorSearchString",
+      type: "string",
+      description:
+        "Search string for finding semantically similar messages. Requires semantic recall to be enabled in threadConfig.",
+      isOptional: true,
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description:
+        "Number of messages to retrieve per page. Set to false to fetch all messages without pagination. If not provided, defaults to threadConfig.lastMessages.",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description:
+        "Zero-based page number for pagination. Used with perPage to retrieve messages in batches.",
+      isOptional: true,
+    },
+    {
+      name: "include",
+      type: "{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[]",
+      description:
+        "Array of specific message IDs to include with optional context messages. Each item has an `id` (required), optional `threadId` (defaults to main threadId), `withPreviousMessages` (number of messages before, defaults to 2 for vector search, 0 otherwise), and `withNextMessages` (number of messages after, defaults to 2 for vector search, 0 otherwise).",
+      isOptional: true,
+    },
+    {
+      name: "filter",
+      type: "{ dateRange?: { start?: Date; end?: Date } }",
+      description:
+        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date.",
+      isOptional: true,
+    },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt'; direction: 'ASC' | 'DESC' }",
+      description:
+        "Sort order for retrieved messages. Defaults to descending by creation date.",
+      isOptional: true,
+    },
+    {
+      name: "threadConfig",
+      type: "MemoryConfig",
+      description:
+        "Configuration options for message retrieval and semantic search",
+      isOptional: true,
+    },
+
+  ]}
+/>
+
+### threadConfig parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "lastMessages",
+      type: "number | false",
+      description:
+        "Number of most recent messages to retrieve. Set to false to disable. When perPage is not explicitly provided, this value is used as the default.",
+      isOptional: true,
+      defaultValue: "10",
+    },
+    {
+      name: "semanticRecall",
+      type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+      description:
+        "Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "workingMemory",
+      type: "WorkingMemory",
+      description:
+        "Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
+      isOptional: true,
+      defaultValue:
+        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
+    },
+    {
+      name: "threads",
+      type: "{ generateTitle?: boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> } }",
+      description:
+        "Settings related to memory thread creation. `generateTitle` controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
+      isOptional: true,
+      defaultValue: "{ generateTitle: false }",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "Array of retrieved messages in the database format",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript title="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+// Retrieve messages with pagination
+const { messages } = await memory!.recall({
+  threadId: "thread-123",
+  perPage: 50,
+  vectorSearchString: "What messages are there?",
+  include: [
+    {
+      id: "msg-123",
+    },
+    {
+      id: "msg-456",
+      withPreviousMessages: 3,
+      withNextMessages: 1,
+    },
+  ],
+  threadConfig: {
+    semanticRecall: true,
+  },
+});
+
+console.log(messages); // MastraDBMessage[]
+
+// Fetch all messages without pagination
+const allMessages = await memory!.recall({
+  threadId: "thread-123",
+  perPage: false, // Fetch all
+});
 
 // Convert to AI SDK format if needed
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
@@ -57605,7 +58483,7 @@ telemetry: {
 mastra dev
 ```
 
-This opens the Mastra playground where you can interact with the weather agent.
+This opens Studio where you can interact with the weather agent.
 
 ## Observability
 
@@ -61628,7 +62506,7 @@ The output receives a high score because it accurately answers the query without
 
 ### Partial relevancy example
 
-In this example, the response addresses the query in part but includes additional information that isn’t directly relevant.
+In this example, the response addresses the query in part but includes additional information that isn't directly relevant.
 
 ```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
 import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
@@ -63710,7 +64588,7 @@ const scorer = createContextRelevanceScorerLLM({
   options: {
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results
-      const ragResults = input.metadata?.ragResults || [];
+      const ragResults = inputData.metadata?.ragResults || [];
 
       // Return the text content of retrieved documents
       return ragResults
@@ -63733,7 +64611,7 @@ const evaluateRAG = async (testCases) => {
   for (const testCase of testCases) {
     const score = await scorer.run(testCase);
     results.push({
-      query: testCase.input.inputMessages[0].content,
+      query: testCase.inputData.inputMessages[0].content,
       relevanceScore: score.score,
       feedback: score.reason,
       unusedContext: score.reason.includes("unused"),
@@ -63875,7 +64753,7 @@ const agentScorer = createScorer({
 })
   .preprocess(({ run }) => {
     // run.input is automatically typed as ScorerRunInputForAgent
-    const userMessage = run.input.inputMessages[0]?.content;
+    const userMessage = run.inputData.inputMessages[0]?.content;
     return { userMessage };
   })
   .generateScore(({ run, results }) => {
@@ -63923,7 +64801,7 @@ const agentTraceScorer = createScorer({
   type: "agent",
 }).generateScore(({ run }) => {
   // Trace data is automatically transformed to agent format
-  const userMessages = run.input.inputMessages;
+  const userMessages = run.inputData.inputMessages;
   const agentResponse = run.output[0]?.content;
 
   // Score based on response length
@@ -66915,7 +67793,7 @@ const workflowResult = await runEvals({
     },
   },
   onItemComplete: ({ item, targetResult, scorerResults }) => {
-    console.log(`Workflow completed for: ${item.input.query}`);
+    console.log(`Workflow completed for: ${item.inputData.query}`);
     if (scorerResults.workflow) {
       console.log("Workflow scores:", scorerResults.workflow);
     }
@@ -72639,7 +73517,7 @@ The `.observeStream()` method opens a new `ReadableStream` to a workflow run tha
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 run.stream({
   inputData: {
@@ -72674,7 +73552,7 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 - [Run.stream()](./stream)
 
 
@@ -72691,7 +73569,7 @@ The `.observeStreamVNext()` method opens a new `ReadableStream` to a workflow ru
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 run.streamVNext({
   inputData: {
@@ -72723,7 +73601,7 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 - [Run.streamVNext()](./streamVNext)
 - [Run.resumeStreamVNext()](./resumeStreamVNext)
 
@@ -72745,7 +73623,7 @@ The `.resumeStreamVNext()` method resumes a suspended workflow run with new data
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -72849,7 +73727,7 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 - [Run.streamVNext()](./streamVNext)
 
 
@@ -72866,7 +73744,7 @@ The `.stream()` method allows you to monitor the execution of a workflow run, pr
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const { stream } = await run.stream({
   inputData: {
@@ -72987,7 +73865,7 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 
 
 ---
@@ -73007,7 +73885,7 @@ The `.streamVNext()` method enables real-time streaming of responses from a work
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -73118,7 +73996,7 @@ const stream = run.streamVNext({
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -73142,7 +74020,7 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 - [Run.resumeStreamVNext()](./resumeStreamVNext)
 
 
@@ -73718,9 +74596,8 @@ export const tool = createTool({
   outputSchema: z.object({
     output: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { input } = context;
-    const reversed = input.split("").reverse().join("");
+  execute: async (inputData) => {
+    const reversed = inputData.input.split("").reverse().join("");
 
     return {
       output: reversed,
@@ -73764,47 +74641,65 @@ export const tool = createTool({
       name: "execute",
       type: "function",
       description:
-        "The function that contains the tool's logic. It receives an object with `context` (the parsed input based on `inputSchema`), `requestContext`, `tracingContext`, and an object containing `abortSignal`.",
+        "The function that contains the tool's logic. It receives two parameters: the validated input data (first parameter) and an optional execution context object (second parameter) containing `requestContext`, `tracingContext`, `abortSignal`, and other execution metadata.",
       isOptional: false,
       properties: [
         {
           parameters: [
             {
-              name: "context",
+              name: "input",
               type: "z.infer<TInput>",
-              description: "The parsed input based on inputSchema",
+              description: "The validated input data based on inputSchema",
             },
           ],
         },
         {
           parameters: [
             {
-              name: "requestContext",
-              type: "RequestContext",
+              name: "context",
+              type: "ToolExecutionContext",
               isOptional: true,
-              description:
-                "Request Context for accessing shared state and dependencies",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "tracingContext",
-              type: "TracingContext",
-              isOptional: true,
-              description:
-                "AI tracing context for creating child spans and adding metadata. Automatically injected when the tool is called within a traced operation.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "abortSignal",
-              type: "AbortSignal",
-              isOptional: true,
-              description: "Signal for aborting the tool execution",
+              description: "Optional execution context containing metadata",
+              properties: [
+                {
+                  name: "requestContext",
+                  type: "RequestContext",
+                  isOptional: true,
+                  description:
+                    "Request Context for accessing shared state and dependencies",
+                },
+                {
+                  name: "tracingContext",
+                  type: "TracingContext",
+                  isOptional: true,
+                  description:
+                    "AI tracing context for creating child spans and adding metadata",
+                },
+                {
+                  name: "abortSignal",
+                  type: "AbortSignal",
+                  isOptional: true,
+                  description: "Signal for aborting the tool execution",
+                },
+                {
+                  name: "agent",
+                  type: "AgentToolExecutionContext",
+                  isOptional: true,
+                  description: "Agent-specific context (messages, suspend, resumeData, etc.)",
+                },
+                {
+                  name: "workflow",
+                  type: "WorkflowToolExecutionContext",
+                  isOptional: true,
+                  description: "Workflow-specific context (state, setState, suspend, etc.)",
+                },
+                {
+                  name: "mcp",
+                  type: "MCPToolExecutionContext",
+                  isOptional: true,
+                  description: "MCP-specific context (elicitation, etc.)",
+                },
+              ],
             },
           ],
         },
@@ -75111,6 +76006,7 @@ import { z } from "zod";
 import { dataProcessingWorkflow } from "../workflows/dataProcessingWorkflow";
 
 const myAgent = new Agent({
+  id: "my-example-agent",
   name: "MyExampleAgent",
   description: "A generalist to help with basic questions."
   instructions: "You are a helpful assistant.",
@@ -75121,7 +76017,7 @@ const weatherTool = createTool({
   id: "getWeather",
   description: "Gets the current weather for a location.",
   inputSchema: z.object({ location: z.string() }),
-  execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+  execute: async (inputData) => `Weather in ${inputData.location} is sunny.`,
 });
 
 const server = new MCPServer({
@@ -75173,7 +76069,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       type: "Record<string, Workflow>",
       isOptional: true,
       description:
-        "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRunAsync()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
+        "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
     },
     {
       name: "id",
@@ -75474,7 +76370,7 @@ const httpServer = http.createServer(async (req, res) => {
     req,
     res,
     options: {
-      sessionIdGenerator: undefined,
+      sessionIdGenerator: () => randomUUID(),
     },
   });
 });
@@ -75483,6 +76379,74 @@ httpServer.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
 });
 ```
+
+For **serverless environments** (Supabase Edge Functions, Cloudflare Workers, Vercel Edge, etc.), use `serverless: true` to enable stateless operation:
+
+```typescript
+// Supabase Edge Function example
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { MCPServer } from "@mastra/mcp";
+// Note: You will need to convert req/res format from Deno to Node
+import { toReqRes, toFetchResponse } from "fetch-to-node";
+
+const server = new MCPServer({
+  name: "my-serverless-mcp",
+  version: "1.0.0",
+  tools: { /* your tools */ },
+});
+
+serve(async (req) => {
+  const url = new URL(req.url);
+  
+  if (url.pathname === "/mcp") {
+    // Convert Deno Request to Node.js-compatible format
+    const { req: nodeReq, res: nodeRes } = toReqRes(req);
+    
+    await server.startHTTP({
+      url,
+      httpPath: "/mcp",
+      req: nodeReq,
+      res: nodeRes,
+      options: {
+        serverless: true, // ← Enable stateless mode for serverless
+      },
+    });
+    
+    return toFetchResponse(nodeRes);
+  }
+  
+  return new Response("Not found", { status: 404 });
+});
+```
+
+:::info
+
+**When to use `serverless: true`**
+
+Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
+- Supabase Edge Functions
+- Cloudflare Workers
+- Vercel Edge Functions
+- Netlify Edge Functions
+- AWS Lambda
+- Deno Deploy
+
+Use the default session-based mode (without `serverless: true`) for:
+- Long-lived Node.js servers
+- Docker containers
+- Traditional hosting (VPS, dedicated servers)
+
+The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
+
+**Note:** The following MCP features require session state or persistent connections and will **not work** in serverless mode:
+- **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
+- **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
+- **Resource update notifications** - `resources.notifyUpdated()` requires active subscriptions and persistent connections to notify clients
+- **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
+
+These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
+
+:::
 
 Here are the details for the values needed by the `startHTTP` method:
 
@@ -75524,6 +76488,13 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 <PropertiesTable
   content={[
+    {
+      name: "serverless",
+      type: "boolean",
+      description:
+        "If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.",
+      optional: true,
+    },
     {
       name: "sessionIdGenerator",
       type: "(() => string) | undefined",
@@ -75932,24 +76903,24 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
 
-The `MCPServer` class automatically includes elicitation capabilities. Tools receive an `options` parameter in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
+The `MCPServer` class automatically includes elicitation capabilities. Tools receive a `context.mcp` object in their `execute` function that includes an `elicitation.sendRequest()` method for requesting user input.
 
 ### Tool Execution Signature
 
-When tools are executed within an MCP server context, they receive an additional `options` parameter:
+When tools are executed within an MCP server context, they receive MCP-specific capabilities via the `context.mcp` object:
 
 ```typescript
-execute: async ({ context }, options) => {
-  // context contains the tool's input parameters
-  // options contains server capabilities like elicitation and authentication info
+execute: async (inputData, context) => {
+  // input contains the tool's inputData parameters
+  // context.mcp contains server capabilities like elicitation and authentication info
 
   // Access authentication information (when available)
-  if (options.extra?.authInfo) {
-    console.log("Authenticated request from:", options.extra.authInfo.clientId);
+  if (context.mcp?.extra?.authInfo) {
+    console.log("Authenticated request from:", context.mcp.extra.authInfo.clientId);
   }
 
   // Use elicitation capabilities
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: "Please provide information",
     requestedSchema: {
       /* schema */
@@ -75962,9 +76933,9 @@ execute: async ({ context }, options) => {
 
 ### How Elicitation Works
 
-A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the tool's execution options:
+A common use case is during tool execution. When a tool needs user input, it can use the elicitation functionality provided through the context parameter:
 
-1. The tool calls `options.elicitation.sendRequest()` with a message and schema
+1. The tool calls `context.mcp.elicitation.sendRequest()` with a message and schema
 2. The request is sent to the connected MCP client
 3. The client presents the request to the user (via UI, command line, etc.)
 4. The user provides input, declines, or cancels the request
@@ -75993,15 +76964,15 @@ const server = new MCPServer({
           .optional()
           .describe("Reason for collecting contact info"),
       }),
-      execute: async ({ context }, options) => {
-        const { reason } = context;
+      execute: async (inputData, context) => {
+        const { reason } = inputData;
 
         // Log session info if available
-        console.log("Request from session:", options.extra?.sessionId);
+        console.log("Request from session:", context.mcp?.extra?.sessionId);
 
         try {
           // Request user input via elicitation
-          const result = await options.elicitation.sendRequest({
+          const result = await context.mcp.elicitation.sendRequest({
             message: reason
               ? `Please provide your contact information. ${reason}`
               : "Please provide your contact information",
@@ -76109,16 +77080,16 @@ The elicitation functionality is available through the `options` parameter in to
 
 ```typescript
 // Within a tool's execute function
-execute: async ({ context }, options) => {
+execute: async (inputData, context) => {
   // Use elicitation for user input
-  const result = await options.elicitation.sendRequest({
+  const result = await context.mcp.elicitation.sendRequest({
     message: string,           // Message to display to user
     requestedSchema: object    // JSON schema defining expected response structure
   }): Promise<ElicitResult>
 
   // Access authentication info if needed
-  if (options.extra?.authInfo) {
-    // Use options.extra.authInfo.token, etc.
+  if (context.mcp?.extra?.authInfo) {
+    // Use context.mcp.extra.authInfo.token, etc.
   }
 }
 ```
@@ -76136,18 +77107,18 @@ type ElicitResult = {
 
 ## Authentication Context
 
-Tools can access request metadata via `options.extra` when using HTTP-based transports:
+Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports:
 
 ```typescript
-execute: async ({ context }, options) => {
-  if (!options.extra?.authInfo?.token) {
+execute: async (inputData, context) => {
+  if (!context.mcp?.extra?.authInfo?.token) {
     return "Authentication required";
   }
 
   // Use the auth token
   const response = await fetch("/api/data", {
-    headers: { Authorization: `Bearer ${options.extra.authInfo.token}` },
-    signal: options.extra.signal,
+    headers: { Authorization: `Bearer ${context.mcp.extra.authInfo.token}` },
+    signal: context.mcp.extra.signal,
   });
 
   return response.json();
@@ -76774,10 +77745,10 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 const requestContext = new RequestContext();
-const queryResult = await vectorQueryTool.execute({
-  context: { queryText: "foo", topK: 1 },
-  requestContext,
-});
+const queryResult = await vectorQueryTool.execute(
+  { queryText: "foo", topK: 1 },
+  { requestContext }
+);
 
 console.log(queryResult.sources);
 ```
@@ -85303,14 +86274,14 @@ const weatherTool = createTool({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     // Fetch weather data from an API
     const response = await fetch(
-      `https://api.weather.com?location=${encodeURIComponent(context.location)}`,
+      `https://api.weather.com?location=${encodeURIComponent(inputData.location)}`,
     );
     const data = await response.json();
     return {
-      message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.`,
+      message: `The current temperature in ${inputData.location} is ${data.temperature}°F with ${data.conditions}.`,
     };
   },
 });
@@ -86818,7 +87789,7 @@ The `.cancel()` method cancels a workflow run, stopping execution and cleaning u
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.cancel();
 ```
@@ -86852,7 +87823,7 @@ await run.cancel();
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 try {
   const result = await run.start({ inputData: { value: "initial data" } });
@@ -86864,7 +87835,7 @@ try {
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](../workflow-methods/create-run)
+- [Workflow.createRun()](../workflow-methods/create-run)
 
 
 ---
@@ -86880,7 +87851,7 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
 
@@ -87017,7 +87988,7 @@ if (result.status === "suspended") {
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](../workflow-methods/create-run)
+- [Workflow.createRun()](../workflow-methods/create-run)
 - [Suspend and resume](/docs/workflows/suspend-and-resume)
 - [Human in the loop](/docs/workflows/human-in-the-loop)
 
@@ -87035,7 +88006,7 @@ The `.start()` method starts a workflow run with input data, allowing you to exe
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -87152,7 +88123,7 @@ const result = await run.start({
 ```typescript showLineNumbers copy
 import { RequestContext } from "@mastra/core/request-context";
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const requestContext = new RequestContext();
 requestContext.set("variable", false);
@@ -87168,7 +88139,7 @@ const result = await run.start({
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](../workflow-methods/create-run)
+- [Workflow.createRun()](../workflow-methods/create-run)
 
 
 ---
@@ -87184,7 +88155,7 @@ The `Run` class represents a workflow execution instance, providing methods to s
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: { value: "initial data" },
@@ -87514,19 +88485,19 @@ workflow.then(step1).commit();
 
 
 ---
-title: "Reference: Workflow.createRunAsync() | Workflows | Mastra Docs"
-description: Documentation for the `Workflow.createRunAsync()` method in workflows, which creates a new workflow run instance.
+title: "Reference: Workflow.createRun() | Workflows | Mastra Docs"
+description: Documentation for the `Workflow.createRun()` method in workflows, which creates a new workflow run instance.
 ---
 
-# Workflow.createRunAsync()
+# Workflow.createRun()
 [EN] Source: https://mastra.ai/en/reference/workflows/workflow-methods/create-run
 
-The `.createRunAsync()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data. This is the current API that returns a `Run` instance.
+The `.createRun()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data. This is the current API that returns a `Run` instance.
 
 ## Usage example
 
 ```typescript copy
-await workflow.createRunAsync();
+await workflow.createRun();
 ```
 
 ## Parameters
@@ -87560,7 +88531,7 @@ await workflow.createRunAsync();
 ```typescript showLineNumbers copy
 const workflow = mastra.getWorkflow("workflow");
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -87745,7 +88716,7 @@ workflow.foreach(step1, { concurrency: 2 });
 
 ## Related
 
-- [Repeating with foreach](/docs/workflows/control-flow#repeating-with-foreach)
+- [Repeating with foreach](/docs/workflows/control-flow#looping-with-foreach)
 
 
 ---
@@ -87790,9 +88761,84 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
   ]}
 />
 
+## Using `inputData`
+
+Use `inputData` to access the full output of the previous step.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(({ inputData }) => {
+    console.log(inputData);
+  })
+```
+
+## Using `getStepResult()`
+
+Use `getStepResult()` to access the full output of a specific step by referencing the step's instance.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getStepResult }) => {
+    console.log(getStepResult(step1));
+  })
+```
+
+## Using `getInitData()`
+
+Use `getInitData()` to access the initial input data provided to the workflow.
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map(async ({ getInitData }) => {
+      console.log(getInitData());
+  })
+```
+
+## Using `mapVariable()`
+
+The object form of `.map()` provides an alternative declarative syntax for mapping fields. Instead of writing a function, you define an object where each key is a new field name and each value uses `mapVariable()` to extract data from previous steps or workflow input.
+Import `mapVariable()` from the workflows module:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { mapVariable } from "@mastra/core/workflows";
+```
+
+### Extracting fields from step outputs
+
+Use `mapVariable()` with `step` to extract a specific field from a step's output and map it to a new field name. The `path` parameter specifies which field to extract.
+In this example, the `value` field from `step1`'s output is extracted and mapped to a new field called `details`:
+
+```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+  .then(step1)
+  .map({
+    details: mapVariable({
+      step: step1,
+      path: "value"
+    })
+  })
+```
+
+### Extracting fields from workflow input
+
+Use `mapVariable()` with `initData` to extract a specific field from the workflow's initial input data. This is useful when you need to pass the original workflow input to a later step.
+In this example, the `value` field from the workflow's input is extracted and mapped to a field called `details`:
+
+```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+export const testWorkflow = createWorkflow({...});
+
+testWorkflow
+  .then(step1)
+  .map({
+    details: mapVariable({
+      initData: testWorkflow,
+      path: "value"
+    })
+  })
+```
+
 ## Related
 
-- [Input data mapping](/docs/workflows/input-data-mapping)
+- [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping)
 
 
 ---
@@ -87893,7 +88939,7 @@ run.sendEvent("event-name", { value: "data" });
 ```typescript showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRun();
 
 const result = run.start({
   inputData: {
@@ -88277,20 +89323,6 @@ A workflow's `status` indicates its current execution state. The possible values
     },
   ]}
 />
-
-## Extended usage example
-
-```typescript title="src/test-run.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("workflow").createRunAsync();
-
-const result = await run.start({...});
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({...});
-}
-```
 
 ## Related
 

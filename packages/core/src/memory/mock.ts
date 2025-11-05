@@ -3,7 +3,6 @@ import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
 import type {
-  StorageGetMessagesArg,
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
@@ -25,10 +24,6 @@ export class MockMemory extends MastraMemory {
     return this.storage.saveThread({ thread });
   }
 
-  async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.storage.getMessages(args);
-  }
-
   async saveMessages({
     messages,
   }: {
@@ -45,35 +40,24 @@ export class MockMemory extends MastraMemory {
     return this.storage.saveMessages({ messages: dbMessages });
   }
 
-  async rememberMessages(args: {
-    threadId: string;
-    resourceId?: string;
-    vectorMessageSearch?: string;
-    config?: MemoryConfig;
-  }): Promise<{ messages: MastraDBMessage[] }> {
-    // Query all messages from storage and return them
-    const getMessagesArgs: StorageListMessagesInput = { threadId: args.threadId };
-    if (args.resourceId !== undefined) {
-      getMessagesArgs.resourceId = args.resourceId;
-    }
-    const result = await this.storage.getMessages(getMessagesArgs);
-    return { messages: result.messages };
-  }
-
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
     return this.storage.listThreadsByResourceId(args);
   }
 
-  async query(args: StorageGetMessagesArg & { threadConfig?: MemoryConfig }): Promise<{
+  async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage
-    const result = await this.storage.getMessages({
+    const result = await this.storage.listMessages({
       threadId: args.threadId,
       resourceId: args.resourceId,
-      selectBy: args.selectBy,
+      perPage: args.perPage,
+      page: args.page,
+      orderBy: args.orderBy,
+      filter: args.filter,
+      include: args.include,
     });
 
     return result;

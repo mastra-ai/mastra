@@ -1,10 +1,10 @@
-import type { AISpanType } from '../ai-tracing';
-import type { MemoryConfig, MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { MastraDBMessage, StorageThreadType } from '../memory/types';
+import type { AISpanType } from '../observability';
 import type { WorkflowRunState } from '../workflows';
 
 export type StoragePagination = {
   page: number;
-  perPage: number;
+  perPage: number | false;
 };
 
 export interface StorageColumn {
@@ -50,7 +50,11 @@ export type PaginationArgs = {
 export type PaginationInfo = {
   total: number;
   page: number;
-  perPage: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * When `false`, all matching records are returned in a single response.
+   */
+  perPage: number | false;
   hasMore: boolean;
 };
 
@@ -65,8 +69,16 @@ export type StorageListMessagesInput = {
     withPreviousMessages?: number;
     withNextMessages?: number;
   }[];
-  limit?: number | false;
-  offset?: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 40 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
   filter?: {
     dateRange?: {
       start?: Date;
@@ -84,38 +96,38 @@ export type StorageListWorkflowRunsInput = {
   workflowName?: string;
   fromDate?: Date;
   toDate?: Date;
-  limit?: number;
-  offset?: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * When undefined, returns all workflow runs without pagination.
+   * When both perPage and page are provided, pagination is applied.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * When both perPage and page are provided, pagination is applied.
+   * When either is undefined, all results are returned.
+   */
+  page?: number;
   resourceId?: string;
 };
 
 export type StorageListThreadsByResourceIdInput = {
   resourceId: string;
-  limit: number;
-  offset: number;
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
   orderBy?: StorageOrderBy;
 };
 
 export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
-};
-
-export type StorageGetMessagesArg = {
-  threadId: string;
-  resourceId?: string;
-  selectBy?: {
-    vectorSearchString?: string;
-    last?: number | false;
-    include?: {
-      id: string;
-      threadId?: string;
-      withPreviousMessages?: number;
-      withNextMessages?: number;
-    }[];
-    pagination?: PaginationArgs;
-  };
-  threadConfig?: MemoryConfig;
-  format?: MastraMessageFormat;
 };
 
 export type StorageResourceType = {

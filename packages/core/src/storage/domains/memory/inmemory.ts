@@ -1,8 +1,7 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import { normalizePerPage, calculatePagination } from '../../base';
 import type {
-  PaginationInfo,
-  StorageGetMessagesArg,
   StorageMessageType,
   StorageResourceType,
   ThreadOrderBy,
@@ -96,33 +95,32 @@ export class InMemoryMemory extends MemoryStorage {
     resourceId,
     include,
     filter,
-    limit,
-    offset = 0,
+    perPage: perPageInput,
+    page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     this.logger.debug(`MockStore: listMessages called for thread ${threadId}`);
 
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const { field, direction } = this.parseOrderBy(orderBy);
+    const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-    // Determine how many results to return
-    // Default pagination is always 40 unless explicitly specified
-    let perPage = 40;
+    // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
+    const perPage = normalizePerPage(perPageInput, 40);
 
-    if (limit !== undefined) {
-      // Explicit limit provided
-      if (limit === false) {
-        // limit: false means get ALL messages
-        perPage = Number.MAX_SAFE_INTEGER;
-      } else if (typeof limit === 'number' && limit > 0) {
-        // limit: number means get that many messages
-        perPage = limit;
-      }
+    if (page < 0) {
+      throw new Error('page must be >= 0');
     }
 
-    // Calculate page from offset
-    const page = Math.floor(offset / perPage);
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
+
+    // Calculate offset from page
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     // Step 1: Get regular paginated messages from the thread first
     let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
@@ -291,132 +289,9 @@ export class InMemoryMemory extends MemoryStorage {
       messages,
       total: totalThreadMessages,
       page,
-      perPage,
+      perPage: perPageForResponse,
       hasMore,
     };
-  }
-
-  async getMessages({ threadId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
-
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    // Handle include messages first
-    const messages: MastraDBMessage[] = [];
-
-    if (selectBy?.include && selectBy.include.length > 0) {
-      for (const includeItem of selectBy.include) {
-        const targetMessage = this.collection.messages.get(includeItem.id);
-        if (targetMessage) {
-          // Convert StorageMessageType to MastraDBMessage
-          const convertedMessage = {
-            id: targetMessage.id,
-            threadId: targetMessage.thread_id,
-            content: safelyParseJSON(targetMessage.content),
-            role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: targetMessage.type,
-            createdAt: targetMessage.createdAt,
-            resourceId: targetMessage.resourceId,
-          } as MastraDBMessage;
-
-          messages.push(convertedMessage);
-
-          // Add previous messages if requested
-          if (includeItem.withPreviousMessages) {
-            const allThreadMessages = Array.from(this.collection.messages.values())
-              .filter((msg: any) => msg.thread_id === includeItem.threadId)
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
-              for (let i = startIndex; i < targetIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messages.some(m => m.id === message.id)) {
-                  const convertedPrevMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraDBMessage;
-                  messages.push(convertedPrevMessage);
-                }
-              }
-            }
-          }
-
-          // Add next messages if requested
-          if (includeItem.withNextMessages) {
-            const allThreadMessages = Array.from(this.collection.messages.values())
-              .filter((msg: any) => msg.thread_id === includeItem.threadId)
-              .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-            const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-            if (targetIndex !== -1) {
-              const endIndex = Math.min(
-                allThreadMessages.length,
-                targetIndex + (includeItem.withNextMessages || 0) + 1,
-              );
-              for (let i = targetIndex + 1; i < endIndex; i++) {
-                const message = allThreadMessages[i];
-                if (message && !messages.some(m => m.id === message.id)) {
-                  const convertedNextMessage = {
-                    id: message.id,
-                    threadId: message.thread_id,
-                    content: safelyParseJSON(message.content),
-                    role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                    type: message.type,
-                    createdAt: message.createdAt,
-                    resourceId: message.resourceId,
-                  } as MastraDBMessage;
-                  messages.push(convertedNextMessage);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // Get regular messages from the thread only if no include items or if last is specified
-    if (!selectBy?.include || selectBy.include.length === 0 || selectBy?.last) {
-      let threadMessages = Array.from(this.collection.messages.values())
-        .filter((msg: any) => msg.thread_id === threadId)
-        .filter((msg: any) => !messages.some(m => m.id === msg.id)); // Exclude already included messages
-
-      // Apply selectBy logic
-      if (selectBy?.last) {
-        threadMessages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        const lastMessages = threadMessages.slice(-selectBy.last);
-        // Convert and add last messages
-        for (const msg of lastMessages) {
-          const convertedMessage = {
-            id: msg.id,
-            threadId: msg.thread_id,
-            content: safelyParseJSON(msg.content),
-            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-            type: msg.type,
-            createdAt: msg.createdAt,
-            resourceId: msg.resourceId,
-          } as MastraDBMessage;
-          messages.push(convertedMessage);
-        }
-      } else if (!selectBy?.include || selectBy.include.length === 0) {
-        // Convert and add all thread messages only if no include items
-        for (const msg of threadMessages) {
-          const convertedMessage = this.parseStoredMessage(msg);
-          messages.push(convertedMessage);
-        }
-      }
-    }
-
-    // Sort by createdAt
-    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    return { messages };
   }
 
   protected parseStoredMessage(message: StorageMessageType): MastraDBMessage {
@@ -443,17 +318,13 @@ export class InMemoryMemory extends MemoryStorage {
     } satisfies MastraDBMessage;
   }
 
-  async getMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    this.logger.debug(`MockStore: getMessagesById called`);
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    this.logger.debug(`MockStore: listMessagesById called`);
 
     const rawMessages = messageIds.map(id => this.collection.messages.get(id)).filter(message => !!message);
 
     const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
     return { messages: list.get.all.db() };
-  }
-
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.getMessagesById({ messageIds });
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -603,8 +474,20 @@ export class InMemoryMemory extends MemoryStorage {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, offset, limit, orderBy } = args;
+    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const { field, direction } = this.parseOrderBy(orderBy);
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    if (page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
+    // Prevent unreasonably large page values that could cause performance issues
+    const maxOffset = Number.MAX_SAFE_INTEGER / 2;
+    if (page * perPage > maxOffset) {
+      throw new Error('page value too large');
+    }
+
     this.logger.debug(`MockStore: listThreadsByResourceId called for ${resourceId}`);
     // Mock implementation - find threads by resourceId
     const threads = Array.from(this.collection.threads.values()).filter((t: any) => t.resourceId === resourceId);
@@ -613,176 +496,14 @@ export class InMemoryMemory extends MemoryStorage {
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
     })) as StorageThreadType[];
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     return {
-      threads: clonedThreads.slice(offset, offset + limit),
+      threads: clonedThreads.slice(offset, offset + perPage),
       total: clonedThreads.length,
-      page: limit > 0 ? Math.floor(offset / limit) : 0,
-      perPage: limit,
-      hasMore: offset + limit < clonedThreads.length,
+      page,
+      perPage: perPageForResponse,
+      hasMore: offset + perPage < clonedThreads.length,
     };
-  }
-
-  async getMessagesPaginated({
-    threadId,
-    selectBy,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    this.logger.debug(`MockStore: getMessagesPaginated called for thread ${threadId}`);
-
-    const { page = 0, perPage = 40 } = selectBy?.pagination || {};
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      // Handle include messages first
-      const messages: MastraDBMessage[] = [];
-
-      if (selectBy?.include && selectBy.include.length > 0) {
-        for (const includeItem of selectBy.include) {
-          const targetMessage = this.collection.messages.get(includeItem.id);
-          if (targetMessage) {
-            // Convert StorageMessageType to MastraDBMessage
-            const convertedMessage = {
-              id: targetMessage.id,
-              threadId: targetMessage.thread_id,
-              content: safelyParseJSON(targetMessage.content),
-              role: targetMessage.role as 'user' | 'assistant' | 'system' | 'tool',
-              type: targetMessage.type,
-              createdAt: targetMessage.createdAt,
-              resourceId: targetMessage.resourceId,
-            } as MastraDBMessage;
-
-            messages.push(convertedMessage);
-
-            // Add previous messages if requested
-            if (includeItem.withPreviousMessages) {
-              const allThreadMessages = Array.from(this.collection.messages.values())
-                .filter((msg: any) => msg.thread_id === includeItem.threadId)
-                .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-              const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-              if (targetIndex !== -1) {
-                const startIndex = Math.max(0, targetIndex - (includeItem.withPreviousMessages || 0));
-                for (let i = startIndex; i < targetIndex; i++) {
-                  const message = allThreadMessages[i];
-                  if (message && !messages.some(m => m.id === message.id)) {
-                    const convertedPrevMessage = {
-                      id: message.id,
-                      threadId: message.thread_id,
-                      content: safelyParseJSON(message.content),
-                      role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                      type: message.type,
-                      createdAt: message.createdAt,
-                      resourceId: message.resourceId,
-                    } as MastraDBMessage;
-                    messages.push(convertedPrevMessage);
-                  }
-                }
-              }
-            }
-
-            // Add next messages if requested
-            if (includeItem.withNextMessages) {
-              const allThreadMessages = Array.from(this.collection.messages.values())
-                .filter((msg: any) => msg.thread_id === includeItem.threadId)
-                .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-              const targetIndex = allThreadMessages.findIndex(msg => msg.id === includeItem.id);
-              if (targetIndex !== -1) {
-                const endIndex = Math.min(
-                  allThreadMessages.length,
-                  targetIndex + (includeItem.withNextMessages || 0) + 1,
-                );
-                for (let i = targetIndex + 1; i < endIndex; i++) {
-                  const message = allThreadMessages[i];
-                  if (message && !messages.some(m => m.id === message.id)) {
-                    const convertedNextMessage = {
-                      id: message.id,
-                      threadId: message.thread_id,
-                      content: safelyParseJSON(message.content),
-                      role: message.role as 'user' | 'assistant' | 'system' | 'tool',
-                      type: message.type,
-                      createdAt: message.createdAt,
-                      resourceId: message.resourceId,
-                    } as MastraDBMessage;
-                    messages.push(convertedNextMessage);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Get regular messages from the thread only if no include items or if last is specified
-      if (!selectBy?.include || selectBy.include.length === 0 || selectBy?.last) {
-        let threadMessages = Array.from(this.collection.messages.values())
-          .filter((msg: any) => msg.thread_id === threadId)
-          .filter((msg: any) => !messages.some(m => m.id === msg.id)); // Exclude already included messages
-
-        // Apply date filtering
-        if (selectBy?.pagination?.dateRange) {
-          const { start: from, end: to } = selectBy.pagination.dateRange;
-          threadMessages = threadMessages.filter((msg: any) => {
-            const msgDate = new Date(msg.createdAt);
-            const fromDate = from ? new Date(from) : null;
-            const toDate = to ? new Date(to) : null;
-
-            if (fromDate && msgDate < fromDate) return false;
-            if (toDate && msgDate > toDate) return false;
-            return true;
-          });
-        }
-
-        // Apply selectBy logic
-        if (selectBy?.last) {
-          threadMessages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-          const lastMessages = threadMessages.slice(-selectBy.last);
-          // Convert and add last messages
-          for (const msg of lastMessages) {
-            const convertedMessage = {
-              id: msg.id,
-              threadId: msg.thread_id,
-              content: safelyParseJSON(msg.content),
-              role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-              type: msg.type,
-              createdAt: msg.createdAt,
-              resourceId: msg.resourceId,
-            } as MastraDBMessage;
-            messages.push(convertedMessage);
-          }
-        } else if (!selectBy?.include || selectBy.include.length === 0) {
-          // Convert and add all thread messages only if no include items
-          for (const msg of threadMessages) {
-            const convertedMessage = {
-              id: msg.id,
-              threadId: msg.thread_id,
-              content: safelyParseJSON(msg.content),
-              role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-              type: msg.type,
-              createdAt: msg.createdAt,
-              resourceId: msg.resourceId,
-            } as MastraDBMessage;
-            messages.push(convertedMessage);
-          }
-        }
-      }
-
-      // Sort by createdAt
-      messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      const start = page * perPage;
-      const end = start + perPage;
-      return {
-        messages: messages.slice(start, end),
-        total: messages.length,
-        page,
-        perPage,
-        hasMore: messages.length > end,
-      };
-    } catch (error) {
-      this.logger.error('Error in getMessagesPaginated:', error);
-      return { messages: [], total: 0, page, perPage, hasMore: false };
-    }
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

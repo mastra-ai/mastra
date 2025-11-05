@@ -2,7 +2,7 @@
  * Tests for OTEL-compliant span conversion
  */
 
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { AISpanType } from '@mastra/core/observability';
 import type {
   ExportedAISpan,
   ModelGenerationAttributes,
@@ -10,7 +10,7 @@ import type {
   ToolCallAttributes,
   MCPToolCallAttributes,
   WorkflowRunAttributes,
-} from '@mastra/core/ai-tracing';
+} from '@mastra/core/observability';
 import { SpanKind } from '@opentelemetry/api';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SpanConverter } from './span-converter.js';

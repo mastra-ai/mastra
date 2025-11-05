@@ -1,4 +1,4 @@
-import type { Attachment } from '@ai-sdk/ui-utils';
+import type { Attachment } from '@ai-sdk/ui-utils-v5';
 import type { FilePart, ImagePart, TextPart } from '@internal/ai-sdk-v4/message';
 
 type ContentPart = TextPart | ImagePart | FilePart;

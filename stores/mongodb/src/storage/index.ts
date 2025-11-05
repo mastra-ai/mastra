@@ -6,7 +6,6 @@ import type {
   PaginationInfo,
   StorageColumn,
   StorageDomains,
-  StorageGetMessagesArg,
   StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
@@ -184,14 +183,6 @@ export class MongoDBStore extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     return this.stores.memory.deleteThread({ threadId });
-  }
-
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
-  }
-
-  async getMessagesPaginated(_args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(_args);
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

@@ -1426,6 +1426,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/workflows/input-data-mapping",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
       "source": "/reference/memory/getThreadsByResourceId",
       "destination": "/reference/memory/listThreadsByResourceId",
       "permanent": true

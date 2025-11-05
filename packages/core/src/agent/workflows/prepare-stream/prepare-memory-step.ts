@@ -1,10 +1,10 @@
 import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { AISpan, AISpanType } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
@@ -44,10 +44,6 @@ interface PrepareMemoryStepOptions<
   requestContext: RequestContext;
   agentAISpan: AISpan<AISpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
@@ -176,7 +172,13 @@ export function createPrepareMemoryStep<
               requestContext,
             })
           : { messages: [] },
-        memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+        memory.getSystemMessage({
+          threadId: threadObject.id,
+          resourceId,
+          memoryConfig: capabilities._agentNetworkAppend
+            ? { ...memoryConfig, workingMemory: { enabled: false } }
+            : memoryConfig,
+        }),
       ]);
 
       const memoryMessages = memoryResult.messages;

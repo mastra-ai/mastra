@@ -39,13 +39,13 @@ export function getPerformanceTests(memory: Memory) {
     // Reset message counter
     messageCounter = 0;
     // Clean up before each test
-    const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
+    const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 
   afterAll(async () => {
     // Final cleanup
-    const { threads } = await memory.listThreadsByResourceId({ resourceId, offset: 0, limit: 10 });
+    const { threads } = await memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 10 });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 
@@ -133,10 +133,10 @@ export function getPerformanceTests(memory: Memory) {
 
         for (const thread of threads) {
           const start = performance.now();
-          await memory.rememberMessages({
+          await memory.recall({
             threadId: thread.id,
-            vectorMessageSearch: searchQuery,
-            config: {
+            vectorSearchString: searchQuery,
+            threadConfig: {
               semanticRecall: {
                 topK: 50,
                 messageRange: { before: 5, after: 5 },

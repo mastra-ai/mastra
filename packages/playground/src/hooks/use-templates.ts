@@ -173,7 +173,7 @@ export const useCreateTemplateInstallRun = () => {
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId?: string }) => {
-      return await client.getAgentBuilderAction('merge-template').createRunAsync({ runId });
+      return await client.getAgentBuilderAction('merge-template').createRun({ runId });
     },
   });
 };

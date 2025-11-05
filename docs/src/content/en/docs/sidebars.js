@@ -115,11 +115,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/input-data-mapping",
-          label: "Input Data Mapping",
-        },
-        {
-          type: "doc",
           id: "workflows/human-in-the-loop",
           label: "Human-in-the-loop",
         },

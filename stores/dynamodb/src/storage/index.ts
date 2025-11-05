@@ -7,7 +7,6 @@ import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  StorageGetMessagesArg,
   WorkflowRun,
   WorkflowRuns,
   TABLE_NAMES,
@@ -266,21 +265,12 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  // Message operations
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
-  }
-
   async listMessagesById(args: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById(args);
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
-  }
-
-  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async updateMessages(_args: {

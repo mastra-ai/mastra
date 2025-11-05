@@ -71,6 +71,7 @@ const documentChunkerTool = createDocumentChunkerTool({
 });
 
 const ragAgent = new Agent({
+  id: 'rag-agent',
   name: 'RAG Agent',
   instructions: `You are a helpful assistant that handles both querying and cleaning documents.
     When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.

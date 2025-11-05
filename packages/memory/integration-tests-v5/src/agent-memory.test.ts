@@ -66,9 +66,9 @@ describe('Agent Memory Tests', () => {
       }),
     });
     const agentMemory = (await mastra.getAgent('agent').getMemory())!;
-    await expect(agentMemory.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory.recall({ threadId: '1' })).resolves.not.toThrow();
     const agentMemory2 = (await agent.getMemory())!;
-    await expect(agentMemory2.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory2.recall({ threadId: '1' })).resolves.not.toThrow();
   });
 
   it('should inherit storage from Mastra instance when workingMemory is enabled', async () => {
@@ -219,7 +219,7 @@ describe('Agent Memory Tests', () => {
     });
 
     // Verify first thread has messages
-    const thread1Messages = await memory.query({ threadId: thread1Id, resourceId });
+    const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
     expect(thread1Messages.messages.length).toBeGreaterThan(0);
 
     // Now create a second thread - this should be able to access memory from thread1
@@ -302,7 +302,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => getTextContent(m));
 
       expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
@@ -336,7 +336,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => getTextContent(m));
       const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => getTextContent(m));
       expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
@@ -371,7 +371,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter(
@@ -423,7 +423,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Check that all user messages were saved
       const savedUserMessages = messages.filter((m: any) => m.role === 'user');
@@ -438,14 +438,14 @@ describe('Agent Memory Tests', () => {
       );
 
       expect(firstMessage).toBeDefined();
-      expect(firstMessage!.metadata).toEqual({
+      expect(firstMessage!.content.metadata).toEqual({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
       expect(secondMessage).toBeDefined();
-      expect(secondMessage!.metadata).toEqual({
+      expect(secondMessage!.content.metadata).toEqual({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',
@@ -476,29 +476,28 @@ describe('Agent Memory Tests', () => {
       const originalReasoningText = result.reasoningText;
 
       const agentMemory = (await reasoningAgent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       const assistantMessage = messages.find(
-        (m: any) =>
-          m.role === 'assistant' && Array.isArray(m.content) && m.content.some((p: any) => p?.type === 'reasoning'),
+        m => m.role === 'assistant' && m.content.parts?.find(p => p.type === 'reasoning'),
       );
 
       expect(assistantMessage).toBeDefined();
 
-      const retrievedReasoningParts = Array.isArray((assistantMessage as any).content)
-        ? (assistantMessage as any).content.filter((p: any) => p?.type === 'reasoning')
-        : [];
+      const retrievedReasoningParts = assistantMessage?.content.parts?.filter(p => p?.type === 'reasoning');
 
       expect(retrievedReasoningParts).toBeDefined();
-      expect(retrievedReasoningParts.length).toBeGreaterThan(0);
+      expect(retrievedReasoningParts?.length).toBeGreaterThan(0);
 
-      const retrievedReasoningText = retrievedReasoningParts.map((p: any) => p.text || '').join('');
+      const retrievedReasoningText = retrievedReasoningParts
+        ?.map(p => p.details?.map(d => (d.type === 'text' ? d.text : '')).join('') || '')
+        .join('');
 
-      expect(retrievedReasoningText.length).toBeGreaterThan(0);
+      expect(retrievedReasoningText?.length).toBeGreaterThan(0);
       expect(retrievedReasoningText).toBe(originalReasoningText);
 
       // This is the key fix for issue #8073 - before the fix, reasoning was split into many parts
-      expect(retrievedReasoningParts.length).toBe(1);
+      expect(retrievedReasoningParts?.length).toBe(1);
     }, 30000);
   });
 
@@ -641,7 +640,7 @@ describe('Agent with message processors', () => {
 
     // Check that tool calls were saved to memory
     const agentMemory = (await memoryProcessorAgent.getMemory())!;
-    const { messages: messagesFromMemory } = await agentMemory.query({ threadId });
+    const { messages: messagesFromMemory } = await agentMemory.recall({ threadId });
     const toolMessages = messagesFromMemory.filter(
       m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
     );

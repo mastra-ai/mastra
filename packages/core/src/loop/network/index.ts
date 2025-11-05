@@ -1,11 +1,11 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
-import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -304,7 +304,7 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        const completionStream = await tryStreamWithJsonFallback(routingAgent, completionPrompt, {
+        const streamOptions = {
           structuredOutput: {
             schema: completionSchema,
           },
@@ -316,11 +316,13 @@ export async function createNetworkLoop({
             readOnly: true,
           },
           ...routingAgentOptions,
-        });
+        };
+
+        // Try streaming with structured output
+        let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
 
         let currentText = '';
         let currentTextIdx = 0;
-
         await writer.write({
           type: 'routing-agent-text-start',
           payload: {
@@ -330,6 +332,7 @@ export async function createNetworkLoop({
           runId,
         });
 
+        // Stream and check for errors
         for await (const chunk of completionStream.objectStream) {
           if (chunk?.finalResult) {
             currentText = chunk.finalResult;
@@ -346,6 +349,45 @@ export async function createNetworkLoop({
               runId,
             });
             currentTextIdx = currentText.length;
+          }
+        }
+
+        // If error detected, retry with JSON prompt injection fallback
+        // TODO ujpdate tryStreamWithJsonFallback to not await the result so we can re-use it here
+        if (completionStream.error) {
+          console.warn('Error detected in structured output stream. Attempting fallback with JSON prompt injection.');
+
+          // Reset text tracking for fallback
+          currentText = '';
+          currentTextIdx = 0;
+
+          // Create fallback stream with jsonPromptInjection
+          completionStream = await routingAgent.stream(completionPrompt, {
+            ...streamOptions,
+            structuredOutput: {
+              ...streamOptions.structuredOutput,
+              jsonPromptInjection: true,
+            },
+          });
+
+          // Stream from fallback
+          for await (const chunk of completionStream.objectStream) {
+            if (chunk?.finalResult) {
+              currentText = chunk.finalResult;
+            }
+
+            const currentSlice = currentText.slice(currentTextIdx);
+            if (chunk?.isComplete && currentSlice.length) {
+              await writer.write({
+                type: 'routing-agent-text-delta',
+                payload: {
+                  text: currentSlice,
+                },
+                from: ChunkFrom.NETWORK,
+                runId,
+              });
+              currentTextIdx = currentText.length;
+            }
           }
         }
 
@@ -538,8 +580,6 @@ export async function createNetworkLoop({
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
-        // resourceId: inputData.resourceId,
-        // threadId: inputData.threadId,
         requestContext: requestContext,
         runId,
       });
@@ -674,7 +714,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const run = await wf.createRunAsync({ runId });
+      const run = await wf.createRun({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
@@ -860,11 +900,14 @@ export async function createNetworkLoop({
       });
 
       const finalResult = await tool.execute(
+        inputDataToUse,
         {
           requestContext,
           mastra: agent.getMastraInstance(),
-          resourceId: initData.threadResourceId || networkName,
-          threadId: initData.threadId,
+          agent: {
+            resourceId: initData.threadResourceId || networkName,
+            threadId: initData.threadId,
+          },
           runId,
           memory,
           context: inputDataToUse,
@@ -1113,21 +1156,20 @@ export async function networkLoop<
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: networkWorkflow.outputSchema,
     execute: async ({ inputData, writer }) => {
-      if (maxIterations && inputData.iteration >= maxIterations) {
-        await writer?.write({
-          type: 'network-execution-event-finish',
-          payload: {
-            ...inputData,
-            completionReason: `Max iterations reached: ${maxIterations}`,
-          },
-        });
-        return {
-          ...inputData,
-          completionReason: `Max iterations reached: ${maxIterations}`,
-        };
-      }
+      const finalData = {
+        ...inputData,
+        ...(maxIterations && inputData.iteration >= maxIterations
+          ? { completionReason: `Max iterations reached: ${maxIterations}` }
+          : {}),
+      };
+      await writer?.write({
+        type: 'network-execution-event-finish',
+        payload: finalData,
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
 
-      return inputData;
+      return finalData;
     },
   });
 
@@ -1164,7 +1206,7 @@ export async function networkLoop<
     .then(finalStep)
     .commit();
 
-  const run = await mainWorkflow.createRunAsync({
+  const run = await mainWorkflow.createRun({
     runId,
   });
 

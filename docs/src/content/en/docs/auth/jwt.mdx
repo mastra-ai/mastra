@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # MastraJwtAuth Class
 
-The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `auth` option.
 
 ## Installation
 
@@ -27,7 +27,7 @@ import { MastraJwtAuth } from "@mastra/auth";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraJwtAuth({
+    auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
     }),
   },
@@ -38,7 +38,7 @@ export const mastra = new Mastra({
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -58,7 +58,7 @@ export const mastraClient = new MastraClient({
 Once `MastraClient` is configured, you can send authenticated requests from your frontend application, or use `curl` for quick local testing:
 
 <Tabs>
-  <TabItem value="curl" label="cURL">
+  <TabItem value="react" label="React">
     ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
     import { mastraClient } from "../../lib/mastra-client";
 
@@ -78,7 +78,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
     ```
 
   </TabItem>
-  <TabItem value="react" label="React">
+  <TabItem value="curl" label="cURL">
     ```bash copy
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \

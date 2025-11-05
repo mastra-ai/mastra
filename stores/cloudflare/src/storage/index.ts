@@ -13,7 +13,6 @@ import {
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
@@ -204,14 +203,6 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.memory.saveMessages(args);
   }
 
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
-  }
-
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -269,16 +260,16 @@ export class CloudflareStore extends MastraStorage {
 
   async listWorkflowRuns({
     workflowName,
-    limit = 20,
-    offset = 0,
+    perPage = 20,
+    page = 0,
     resourceId,
     fromDate,
     toDate,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns({
       workflowName,
-      limit,
-      offset,
+      perPage,
+      page,
       resourceId,
       fromDate,
       toDate,
@@ -293,10 +284,6 @@ export class CloudflareStore extends MastraStorage {
     workflowName: string;
   }): Promise<WorkflowRun | null> {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async updateMessages(args: {

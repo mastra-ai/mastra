@@ -6,13 +6,11 @@
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type {
-  AITracingEvent,
-  AnyExportedAISpan,
-  ModelGenerationAttributes,
-  BaseExporterConfig,
-} from '@mastra/core/ai-tracing';
-import { AISpanType, omitKeys, BaseExporter } from '@mastra/core/ai-tracing';
+import type { AITracingEvent, AnyExportedAISpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import { AISpanType } from '@mastra/core/observability';
+import { omitKeys } from '@mastra/core/utils';
+import { BaseExporter } from '@mastra/observability';
+import type { BaseExporterConfig } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';

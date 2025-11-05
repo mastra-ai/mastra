@@ -180,7 +180,7 @@ const sidebars = {
             {
               type: "doc",
               id: "workflows/workflow-methods/create-run",
-              label: ".createRunAsync()",
+              label: ".createRun()",
             },
           ],
         },
@@ -188,7 +188,7 @@ const sidebars = {
         { type: "doc", id: "workflows/run", label: "Run Class" },
         {
           type: "category",
-          label: "Methods",
+          label: "Run Methods",
           items: [
             {
               type: "doc",
@@ -301,7 +301,8 @@ const sidebars = {
       items: [
         { type: "doc", id: "memory/memory-class", label: "Memory Class" },
         { type: "doc", id: "memory/createThread", label: ".createThread()" },
-        { type: "doc", id: "memory/query", label: ".query()" },
+        { type: "doc", id: "memory/recall", label: ".recall()" },
+        { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
         { type: "doc", id: "memory/getThreadById", label: ".getThreadById()" },
         {
           type: "doc",

@@ -442,13 +442,6 @@ export function pgTests() {
           [testMessageId, testThreadId, 'Test message', 'user', 'v2', testResourceId, createdAtValue, createdAtZValue],
         );
 
-        // Test getMessages
-        const messagesResult = await store.getMessages({ threadId: testThreadId });
-        expect(messagesResult.messages.length).toBe(1);
-        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
-        expect(messagesResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
-
         // Test listMessagesById
         const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
@@ -456,15 +449,14 @@ export function pgTests() {
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
-        // Test getMessagesPaginated
-        const messagesPaginated = await store.getMessagesPaginated({
+        // Test listMessages
+        const messagesResult = await store.listMessages({
           threadId: testThreadId,
-          format: 'v2',
         });
-        expect(messagesPaginated.messages.length).toBe(1);
-        expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messagesPaginated.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
-        expect(messagesPaginated.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
       });
 
       it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
@@ -481,25 +473,19 @@ export function pgTests() {
           [testMessageId, testThreadId, 'Legacy message', 'user', 'v2', testResourceId, createdAtValue],
         );
 
-        // Test getMessages
-        const messagesResult = await store.getMessages({ threadId: testThreadId });
-        expect(messagesResult.messages.length).toBe(1);
-        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
-
         // Test listMessagesById
         const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
-        // Test getMessagesPaginated
-        const messagesPaginated = await store.getMessagesPaginated({
+        // Test listMessages
+        const messagesResult = await store.listMessages({
           threadId: testThreadId,
         });
-        expect(messagesPaginated.messages.length).toBe(1);
-        expect(messagesPaginated.messages[0]?.createdAt).toBeInstanceOf(Date);
-        expect(messagesPaginated.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
       });
 
       it('should have consistent timestamp handling between threads and messages', async () => {
@@ -531,7 +517,7 @@ export function pgTests() {
         expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
 
         // Get messages
-        const messagesResult = await store.getMessages({ threadId: testThreadId });
+        const messagesResult = await store.listMessages({ threadId: testThreadId });
         expect(messagesResult.messages.length).toBe(1);
         expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
@@ -574,18 +560,16 @@ export function pgTests() {
           [msg3Id, testThreadId, 'Message 3', 'user', 'v2', testResourceId, date3, date2Z],
         );
 
-        // Test getMessages with include
-        const messagesResult = await store.getMessages({
+        // Test listMessages with include
+        const messagesResult = await store.listMessages({
           threadId: testThreadId,
-          selectBy: {
-            include: [
-              {
-                id: msg2Id,
-                withPreviousMessages: 1,
-                withNextMessages: 1,
-              },
-            ],
-          },
+          include: [
+            {
+              id: msg2Id,
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
         });
 
         expect(messagesResult.messages.length).toBe(3);

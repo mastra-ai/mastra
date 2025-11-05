@@ -3,9 +3,9 @@ import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, Ste
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { ModelSpanTracker } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { IModelSpanTracker } from '../observability';
 import type { OutputProcessor, ProcessorState } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
@@ -79,7 +79,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
-  modelSpanTracker?: ModelSpanTracker;
+  modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
   toolConcurrency?: number;

@@ -1,8 +1,8 @@
 import pMap from 'p-map';
 import z from 'zod';
-import { InternalSpans } from '../../ai-tracing';
-import type { TracingContext } from '../../ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { InternalSpans } from '../../observability';
+import type { TracingContext } from '../../observability';
 import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';

@@ -592,10 +592,10 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 const requestContext = new RequestContext();
-const queryResult = await vectorQueryTool.execute({
-  context: { queryText: "foo", topK: 1 },
-  requestContext,
-});
+const queryResult = await vectorQueryTool.execute(
+  { queryText: "foo", topK: 1 },
+  { requestContext }
+);
 
 console.log(queryResult.sources);
 ```
