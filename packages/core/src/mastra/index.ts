@@ -404,7 +404,7 @@ export class Mastra<
 
     // Validate and assign observability instance
     if (config?.observability) {
-      if (typeof config.observability.setMastraContext === 'function') {
+      if (typeof config.observability.getDefaultInstance === 'function') {
         this.#observability = config.observability;
         // Set logger early
         this.#observability.setLogger({ logger: this.#logger });

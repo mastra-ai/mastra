@@ -103,11 +103,6 @@ export class DefaultObservability extends MastraBase implements Observability {
     });
   }
 
-  // Backward compatibility - will be removed in future version
-  registerMastra(options: { mastra: Mastra }): void {
-    return this.setMastraContext(options);
-  }
-
   setLogger(options: { logger: IMastraLogger }): void {
     this.listInstances().forEach(instance => {
       instance.__setLogger(options.logger);

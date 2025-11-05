@@ -805,8 +805,6 @@ export interface ObservabilityExporter {
   name: string;
 
   /** Initialize exporter with tracing configuration and/or access to Mastra */
-  //TODO: maybe we don't need this anymore?
-  // or maybe better to have this instead of the version in the public Observability interface?
   init?(options: InitExporterOptions): void;
 
   /** Sets logger instance throughout Observability, including all configured exporters, processors, etc..  */
