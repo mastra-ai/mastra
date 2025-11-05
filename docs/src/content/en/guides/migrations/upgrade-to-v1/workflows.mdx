@@ -155,7 +155,7 @@ createStep({
 - }
 + execute: async (inputData, context) => {
 +   if (!context.resumeData) {
-+     return await context.suspend({)
++     return context.suspend({})
 +   }
 +   //..continue execution logic
 + }
