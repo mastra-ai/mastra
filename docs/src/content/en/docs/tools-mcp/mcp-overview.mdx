@@ -52,7 +52,7 @@ export const testMcpClient = new MCPClient({
 
 ## Using `MCPClient` with an agent
 
-To use tools from an MCP server in an agent, import your `MCPClient` and call `.getTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
+To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
 ```typescript {4,16} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -61,6 +61,7 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   name: "Test Agent",
   description: "You are a helpful AI assistant",
   instructions: `
@@ -70,7 +71,7 @@ export const testAgent = new Agent({
 
       Answer questions using the information you find using the MCP Servers.`,
   model: openai("gpt-4o-mini"),
-  tools: await testMcpClient.getTools(),
+  tools: await testMcpClient.listTools(),
 });
 ```
 
@@ -89,7 +90,7 @@ import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
   id: "test-mcp-server",
-  name: "Test Server",
+  name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
@@ -99,12 +100,18 @@ export const testMcpServer = new MCPServer({
 
 > See [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
 
+### Serverless deployments
+
+`MCPServer` can be deployed in serverless environments (Cloudflare Workers, Vercel Edge Functions, AWS Lambda, etc.) by enabling the `serverless: true` option in `startHTTP()`. This runs the server in stateless mode, where each request is handled independently without session management.
+
+**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/tools/mcp-server#starthttp) in the API reference for full details and limitations.
+
 ## Registering an `MCPServer`
 
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { testMcpServer } from "./mcp/test-mcp-server";
 
@@ -118,7 +125,7 @@ export const mastra = new Mastra({
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
-| Feature           | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`)    |
+| Feature           | Static Configuration (`await mcp.listTools()`) | Dynamic Configuration (`await mcp.listToolsets()`)    |
 | :---------------- | :-------------------------------------------- | :--------------------------------------------------- |
 | **Use Case**      | Single-user, static config (e.g., CLI tool)   | Multi-user, dynamic config (e.g., SaaS app)          |
 | **Configuration** | Fixed at agent initialization                 | Per-request, dynamic                                 |
@@ -127,9 +134,9 @@ export const mastra = new Mastra({
 
 ### Static tools
 
-Use the `.getTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
+Use the `.listTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
 
-> See [getTools()](/reference/tools/mcp-client#gettools) for more information.
+> See [listTools()](/reference/tools/mcp-client#listtools) for more information.
 
 ```typescript {8} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -139,13 +146,13 @@ import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
   // ...
-  tools: await testMcpClient.getTools(),
+  tools: await testMcpClient.listTools(),
 });
 ```
 
 ### Dynamic tools
 
-Use the `.getToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
+Use the `.listToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
 
 ```typescript {5-16,21} showLineNumbers copy
 import { MCPClient } from "@mastra/mcp";
@@ -168,7 +175,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
   const agent = mastra.getAgent("testAgent");
 
   const response = await agent.generate(userPrompt, {
-    toolsets: await userMcp.getToolsets(),
+    toolsets: await userMcp.listToolsets(),
   });
 
   await userMcp.disconnect();
@@ -179,7 +186,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 }
 ```
 
-> See [getToolsets()](/reference/tools/mcp-client#gettoolsets) for more information.
+> See [listToolsets()](/reference/tools/mcp-client#listtoolsets) for more information.
 
 ## Connecting to an MCP registry
 

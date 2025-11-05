@@ -1,6 +1,5 @@
-import type { ChunkType } from '@mastra/core';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { PartialSchemaOutput, OutputSchema, DataChunkType } from '@mastra/core/stream';
+import type { PartialSchemaOutput, OutputSchema, DataChunkType, ChunkType } from '@mastra/core/stream';
 
 import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
 import { isDataChunkType } from './utils';

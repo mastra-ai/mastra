@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -27,7 +27,6 @@ import {
   observeStreamAgentBuilderActionHandler,
   observeStreamVNextAgentBuilderActionHandler,
   resumeStreamAgentBuilderActionHandler,
-  watchAgentBuilderActionHandler,
 } from './agent-builder';
 
 vi.mock('@mastra/agent-builder', () => ({
@@ -380,7 +379,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -424,7 +423,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action run execution result successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -526,7 +525,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should start action run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -605,7 +604,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should resume action run successfully', async () => {
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -662,7 +661,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action runs successfully (not empty)', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -787,33 +786,6 @@ describe('Agent Builder Handlers', () => {
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Streaming VNext agent builder action',
-        expect.objectContaining({
-          actionId: 'merge-template',
-        }),
-      );
-    });
-  });
-
-  describe('watchAgentBuilderActionHandler', () => {
-    it('should handle workflow registry correctly on watch', async () => {
-      await expect(
-        watchAgentBuilderActionHandler({
-          mastra: mockMastra,
-          actionId: 'merge-template',
-          runId: 'test-run',
-        }),
-      ).rejects.toThrow(); // Will throw because watching is complex to mock
-
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Watching agent builder action',
         expect.objectContaining({
           actionId: 'merge-template',
         }),

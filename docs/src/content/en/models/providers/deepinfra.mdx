@@ -8,7 +8,8 @@ description: "Use Deep Infra models with Mastra. 4 models available."
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-import { Tabs, Tab } from "@/components/tabs";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
@@ -21,10 +22,11 @@ DEEPINFRA_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
 });
@@ -106,6 +108,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.deepinfra.com/v1/openai",
@@ -122,9 +125,10 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "deepinfra/zai-org/GLM-4.5"
       : "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct";

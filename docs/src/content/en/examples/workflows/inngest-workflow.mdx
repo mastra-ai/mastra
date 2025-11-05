@@ -29,6 +29,7 @@ import { openai } from "@ai-sdk/openai";
 
 // Create a new planning agent that uses the OpenAI model
 const planningAgent = new Agent({
+  id: "planning-agent",
   name: "planningAgent",
   model: openai("gpt-4o"),
   instructions: `
@@ -318,13 +319,13 @@ export { activityPlanningWorkflow };
 Register the agents and workflow with the mastra instance. This allows access to the agents within the workflow.
 
 ```ts showLineNumbers copy title="index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
 import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
 import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 // Create an Inngest instance for workflow orchestration and event handling
 const inngest = new Inngest({
@@ -380,7 +381,7 @@ const srv = serve({
 });
 
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 // Start the workflow with the required input data (city name)
 // This will trigger the workflow steps and stream the result to the console
@@ -527,9 +528,3 @@ const workflow = createWorkflow({
 All flow control features are optional. If not specified, workflows run with Inngest's default behavior. Flow control configuration is validated by Inngest's native implementation, ensuring compatibility and correctness.
 
 For detailed information about flow control options and their behavior, see the [Inngest Flow Control documentation](https://www.inngest.com/docs/guides/flow-control).
-
-## Workflows (Legacy)
-
-The following links provide example documentation for legacy workflows:
-
-- [Creating a Simple Workflow (Legacy)](/examples/workflows_legacy/creating-a-workflow)

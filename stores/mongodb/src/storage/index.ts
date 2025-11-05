@@ -1,29 +1,26 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  EvalRow,
-  PaginationArgs,
   PaginationInfo,
   StorageColumn,
   StorageDomains,
-  StorageGetMessagesArg,
   StoragePagination,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  AISpanRecord,
+  SpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
-  CreateAISpanRecord,
-  UpdateAISpanRecord,
+  CreateSpanRecord,
+  UpdateSpanRecord,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
-import { LegacyEvalsMongoDB } from './domains/legacy-evals';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { StoreOperationsMongoDB } from './domains/operations';
@@ -78,7 +75,7 @@ export class MongoDBStore extends MastraStorage {
     hasColumn: boolean;
     createTable: boolean;
     deleteMessages: boolean;
-    getScoresBySpan: boolean;
+    listScoresBySpan: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
@@ -86,7 +83,7 @@ export class MongoDBStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
-      getScoresBySpan: true,
+      listScoresBySpan: true,
     };
   }
 
@@ -105,10 +102,6 @@ export class MongoDBStore extends MastraStorage {
       operations,
     });
 
-    const legacyEvals = new LegacyEvalsMongoDB({
-      operations,
-    });
-
     const scores = new ScoresStorageMongoDB({
       operations,
     });
@@ -124,7 +117,6 @@ export class MongoDBStore extends MastraStorage {
     this.stores = {
       operations,
       memory,
-      legacyEvals,
       scores,
       workflows,
       observability,
@@ -173,18 +165,6 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.getThreadById({ threadId });
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId({ resourceId });
-  }
-
-  async getThreadsByResourceIdPaginated(_args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    return this.stores.memory.getThreadsByResourceIdPaginated(_args);
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     return this.stores.memory.saveThread({ thread });
   }
@@ -205,76 +185,25 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & {
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, selectBy, format });
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
 
-  async getMessagesPaginated(
-    _args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(_args);
-  }
-
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
-  }
-
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
 
   async updateMessages(_args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
-  }): Promise<MastraMessageV2[]> {
+    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    })[];
+  }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(_args);
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns(args);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async updateWorkflowResults({
@@ -282,15 +211,15 @@ export class MongoDBStore extends MastraStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
@@ -371,17 +300,17 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.scores.saveScore(score);
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByRunId({ runId, pagination });
+    return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -390,10 +319,10 @@ export class MongoDBStore extends MastraStorage {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
+    return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -406,10 +335,10 @@ export class MongoDBStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
+    return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -418,7 +347,7 @@ export class MongoDBStore extends MastraStorage {
     spanId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
+    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
   /**
@@ -449,9 +378,9 @@ export class MongoDBStore extends MastraStorage {
   }
 
   /**
-   * AI Tracing/Observability
+   * Tracing/Observability
    */
-  async createAISpan(span: CreateAISpanRecord): Promise<void> {
+  async createSpan(span: CreateSpanRecord): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -460,17 +389,17 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.createAISpan(span);
+    return this.stores.observability.createSpan(span);
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
@@ -480,7 +409,7 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.updateAISpan({ spanId, traceId, updates });
+    return this.stores.observability.updateSpan({ spanId, traceId, updates });
   }
 
   async getAITrace(traceId: string): Promise<AITraceRecord | null> {
@@ -495,9 +424,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.getAITrace(traceId);
   }
 
-  async getAITracesPaginated(
-    args: AITracesPaginatedArg,
-  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -509,7 +436,7 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.observability.getAITracesPaginated(args);
   }
 
-  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -518,14 +445,14 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchCreateAISpans(args);
+    return this.stores.observability.batchCreateSpans(args);
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
     if (!this.stores.observability) {
@@ -536,7 +463,7 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchUpdateAISpans(args);
+    return this.stores.observability.batchUpdateSpans(args);
   }
 
   async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {

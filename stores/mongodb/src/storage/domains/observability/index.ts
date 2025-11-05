@@ -1,13 +1,13 @@
-import type { TracingStrategy } from '@mastra/core/ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { TracingStorageStrategy } from '@mastra/core/observability';
 import { ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type {
-  AISpanRecord,
+  SpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
-  CreateAISpanRecord,
+  CreateSpanRecord,
   PaginationInfo,
-  UpdateAISpanRecord,
+  UpdateSpanRecord,
 } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
 
@@ -19,9 +19,9 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     this.operations = operations;
   }
 
-  public get aiTracingStrategy(): {
-    preferred: TracingStrategy;
-    supported: TracingStrategy[];
+  public get tracingStrategy(): {
+    preferred: TracingStorageStrategy;
+    supported: TracingStorageStrategy[];
   } {
     return {
       preferred: 'batch-with-updates',
@@ -29,7 +29,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     };
   }
 
-  async createAISpan(span: CreateAISpanRecord): Promise<void> {
+  async createSpan(span: CreateSpanRecord): Promise<void> {
     try {
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
       const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
@@ -90,14 +90,14 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     try {
       const data = { ...updates };
@@ -138,7 +138,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   async getAITracesPaginated({
     filters,
     pagination,
-  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const { entityId, entityType, ...actualFilters } = filters || {};
@@ -238,7 +238,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     try {
       const records = args.records.map(record => {
         const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
@@ -269,18 +269,18 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
     try {
       return this.operations.batchUpdate({
         tableName: TABLE_AI_SPANS,
         updates: args.records.map(record => {
-          const data: Partial<UpdateAISpanRecord> = { ...record.updates };
+          const data: Partial<UpdateSpanRecord> = { ...record.updates };
 
           if (data.endedAt instanceof Date) {
             data.endedAt = data.endedAt.toISOString() as any;
@@ -333,9 +333,9 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }
 
   /**
-   * Transform MongoDB document to AISpanRecord format
+   * Transform MongoDB document to SpanRecord format
    */
-  private transformSpanFromMongo(doc: any): AISpanRecord {
+  private transformSpanFromMongo(doc: any): SpanRecord {
     // Remove MongoDB's _id field and return clean span record
     const { _id, ...span } = doc;
 
@@ -353,6 +353,6 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       span.updatedAt = new Date(span.updatedAt);
     }
 
-    return span as AISpanRecord;
+    return span as SpanRecord;
   }
 }

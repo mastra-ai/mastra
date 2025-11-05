@@ -2,15 +2,22 @@ import type { Connection } from '@lancedb/lancedb';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   MemoryStorage,
-  resolveMessageLimit,
+  normalizePerPage,
+  calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type {
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsByResourceIdInput,
+  StorageListThreadsByResourceIdOutput,
+} from '@mastra/core/storage';
 import type { StoreOperationsLance } from '../operations';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
@@ -21,6 +28,11 @@ export class StoreMemoryLance extends MemoryStorage {
     super();
     this.client = client;
     this.operations = operations;
+  }
+
+  // Utility to escape single quotes in SQL strings
+  private escapeSql(str: string): string {
+    return str.replace(/'/g, "''");
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -40,29 +52,6 @@ export class StoreMemoryLance extends MemoryStorage {
       throw new MastraError(
         {
           id: 'LANCE_STORE_GET_THREAD_BY_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    try {
-      const table = await this.client.openTable(TABLE_THREADS);
-      // fetches all threads with the given resourceId
-      const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-
-      const records = await query.toArray();
-      return processResultWithTypeConversion(
-        records,
-        await getTableSchema({ tableName: TABLE_THREADS, client: this.client }),
-      ) as StorageThreadType[];
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'LANCE_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -185,7 +174,7 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  private normalizeMessage(message: any): MastraMessageV1 | MastraMessageV2 {
+  private normalizeMessage(message: any): MastraMessageV1 | MastraDBMessage {
     const { thread_id, ...rest } = message;
     return {
       ...rest,
@@ -203,106 +192,8 @@ export class StoreMemoryLance extends MemoryStorage {
     };
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-    threadConfig,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      if (threadConfig) {
-        throw new Error('ThreadConfig is not supported by LanceDB storage');
-      }
-      const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
-      const table = await this.client.openTable(TABLE_MESSAGES);
-
-      let allRecords: any[] = [];
-
-      // Handle selectBy.include for cross-thread context retrieval
-      if (selectBy?.include && selectBy.include.length > 0) {
-        // Get all unique thread IDs from include items
-        const threadIds = [...new Set(selectBy.include.map(item => item.threadId))];
-
-        // Fetch all messages from all relevant threads
-        for (const threadId of threadIds) {
-          const threadQuery = table.query().where(`thread_id = '${threadId}'`);
-          let threadRecords = await threadQuery.toArray();
-          allRecords.push(...threadRecords);
-        }
-      } else {
-        // Regular single-thread query
-        let query = table.query().where(`\`thread_id\` = '${threadId}'`);
-        allRecords = await query.toArray();
-      }
-
-      // Sort the records chronologically
-      allRecords.sort((a, b) => {
-        const dateA = new Date(a.createdAt).getTime();
-        const dateB = new Date(b.createdAt).getTime();
-        return dateA - dateB; // Ascending order
-      });
-
-      // Process the include.withPreviousMessages and include.withNextMessages if specified
-      if (selectBy?.include && selectBy.include.length > 0) {
-        allRecords = this.processMessagesWithContext(allRecords, selectBy.include);
-      }
-
-      // If we're fetching the last N messages, take only the last N after sorting
-      if (limit !== Number.MAX_SAFE_INTEGER) {
-        allRecords = allRecords.slice(-limit);
-      }
-
-      const messages = processResultWithTypeConversion(
-        allRecords,
-        await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
-      );
-
-      const list = new MessageList({ threadId, resourceId }).add(messages.map(this.normalizeMessage), 'memory');
-      if (format === 'v2') return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: 'LANCE_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (messageIds.length === 0) return [];
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
     try {
       const table = await this.client.openTable(TABLE_MESSAGES);
 
@@ -314,13 +205,15 @@ export class StoreMemoryLance extends MemoryStorage {
         await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
       );
 
-      const list = new MessageList().add(messages.map(this.normalizeMessage), 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      const list = new MessageList().add(
+        messages.map(this.normalizeMessage) as (MastraMessageV1 | MastraDBMessage)[],
+        'memory',
+      );
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: 'LANCE_STORE_LIST_MESSAGES_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -332,15 +225,201 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!threadId.trim()) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_THREAD_ID',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId },
+        },
+        new Error('threadId must be a non-empty string'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
     try {
-      const { messages, format = 'v1' } = args;
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_LANCE_LIST_MESSAGES_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      // Determine sort field and direction
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
+      const table = await this.client.openTable(TABLE_MESSAGES);
+
+      // Build query conditions
+      const conditions: string[] = [`thread_id = '${this.escapeSql(threadId)}'`];
+
+      if (resourceId) {
+        conditions.push(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
+      }
+
+      if (filter?.dateRange?.start) {
+        const startTime =
+          filter.dateRange.start instanceof Date
+            ? filter.dateRange.start.getTime()
+            : new Date(filter.dateRange.start).getTime();
+        conditions.push(`\`createdAt\` >= ${startTime}`);
+      }
+
+      if (filter?.dateRange?.end) {
+        const endTime =
+          filter.dateRange.end instanceof Date
+            ? filter.dateRange.end.getTime()
+            : new Date(filter.dateRange.end).getTime();
+        conditions.push(`\`createdAt\` <= ${endTime}`);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // Get total count
+      const total = await table.countRows(whereClause);
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const query = table.query().where(whereClause);
+      let allRecords = await query.toArray();
+
+      // Sort records
+      allRecords.sort((a, b) => {
+        const aValue = field === 'createdAt' ? a.createdAt : a[field];
+        const bValue = field === 'createdAt' ? b.createdAt : b[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Apply pagination
+      const paginatedRecords = allRecords.slice(offset, offset + perPage);
+      const messages: any[] = paginatedRecords.map((row: any) => this.normalizeMessage(row));
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(messages.map(m => m.id));
+      if (include && include.length > 0) {
+        // Get all unique thread IDs from include items
+        const threadIds = [...new Set(include.map(item => item.threadId || threadId))];
+
+        // Fetch all messages from all relevant threads
+        const allThreadMessages: any[] = [];
+        for (const tid of threadIds) {
+          const threadQuery = table.query().where(`thread_id = '${tid}'`);
+          let threadRecords = await threadQuery.toArray();
+          allThreadMessages.push(...threadRecords);
+        }
+
+        // Sort all messages by createdAt
+        allThreadMessages.sort((a, b) => a.createdAt - b.createdAt);
+
+        // Apply processMessagesWithContext to get included messages with context
+        const contextMessages = this.processMessagesWithContext(allThreadMessages, include);
+        const includedMessages = contextMessages.map((row: any) => this.normalizeMessage(row));
+
+        // Deduplicate: only add messages that aren't already in the paginated results
+        for (const includeMsg of includedMessages) {
+          if (!messageIds.has(includeMsg.id)) {
+            messages.push(includeMsg);
+            messageIds.add(includeMsg.id);
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(messages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const fetchedAll = perPageInput === false || allThreadMessagesReturned;
+      const hasMore = !fetchedAll && offset + perPage < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'LANCE_STORE_LIST_MESSAGES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+    try {
+      const { messages } = args;
       if (messages.length === 0) {
-        return [];
+        return { messages: [] };
       }
 
       const threadId = messages[0]?.threadId;
@@ -365,7 +444,7 @@ export class StoreMemoryLance extends MemoryStorage {
         }
       }
 
-      const transformedMessages = messages.map((message: MastraMessageV2 | MastraMessageV1) => {
+      const transformedMessages = messages.map((message: MastraDBMessage | MastraMessageV1) => {
         const { threadId, type, ...rest } = message;
         return {
           ...rest,
@@ -384,9 +463,8 @@ export class StoreMemoryLance extends MemoryStorage {
       const updateRecord = { id: threadId, updatedAt: currentTime };
       await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error: any) {
       throw new MastraError(
         {
@@ -399,45 +477,72 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+  public async listThreadsByResourceId(
+    args: StorageListThreadsByResourceIdInput,
+  ): Promise<StorageListThreadsByResourceIdOutput> {
     try {
-      const { resourceId, page = 0, perPage = 10 } = args;
+      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+      const perPage = normalizePerPage(perPageInput, 100);
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'STORAGE_LANCE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      // When perPage is false (get all), ignore page offset
+      const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
       // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${resourceId}'`);
+      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
 
-      // Get paginated results
-      const query = table.query().where(`\`resourceId\` = '${resourceId}'`);
-      const offset = page * perPage;
-      query.limit(perPage);
-      if (offset > 0) {
-        query.offset(offset);
-      }
-
+      // Get ALL matching records (no limit/offset yet - need to sort first)
+      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
       const records = await query.toArray();
 
-      // Sort by updatedAt descending (most recent first)
-      records.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      // Apply dynamic sorting BEFORE pagination
+      records.sort((a, b) => {
+        const aValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(a[field]).getTime() : a[field];
+        const bValue = ['createdAt', 'updatedAt'].includes(field) ? new Date(b[field]).getTime() : b[field];
+
+        // Handle null/undefined - treat as "smallest" values
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return direction === 'ASC' ? -1 : 1;
+        if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+        }
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Apply pagination AFTER sorting
+      const paginatedRecords = records.slice(offset, offset + perPage);
 
       const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });
-      const threads = records.map(record => processResultWithTypeConversion(record, schema)) as StorageThreadType[];
+      const threads = paginatedRecords.map(record =>
+        processResultWithTypeConversion(record, schema),
+      ) as StorageThreadType[];
 
       return {
         threads,
         total,
         page,
-        perPage,
-        hasMore: total > (page + 1) * perPage,
+        perPage: perPageForResponse,
+        hasMore: offset + perPage < total,
       };
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: 'LANCE_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -523,177 +628,10 @@ export class StoreMemoryLance extends MemoryStorage {
       .map(index => records[index]);
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
-    const page = selectBy?.pagination?.page ?? 0;
-    const perPage = selectBy?.pagination?.perPage ?? 10;
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      // Extract pagination and dateRange from selectBy.pagination
-      const dateRange = selectBy?.pagination?.dateRange;
-      const fromDate = dateRange?.start;
-      const toDate = dateRange?.end;
-
-      const table = await this.client.openTable(TABLE_MESSAGES);
-      const messages: any[] = [];
-
-      // Handle selectBy.include first (before pagination)
-      if (selectBy?.include && Array.isArray(selectBy.include)) {
-        // Get all unique thread IDs from include items
-        const threadIds = [...new Set(selectBy.include.map(item => item.threadId))];
-
-        // Fetch all messages from all relevant threads
-        const allThreadMessages: any[] = [];
-        for (const threadId of threadIds) {
-          const threadQuery = table.query().where(`thread_id = '${threadId}'`);
-          let threadRecords = await threadQuery.toArray();
-
-          // Apply date filtering in JS for context
-          if (fromDate) threadRecords = threadRecords.filter(m => m.createdAt >= fromDate.getTime());
-          if (toDate) threadRecords = threadRecords.filter(m => m.createdAt <= toDate.getTime());
-
-          allThreadMessages.push(...threadRecords);
-        }
-
-        // Sort all messages by createdAt
-        allThreadMessages.sort((a, b) => a.createdAt - b.createdAt);
-
-        // Apply processMessagesWithContext to the combined array
-        const contextMessages = this.processMessagesWithContext(allThreadMessages, selectBy.include);
-        messages.push(...contextMessages);
-      }
-
-      // Build query conditions for the main thread
-      const conditions: string[] = [`thread_id = '${threadId}'`];
-      if (resourceId) {
-        conditions.push(`\`resourceId\` = '${resourceId}'`);
-      }
-      if (fromDate) {
-        conditions.push(`\`createdAt\` >= ${fromDate.getTime()}`);
-      }
-      if (toDate) {
-        conditions.push(`\`createdAt\` <= ${toDate.getTime()}`);
-      }
-
-      // Get total count (excluding already included messages)
-      let total = 0;
-      if (conditions.length > 0) {
-        total = await table.countRows(conditions.join(' AND '));
-      } else {
-        total = await table.countRows();
-      }
-
-      // If no messages and no included messages, return empty result
-      if (total === 0 && messages.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          perPage,
-          hasMore: false,
-        };
-      }
-
-      // Fetch paginated messages (excluding already included ones)
-      const excludeIds = messages.map(m => m.id);
-      let selectedMessages: any[] = [];
-
-      if (selectBy?.last && selectBy.last > 0) {
-        // Handle selectBy.last: get last N messages for the main thread
-        const query = table.query();
-        if (conditions.length > 0) {
-          query.where(conditions.join(' AND '));
-        }
-        let records = await query.toArray();
-        records = records.sort((a, b) => a.createdAt - b.createdAt);
-
-        // Exclude already included messages
-        if (excludeIds.length > 0) {
-          records = records.filter(m => !excludeIds.includes(m.id));
-        }
-
-        selectedMessages = records.slice(-selectBy.last);
-      } else {
-        // Regular pagination
-        const query = table.query();
-        if (conditions.length > 0) {
-          query.where(conditions.join(' AND '));
-        }
-        let records = await query.toArray();
-        records = records.sort((a, b) => a.createdAt - b.createdAt);
-
-        // Exclude already included messages
-        if (excludeIds.length > 0) {
-          records = records.filter(m => !excludeIds.includes(m.id));
-        }
-
-        selectedMessages = records.slice(page * perPage, (page + 1) * perPage);
-      }
-
-      // Merge all messages and deduplicate
-      const allMessages = [...messages, ...selectedMessages];
-      const seen = new Set();
-      const dedupedMessages = allMessages.filter(m => {
-        const key = `${m.id}:${m.thread_id}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      // Convert to correct format (v1/v2)
-      const formattedMessages = dedupedMessages.map((msg: any) => {
-        const { thread_id, ...rest } = msg;
-        return {
-          ...rest,
-          threadId: thread_id,
-          content:
-            typeof msg.content === 'string'
-              ? (() => {
-                  try {
-                    return JSON.parse(msg.content);
-                  } catch {
-                    return msg.content;
-                  }
-                })()
-              : msg.content,
-        };
-      });
-
-      const list = new MessageList().add(formattedMessages, 'memory');
-      return {
-        messages: format === 'v2' ? list.get.all.v2() : list.get.all.v1(),
-        total: total, // Total should be the count of messages matching the filters
-        page,
-        perPage,
-        hasMore: total > (page + 1) * perPage,
-      };
-    } catch (error: any) {
-      const mastraError = new MastraError(
-        {
-          id: 'LANCE_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage, hasMore: false };
-    }
-  }
-
   /**
-   * Parse message data from LanceDB record format to MastraMessageV2 format
+   * Parse message data from LanceDB record format to MastraDBMessage format
    */
-  private parseMessageData(data: any): MastraMessageV2 {
+  private parseMessageData(data: any): MastraDBMessage {
     const { thread_id, ...rest } = data;
     return {
       ...rest,
@@ -710,16 +648,16 @@ export class StoreMemoryLance extends MemoryStorage {
           : data.content,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
-    } as MastraMessageV2;
+    } as MastraDBMessage;
   }
 
   async updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+    messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
 
@@ -727,7 +665,7 @@ export class StoreMemoryLance extends MemoryStorage {
       return [];
     }
 
-    const updatedMessages: MastraMessageV2[] = [];
+    const updatedMessages: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
 
     try {

@@ -21,7 +21,8 @@ import { workflow1 } from "./workflows";
 import { tool1, tool2 } from "./tools";
 
 const agent = new Agent({
-  name: "network-agent",
+  id: "network-agent",
+  name: "Network Agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
   model: openai("gpt-4o"),
@@ -300,11 +301,11 @@ await agent.network(`
         "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "traceId",

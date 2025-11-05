@@ -65,6 +65,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -91,7 +92,7 @@ npm run dev
 
 This will start the Mastra development server.
 
-You can now test your agent by visiting [http://localhost:4111](http://localhost:4111) for the playground or via the Mastra API at [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream).
+You can now test your agent by visiting [http://localhost:4111](http://localhost:4111) and using Studio or via the Mastra API at [http://localhost:4111/api/agents/assistant/stream](http://localhost:4111/api/agents/assistant/stream).
 
 </StepItem>
 
@@ -119,6 +120,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4"),
@@ -138,6 +140,7 @@ const openrouter = createOpenRouter({
 });
 
 export const assistant = new Agent({
+  id: "assistant",
   name: "assistant",
   instructions: "You are a helpful assistant.",
   model: openrouter("anthropic/claude-sonnet-4", {

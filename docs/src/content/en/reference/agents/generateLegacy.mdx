@@ -7,7 +7,7 @@ description: "Documentation for the legacy `Agent.generateLegacy()` method in Ma
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate) method instead. See the [migration guide](../../guides/migrations/vnext-to-standard-apis) for details on upgrading.
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate) method instead.
 
 :::
 
@@ -400,11 +400,11 @@ await agent.generateLegacy("message for agent");
       ],
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "maxTokens",

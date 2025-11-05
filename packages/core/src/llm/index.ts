@@ -1,26 +1,27 @@
+import type { EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult } from '@internal/ai-sdk-v4/embed';
 import type {
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
   CoreSystemMessage as AiCoreSystemMessage,
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
-  EmbedManyResult as AiEmbedManyResult,
-  EmbedResult as AiEmbedResult,
+  UIMessage,
+} from '@internal/ai-sdk-v4/message';
+import type {
   streamText,
   streamObject,
   generateText,
   generateObject,
-  UIMessage,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from 'ai';
+} from '@internal/ai-sdk-v4/model';
 import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
 import type { Run } from '../run/types';
-import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
 
@@ -117,7 +118,7 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   experimental_output?: Z;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   tracingContext: TracingContext;
 } & Run;
 

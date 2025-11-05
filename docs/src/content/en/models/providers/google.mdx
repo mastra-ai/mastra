@@ -8,7 +8,8 @@ description: "Use Google models with Mastra. 24 models available."
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-import { Tabs, Tab } from "@/components/tabs";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 
@@ -21,10 +22,11 @@ GOOGLE_GENERATIVE_AI_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "google/gemini-1.5-flash"
 });
@@ -340,6 +342,7 @@ for await (const chunk of stream) {
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     id: "google/gemini-1.5-flash",
@@ -355,9 +358,10 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "google/gemini-live-2.5-flash-preview-native-audio"
       : "google/gemini-1.5-flash";

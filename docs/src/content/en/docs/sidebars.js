@@ -29,7 +29,7 @@ const sidebars = {
         {
           type: "doc",
           id: "getting-started/studio",
-          label: "Playground",
+          label: "Studio",
         },
         {
           type: "doc",
@@ -112,11 +112,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/error-handling",
           label: "Error Handling",
-        },
-        {
-          type: "doc",
-          id: "workflows/input-data-mapping",
-          label: "Input Data Mapping",
         },
         {
           type: "doc",
@@ -283,8 +278,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "server-db/runtime-context",
-          label: "Runtime Context",
+          id: "server-db/request-context",
+          label: "Request Context",
         },
         {
           type: "doc",
@@ -503,48 +498,27 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Scorers",
+      label: "Evals",
       items: [
         {
           type: "doc",
-          id: "scorers/overview",
+          id: "evals/overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "scorers/off-the-shelf-scorers",
+          id: "evals/off-the-shelf-scorers",
           label: "Off the Shelf Scorers",
         },
         {
           type: "doc",
-          id: "scorers/custom-scorers",
+          id: "evals/custom-scorers",
           label: "Custom Scorers",
         },
         {
-          type: "category",
-          label: "Evals (old API)",
-          items: [
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/textual-evals",
-              label: "Textual Evals",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/custom-eval",
-              label: "Custom Evals",
-            },
-            {
-              type: "doc",
-              id: "scorers/evals-old-api/running-in-ci",
-              label: "Running in CI",
-            },
-          ],
+          type: "doc",
+          id: "evals/running-in-ci",
+          label: "Running in CI",
         },
       ],
     },

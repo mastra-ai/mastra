@@ -1,13 +1,13 @@
-import type { TracingStrategy } from '@mastra/core/ai-tracing';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { TracingStorageStrategy } from '@mastra/core/observability';
 import { AI_SPAN_SCHEMA, ObservabilityStorage, TABLE_AI_SPANS } from '@mastra/core/storage';
 import type {
-  AISpanRecord,
+  SpanRecord,
   AITraceRecord,
   AITracesPaginatedArg,
-  CreateAISpanRecord,
+  CreateSpanRecord,
   PaginationInfo,
-  UpdateAISpanRecord,
+  UpdateSpanRecord,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
@@ -33,9 +33,9 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     this.schema = schema;
   }
 
-  public get aiTracingStrategy(): {
-    preferred: TracingStrategy;
-    supported: TracingStrategy[];
+  public get tracingStrategy(): {
+    preferred: TracingStorageStrategy;
+    supported: TracingStorageStrategy[];
   } {
     return {
       preferred: 'batch-with-updates',
@@ -43,7 +43,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     };
   }
 
-  async createAISpan(span: CreateAISpanRecord): Promise<void> {
+  async createSpan(span: CreateSpanRecord): Promise<void> {
     try {
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
       const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
@@ -84,7 +84,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       const request = this.pool.request();
       request.input('traceId', traceId);
 
-      const result = await request.query<AISpanRecord>(
+      const result = await request.query<SpanRecord>(
         `SELECT
           [traceId], [spanId], [parentSpanId], [name], [scope], [spanType],
           [attributes], [metadata], [links], [input], [output], [error], [isEvent],
@@ -101,7 +101,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       return {
         traceId,
         spans: result.recordset.map(span =>
-          transformFromSqlRow<AISpanRecord>({
+          transformFromSqlRow<SpanRecord>({
             tableName: TABLE_AI_SPANS,
             sqlRow: span,
           }),
@@ -122,14 +122,14 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     try {
       const data: Record<string, any> = { ...updates };
@@ -165,7 +165,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
   async getAITracesPaginated({
     filters,
     pagination,
-  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const { entityId, entityType, ...actualFilters } = filters || {};
@@ -249,12 +249,12 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       dataRequest.input('offset', page * perPage);
       dataRequest.input('limit', perPage);
 
-      const dataResult = await dataRequest.query<AISpanRecord>(
+      const dataResult = await dataRequest.query<SpanRecord>(
         `SELECT * FROM ${tableName}${actualWhereClause} ORDER BY [startedAt] DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
       );
 
       const spans = dataResult.recordset.map(row =>
-        transformFromSqlRow<AISpanRecord>({
+        transformFromSqlRow<SpanRecord>({
           tableName: TABLE_AI_SPANS,
           sqlRow: row,
         }),
@@ -281,7 +281,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     if (!args.records || args.records.length === 0) {
       return;
     }
@@ -310,11 +310,11 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
     if (!args.records || args.records.length === 0) {

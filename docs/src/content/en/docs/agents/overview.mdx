@@ -60,7 +60,8 @@ Create an agent by instantiating the `Agent` class with system `instructions` an
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o-mini",
 });
@@ -108,7 +109,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o-mini"),
 });
@@ -168,7 +170,7 @@ instructions: {
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
 ```typescript {6} showLineNumbers title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { testAgent } from "./agents/test-agent";
 
 export const mastra = new Mastra({
@@ -420,6 +422,8 @@ Agents can use tools to go beyond language generation, enabling structured inter
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   tools: { testTool },
 });
@@ -427,9 +431,9 @@ export const testAgent = new Agent({
 
 > See [Using Tools](./using-tools) for more information.
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use `RuntimeContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use `RequestContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export type UserTier = {
@@ -437,9 +441,11 @@ export type UserTier = {
 };
 
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
-  model: ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  model: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
       ? openai("gpt-4o-mini")
@@ -448,15 +454,15 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Request Context](/docs/server-db/request-context) for more information.
 
-## Testing with Mastra Playground
+## Testing with Studio
 
-Use the Mastra [Playground](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
 - [Using Tools](./using-tools)
 - [Agent Memory](./agent-memory)
-- [Runtime Context](/examples/agents/runtime-context)
+- [Request Context](/examples/agents/request-context)
 - [Calling Agents](/examples/agents/calling-agents)

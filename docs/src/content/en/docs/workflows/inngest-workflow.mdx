@@ -35,7 +35,7 @@ In development
 
 ```ts showLineNumbers copy title="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 export const inngest = new Inngest({
   id: "mastra",
@@ -49,7 +49,7 @@ In production
 
 ```ts showLineNumbers copy title="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
 export const inngest = new Inngest({
   id: "mastra",
@@ -110,7 +110,7 @@ export { workflow as incrementWorkflow };
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
 ```ts showLineNumbers copy title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";
@@ -321,7 +321,7 @@ export const customWebhookFunction = inngest.createFunction(
 Update your Mastra configuration to include the custom functions:
 
 ```ts showLineNumbers copy title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";

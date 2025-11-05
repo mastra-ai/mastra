@@ -15,6 +15,7 @@ const memory = new Memory({
 });
 
 export const flashCardCreatorAgent = new Agent({
+  id: 'flash-card-creator-agent',
   name: 'Flash Card Creator',
   description: 'Creates educational flash cards from PDF documents',
   instructions: `

@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { TemplateInstallationRequest } from '@mastra/client-js';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { useMastraClient } from '@mastra/react';
 import { useState } from 'react';
 
@@ -173,7 +173,7 @@ export const useCreateTemplateInstallRun = () => {
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId?: string }) => {
-      return await client.getAgentBuilderAction('merge-template').createRunAsync({ runId });
+      return await client.getAgentBuilderAction('merge-template').createRun({ runId });
     },
   });
 };
@@ -493,7 +493,7 @@ export const useWatchTemplateInstall = (workflowInfo?: any) => {
 
           // Use correct callback API (fix the TypeScript issue when possible)
           await template.watch(
-            { runId, eventType: 'watch-v2' },
+            { runId, eventType: 'watch' },
             (record: { type: string; payload: any; runId?: string; eventTimestamp?: string }) => {
               try {
                 processTemplateRecord(record);
@@ -625,9 +625,9 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const template = client.getAgentBuilderAction('merge-template');
-          const runtimeContext = new RuntimeContext();
-          runtimeContext.set('selectedModel', selectedModel);
-          const stream = await template.stream({ inputData, runtimeContext }, runId);
+          const requestContext = new RequestContext();
+          requestContext.set('selectedModel', selectedModel);
+          const stream = await template.stream({ inputData, requestContext }, runId);
           await processStream(stream, runId);
 
           // If we get here, the stream completed successfully

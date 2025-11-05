@@ -12,8 +12,10 @@ The Agents API provides methods to interact with Mastra AI agents, including gen
 Retrieve a list of all available agents:
 
 ```typescript
-const agents = await mastraClient.getAgents();
+const agents = await mastraClient.listAgents();
 ```
+
+Returns a record of agent IDs to their serialized agent configurations. See the [Agent class reference](/reference/agents/agent) for details on agent properties.
 
 ## Working with a Specific Agent
 
@@ -32,6 +34,8 @@ Retrieve detailed information about an agent:
 ```typescript
 const details = await agent.details();
 ```
+
+Returns the serialized agent configuration. See the [Agent class reference](/reference/agents/agent) for details on agent properties.
 
 ### Generate Response
 
@@ -97,8 +101,8 @@ const colorChangeTool = createTool({
   inputSchema: z.object({
     color: z.string(),
   }),
-  execute: async ({ context }) => {
-    document.body.style.backgroundColor = context.color;
+  execute: async (inputData) => {
+    document.body.style.backgroundColor = inputData.color;
     return { success: true };
   },
 });

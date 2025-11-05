@@ -1,8 +1,8 @@
-import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
+import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from '@internal/ai-sdk-v4/message';
 import { isToolUIPart } from 'ai-v5';
 import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../index';
+import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
 import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
 import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
@@ -281,7 +281,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with pending state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -322,7 +322,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with result state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -365,7 +365,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert reasoning parts', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -400,7 +400,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert file parts with URL handling', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'user',
           createdAt: new Date(),
@@ -752,7 +752,7 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
 
       // Add a v5 message with reasoning through the conversion pipeline
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -941,7 +941,7 @@ describe('MessageList V5 Support', () => {
 
       // This mimics what happens when the user passes messages to stream
       // with format: 'aisdk' containing file parts with URLs
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'test-msg-1',
         role: 'user',
         content: {
@@ -958,18 +958,18 @@ describe('MessageList V5 Support', () => {
 
       messageList.add(v2Message, 'user');
 
-      // Get V3 messages (internal format used for message processing)
-      const v3Messages = messageList.get.all.v3();
-      const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
+      // Get V5 UI messages (used for message processing)
+      const v5UiMessages = messageList.get.all.aiV5.ui();
+      const v5UiFilePart = v5UiMessages[0].parts.find((p: any) => p.type === 'file');
 
-      if (v3FilePart?.type === 'file') {
-        expect(v3FilePart.url).toBe(imageUrl);
+      if (v5UiFilePart?.type === 'file') {
+        expect(v5UiFilePart.url).toBe(imageUrl);
         // It should NOT be wrapped as a malformed data URI
-        expect(v3FilePart.url).not.toContain('data:image/png;base64,https://');
+        expect(v5UiFilePart.url).not.toContain('data:image/png;base64,https://');
       }
 
       // Get V2 messages back (this is what InputProcessors receive)
-      const v2Messages = messageList.get.all.v2();
+      const v2Messages = messageList.get.all.db();
       const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
 
       // The URL should remain unchanged when converting back to V2
@@ -1166,7 +1166,7 @@ describe('MessageList V5 Support', () => {
     it('should handle tool invocations with missing fields gracefully', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const incompleteToolMessage: MastraMessageV2 = {
+      const incompleteToolMessage: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -1206,7 +1206,7 @@ describe('MessageList V5 Support', () => {
     it('should filter out empty reasoning parts', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const messageWithEmptyReasoning: MastraMessageV2 = {
+      const messageWithEmptyReasoning: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -1293,7 +1293,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'input');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const filePart = v2Messages[0].content.parts.find(p => p.type === 'file');
         expect(filePart).toBeDefined();
@@ -1329,7 +1329,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const textPart = v2Messages[0].content.parts.find(p => p.type === 'text');
         expect(textPart).toBeDefined();
@@ -1366,7 +1366,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const reasoningPart = v2Messages[0].content.parts.find(p => p.type === 'reasoning');
         expect(reasoningPart).toBeDefined();
@@ -1406,7 +1406,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check callProviderMetadata was preserved on tool-invocation
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const toolPart = v2Messages[0].content.parts.find(p => p.type === 'tool-invocation');
         expect(toolPart).toBeDefined();
@@ -1448,7 +1448,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const sourcePart = v2Messages[0].content.parts.find(p => p.type === 'source');
         expect(sourcePart).toBeDefined();
@@ -1495,7 +1495,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and verify all providerMetadata preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         const parts = v2Messages[0].content.parts;
 
         const textPart = parts.find(p => p.type === 'text');

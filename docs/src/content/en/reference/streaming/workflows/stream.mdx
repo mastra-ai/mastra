@@ -10,7 +10,7 @@ The `.stream()` method allows you to monitor the execution of a workflow run, pr
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const { stream } = await run.stream({
   inputData: {
@@ -30,9 +30,9 @@ const { stream } = await run.stream({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -131,4 +131,4 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)

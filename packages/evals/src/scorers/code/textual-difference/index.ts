@@ -1,15 +1,17 @@
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { SequenceMatcher } from 'difflib';
+import { getTextContentFromMastraDBMessage } from '../../utils';
 
 export function createTextualDifferenceScorer() {
   return createScorer({
+    id: 'textual-difference-scorer',
     name: 'Textual Difference Scorer',
     description: 'Calculate textual difference between input and output using sequence matching algorithms.',
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const input = run.input?.inputMessages?.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
+      const output = run.output?.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
       const matcher = new SequenceMatcher(null, input, output);
       const ratio = matcher.ratio();
 

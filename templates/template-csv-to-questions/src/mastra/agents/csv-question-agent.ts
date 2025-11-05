@@ -13,6 +13,7 @@ const memory = new Memory({
 });
 
 export const csvQuestionAgent = new Agent({
+  id: 'csv-question-agent',
   name: 'Generate questions from CSV agent',
   description: 'An agent that can download CSV files, generate summaries, and create questions from CSV content',
   instructions: `

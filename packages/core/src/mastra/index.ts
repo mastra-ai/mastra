@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
-import { getAllAITracing, setupAITracing, shutdownAITracingRegistry } from '../ai-tracing';
-import type { ObservabilityRegistryConfig } from '../ai-tracing';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
 import type { MastraDeployer } from '../deployer';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
@@ -14,8 +13,8 @@ import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
-import type { MastraMemory } from '../memory/memory';
-import type { MastraScorer } from '../scores';
+import type { ObservabilityEntrypoint } from '../observability';
+import { NoOpObservability } from '../observability';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -24,7 +23,6 @@ import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import type { LegacyWorkflow } from '../workflows/legacy';
 import { createOnScorerHook } from './hooks';
 
 /**
@@ -34,7 +32,6 @@ import { createOnScorerHook } from './hooks';
  * with a Mastra instance, including agents, workflows, storage, logging, and more.
  *
  * @template TAgents - Record of agent instances keyed by their names
- * @template TLegacyWorkflows - Record of legacy workflow instances
  * @template TWorkflows - Record of workflow instances
  * @template TVectors - Record of vector store instances
  * @template TTTS - Record of text-to-speech instances
@@ -48,7 +45,8 @@ import { createOnScorerHook } from './hooks';
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You help with weather information',
  *       model: 'openai/gpt-5'
  *     })
@@ -60,7 +58,6 @@ import { createOnScorerHook } from './hooks';
  */
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
     string,
     Workflow<any, any, any, any, any, any>
@@ -96,12 +93,6 @@ export interface Config<
   logger?: TLogger | false;
 
   /**
-   * Legacy workflow definitions for backward compatibility.
-   * @deprecated Use `workflows` instead.
-   */
-  legacy_workflows?: TLegacyWorkflows;
-
-  /**
    * Workflows provide type-safe, composable task execution with built-in error handling.
    */
   workflows?: TWorkflows;
@@ -112,9 +103,21 @@ export interface Config<
   tts?: TTTS;
 
   /**
-   * AI-specific observability configuration for tracking model interactions.
+   * Observability entrypoint for tracking model interactions and tracing.
+   * Pass an instance of the Observability class from @mastra/observability.
+   *
+   * @example
+   * ```typescript
+   * import { Observability } from '@mastra/observability';
+   *
+   * new Mastra({
+   *   observability: new Observability({
+   *     default: { enabled: true }
+   *   })
+   * })
+   * ```
    */
-  observability?: ObservabilityRegistryConfig;
+  observability?: ObservabilityEntrypoint;
 
   /**
    * Custom ID generator function for creating unique identifiers.
@@ -154,19 +157,6 @@ export interface Config<
   scorers?: TScorers;
 
   /**
-   * Server middleware functions to be applied to API routes
-   * Each middleware can specify a path pattern (defaults to '/api/*')
-   * @deprecated use server.middleware instead
-   */
-  serverMiddleware?: Array<{
-    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
-    path?: string;
-  }>;
-
-  // @deprecated add memory to your Agent directly instead
-  memory?: never;
-
-  /**
    * Event handlers for custom application events.
    * Maps event topics to handler functions for event-driven architectures.
    */
@@ -185,7 +175,6 @@ export interface Config<
  * It coordinates the interaction between agents, workflows, storage systems, and other services.
 
  * @template TAgents - Record of agent instances keyed by their names
- * @template TLegacyWorkflows - Record of legacy workflow instances for backward compatibility
  * @template TWorkflows - Record of modern workflow instances
  * @template TVectors - Record of vector store instances for semantic search and RAG
  * @template TTTS - Record of text-to-speech provider instances
@@ -199,7 +188,8 @@ export interface Config<
  * const mastra = new Mastra({
  *   agents: {
  *     weatherAgent: new Agent({
- *       name: 'weather-agent',
+ *       id: 'weather-agent',
+ *       name: 'Weather Agent',
  *       instructions: 'You provide weather information',
  *       model: 'openai/gpt-5',
  *       tools: [getWeatherTool]
@@ -213,7 +203,6 @@ export interface Config<
  */
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
-  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow<any, any, any, any, any, any>> = Record<
     string,
     Workflow<any, any, any, any, any, any>
@@ -227,8 +216,8 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
-  #legacy_workflows: TLegacyWorkflows;
   #workflows: TWorkflows;
+  #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -237,7 +226,6 @@ export class Mastra<
   }> = [];
 
   #storage?: MastraStorage;
-  #memory?: MastraMemory;
   #scorers?: TScorers;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
@@ -250,20 +238,6 @@ export class Mastra<
   #internalMastraWorkflows: Record<string, Workflow> = {};
   // This is only used internally for server handlers that require temporary persistence
   #serverCache: MastraServerCache;
-
-  /**
-   * @deprecated use getStorage() instead
-   */
-  get storage() {
-    return this.#storage;
-  }
-
-  /**
-   * @deprecated use getMemory() instead
-   */
-  get memory() {
-    return this.#memory;
-  }
 
   get pubsub() {
     return this.#pubsub;
@@ -348,7 +322,8 @@ export class Mastra<
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
-   *       name: 'assistant',
+   *       id: 'assistant',
+   *       name: 'Assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
    *     })
@@ -361,15 +336,7 @@ export class Mastra<
    * });
    * ```
    */
-  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
-    // Store server middleware with default path
-    if (config?.serverMiddleware) {
-      this.#serverMiddleware = config.serverMiddleware.map(m => ({
-        handler: m.handler,
-        path: m.path || '/api/*',
-      }));
-    }
-
+  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger, TMCPServers, TScorers>) {
     /*
     Server Cache
     */
@@ -435,12 +402,23 @@ export class Mastra<
       storage = augmentWithInit(storage);
     }
 
-    /*
-    AI Tracing
-    */
-
+    // Validate and assign observability instance
     if (config?.observability) {
-      setupAITracing(config.observability);
+      if (typeof config.observability.getDefaultInstance === 'function') {
+        this.#observability = config.observability;
+        // Set logger early
+        this.#observability.setLogger({ logger: this.#logger });
+      } else {
+        this.#logger?.warn(
+          'Observability configuration error: Expected an Observability instance, but received a config object. ' +
+            'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ default: { enabled: true } }). ' +
+            'Observability has been disabled.',
+        );
+        this.#observability = new NoOpObservability();
+      }
+    } else {
+      this.#observability = new NoOpObservability();
     }
 
     /*
@@ -470,25 +448,6 @@ export class Mastra<
       });
     }
 
-    if (config && `memory` in config) {
-      const error = new MastraError({
-        id: 'MASTRA_CONSTRUCTOR_INVALID_MEMORY_CONFIG',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `
-  Memory should be added to Agents, not to Mastra.
-
-Instead of:
-  new Mastra({ memory: new Memory() })
-
-do:
-  new Agent({ memory: new Memory() })
-`,
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
     if (config?.tts) {
       this.#tts = config.tts;
     }
@@ -516,8 +475,7 @@ do:
 
         agent.__registerPrimitives({
           logger: this.getLogger(),
-          storage: this.storage,
-          memory: this.memory,
+          storage: this.getStorage(),
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -541,43 +499,13 @@ do:
     }
     this.#scorers = scorers as TScorers;
 
-    /*
-    Legacy Workflows
-    */
-    this.#legacy_workflows = {} as TLegacyWorkflows;
-
-    if (config?.legacy_workflows) {
-      Object.entries(config.legacy_workflows).forEach(([key, workflow]) => {
-        workflow.__registerMastra(this);
-        workflow.__registerPrimitives({
-          logger: this.getLogger(),
-          storage: this.storage,
-          memory: this.memory,
-          agents: agents,
-          tts: this.#tts,
-          vectors: this.#vectors,
-        });
-        // @ts-ignore
-        this.#legacy_workflows[key] = workflow;
-
-        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
-        if (workflowSteps.length > 0) {
-          workflowSteps.forEach(step => {
-            // @ts-ignore
-            this.#legacy_workflows[step.workflowId] = step.workflow;
-          });
-        }
-      });
-    }
-
     this.#workflows = {} as TWorkflows;
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         workflow.__registerMastra(this);
         workflow.__registerPrimitives({
           logger: this.getLogger(),
-          storage: this.storage,
-          memory: this.memory,
+          storage: this.getStorage(),
           agents: agents,
           tts: this.#tts,
           vectors: this.#vectors,
@@ -594,55 +522,11 @@ do:
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
-      Register Mastra instance with AI tracing exporters and initialize them
+      Initialize observability with Mastra context (after storage configured)
     */
-    if (config?.observability) {
-      this.registerAITracingExporters();
-      this.initAITracingExporters();
-    }
+    this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
-  }
-
-  /**
-   * Register this Mastra instance with AI tracing exporters that need it
-   */
-  private registerAITracingExporters(): void {
-    const allTracingInstances = getAllAITracing();
-    allTracingInstances.forEach(tracing => {
-      const exporters = tracing.getExporters();
-      exporters.forEach(exporter => {
-        // Check if exporter has __registerMastra method
-        if ('__registerMastra' in exporter && typeof (exporter as any).__registerMastra === 'function') {
-          (exporter as any).__registerMastra(this);
-        }
-      });
-    });
-  }
-
-  /**
-   * Initialize all AI tracing exporters after registration is complete
-   */
-  private initAITracingExporters(): void {
-    const allTracingInstances = getAllAITracing();
-
-    allTracingInstances.forEach(tracing => {
-      const config = tracing.getConfig();
-      const exporters = tracing.getExporters();
-      exporters.forEach(exporter => {
-        // Initialize exporter if it has an init method
-        if ('init' in exporter && typeof exporter.init === 'function') {
-          try {
-            exporter.init(config);
-          } catch (error) {
-            this.#logger?.warn('Failed to initialize AI tracing exporter', {
-              exporterName: exporter.name,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-      });
-    });
   }
 
   /**
@@ -656,6 +540,7 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     weatherAgent: new Agent({
+   *       id: 'weather-agent',
    *       name: 'weather-agent',
    *       instructions: 'You provide weather information',
    *       model: 'openai/gpt-5'
@@ -691,7 +576,7 @@ do:
    *
    * This method searches for an agent using its internal ID property. If no agent
    * is found with the given ID, it also attempts to find an agent using the ID as
-   * a name (for backward compatibility).
+   * a name.
    *
    * @throws {MastraError} When no agent is found with the specified ID
    *
@@ -700,6 +585,7 @@ do:
    * const mastra = new Mastra({
    *   agents: {
    *     assistant: new Agent({
+   *       id: 'assistant',
    *       name: 'assistant',
    *       instructions: 'You are a helpful assistant',
    *       model: 'openai/gpt-5'
@@ -751,16 +637,16 @@ do:
    * ```typescript
    * const mastra = new Mastra({
    *   agents: {
-   *     weatherAgent: new Agent({ name: 'weather', model: openai('gpt-4o') }),
-   *     supportAgent: new Agent({ name: 'support', model: openai('gpt-4o') })
+   *     weatherAgent: new Agent({ id: 'weather-agent', name: 'weather', model: openai('gpt-4o') }),
+   *     supportAgent: new Agent({ id: 'support-agent', name: 'support', model: openai('gpt-4o') })
    *   }
    * });
    *
-   * const allAgents = mastra.getAgents();
+   * const allAgents = mastra.listAgents();
    * console.log(Object.keys(allAgents)); // ['weatherAgent', 'supportAgent']
    * ```
    */
-  public getAgents() {
+  public listAgents() {
     return this.#agents;
   }
 
@@ -874,57 +760,6 @@ do:
   }
 
   /**
-   * Retrieves a registered legacy workflow by its ID.
-   *
-   * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use the
-   * modern workflow system accessed via `getWorkflow()`.
-   *
-   * @template TWorkflowId - The specific workflow ID type from the registered legacy workflows
-   * @throws {MastraError} When the legacy workflow with the specified ID is not found
-   * @deprecated Use `getWorkflow()` for new implementations
-   *
-   * @example Getting a legacy workflow
-   * ```typescript
-   * const mastra = new Mastra({
-   *   legacy_workflows: {
-   *     oldDataFlow: legacyWorkflowInstance
-   *   }
-   * });
-   *
-   * const workflow = mastra.legacy_getWorkflow('oldDataFlow');
-   * const result = await workflow.execute({ input: 'data' });
-   * ```
-   */
-  public legacy_getWorkflow<TWorkflowId extends keyof TLegacyWorkflows>(
-    id: TWorkflowId,
-    { serialized }: { serialized?: boolean } = {},
-  ): TLegacyWorkflows[TWorkflowId] {
-    const workflow = this.#legacy_workflows?.[id];
-    if (!workflow) {
-      const error = new MastraError({
-        id: 'MASTRA_GET_LEGACY_WORKFLOW_BY_ID_NOT_FOUND',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Workflow with ID ${String(id)} not found`,
-        details: {
-          status: 404,
-          workflowId: String(id),
-          workflows: Object.keys(this.#legacy_workflows ?? {}).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
-    if (serialized) {
-      return { name: workflow.name } as TLegacyWorkflows[TWorkflowId];
-    }
-
-    return workflow;
-  }
-
-  /**
    * Retrieves a registered workflow by its ID.
    *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
@@ -983,7 +818,7 @@ do:
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
-      storage: this.storage,
+      storage: this.getStorage(),
     });
     this.#internalMastraWorkflows[workflow.id] = workflow;
   }
@@ -1015,7 +850,7 @@ do:
    *
    * This method searches for a workflow using its internal ID property. If no workflow
    * is found with the given ID, it also attempts to find a workflow using the ID as
-   * a name (for backward compatibility).
+   * a name.
    *
    * @throws {MastraError} When no workflow is found with the specified ID
    *
@@ -1070,44 +905,6 @@ do:
   }
 
   /**
-   * Returns all registered legacy workflows as a record keyed by their IDs.
-   *
-   * Legacy workflows are the previous generation of workflow system in Mastra,
-   * maintained for backward compatibility. For new implementations, use `getWorkflows()`.
-   *
-   * @deprecated Use `getWorkflows()` for new implementations
-   *
-   * @example Listing all legacy workflows
-   * ```typescript
-   * const mastra = new Mastra({
-   *   legacy_workflows: {
-   *     oldFlow1: legacyWorkflow1,
-   *     oldFlow2: legacyWorkflow2
-   *   }
-   * });
-   *
-   * const allLegacyWorkflows = mastra.legacy_getWorkflows();
-   * console.log(Object.keys(allLegacyWorkflows)); // ['oldFlow1', 'oldFlow2']
-   *
-   * // Execute all legacy workflows
-   * for (const [id, workflow] of Object.entries(allLegacyWorkflows)) {
-   *   console.log(`Legacy workflow ${id}:`, workflow.name);
-   * }
-   * ```
-   */
-  public legacy_getWorkflows(props: { serialized?: boolean } = {}): Record<string, LegacyWorkflow> {
-    if (props.serialized) {
-      return Object.entries(this.#legacy_workflows).reduce((acc, [k, v]) => {
-        return {
-          ...acc,
-          [k]: { name: v.name },
-        };
-      }, {});
-    }
-    return this.#legacy_workflows;
-  }
-
-  /**
    * Returns all registered scorers as a record keyed by their IDs.
    *
    * @example Listing all scorers
@@ -1122,16 +919,16 @@ do:
    *   }
    * });
    *
-   * const allScorers = mastra.getScorers();
+   * const allScorers = mastra.listScorers();
    * console.log(Object.keys(allScorers)); // ['helpfulness', 'accuracy', 'relevance']
    *
    * // Check scorer configurations
    * for (const [id, scorer] of Object.entries(allScorers)) {
-   *   console.log(`Scorer ${id}:`, scorer.name, scorer.description);
+   *   console.log(`Scorer ${id}:`, scorer.id, scorer.name, scorer.description);
    * }
    * ```
    */
-  public getScorers() {
+  public listScorers() {
     return this.#scorers;
   }
 
@@ -1206,25 +1003,25 @@ do:
    * });
    *
    * // Find scorer by its internal name, not the registration key
-   * const scorer = mastra.getScorerByName('helpfulness-evaluator');
+   * const scorer = mastra.getScorerById('helpfulness-evaluator');
    * const score = await scorer.score({
    *   input: 'question',
    *   output: 'answer'
    * });
    * ```
    */
-  public getScorerByName(name: string): MastraScorer<any, any, any, any> {
+  public getScorerById(id: string): MastraScorer<any, any, any, any> {
     for (const [_key, value] of Object.entries(this.#scorers ?? {})) {
-      if (value.name === name) {
+      if (value.id === id || value?.name === id) {
         return value;
       }
     }
 
     const error = new MastraError({
-      id: 'MASTRA_GET_SCORER_BY_NAME_NOT_FOUND',
+      id: 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND',
       domain: ErrorDomain.MASTRA,
       category: ErrorCategory.USER,
-      text: `Scorer with name ${String(name)} not found`,
+      text: `Scorer with id ${String(id)} not found`,
     });
     this.#logger?.trackException(error);
     throw error;
@@ -1243,7 +1040,7 @@ do:
    *   }
    * });
    *
-   * const allWorkflows = mastra.getWorkflows();
+   * const allWorkflows = mastra.listWorkflows();
    * console.log(Object.keys(allWorkflows)); // ['dataProcessor', 'emailSender', 'reportGenerator']
    *
    * // Execute all workflows with sample data
@@ -1253,7 +1050,7 @@ do:
    * }
    * ```
    */
-  public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+  public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
     if (props.serialized) {
       return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
         return {
@@ -1279,6 +1076,7 @@ do:
    *
    * // Now agents can use memory with the storage
    * const agent = new Agent({
+   *   id: 'assistant',
    *   name: 'assistant',
    *   memory: new Memory({ storage: mastra.getStorage() })
    * });
@@ -1295,10 +1093,6 @@ do:
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
       });
-    }
-
-    if (this.#memory) {
-      this.#memory.__setLogger(this.#logger);
     }
 
     if (this.#deployer) {
@@ -1327,11 +1121,7 @@ do:
       });
     }
 
-    // Set logger for AI tracing instances
-    const allTracingInstances = getAllAITracing();
-    allTracingInstances.forEach(instance => {
-      instance.__setLogger(this.#logger);
-    });
+    this.#observability.setLogger({ logger: this.#logger });
   }
 
   /**
@@ -1381,32 +1171,6 @@ do:
   }
 
   /**
-   * Gets the currently configured memory instance.
-   *
-   * @deprecated Memory should be configured directly on agents instead of on the Mastra instance.
-   * Use `new Agent({ memory: new Memory() })` instead.
-   *
-   * @example Legacy memory usage (deprecated)
-   * ```typescript
-   * // This approach is deprecated
-   * const mastra = new Mastra({
-   *   // memory: new Memory() // This is no longer supported
-   * });
-   *
-   * // Use this instead:
-   * const agent = new Agent({
-   *   name: 'assistant',
-   *   memory: new Memory({
-   *     storage: new LibSQLStore({ url: ':memory:' })
-   *   })
-   * });
-   * ```
-   */
-  public getMemory() {
-    return this.#memory;
-  }
-
-  /**
    * Gets the currently configured storage provider.
    *
    * @example
@@ -1417,6 +1181,7 @@ do:
    *
    * // Use the storage in agent memory
    * const agent = new Agent({
+   *   id: 'assistant',
    *   name: 'assistant',
    *   memory: new Memory({
    *     storage: mastra.getStorage()
@@ -1426,6 +1191,10 @@ do:
    */
   public getStorage() {
     return this.#storage;
+  }
+
+  get observability(): ObservabilityEntrypoint {
+    return this.#observability;
   }
 
   public getServerMiddleware() {
@@ -1480,7 +1249,7 @@ do:
     return this.#bundler;
   }
 
-  public async getLogsByRunId({
+  public async listLogsByRunId({
     runId,
     transportId,
     fromDate,
@@ -1501,7 +1270,7 @@ do:
   }) {
     if (!transportId) {
       const error = new MastraError({
-        id: 'MASTRA_GET_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
+        id: 'MASTRA_LIST_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
         text: 'Transport ID is required',
@@ -1514,12 +1283,12 @@ do:
       throw error;
     }
 
-    if (!this.#logger?.getLogsByRunId) {
+    if (!this.#logger?.listLogsByRunId) {
       const error = new MastraError({
         id: 'MASTRA_GET_LOGS_BY_RUN_ID_LOGGER_NOT_CONFIGURED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.SYSTEM,
-        text: 'Logger is not configured or does not support getLogsByRunId operation',
+        text: 'Logger is not configured or does not support listLogsByRunId operation',
         details: {
           runId,
           transportId,
@@ -1529,7 +1298,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogsByRunId({
+    return await this.#logger.listLogsByRunId({
       runId,
       transportId,
       fromDate,
@@ -1541,7 +1310,7 @@ do:
     });
   }
 
-  public async getLogs(
+  public async listLogs(
     transportId: string,
     params?: {
       fromDate?: Date;
@@ -1579,7 +1348,7 @@ do:
       throw error;
     }
 
-    return await this.#logger.getLogs(transportId, params);
+    return await this.#logger.listLogs(transportId, params);
   }
 
   /**
@@ -1598,7 +1367,7 @@ do:
    * const mcpServers = mastra.getMCPServers();
    * if (mcpServers) {
    *   const fsServer = mcpServers.filesystem;
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */
@@ -1627,7 +1396,7 @@ do:
    *
    * const fsServer = mastra.getMCPServer('fs-server');
    * if (fsServer) {
-   *   const tools = await fsServer.getTools();
+   *   const tools = await fsServer.listTools();
    * }
    * ```
    */
@@ -1728,7 +1497,7 @@ do:
    * Gracefully shuts down the Mastra instance and cleans up all resources.
    *
    * This method performs a clean shutdown of all Mastra components, including:
-   * - AI tracing registry and all tracing instances
+   * - tracing registry and all tracing instances
    * - Event engine and pub/sub system
    * - All registered components and their resources
    *
@@ -1750,9 +1519,9 @@ do:
    * ```
    */
   async shutdown(): Promise<void> {
-    // Shutdown AI tracing registry and all instances
-    await shutdownAITracingRegistry();
     await this.stopEventEngine();
+    // Shutdown observability registry, exporters, etc...
+    await this.#observability.shutdown();
 
     this.#logger?.info('Mastra shutdown completed');
   }

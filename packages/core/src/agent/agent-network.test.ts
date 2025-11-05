@@ -1,17 +1,18 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../runtime-context';
+import { MockMemory } from '../memory/mock';
+import { RequestContext } from '../request-context';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { MockMemory } from './test-utils';
 import { Agent } from './index';
 
 describe('Agent - network', () => {
   const memory = new MockMemory();
 
   const agent1 = new Agent({
-    name: 'agent1',
+    id: 'agent1',
+    name: 'Research Agent',
     instructions:
       'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
     description:
@@ -20,7 +21,8 @@ describe('Agent - network', () => {
   });
 
   const agent2 = new Agent({
-    name: 'agent2',
+    id: 'agent2',
+    name: 'Text Synthesis Agent',
     description:
       'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
     instructions:
@@ -87,6 +89,35 @@ describe('Agent - network', () => {
     .then(agentStep2)
     .commit();
 
+  const agentStep1WithStream = createStep(agent1);
+
+  const agentStep2WithStream = createStep(agent2);
+
+  const workflow1WithAgentStream = createWorkflow({
+    id: 'workflow1',
+    description: 'This workflow is perfect for researching a specific topic.',
+    steps: [],
+    inputSchema: z.object({
+      researchTopic: z.string(),
+    }),
+    outputSchema: z.object({
+      text: z.string(),
+    }),
+  })
+    .map(async ({ inputData }) => {
+      return {
+        prompt: inputData.researchTopic,
+      };
+    })
+    .then(agentStep1WithStream)
+    .map(async ({ inputData }) => {
+      return {
+        prompt: inputData.text,
+      };
+    })
+    .then(agentStep2WithStream)
+    .commit();
+
   const tool = createTool({
     id: 'tool1',
     description: 'This tool will tell you about "cool stuff"',
@@ -96,15 +127,15 @@ describe('Agent - network', () => {
     outputSchema: z.object({
       text: z.string(),
     }),
-    execute: async ({ context, ...rest }) => {
-      await rest.writer?.write({
+    execute: async (inputData, context) => {
+      await context?.writer?.write({
         type: 'my-custom-tool-payload',
         payload: {
-          context,
+          context: inputData,
         },
       });
 
-      return { text: `This is a test tool. How cool is the stuff? ${context.howCool}` };
+      return { text: `This is a test tool. How cool is the stuff? ${inputData.howCool}` };
     },
   });
 
@@ -127,11 +158,30 @@ describe('Agent - network', () => {
     memory,
   });
 
-  const runtimeContext = new RuntimeContext();
+  const networkWithWflowAgentStream = new Agent({
+    id: 'test-network-with-workflow-agent-stream',
+    name: 'Test Network',
+    instructions:
+      'You can research anything. You can also synthesize research material. You can also write a full report based on the researched material.',
+    model: openai('gpt-4o-mini'),
+    agents: {
+      agent1,
+      agent2,
+    },
+    workflows: {
+      workflow1WithAgentStream,
+    },
+    tools: {
+      tool,
+    },
+    memory,
+  });
+
+  const requestContext = new RequestContext();
 
   it('LOOP - execute a single tool', async () => {
     const anStream = await network.network('Execute tool1', {
-      runtimeContext,
+      requestContext,
     });
 
     for await (const _chunk of anStream) {
@@ -141,7 +191,7 @@ describe('Agent - network', () => {
 
   it('LOOP - execute a single workflow', async () => {
     const anStream = await network.network('Execute workflow1 on Paris', {
-      runtimeContext,
+      requestContext,
     });
 
     for await (const _chunk of anStream) {
@@ -151,7 +201,7 @@ describe('Agent - network', () => {
 
   it('LOOP - execute a single agent', async () => {
     const anStream = await network.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     for await (const _chunk of anStream) {
@@ -163,7 +213,7 @@ describe('Agent - network', () => {
     const anStream = await network.network(
       'Research dolphins then execute workflow1 based on the location where dolphins live',
       {
-        runtimeContext,
+        requestContext,
         maxSteps: 3,
       },
     );
@@ -175,7 +225,7 @@ describe('Agent - network', () => {
 
   it('LOOP - should track usage data from agent.network()', async () => {
     const anStream = await network.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream to trigger usage collection
@@ -189,6 +239,103 @@ describe('Agent - network', () => {
     expect(usage.inputTokens).toBeGreaterThan(0);
     expect(usage.outputTokens).toBeGreaterThan(0);
     expect(usage.totalTokens).toBeGreaterThan(0);
+  });
+
+  it('LOOP - should track usage data from workflow with agent stream agent.network()', async () => {
+    const anStream = await networkWithWflowAgentStream.network('Research dolphins', {
+      requestContext,
+    });
+
+    let networkUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+    };
+
+    // Consume the stream to trigger usage collection
+    for await (const _chunk of anStream) {
+      if (
+        _chunk.type === 'routing-agent-end' ||
+        _chunk.type === 'agent-execution-end' ||
+        _chunk.type === 'workflow-execution-end'
+      ) {
+        if (_chunk.payload?.usage) {
+          networkUsage.inputTokens += parseInt(_chunk.payload.usage?.inputTokens?.toString() ?? '0', 10);
+          networkUsage.outputTokens += parseInt(_chunk.payload.usage?.outputTokens?.toString() ?? '0', 10);
+          networkUsage.totalTokens += parseInt(_chunk.payload.usage?.totalTokens?.toString() ?? '0', 10);
+          networkUsage.reasoningTokens += parseInt(_chunk.payload.usage?.reasoningTokens?.toString() ?? '0', 10);
+          networkUsage.cachedInputTokens += parseInt(_chunk.payload.usage?.cachedInputTokens?.toString() ?? '0', 10);
+        }
+      }
+    }
+
+    // Check that usage data is available
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+    expect(usage.inputTokens).toBe(networkUsage.inputTokens);
+    expect(usage.outputTokens).toBe(networkUsage.outputTokens);
+    expect(usage.totalTokens).toBe(networkUsage.totalTokens);
+    expect(usage.reasoningTokens).toBe(networkUsage.reasoningTokens);
+    expect(usage.cachedInputTokens).toBe(networkUsage.cachedInputTokens);
+  });
+
+  it('LOOP - should track usage data from agent in agent.network()', async () => {
+    const anStream = await networkWithWflowAgentStream.network('Research dolphins using agent1', {
+      requestContext,
+    });
+
+    let networkUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+    };
+
+    let finishUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      reasoningTokens: 0,
+      cachedInputTokens: 0,
+    };
+
+    // Consume the stream to trigger usage collection
+    for await (const _chunk of anStream) {
+      if (
+        _chunk.type === 'routing-agent-end' ||
+        _chunk.type === 'agent-execution-end' ||
+        _chunk.type === 'workflow-execution-end'
+      ) {
+        if (_chunk.payload?.usage) {
+          networkUsage.inputTokens += parseInt(_chunk.payload.usage?.inputTokens?.toString() ?? '0', 10);
+          networkUsage.outputTokens += parseInt(_chunk.payload.usage?.outputTokens?.toString() ?? '0', 10);
+          networkUsage.totalTokens += parseInt(_chunk.payload.usage?.totalTokens?.toString() ?? '0', 10);
+          networkUsage.reasoningTokens += parseInt(_chunk.payload.usage?.reasoningTokens?.toString() ?? '0', 10);
+          networkUsage.cachedInputTokens += parseInt(_chunk.payload.usage?.cachedInputTokens?.toString() ?? '0', 10);
+        }
+      }
+
+      if (_chunk.type === 'network-execution-event-finish') {
+        finishUsage = _chunk.payload.usage as any;
+      }
+    }
+
+    // Check that usage data is available
+    const usage = await anStream.usage;
+    expect(usage).toBeDefined();
+    expect(usage.inputTokens).toBe(networkUsage.inputTokens);
+    expect(usage.outputTokens).toBe(networkUsage.outputTokens);
+    expect(usage.totalTokens).toBe(networkUsage.totalTokens);
+    expect(usage.reasoningTokens).toBe(networkUsage.reasoningTokens);
+    expect(usage.cachedInputTokens).toBe(networkUsage.cachedInputTokens);
+    expect(usage.inputTokens).toBe(finishUsage.inputTokens);
+    expect(usage.outputTokens).toBe(finishUsage.outputTokens);
+    expect(usage.totalTokens).toBe(finishUsage.totalTokens);
+    expect(usage.reasoningTokens).toBe(finishUsage.reasoningTokens);
+    expect(usage.cachedInputTokens).toBe(finishUsage.cachedInputTokens);
   });
 
   it('Should throw if memory is not configured', async () => {
@@ -267,7 +414,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkWithTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream
@@ -321,7 +468,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkWithTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
       memory: {
         thread: 'test-network-with-title',
         resource: 'test-network-with-title',
@@ -377,7 +524,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkNoTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
     });
 
     // Consume the stream
@@ -417,7 +564,7 @@ describe('Agent - network', () => {
     });
 
     const anStream = await networkNoTitle.network('Research dolphins', {
-      runtimeContext,
+      requestContext,
       memory: {
         thread: 'test-network-no-title',
         resource: 'test-network-no-title',

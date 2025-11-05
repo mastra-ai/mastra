@@ -11,7 +11,7 @@ export const useTraceSpanScores = ({ traceId = '', spanId = '', page }: useTrace
   const client = useMastraClient();
   return useQuery({
     queryKey: ['trace-span-scores', traceId, spanId, page],
-    queryFn: () => client.getScoresBySpan({ traceId, spanId, page: page || 0, perPage: 10 }),
+    queryFn: () => client.listScoresBySpan({ traceId, spanId, page: page || 0, perPage: 10 }),
     enabled: !!traceId && !!spanId,
     refetchInterval: 3000,
     gcTime: 0,

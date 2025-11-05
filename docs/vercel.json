@@ -57,12 +57,12 @@
     },
     {
       "source": "/docs/evals/01-textual-evals",
-      "destination": "/docs/evals/textual-evals",
+      "destination": "/docs/evals/off-the-shelf-scorers",
       "permanent": true
     },
     {
       "source": "/docs/evals/02-custom-eval",
-      "destination": "/docs/evals/custom-eval",
+      "destination": "/docs/evals/custom-scorers",
       "permanent": true
     },
     {
@@ -1042,87 +1042,87 @@
     },
     {
       "source": "/examples/scorers/answer-relevancy",
-      "destination": "/reference/scorers/answer-relevancy",
+      "destination": "/reference/evals/answer-relevancy",
       "permanent": true
     },
     {
       "source": "/examples/scorers/answer-similarity",
-      "destination": "/reference/scorers/answer-similarity",
+      "destination": "/reference/evals/answer-similarity",
       "permanent": true
     },
     {
       "source": "/examples/scorers/bias",
-      "destination": "/reference/scorers/bias",
+      "destination": "/reference/evals/bias",
       "permanent": true
     },
     {
       "source": "/examples/scorers/completeness",
-      "destination": "/reference/scorers/completeness",
+      "destination": "/reference/evals/completeness",
       "permanent": true
     },
     {
       "source": "/examples/scorers/content-similarity",
-      "destination": "/reference/scorers/content-similarity",
+      "destination": "/reference/evals/content-similarity",
       "permanent": true
     },
     {
       "source": "/examples/scorers/context-precision",
-      "destination": "/reference/scorers/context-precision",
+      "destination": "/reference/evals/context-precision",
       "permanent": true
     },
     {
       "source": "/examples/scorers/context-relevance",
-      "destination": "/reference/scorers/context-relevance",
+      "destination": "/reference/evals/context-relevance",
       "permanent": true
     },
     {
       "source": "/examples/scorers/faithfulness",
-      "destination": "/reference/scorers/faithfulness",
+      "destination": "/reference/evals/faithfulness",
       "permanent": true
     },
     {
       "source": "/examples/scorers/hallucination",
-      "destination": "/reference/scorers/hallucination",
+      "destination": "/reference/evals/hallucination",
       "permanent": true
     },
     {
       "source": "/examples/scorers/keyword-coverage",
-      "destination": "/reference/scorers/keyword-coverage",
+      "destination": "/reference/evals/keyword-coverage",
       "permanent": true
     },
     {
       "source": "/examples/scorers/textual-difference",
-      "destination": "/reference/scorers/textual-difference",
+      "destination": "/reference/evals/textual-difference",
       "permanent": true
     },
     {
       "source": "/examples/scorers/tone-consistency",
-      "destination": "/reference/scorers/tone-consistency",
+      "destination": "/reference/evals/tone-consistency",
       "permanent": true
     },
     {
       "source": "/examples/scorers/tool-call-accuracy",
-      "destination": "/reference/scorers/tool-call-accuracy",
+      "destination": "/reference/evals/tool-call-accuracy",
       "permanent": true
     },
     {
       "source": "/examples/scorers/prompt-alignment",
-      "destination": "/reference/scorers/prompt-alignment",
+      "destination": "/reference/evals/prompt-alignment",
       "permanent": true
     },
     {
       "source": "/examples/scorers/noise-sensitivity",
-      "destination": "/reference/scorers/noise-sensitivity",
+      "destination": "/reference/evals/noise-sensitivity",
       "permanent": true
     },
     {
       "source": "/examples/scorers/toxicity",
-      "destination": "/reference/scorers/toxicity",
+      "destination": "/reference/evals/toxicity",
       "permanent": true
     },
     {
       "source": "/examples/scorers/custom-scorer",
-      "destination": "/docs/scorers/custom-scorers",
+      "destination": "/docs/evals/custom-scorers",
       "permanent": true
     },
     {
@@ -1132,27 +1132,27 @@
     },
     {
       "source": "/docs/evals",
-      "destination": "/docs/scorers/evals-old-api",
+      "destination": "/docs/evals/overview",
       "permanent": true
     },
     {
       "source": "/docs/evals/overview",
-      "destination": "/docs/scorers/evals-old-api/overview",
+      "destination": "/docs/evals/overview",
       "permanent": true
     },
     {
       "source": "/docs/evals/custom-eval",
-      "destination": "/docs/scorers/evals-old-api/custom-eval",
+      "destination": "/docs/evals/custom-scorers",
       "permanent": true
     },
     {
       "source": "/docs/evals/running-in-ci",
-      "destination": "/docs/scorers/evals-old-api/running-in-ci",
+      "destination": "/docs/evals/running-in-ci",
       "permanent": true
     },
     {
       "source": "/docs/evals/textual-evals",
-      "destination": "/docs/scorers/evals-old-api/textual-evals",
+      "destination": "/docs/evals/off-the-shelf-scorers",
       "permanent": true
     },
     {
@@ -1168,6 +1168,296 @@
     {
       "source": "/docs/workflows/pausing-execution",
       "destination": "/docs/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getAgents",
+      "destination": "/reference/core/listAgents",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getScorers",
+      "destination": "/reference/core/listScorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getLogs",
+      "destination": "/reference/core/listLogs",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getLogsByRunId",
+      "destination": "/reference/core/listLogsByRunId",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getWorkflows",
+      "destination": "/reference/core/listWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getTools",
+      "destination": "/reference/agents/listTools",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getWorkflows",
+      "destination": "/reference/agents/listWorkflows",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getScorers",
+      "destination": "/reference/agents/listScorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/workflows-legacy",
+      "destination": "/reference/client-js/workflows",
+      "permanent": true
+    },
+    {
+      "source": "/examples/workflows_legacy/:path*",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/workflows-legacy/:path*",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/evals-old-api/custom-eval",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/evals-old-api/overview",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/evals-old-api/running-in-ci",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/evals-old-api/textual-evals",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/answer-relevancy",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/bias",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/completeness",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/content-similarity",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/context-position",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/context-precision",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/context-relevancy",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/contextual-recall",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/custom-llm-judge-eval",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/custom-native-javascript-eval",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/faithfulness",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/hallucination",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/keyword-coverage",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/prompt-alignment",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/summarization",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/textual-difference",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/tone-consistency",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/toxicity",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/answer-relevancy",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/bias",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/completeness",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/content-similarity",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/context-position",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/context-precision",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/context-relevancy",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/contextual-recall",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/faithfulness",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/hallucination",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/keyword-coverage",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/prompt-alignment",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/summarization",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/textual-difference",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/tone-consistency",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/evals/toxicity",
+      "destination": "/docs/evals/off-the-shelf-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/runtime-context",
+      "destination": "/docs/server-db/request-context",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/runtime-context",
+      "destination": "/examples/agents/request-context",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/input-data-mapping",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/getThreadsByResourceId",
+      "destination": "/reference/memory/listThreadsByResourceId",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/getThreadsByResourceIdPaginated",
+      "destination": "/reference/memory/listThreadsByResourceId",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workflows/run-methods/watch",
+      "destination": "/reference/workflows/run",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getScorerByName",
+      "destination": "/reference/core/getScorerById",
+      "permanent": true
+    },
+    {
+      "source": "/reference/scorers/run-experiment",
+      "destination": "/reference/scorers/run-evals",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getMemory",
+      "destination": "/docs/memory/overview",
       "permanent": true
     }
   ]

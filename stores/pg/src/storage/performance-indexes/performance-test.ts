@@ -323,82 +323,6 @@ export class PostgresPerformanceTest {
       throw new Error(`Failed to seed traces data: ${error}`);
     }
 
-    // Create test evals for eval performance testing - PROPERLY SCALED!
-    console.info('Inserting evals...');
-
-    try {
-      const evals: Array<{
-        input: string;
-        output: string;
-        result: object;
-        agent_name: string;
-        metric_name: string;
-        instructions: string;
-        test_info?: object;
-        global_run_id: string;
-        run_id: string;
-        created_at: Date;
-        createdAt?: Date;
-      }> = [];
-
-      // Use same scale as main dataset - test at full scale to show index benefits!
-      const evalsCount = Math.floor(this.config.testDataSize);
-      console.info(`  Creating ${evalsCount.toLocaleString()} evals...`);
-
-      const agentNames = ['test_agent', 'chat_agent', 'search_agent', 'summary_agent', 'code_agent'];
-      for (let i = 0; i < evalsCount; i++) {
-        evals.push({
-          input: `perf_test input ${i}`,
-          output: `perf_test output ${i}`,
-          result: { score: Math.random(), passed: Math.random() > 0.5 },
-          agent_name: agentNames[i % agentNames.length]!, // Distribute across different agents
-          metric_name: 'test_metric',
-          instructions: 'Performance test instructions',
-          test_info: { testId: i, category: 'performance' },
-          global_run_id: `global_run_${Math.floor(i / 100)}`,
-          run_id: `run_${i}`,
-          created_at: new Date(Date.now() - Math.random() * 86400000 * 30),
-        });
-      }
-
-      if (evals.length > 0) {
-        for (let i = 0; i < evals.length; i += batchSize) {
-          const batch = evals.slice(i, i + batchSize);
-          const values = batch
-            .map(
-              (_, index) =>
-                `($${index * 10 + 1}, $${index * 10 + 2}, $${index * 10 + 3}, $${index * 10 + 4}, $${index * 10 + 5}, $${index * 10 + 6}, $${index * 10 + 7}, $${index * 10 + 8}, $${index * 10 + 9}, $${index * 10 + 10})`,
-            )
-            .join(', ');
-
-          const params = batch.flatMap(evalRow => [
-            evalRow.input,
-            evalRow.output,
-            JSON.stringify(evalRow.result),
-            evalRow.agent_name,
-            evalRow.metric_name,
-            evalRow.instructions,
-            JSON.stringify(evalRow.test_info),
-            evalRow.global_run_id,
-            evalRow.run_id,
-            evalRow.created_at,
-          ]);
-
-          await db.none(
-            `INSERT INTO mastra_evals (input, output, result, agent_name, metric_name, instructions, test_info, global_run_id, run_id, created_at) VALUES ${values}`,
-            params,
-          );
-
-          if (i % (batchSize * 10) === 0) {
-            console.info(`  Inserted ${Math.min(i + batchSize, evals.length)} / ${evals.length} evals`);
-          }
-        }
-        console.info(`  Inserted ${evals.length} test evals`);
-      }
-    } catch (error) {
-      throw new Error(`Failed to seed evals data: ${error}`);
-    }
-
     console.info('Test data seeding completed');
   }
 
@@ -438,55 +362,30 @@ export class PostgresPerformanceTest {
   async runPerformanceTests(scenario: 'without_indexes' | 'with_indexes'): Promise<PerformanceResult[]> {
     const results: PerformanceResult[] = [];
 
-    // Test getThreadsByResourceId
     const resourceId = 'resource_0';
+    // Test listThreadsByResourceId
     results.push(
       await this.measureOperation(
-        'getThreadsByResourceId',
-        () => this.store.getThreadsByResourceId({ resourceId }),
+        'listThreadsByResourceId',
+        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
         scenario,
       ),
     );
 
-    // Test getThreadsByResourceIdPaginated
-    results.push(
-      await this.measureOperation(
-        'getThreadsByResourceIdPaginated',
-        () => this.store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 20 }),
-        scenario,
-      ),
-    );
-
-    // Test getMessages
     const threadId = 'thread_0';
-    results.push(await this.measureOperation('getMessages', () => this.store.getMessages({ threadId }), scenario));
-
-    // Test getMessagesPaginated
+    // Test listMessages
     results.push(
       await this.measureOperation(
-        'getMessagesPaginated',
+        'listMessages',
         () =>
-          this.store.getMessagesPaginated({
+          this.store.listMessages({
             threadId,
-            selectBy: { pagination: { page: 0, perPage: 20 } },
+            perPage: 20,
+            page: 0,
           }),
         scenario,
       ),
     );
-
-    // Test getEvals (if evals exist)
-    try {
-      results.push(
-        await this.measureOperation(
-          'getEvals',
-          () => this.store.getEvals({ agentName: 'test_agent', page: 0, perPage: 20 }),
-          scenario,
-        ),
-      );
-    } catch {
-      // Skip if evals table doesn't exist or no evals
-      console.info('Skipping getEvals test (table may not exist)');
-    }
 
     return results;
   }
@@ -532,7 +431,7 @@ export class PostgresPerformanceTest {
     console.info('\n=== Query Execution Plans ===');
 
     try {
-      // Analyze getThreadsByResourceId query
+      // Analyze listThreadsByResourceId query
       const threadPlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt"
@@ -540,10 +439,10 @@ export class PostgresPerformanceTest {
         WHERE "resourceId" = 'resource_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('getThreadsByResourceId plan:');
+      console.info('listThreadsByResourceId plan:');
       threadPlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
 
-      // Analyze getMessages query
+      // Analyze listMessages query
       const messagePlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
@@ -551,7 +450,7 @@ export class PostgresPerformanceTest {
         WHERE thread_id = 'thread_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('\ngetMessages plan:');
+      console.info('\nlistMessages plan:');
       messagePlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
     } catch (error) {
       console.warn('Could not analyze query plans:', error);
