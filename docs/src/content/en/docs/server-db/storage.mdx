@@ -36,6 +36,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
 });

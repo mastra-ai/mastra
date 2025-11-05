@@ -32,6 +32,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+  id: 'mastra-storage',
     url: "file:./mastra.db", // Required for trace persistence
   }),
   observability: {
@@ -52,6 +53,7 @@ When using the default observability configuration, DefaultExporter is automatic
 ```typescript
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+  id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
   observability: {

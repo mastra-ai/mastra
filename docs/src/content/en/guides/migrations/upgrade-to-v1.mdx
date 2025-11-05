@@ -19,6 +19,200 @@ All Mastra packages have a peer dependency on `@mastra/core` so your package man
 
 ## Migrate to v1.0.0-beta
 
+### Required: ID Parameter for All Primitives
+
+**Breaking Changes:**
+
+All Mastra primitives now require an `id` parameter during initialization:
+- Storage providers (LibSQLStore, PgStore, MSSQLStore, etc.)
+- Vector stores (PgVector, ChromaVector, PineconeVector, etc.)
+- MCP servers (MCPServerBase implementations)
+- Agents (when using Agent class)
+- Workflows (when using Workflow class)
+- Scorers (when using Scorer class)
+
+**Why this change?**
+
+- **Enables new primitives API**: The `id` field is required for the standardized Mastra API (`mastra.getAgent()`, `mastra.listWorkflows()`, etc.)
+- **Prevents ID conflicts**: Ensures each primitive has a unique identifier instead of relying on object keys
+- **Improves debugging**: Makes it easier to track and identify primitives in logs and errors
+- **Better type safety**: Explicit IDs reduce ambiguity about which primitive is being referenced
+
+**Migration:**
+
+#### Storage and Vector Stores
+
+Add an `id` parameter to all storage and vector store instantiations:
+
+```typescript
+// Before
+const storage = new LibSQLStore({
+  url: ':memory:',
+});
+
+const vector = new PgVector({
+  connectionString: process.env.DATABASE_URL,
+});
+
+// After
+const storage = new LibSQLStore({
+  id: 'my-app-storage',  // ✅ Required
+  url: ':memory:',
+});
+
+const vector = new PgVector({
+  id: 'my-app-vector',    // ✅ Required
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+**Important**: When the same storage/vector class is used multiple times (e.g., separate instances for agent memory vs Mastra storage), ensure each has a unique ID:
+
+```typescript
+// Agent memory storage
+const agentMemory = new Memory({
+  storage: new LibSQLStore({
+    id: 'weather-agent-memory-storage',  // ✅ Unique ID
+    url: 'file:./agent.db',
+  }),
+});
+
+// Mastra instance storage
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',  // ✅ Different ID
+    url: ':memory:',
+  }),
+});
+```
+
+#### MCP Servers
+
+MCP servers must have an `id`, and the registration logic has been improved to preserve the server's intrinsic ID:
+
+```typescript
+// Before
+const mcpServer = new MCPServer({
+  name: 'My MCP Server',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    myServer: mcpServer,  // Used 'myServer' as the ID
+  },
+});
+
+// After
+const mcpServer = new MCPServer({
+  id: 'my-mcp-server',  // ✅ Required - preserved even with custom key
+  name: 'My MCP Server',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    myServer: mcpServer,  // Can still use custom key for registry
+  },
+});
+
+// Now both work:
+mastra.getMCPServer('myServer');        // ✅ Works (registry key)
+mastra.getMCPServerById('my-mcp-server'); // ✅ Works (intrinsic ID)
+```
+
+**Key behavioral change**: Previously, `addMCPServer()` would overwrite the server's ID with the registry key. Now it preserves the server's intrinsic ID and only sets it if the server doesn't have one.
+
+#### Agents, Workflows, and Scorers
+
+These primitives already required IDs, but the validation has been strengthened:
+
+```typescript
+// These were already required, but now have stronger validation
+const agent = new Agent({
+  id: 'weather-agent',  // ✅ Required (already was)
+  // ...
+});
+
+const workflow = new Workflow({
+  id: 'data-pipeline',  // ✅ Required (already was)
+  // ...
+});
+
+const scorer = new Scorer({
+  id: 'quality-scorer',  // ✅ Required (already was)
+  // ...
+});
+```
+
+**Validation errors**: Empty strings or whitespace-only IDs will now throw an error during initialization.
+
+### Changed: Tool Registration Uses Intrinsic IDs
+
+**Breaking Changes:**
+
+When tools are auto-registered from agents or MCP servers to the Mastra instance, they now use the tool's intrinsic `id` instead of the configuration object key.
+
+**Why this change?**
+
+- **Prevents collisions**: Multiple agents/MCP servers can have tools with the same configuration key (e.g., "search") without conflicts
+- **Consistent identification**: Tools are always referenced by their logical ID, not arbitrary keys
+- **Clearer intent**: The tool's ID explicitly declares what the tool is, independent of where it's configured
+
+**Migration:**
+
+This change is mostly automatic, but be aware:
+
+```typescript
+// Before - tools registered with config keys
+const agent = new Agent({
+  id: 'agent1',
+  tools: {
+    searchTool: weatherSearchTool,  // Registered as 'searchTool'
+  },
+});
+
+// After - tools registered with their intrinsic IDs
+const agent = new Agent({
+  id: 'agent1',
+  tools: {
+    searchTool: weatherSearchTool,  // Registered as weatherSearchTool.id
+  },
+});
+
+// Access tools by their ID, not the config key
+mastra.getTool(weatherSearchTool.id);  // ✅ Works
+mastra.getTool('searchTool');          // ❌ Won't work anymore
+```
+
+**Action required**: If you have code that references tools by their configuration keys instead of their IDs, update those references to use the tool's intrinsic ID.
+
+### Changed: Workflow Storage Registration
+
+**Breaking Changes:**
+
+When workflows are dynamically registered via `mastra.addWorkflow()`, they now receive the Mastra instance's storage in addition to the logger.
+
+**Why this change?**
+
+- **Feature parity**: Ensures dynamically registered workflows have the same capabilities as workflows registered during Mastra initialization
+- **Fixes persistence**: Run snapshots and workflow state now work correctly for dynamically added workflows
+- **Consistent behavior**: All workflows now have access to storage regardless of how they're registered
+
+**Migration:**
+
+No code changes required - this is a bug fix that improves behavior. If you were working around missing storage in dynamically registered workflows, you can remove those workarounds.
+
+```typescript
+// This now works correctly
+mastra.addWorkflow(myWorkflow);
+
+// Workflows can now save state and snapshots
+await myWorkflow.run(input, {
+  resumable: true,  // ✅ Now works for dynamically added workflows
+});
+```
+
 ### Removed: Memory.rememberMessages() and Renamed: Memory.query() to Memory.recall()
 
 **Breaking Changes:**
@@ -600,7 +794,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: "file:local.db" }),
+  storage: new LibSQLStore({ id: 'user-storage', url: "file:local.db" }),
   options: {
     workingMemory: {
       enabled: true,

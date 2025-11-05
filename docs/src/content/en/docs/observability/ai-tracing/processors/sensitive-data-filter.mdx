@@ -17,6 +17,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Automatically includes SensitiveDataFilter
   },
   storage: new LibSQLStore({
+  id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
 });

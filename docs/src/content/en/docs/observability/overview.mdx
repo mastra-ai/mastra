@@ -50,6 +50,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Enables AI Tracing
   },
   storage: new LibSQLStore({
+  id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
   telemetry: {

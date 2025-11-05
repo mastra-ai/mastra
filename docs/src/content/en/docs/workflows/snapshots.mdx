@@ -138,6 +138,7 @@ import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+  id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -154,6 +155,7 @@ import { UpstashStore } from "@mastra/upstash";
 export const mastra = new Mastra({
   // ...
   storage: new UpstashStore({
+  id: 'upstash-storage',
     url: "<upstash-redis-rest-url>",
     token: "<upstash-redis-rest-token>",
   }),
@@ -171,6 +173,7 @@ import { PostgresStore } from "@mastra/pg";
 export const mastra = new Mastra({
   // ...
   storage: new PostgresStore({
+    id: 'mastra-storage',
     connectionString: "<database-url>",
   }),
 });
