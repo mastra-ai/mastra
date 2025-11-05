@@ -55,26 +55,32 @@ const store = new LibSQLStore({
 
 // Create a thread
 await store.saveThread({
-  id: 'thread-123',
-  resourceId: 'resource-456',
-  title: 'My Thread',
-  metadata: { key: 'value' },
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
 });
 
 // Add messages to thread
-await store.saveMessages([
-  {
-    id: 'msg-789',
-    threadId: 'thread-123',
-    role: 'user',
-    type: 'text',
-    content: [{ type: 'text', text: 'Hello' }],
-  },
-]);
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
 
 // Query threads and messages
-const savedThread = await store.getThread('thread-123');
-const messages = await store.getMessages('thread-123');
+const savedThread = await store.getThreadById({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -132,11 +138,11 @@ Example filter:
 
 ## Storage Methods
 
-- `saveThread(thread)`: Create or update a thread
-- `getThread(threadId)`: Get a thread by ID
-- `deleteThread(threadId)`: Delete a thread and its messages
-- `saveMessages(messages)`: Save multiple messages in a transaction
-- `getMessages(threadId)`: Get all messages for a thread
+- `saveThread({ thread })`: Create or update a thread
+- `getThreadById({ threadId })`: Get a thread by ID
+- `deleteThread({ threadId })`: Delete a thread and its messages
+- `saveMessages({ messages })`: Save multiple messages in a transaction
+- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
 - `deleteMessages(messageIds)`: Delete specific messages
 
 ## Related Links

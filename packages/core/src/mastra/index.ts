@@ -13,8 +13,8 @@ import { AvailableHooks, registerHook } from '../hooks';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
-import type { ObservabilityEntrypoint, ObservabilityRegistryConfig } from '../observability';
-import { initObservability } from '../observability';
+import type { ObservabilityEntrypoint } from '../observability';
+import { NoOpObservability } from '../observability';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -103,9 +103,21 @@ export interface Config<
   tts?: TTTS;
 
   /**
-   * AI-specific observability configuration for tracking model interactions.
+   * Observability entrypoint for tracking model interactions and tracing.
+   * Pass an instance of the Observability class from @mastra/observability.
+   *
+   * @example
+   * ```typescript
+   * import { Observability } from '@mastra/observability';
+   *
+   * new Mastra({
+   *   observability: new Observability({
+   *     default: { enabled: true }
+   *   })
+   * })
+   * ```
    */
-  observability?: ObservabilityRegistryConfig;
+  observability?: ObservabilityEntrypoint;
 
   /**
    * Custom ID generator function for creating unique identifiers.
@@ -390,7 +402,24 @@ export class Mastra<
       storage = augmentWithInit(storage);
     }
 
-    this.#observability = initObservability({ config: config?.observability, logger: this.#logger });
+    // Validate and assign observability instance
+    if (config?.observability) {
+      if (typeof config.observability.getDefaultInstance === 'function') {
+        this.#observability = config.observability;
+        // Set logger early
+        this.#observability.setLogger({ logger: this.#logger });
+      } else {
+        this.#logger?.warn(
+          'Observability configuration error: Expected an Observability instance, but received a config object. ' +
+            'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ default: { enabled: true } }). ' +
+            'Observability has been disabled.',
+        );
+        this.#observability = new NoOpObservability();
+      }
+    } else {
+      this.#observability = new NoOpObservability();
+    }
 
     /*
       Storage
@@ -493,9 +522,9 @@ export class Mastra<
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
-      Register mastra on Observability exporters and other items that require it
+      Initialize observability with Mastra context (after storage configured)
     */
-    this.#observability.registerMastra({ mastra: this });
+    this.#observability.setMastraContext({ mastra: this });
 
     this.setLogger({ logger });
   }
@@ -1468,7 +1497,7 @@ export class Mastra<
    * Gracefully shuts down the Mastra instance and cleans up all resources.
    *
    * This method performs a clean shutdown of all Mastra components, including:
-   * - AI tracing registry and all tracing instances
+   * - tracing registry and all tracing instances
    * - Event engine and pub/sub system
    * - All registered components and their resources
    *

@@ -258,7 +258,7 @@
     "zod-v4": "npm:zod@4.1.12"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "keywords": [
     "ai",

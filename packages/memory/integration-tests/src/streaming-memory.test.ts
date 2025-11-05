@@ -120,7 +120,7 @@ describe('Memory Streaming Tests', () => {
     });
 
     const agentMemory = (await agent.getMemory())!;
-    const { messages } = await agentMemory.query({ threadId });
+    const { messages } = await agentMemory.recall({ threadId });
 
     console.log('Custom IDs: ', customIds);
     console.log('Messages: ', messages);
@@ -254,7 +254,7 @@ describe('Memory Streaming Tests', () => {
 
       const agentMemory = (await weatherAgent.getMemory())!;
       // Get initial messages from memory and convert to AI SDK v4 format
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const initialMessages = messages.map(m => MessageList.mastraDBMessageToAIV4UIMessage(m)) as Message[];
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
