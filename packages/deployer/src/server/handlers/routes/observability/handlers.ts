@@ -26,7 +26,7 @@ export async function getTraceHandler(c: Context) {
 
     return c.json(trace);
   } catch (error) {
-    return handleError(error, 'Error getting AI trace');
+    return handleError(error, 'Error getting trace');
   }
 }
 
@@ -80,7 +80,7 @@ export async function getTracesPaginatedHandler(c: Context) {
 
     return c.json(result);
   } catch (error) {
-    return handleError(error, 'Error getting AI traces paginated');
+    return handleError(error, 'Error getting traces paginated');
   }
 }
 

@@ -22,8 +22,8 @@ import {
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
-import { useTraces } from '@/domains/observability/hooks/use-ai-traces';
-import { useTrace } from '@/domains/observability/hooks/use-ai-trace';
+import { useTraces } from '@/domains/observability/hooks/use-traces';
+import { useTrace } from '@/domains/observability/hooks/use-trace';
 
 import { Link, useNavigate, useSearchParams } from 'react-router';
 

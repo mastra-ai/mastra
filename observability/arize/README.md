@@ -1,6 +1,6 @@
 # @mastra/arize - OpenTelemetry + OpenInference AI Tracing Exporter
 
-Export Mastra AI traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
+Export Mastra traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
 
 For more information on OpenInference, see the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) specification.
 
@@ -30,7 +30,7 @@ const PROJECT_NAME = process.env.PHOENIX_PROJECT_NAME || 'mastra-service';
 const mastra = new Mastra({
   ...,
   observability: {
-    // Enables ArizeExporter for AI tracing
+    // Enables ArizeExporter for tracing
     configs: {
       arize: {
         serviceName: PROJECT_NAME,

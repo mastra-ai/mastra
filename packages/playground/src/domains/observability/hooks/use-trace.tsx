@@ -4,7 +4,7 @@ import { useMastraClient } from '@mastra/react';
 export const useTrace = (traceId: string | null | undefined, options?: { enabled: boolean }) => {
   const client = useMastraClient();
   const query = useQuery({
-    queryKey: ['ai-trace', traceId],
+    queryKey: ['trace', traceId],
     queryFn: async () => {
       if (!traceId) {
         throw new Error('Trace ID is required');

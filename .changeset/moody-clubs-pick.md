@@ -17,4 +17,4 @@
 '@mastra/pg': major
 ---
 
-Renamed a bunch observability / tracing related things to drop the AI prefix.
+Renamed a bunch of observability/tracing-related things to drop the AI prefix.

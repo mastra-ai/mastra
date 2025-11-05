@@ -34,7 +34,7 @@ describe('Observability Methods', () => {
   });
 
   describe('getTrace()', () => {
-    it('should fetch a specific AI trace by ID', async () => {
+    it('should fetch a specific trace by ID', async () => {
       mockSuccessfulResponse();
 
       await client.getTrace('trace-123');

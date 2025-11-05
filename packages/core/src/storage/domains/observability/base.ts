@@ -64,7 +64,7 @@ export class ObservabilityStorage extends MastraBase {
       id: 'OBSERVABILITY_STORAGE_GET_TRACE_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support getting AI traces',
+      text: 'This storage provider does not support getting traces',
     });
   }
 
@@ -76,7 +76,7 @@ export class ObservabilityStorage extends MastraBase {
       id: 'OBSERVABILITY_STORAGE_GET_TRACES_PAGINATED_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support getting AI traces paginated',
+      text: 'This storage provider does not support getting traces paginated',
     });
   }
 

@@ -141,7 +141,7 @@ describe('Observability Handlers', () => {
         }),
       ).rejects.toThrow();
 
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting AI trace');
+      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting trace');
     });
   });
 

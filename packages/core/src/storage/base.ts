@@ -575,7 +575,7 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   /**
-   * Retrieves a single AI trace with all its associated spans.
+   * Retrieves a single trace with all its associated spans.
    */
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (this.stores?.observability) {
@@ -590,7 +590,7 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   /**
-   * Retrieves a paginated list of AI traces with optional filtering.
+   * Retrieves a paginated list of traces with optional filtering.
    */
   async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (this.stores?.observability) {
@@ -641,7 +641,7 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   /**
-   * Deletes multiple AI traces and all their associated spans in a single batch operation.
+   * Deletes multiple traces and all their associated spans in a single batch operation.
    */
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (this.stores?.observability) {

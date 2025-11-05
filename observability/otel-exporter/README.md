@@ -1,6 +1,6 @@
 # OtelExporter - OpenTelemetry AI Tracing Exporter
 
-Export Mastra AI traces to any OpenTelemetry-compatible observability platform.
+Export Mastra traces to any OpenTelemetry-compatible observability platform.
 
 > **⚠️ Important:** This package requires you to install an additional exporter package based on your provider. Each provider section below includes the specific installation command.
 
@@ -364,7 +364,7 @@ Spans are named following OTEL conventions:
 
 ### Attributes
 
-The exporter maps Mastra's AI tracing data to OTEL-compliant attributes:
+The exporter maps Mastra's tracing data to OTEL-compliant attributes:
 
 #### Core Attributes
 

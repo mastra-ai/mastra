@@ -8,16 +8,16 @@ export class Observability extends BaseResource {
   }
 
   /**
-   * Retrieves a specific AI trace by ID
+   * Retrieves a specific trace by ID
    * @param traceId - ID of the trace to retrieve
-   * @returns Promise containing the AI trace with all its spans
+   * @returns Promise containing the trace with all its spans
    */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.request(`/api/observability/traces/${traceId}`);
   }
 
   /**
-   * Retrieves paginated list of AI traces with optional filtering
+   * Retrieves paginated list of traces with optional filtering
    * @param params - Parameters for pagination and filtering
    * @returns Promise containing paginated traces and pagination info
    */

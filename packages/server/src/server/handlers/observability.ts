@@ -21,7 +21,7 @@ interface ScoreTracesContext extends Context {
 }
 
 /**
- * Get a complete AI trace by trace ID
+ * Get a complete trace by trace ID
  * Returns all spans in the trace with their parent-child relationships
  */
 export async function getTraceHandler({ mastra, traceId }: ObservabilityContext & { traceId: string }) {
@@ -43,12 +43,12 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
 
     return trace;
   } catch (error) {
-    handleError(error, 'Error getting AI trace');
+    handleError(error, 'Error getting trace');
   }
 }
 
 /**
- * Get paginated AI traces with filtering and pagination
+ * Get paginated traces with filtering and pagination
  * Returns only root spans (parent spans) for pagination, not child spans
  */
 export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityContext) {
@@ -89,7 +89,7 @@ export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityC
       filters,
     });
   } catch (error) {
-    handleError(error, 'Error getting AI traces paginated');
+    handleError(error, 'Error getting traces paginated');
   }
 }
 
