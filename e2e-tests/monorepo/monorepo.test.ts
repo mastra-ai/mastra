@@ -169,6 +169,12 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            // Ignore punycode warning
+            return;
+          }
+
           reject(new Error('failed to start: ' + data?.toString()));
         });
         proc!.stdout?.on('data', data => {
