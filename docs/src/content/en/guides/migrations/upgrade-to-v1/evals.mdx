@@ -77,6 +77,46 @@ To migrate, update score query methods to use the new naming pattern.
 // - listScoresBySpan
 ```
 
+### Scorer message types from `UIMessage` to `MastraDBMessage`
+
+Scorer input and output types now use `MastraDBMessage[]` instead of `UIMessage`. This change aligns scorers with the database-persisted message format for consistency across the framework.
+
+To migrate, update scorer implementations to use `MastraDBMessage` types and access message content through the nested `content` structure.
+
+```diff
+  import type {
+    ScorerRunInputForAgent,
+    ScorerRunOutputForAgent
+  } from '@mastra/core/evals';
+
+- // ScorerRunInputForAgent uses UIMessage[]
+- const inputMessages: UIMessage[] = run.input.inputMessages;
++ // ScorerRunInputForAgent now uses MastraDBMessage[]
++ import type { MastraDBMessage } from '@mastra/core/agent';
++ const inputMessages: MastraDBMessage[] = run.input.inputMessages;
+```
+
+### Message content structure to nested format
+
+Tool invocations and text content are now accessed through a nested `content` object structure instead of being flat properties on the message. This change provides better type safety and aligns with the database message format.
+
+To migrate, access tool invocations via `message.content.toolInvocations` and text via `message.content.content` or use the `getTextContentFromMastraDBMessage()` helper.
+
+```diff
++ import { getTextContentFromMastraDBMessage } from '@mastra/evals';
++
+  const run = await scorer.run(testRun);
+
+  // Accessing text content
+- const text = message.content;
++ const text = getTextContentFromMastraDBMessage(message);
++ // or directly: message.content.content
+
+  // Accessing tool invocations
+- const toolCalls = message.toolInvocations;
++ const toolCalls = message.content.toolInvocations;
+```
+
 ### Processor interface requirements
 
 Processors now require an `id` field instead of `name`. The `name` field is now optional. Message types have changed from `MastraMessageV2` to `MastraDBMessage`. This change provides consistency with scorer configuration and better type safety.
@@ -87,7 +127,7 @@ To migrate, update processor definitions to use `id` as the required field and u
   import type { InputProcessor } from '@mastra/core/processors';
 - import type { MastraMessageV2 } from '@mastra/core/agent';
 + import type { MastraDBMessage } from '@mastra/core/agent';
-  
+
   const processor: InputProcessor = {
 -   name: 'my-processor',
 +   id: 'my-processor',
@@ -156,4 +196,25 @@ To migrate, remove references to these removed types and use the new scorers API
 - } from '@mastra/core';
 + // Use new scorers API types
 + import type { Scorer } from '@mastra/core/evals';
+```
+
+### `createUIMessage` test helper
+
+The `createUIMessage()` test helper has been removed and replaced with `createTestMessage()`. The new helper creates `MastraDBMessage` objects with the nested content structure and supports optional tool invocations. This change aligns test utilities with the new message format.
+
+To migrate, replace `createUIMessage()` calls with `createTestMessage()` and update to use `MastraDBMessage` types.
+
+```diff
+- import { createUIMessage } from '@mastra/evals';
++ import { createTestMessage } from '@mastra/evals';
+
+  // Creating test messages
+- const message = createUIMessage({
+-   id: 'test-1',
++ const message = createTestMessage({
++   id: 'test-1', // optional, defaults to 'test-message'
+    role: 'user',
+    content: 'Hello',
+    toolInvocations: [], // optional
+  });
 ```
