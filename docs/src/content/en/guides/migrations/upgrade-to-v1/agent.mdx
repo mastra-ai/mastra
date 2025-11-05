@@ -78,6 +78,16 @@ To migrate, update voice method calls to use the `agent.voice` namespace.
 + const speakers = agent.voice.getSpeakers();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-voice .
+```
+
+:::
+
 ### `agent.fetchMemory()` to `(await agent.getMemory()).recall()`
 
 The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
