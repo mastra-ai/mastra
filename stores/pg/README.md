@@ -372,9 +372,9 @@ The system automatically detects configuration changes and only rebuilds indexes
 - `batchCreateAISpans({ records })`: Create multiple AI spans
 - `updateAISpan({ traceId, spanId, updates })`: Update an AI span
 - `batchUpdateAISpans({ updates })`: Update multiple AI spans
-- `getAITrace(traceId)`: Get an AI trace by ID
-- `getAITracesPaginated({ ...filters, pagination })`: Get paginated AI traces with filtering
-- `batchDeleteAITraces({ traceIds })`: Delete multiple AI traces
+- `getTrace(traceId)`: Get an AI trace by ID
+- `getTracesPaginated({ ...filters, pagination })`: Get paginated AI traces with filtering
+- `batchDeleteTraces({ traceIds })`: Delete multiple AI traces
 
 ### Evaluation/Scoring Operations
 

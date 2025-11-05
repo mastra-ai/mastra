@@ -229,11 +229,11 @@ MSSQLStore supports multiple connection methods:
 
 - `createAISpan(span)`: Create an AI trace span
 - `updateAISpan({ spanId, traceId, updates })`: Update an existing span
-- `getAITrace(traceId)`: Get complete trace with all spans
-- `getAITracesPaginated({ filters?, pagination? })`: Query traces with pagination and filters
+- `getTrace(traceId)`: Get complete trace with all spans
+- `getTracesPaginated({ filters?, pagination? })`: Query traces with pagination and filters
 - `batchCreateAISpans({ records })`: Batch create multiple spans
 - `batchUpdateAISpans({ records })`: Batch update multiple spans
-- `batchDeleteAITraces({ traceIds })`: Batch delete traces
+- `batchDeleteTraces({ traceIds })`: Batch delete traces
 
 ### Index Management
 

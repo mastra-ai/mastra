@@ -22,8 +22,8 @@ import {
 } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
-import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
-import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
+import { useTraces } from '@/domains/observability/hooks/use-ai-traces';
+import { useTrace } from '@/domains/observability/hooks/use-ai-trace';
 
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
@@ -42,7 +42,7 @@ export default function Observability() {
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
 
-  const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
+  const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
 
   const traceId = searchParams.get('traceId');
   const spanId = searchParams.get('spanId');
@@ -50,14 +50,14 @@ export default function Observability() {
   const scoreId = searchParams.get('scoreId');
 
   const {
-    data: aiTraces = [],
+    data: Traces = [],
     isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-    error: aiTracesError,
-    isError: isAiTracesError,
-  } = useAITraces({
+    error: TracesError,
+    isError: isTracesError,
+  } = useTraces({
     filters:
       selectedEntityOption?.type === 'all'
         ? undefined
@@ -137,17 +137,17 @@ export default function Observability() {
     setDialogIsOpen(true);
   };
 
-  const error = isAiTracesError ? parseError(aiTracesError) : undefined;
+  const error = isTracesError ? parseError(TracesError) : undefined;
 
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
   const toNextTrace = getToNextEntryFn({
-    entries: aiTraces.map(item => ({ id: item.traceId })),
+    entries: Traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
   const toPreviousTrace = getToPreviousEntryFn({
-    entries: aiTraces.map(item => ({ id: item.traceId })),
+    entries: Traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
@@ -196,7 +196,7 @@ export default function Observability() {
               <EntryListSkeleton columns={tracesListColumns} />
             ) : (
               <TracesList
-                traces={aiTraces}
+                traces={Traces}
                 selectedTraceId={selectedTraceId}
                 onTraceClick={handleTraceClick}
                 errorMsg={error?.error}
@@ -210,12 +210,12 @@ export default function Observability() {
         </div>
       </MainContentLayout>
       <TraceDialog
-        traceSpans={aiTrace?.spans}
+        traceSpans={Trace?.spans}
         traceId={selectedTraceId}
         initialSpanId={spanId || undefined}
         initialSpanTab={spanTab === 'scores' ? 'scores' : 'details'}
         initialScoreId={scoreId || undefined}
-        traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
+        traceDetails={Traces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => {
           navigate(`/observability`);
@@ -223,7 +223,7 @@ export default function Observability() {
         }}
         onNext={toNextTrace}
         onPrevious={toPreviousTrace}
-        isLoadingSpans={isLoadingAiTrace}
+        isLoadingSpans={isLoadingTrace}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
       />
     </>

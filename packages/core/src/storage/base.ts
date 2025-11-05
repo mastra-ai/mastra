@@ -14,7 +14,7 @@ import {
   TABLE_RESOURCES,
   TABLE_SCORERS,
   TABLE_SCHEMAS,
-  TABLE_AI_SPANS,
+  TABLE_SPANS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
@@ -26,8 +26,8 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -359,8 +359,8 @@ export abstract class MastraStorage extends MastraBase {
     if (this.supports.observabilityInstance) {
       tableCreationTasks.push(
         this.createTable({
-          tableName: TABLE_AI_SPANS,
-          schema: TABLE_SCHEMAS[TABLE_AI_SPANS],
+          tableName: TABLE_SPANS,
+          schema: TABLE_SCHEMAS[TABLE_SPANS],
         }),
       );
     }
@@ -577,9 +577,9 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Retrieves a single AI trace with all its associated spans.
    */
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (this.stores?.observability) {
-      return this.stores.observability.getAITrace(traceId);
+      return this.stores.observability.getTrace(traceId);
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_GET_AI_TRACE_NOT_SUPPORTED',
@@ -592,9 +592,9 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Retrieves a paginated list of AI traces with optional filtering.
    */
-  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (this.stores?.observability) {
-      return this.stores.observability.getAITracesPaginated(args);
+      return this.stores.observability.getTracesPaginated(args);
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_GET_AI_TRACES_PAGINATED_NOT_SUPPORTED',
@@ -643,9 +643,9 @@ export abstract class MastraStorage extends MastraBase {
   /**
    * Deletes multiple AI traces and all their associated spans in a single batch operation.
    */
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (this.stores?.observability) {
-      return this.stores.observability.batchDeleteAITraces(args);
+      return this.stores.observability.batchDeleteTraces(args);
     }
     throw new MastraError({
       id: 'MASTRA_STORAGE_BATCH_DELETE_AI_TRACES_NOT_SUPPORTED',

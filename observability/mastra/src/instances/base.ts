@@ -230,7 +230,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // ============================================================================
 
   /**
-   * Check if an AI trace should be sampled
+   * Check if an trace should be sampled
    */
   protected shouldSample(options?: CustomSamplerOptions): boolean {
     // Check built-in sampling strategy

@@ -1,16 +1,16 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
-import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
+import type { TracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import {
-  getAITraceHandler as getOriginalAITraceHandler,
-  getAITracesPaginatedHandler as getOriginalAITracesPaginatedHandler,
+  getTraceHandler as getOriginalTraceHandler,
+  getTracesPaginatedHandler as getOriginalTracesPaginatedHandler,
   scoreTracesHandler as getOriginalScoreTracesHandler,
   listScoresBySpan as getOriginalScoresBySpanHandler,
 } from '@mastra/server/handlers/observability';
 import type { Context } from 'hono';
 import { handleError } from '../../error';
 
-export async function getAITraceHandler(c: Context) {
+export async function getTraceHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const traceId = c.req.param('traceId');
@@ -19,7 +19,7 @@ export async function getAITraceHandler(c: Context) {
       return c.json({ error: 'Trace ID is required' }, 400);
     }
 
-    const trace = await getOriginalAITraceHandler({
+    const trace = await getOriginalTraceHandler({
       mastra,
       traceId,
     });
@@ -30,17 +30,17 @@ export async function getAITraceHandler(c: Context) {
   }
 }
 
-export async function getAITracesPaginatedHandler(c: Context) {
+export async function getTracesPaginatedHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const { page, perPage, name, spanType, dateRange, entityId, entityType } = c.req.query();
 
-    const pagination: AITracesPaginatedArg['pagination'] = {
+    const pagination: TracesPaginatedArg['pagination'] = {
       page: parseInt(page || '0'),
       perPage: parseInt(perPage || '10'),
     };
 
-    const filters: AITracesPaginatedArg['filters'] = {};
+    const filters: TracesPaginatedArg['filters'] = {};
     if (name) filters.name = name;
     if (spanType) {
       if (Object.values(SpanType).includes(spanType as SpanType)) {
@@ -70,7 +70,7 @@ export async function getAITracesPaginatedHandler(c: Context) {
       pagination.dateRange = { start, end };
     }
 
-    const result = await getOriginalAITracesPaginatedHandler({
+    const result = await getOriginalTracesPaginatedHandler({
       mastra,
       body: {
         pagination,

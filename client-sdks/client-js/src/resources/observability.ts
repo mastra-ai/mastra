@@ -1,5 +1,5 @@
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
-import type { ClientOptions, GetAITracesResponse, ListScoresBySpanParams, ListScoresResponse } from '../types';
+import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
+import type { ClientOptions, GetTracesResponse, ListScoresBySpanParams, ListScoresResponse } from '../types';
 import { BaseResource } from './base';
 
 export class Observability extends BaseResource {
@@ -12,7 +12,7 @@ export class Observability extends BaseResource {
    * @param traceId - ID of the trace to retrieve
    * @returns Promise containing the AI trace with all its spans
    */
-  getTrace(traceId: string): Promise<AITraceRecord> {
+  getTrace(traceId: string): Promise<TraceRecord> {
     return this.request(`/api/observability/traces/${traceId}`);
   }
 
@@ -21,7 +21,7 @@ export class Observability extends BaseResource {
    * @param params - Parameters for pagination and filtering
    * @returns Promise containing paginated traces and pagination info
    */
-  getTraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
+  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
     const { pagination, filters } = params;
     const { page, perPage, dateRange } = pagination || {};
     const { name, spanType, entityId, entityType } = filters || {};

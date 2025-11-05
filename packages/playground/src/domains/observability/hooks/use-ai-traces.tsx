@@ -1,20 +1,20 @@
 import { useMastraClient } from '@mastra/react';
-import { AITracesPaginatedArg } from '@mastra/core/storage';
+import { TracesPaginatedArg } from '@mastra/core/storage';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
-const fetchAITracesFn = async ({
+const fetchTracesFn = async ({
   client,
   page,
   perPage,
   dateRange,
   filters,
-}: AITracesFilters & {
+}: TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
   page: number;
   perPage: number;
 }) => {
-  const res = await client.getAITraces({
+  const res = await client.getTraces({
     pagination: {
       page,
       perPage,
@@ -26,22 +26,22 @@ const fetchAITracesFn = async ({
   return res.spans || [];
 };
 
-export interface AITracesFilters {
-  filters?: AITracesPaginatedArg['filters'];
+export interface TracesFilters {
+  filters?: TracesPaginatedArg['filters'];
   dateRange?: {
     start?: Date;
     end?: Date;
   };
 }
 
-export const useAITraces = ({ filters, dateRange }: AITracesFilters) => {
+export const useTraces = ({ filters, dateRange }: TracesFilters) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
     queryKey: ['ai-traces', filters, dateRange],
     queryFn: ({ pageParam }) =>
-      fetchAITracesFn({
+      fetchTracesFn({
         client,
         page: pageParam,
         perPage: 25,

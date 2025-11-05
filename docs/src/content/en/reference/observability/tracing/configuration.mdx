@@ -1,0 +1,238 @@
+---
+title: "Reference: Configuration | Observability | Mastra Docs"
+description: Tracing configuration types and registry functions
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Configuration
+
+## ObservabilityRegistryConfig
+
+```typescript
+interface ObservabilityRegistryConfig {
+  default?: { enabled?: boolean };
+  configs?: Record<string, TracingConfig | Tracing>;
+  configSelector?: ConfigSelector;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "default",
+      type: "{ enabled?: boolean }",
+      description: "Enable default configuration",
+      required: false,
+    },
+    {
+      name: "configs",
+      type: "Record<string, TracingConfig | Tracing>",
+      description: "Named tracing configurations",
+      required: false,
+    },
+    {
+      name: "configSelector",
+      type: "ConfigSelector",
+      description: "Runtime configuration selector",
+      required: false,
+    },
+  ]}
+/>
+
+## TracingConfig
+
+```typescript
+interface TracingConfig {
+  name: string;
+  serviceName: string;
+  sampling?: SamplingStrategy;
+  exporters?: TracingExporter[];
+  processors?: SpanProcessor[];
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "name",
+      type: "string",
+      description: "Configuration identifier",
+      required: true,
+    },
+    {
+      name: "serviceName",
+      type: "string",
+      description: "Service name in traces",
+      required: true,
+    },
+    {
+      name: "sampling",
+      type: "SamplingStrategy",
+      description: "Sampling configuration",
+      required: false,
+    },
+    {
+      name: "exporters",
+      type: "TracingExporter[]",
+      description: "Trace data exporters",
+      required: false,
+    },
+    {
+      name: "processors",
+      type: "SpanProcessor[]",
+      description: "Span processors",
+      required: false,
+    },
+  ]}
+/>
+
+## SamplingStrategy
+
+```typescript
+type SamplingStrategy =
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
+```
+
+## ConfigSelector
+
+```typescript
+type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: Map<string, Tracing>,
+) => string | undefined;
+```
+
+## ConfigSelectorOptions
+
+```typescript
+interface ConfigSelectorOptions {
+  metadata?: Record<string, any>;
+  requestContext?: Map<string, any>;
+}
+```
+
+# Registry Functions
+
+## setupTracing
+
+```typescript
+function setupTracing(config: ObservabilityRegistryConfig): void;
+```
+
+Initializes Tracing from configuration. Called automatically by Mastra constructor.
+
+## registerTracing
+
+```typescript
+function registerTracing(
+  name: string,
+  instance: Tracing,
+  isDefault?: boolean,
+): void;
+```
+
+Registers a tracing config in the global registry.
+
+## getTracing
+
+```typescript
+function getTracing(name: string): Tracing | undefined;
+```
+
+Retrieves a tracing config by name.
+
+## getDefaultTracing
+
+```typescript
+function getDefaultTracing(): Tracing | undefined;
+```
+
+Returns the default tracing config.
+
+## getSelectedTracing
+
+```typescript
+function getSelectedTracing(
+  options: ConfigSelectorOptions,
+): Tracing | undefined;
+```
+
+Returns the tracing config selected by the config selector or default.
+
+## setSelector
+
+```typescript
+function setSelector(selector: ConfigSelector): void;
+```
+
+Sets the global config selector function.
+
+## unregisterTracing
+
+```typescript
+function unregisterTracing(name: string): boolean;
+```
+
+Removes a tracing config from the registry.
+
+## shutdownTracingRegistry
+
+```typescript
+async function shutdownTracingRegistry(): Promise<void>;
+```
+
+Shuts down all tracing configs and clears the registry.
+
+## clearTracingRegistry
+
+```typescript
+function clearTracingRegistry(): void;
+```
+
+Clears all configs without shutdown.
+
+## getAllTracing
+
+```typescript
+function getAllTracing(): ReadonlyMap<string, Tracing>;
+```
+
+Returns all registered tracing configs.
+
+## hasTracing
+
+```typescript
+function hasTracing(name: string): boolean;
+```
+
+Checks if a tracing instance exists and is enabled.
+
+## See Also
+
+### Documentation
+
+- [Tracing Overview](/docs/observability/tracing/overview) - Concepts and usage guide
+- [Sampling Strategies](/docs/observability/tracing/overview#sampling-strategies) - Sampling configuration details
+- [Multi-Config Setup](/docs/observability/tracing/overview#multi-config-setup) - Using multiple configurations
+
+### Reference
+
+- [Tracing Classes](/reference/observability/tracing/) - Core tracing classes
+- [Interfaces](/reference/observability/tracing/interfaces) - Type definitions
+- [Span Reference](/reference/observability/tracing/span) - Span lifecycle
+
+### Examples
+
+- [Basic Tracing](/examples/observability/basic-tracing) - Getting started
+
+### Exporters
+
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - Storage configuration
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Cloud setup
+- [Braintrust](/reference/observability/tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/reference/observability/tracing/exporters/langfuse) - Langfuse integration
+- [LangSmith](/reference/observability/tracing/exporters/langsmith) - LangSmith integration

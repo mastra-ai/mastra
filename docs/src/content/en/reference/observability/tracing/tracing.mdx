@@ -1,0 +1,186 @@
+---
+title: "Reference: Tracing | Observability | Mastra Docs"
+description: Core Tracing classes and methods
+asIndexPage: true
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Tracing
+
+## DefaultTracing
+
+Default implementation of the Tracing interface.
+
+### Constructor
+
+```typescript
+new DefaultTracing(config: TracingConfig)
+```
+
+Creates a new DefaultTracing instance with the specified configuration.
+
+### Properties
+
+Inherits all properties and methods from BaseTracing.
+
+## BaseTracing
+
+Base class for custom Tracing implementations.
+
+### Methods
+
+#### getConfig
+
+```typescript
+getConfig(): Readonly<Required<TracingConfig>>
+```
+
+Returns the current tracing configuration.
+
+#### getExporters
+
+```typescript
+getExporters(): readonly TracingExporter[]
+```
+
+Returns all configured exporters.
+
+#### getProcessors
+
+```typescript
+getProcessors(): readonly SpanProcessor[]
+```
+
+Returns all configured processors.
+
+#### getLogger
+
+```typescript
+getLogger(): IMastraLogger
+```
+
+Returns the logger instance for exporters and other components.
+
+#### startSpan
+
+```typescript
+startSpan<TType extends SpanType>(
+  options: StartSpanOptions<TType>
+): Span<TType>
+```
+
+Start a new span of a specific SpanType. Creates the root span of a trace if no parent is provided.
+
+<PropertiesTable
+  props={[
+    {
+      name: "type",
+      type: "SpanType",
+      description: "Type of span to create",
+      required: true,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Name of the span",
+      required: true,
+    },
+    {
+      name: "parent",
+      type: "AnySpan",
+      description: "Parent span (if not root)",
+      required: false,
+    },
+    {
+      name: "attributes",
+      type: "SpanTypeMap[TType]",
+      description: "Type-specific attributes",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "User-defined metadata",
+      required: false,
+    },
+    {
+      name: "input",
+      type: "any",
+      description: "Initial input data",
+      required: false,
+    },
+    {
+      name: "customSamplerOptions",
+      type: "CustomSamplerOptions",
+      description: "Options for custom sampler",
+      required: false,
+    },
+  ]}
+/>
+
+#### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Shuts down all exporters and processors, cleaning up resources.
+
+## Custom Implementation
+
+To create a custom Tracing implementation, extend BaseTracing:
+
+```typescript
+class CustomTracing extends BaseTracing {
+  constructor(config: TracingConfig) {
+    super(config);
+    // Custom initialization
+  }
+
+  // Override methods as needed
+  startSpan<TType extends SpanType>(
+    options: StartSpanOptions<TType>,
+  ): Span<TType> {
+    // Custom span creation logic
+    return super.startSpan(options);
+  }
+}
+```
+
+## NO-OP Spans
+
+When tracing is disabled (sampling returns false), NO-OP spans are returned:
+
+### NoOpSpan
+
+```typescript
+class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>
+```
+
+A span that performs no operations. All methods are no-ops:
+
+- `id` returns `'no-op'`
+- `traceId` returns `'no-op-trace'`
+- `isValid` returns `false`
+- `end()`, `error()`, `update()` do nothing
+- `createChildSpan()` returns another NO-OP span
+
+## See Also
+
+### Documentation
+
+- [Tracing Overview](/docs/observability/tracing/overview) - Concepts and usage guide
+- [Configuration Reference](/reference/observability/tracing/configuration) - Configuration options
+- [Interfaces Reference](/reference/observability/tracing/interfaces) - Type definitions
+- [Span Reference](/reference/observability/tracing/span) - Span lifecycle and methods
+
+### Examples
+
+- [Basic Tracing](/examples/observability/basic-tracing) - Getting started example
+
+### Exporters
+
+- [DefaultExporter](/reference/observability/tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/reference/observability/tracing/exporters/cloud-exporter) - Mastra Cloud integration
+- [ConsoleExporter](/reference/observability/tracing/exporters/console-exporter) - Debug output

@@ -3,8 +3,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { TracingStorageStrategy } from '../../../observability';
 import type {
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
@@ -37,10 +37,10 @@ export class ObservabilityStorage extends MastraBase {
    */
   createSpan(_span: CreateSpanRecord): Promise<void> {
     throw new MastraError({
-      id: 'OBSERVABILITY_CREATE_AI_SPAN_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_CREATE_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support creating Spans',
+      text: 'This storage provider does not support creating spans',
     });
   }
 
@@ -49,19 +49,19 @@ export class ObservabilityStorage extends MastraBase {
    */
   updateSpan(_params: { spanId: string; traceId: string; updates: Partial<UpdateSpanRecord> }): Promise<void> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_UPDATE_AI_SPAN_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_UPDATE_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support updating Spans',
+      text: 'This storage provider does not support updating spans',
     });
   }
 
   /**
-   * Retrieves a single AI trace with all its associated spans.
+   * Retrieves a single trace with all its associated spans.
    */
-  getAITrace(_traceId: string): Promise<AITraceRecord | null> {
+  getTrace(_traceId: string): Promise<TraceRecord | null> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_GET_AI_TRACE_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_GET_TRACE_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support getting AI traces',
@@ -69,11 +69,11 @@ export class ObservabilityStorage extends MastraBase {
   }
 
   /**
-   * Retrieves a paginated list of AI traces with optional filtering.
+   * Retrieves a paginated list of traces with optional filtering.
    */
-  getAITracesPaginated(_args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  getTracesPaginated(_args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_GET_AI_TRACES_PAGINATED_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_GET_TRACES_PAGINATED_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support getting AI traces paginated',
@@ -85,10 +85,10 @@ export class ObservabilityStorage extends MastraBase {
    */
   batchCreateSpans(_args: { records: CreateSpanRecord[] }): Promise<void> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_AI_SPAN_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support batch creating Spans',
+      text: 'This storage provider does not support batch creating spans',
     });
   }
 
@@ -103,22 +103,22 @@ export class ObservabilityStorage extends MastraBase {
     }[];
   }): Promise<void> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_BATCH_UPDATE_AI_SPAN_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_BATCH_UPDATE_SPANS_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support batch updating Spans',
+      text: 'This storage provider does not support batch updating spans',
     });
   }
 
   /**
-   * Deletes multiple AI traces and all their associated spans in a single batch operation.
+   * Deletes multiple traces and all their associated spans in a single batch operation.
    */
-  batchDeleteAITraces(_args: { traceIds: string[] }): Promise<void> {
+  batchDeleteTraces(_args: { traceIds: string[] }): Promise<void> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_BATCH_DELETE_AI_SPAN_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support batch deleting AI traces',
+      text: 'This storage provider does not support batch deleting traces',
     });
   }
 }

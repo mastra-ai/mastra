@@ -1,7 +1,7 @@
 import { useQuery } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 
-export const useAITrace = (traceId: string | null | undefined, options?: { enabled: boolean }) => {
+export const useTrace = (traceId: string | null | undefined, options?: { enabled: boolean }) => {
   const client = useMastraClient();
   const query = useQuery({
     queryKey: ['ai-trace', traceId],
@@ -10,7 +10,7 @@ export const useAITrace = (traceId: string | null | undefined, options?: { enabl
         throw new Error('Trace ID is required');
       }
 
-      const res = await client.getAITrace(traceId);
+      const res = await client.getTrace(traceId);
       return res;
     },
     enabled: !!traceId,

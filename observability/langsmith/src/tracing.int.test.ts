@@ -8,6 +8,7 @@ import { Client } from 'langsmith';
 import { it } from 'vitest';
 import { z } from 'zod';
 import { LangSmithExporter } from './tracing';
+import { Observability } from '@mastra/observability';
 
 it.skip('should initialize with correct configuration', async () => {
   const client = new Client();
@@ -29,14 +30,14 @@ it.skip('should initialize with correct configuration', async () => {
 
   const mastra = new Mastra({
     agents: { agent },
-    observability: {
+    observability: new Observability({
       configs: {
         langsmith: {
           serviceName: 'ai',
           exporters: [new LangSmithExporter({ logLevel: 'debug', client })],
         },
       },
-    },
+    }),
   });
 
   const res = await mastra.getAgent('agent').generate('What is 21 + 21? Use tools if needed.');

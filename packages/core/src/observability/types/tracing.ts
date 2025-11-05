@@ -8,7 +8,7 @@ import type { RequestContext } from '../../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
-// Core AI-Specific Span Types
+// Span Types
 // ============================================================================
 
 /**
