@@ -67,6 +67,15 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         }
       }
 
+      if (params.body) {
+        try {
+          params.body = await this.parseBody(route, params.body);
+        } catch (error) {
+          console.error('Error parsing body', error);
+          return res.status(500).json({ error: 'Internal server error' });
+        }
+      }
+
       const handlerParams = {
         ...params.urlParams,
         ...params.queryParams,

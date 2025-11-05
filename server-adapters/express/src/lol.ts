@@ -265,14 +265,148 @@ const weatherWorkflow = createWorkflow({
 
 weatherWorkflow.commit();
 
+export const summaryAgent = new Agent({
+  name: 'summaryAgent',
+  model: openai('gpt-4o'),
+  instructions: `
+  You are a travel agent who is given a user prompt about what kind of holiday they want to go on.
+  You then generate 3 different options for the holiday. Return the suggestions as a JSON array { "suggestions": [{"location": "string", "description": "string"}] }. Don't format as markdown.
+
+  Make the options as different as possible from each other.
+  Also make the plan very short and summarized.
+  `,
+});
+export const travelAgent = new Agent({
+  name: 'travelAgent',
+  model: openai('gpt-4o'),
+  instructions: `
+  You are a travel agent who is given a user prompt about what kind of holiday they want to go on. A summary of the plan is provided as well as the location.
+  You then generate a detailed travel plan for the holiday.
+  `,
+});
+
+const generateSuggestionsStep = createStep({
+  id: 'generate-suggestions',
+  inputSchema: z.object({
+    vacationDescription: z.string().describe('The description of the vacation'),
+  }),
+  outputSchema: z.object({
+    suggestions: z.array(
+      z.object({
+        location: z.string(),
+        description: z.string(),
+      }),
+    ),
+  }),
+  execute: async ({ inputData, mastra }) => {
+    const { vacationDescription } = inputData;
+    const result = await mastra.getAgent('summaryAgent').generate(
+      [
+        {
+          role: 'user',
+          content: `Generate 3 suggestions for: ${vacationDescription}`,
+        },
+      ],
+      {
+        structuredOutput: {
+          schema: z.object({
+            suggestions: z.array(
+              z.object({
+                location: z.string(),
+                description: z.string(),
+              }),
+            ),
+          }),
+        },
+      },
+    );
+    return { suggestions: result.object?.suggestions || [] };
+  },
+});
+
+const humanInputStep = createStep({
+  id: 'human-input',
+  inputSchema: z.object({
+    suggestions: z.array(
+      z.object({
+        location: z.string(),
+        description: z.string(),
+      }),
+    ),
+  }),
+  outputSchema: z.object({
+    selection: z.string().describe('The selection of the user'),
+  }),
+  resumeSchema: z.object({
+    selection: z.string().describe('The selection of the user'),
+  }),
+  suspendSchema: z.object({
+    suggestions: z.array(
+      z.object({
+        location: z.string(),
+        description: z.string(),
+      }),
+    ),
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    if (!resumeData?.selection) {
+      return await suspend({ suggestions: inputData?.suggestions });
+    }
+
+    return {
+      selection: resumeData?.selection,
+    };
+  },
+});
+
+const travelPlannerStep = createStep({
+  id: 'travel-planner',
+  inputSchema: z.object({
+    selection: z.string().describe('The selection of the user'),
+  }),
+  outputSchema: z.object({
+    travelPlan: z.string(),
+  }),
+  execute: async ({ inputData, mastra, getInitData }) => {
+    const { vacationDescription } = getInitData();
+
+    const travelAgent = mastra.getAgent('travelAgent');
+
+    const { selection } = inputData;
+    const result = await travelAgent.generate([
+      { role: 'assistant', content: vacationDescription },
+      { role: 'user', content: selection || '' },
+    ]);
+    return { travelPlan: result.text };
+  },
+});
+
+const travelAgentWorkflow = createWorkflow({
+  id: 'travel-agent-workflow-step4-suspend-resume',
+  inputSchema: z.object({
+    vacationDescription: z.string().describe('The description of the vacation'),
+  }),
+  outputSchema: z.object({
+    travelPlan: z.string(),
+  }),
+})
+  .then(generateSuggestionsStep)
+  .then(humanInputStep)
+  .then(travelPlannerStep);
+
+travelAgentWorkflow.commit();
+
 const mastra = new Mastra({
   agents: {
     newAgent,
     weatherAgent,
     planningAgent,
+    summaryAgent,
+    travelAgent,
   },
   workflows: {
     weatherWorkflow,
+    travelAgentWorkflow,
   },
   storage,
   observability: {

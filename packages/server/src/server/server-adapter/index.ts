@@ -8,16 +8,6 @@ import {
   listAgentsHandler,
   streamGenerateHandler,
 } from '../handlers/agents';
-import { getAITracesPaginatedHandler } from '../handlers/observability';
-import {
-  createWorkflowRunHandler,
-  getWorkflowByIdHandler,
-  getWorkflowRunByIdHandler,
-  listWorkflowRunsHandler,
-  listWorkflowsHandler,
-  streamWorkflowHandler,
-} from '../handlers/workflows';
-import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, listToolsHandler } from '../handlers/tools';
 import {
   getMemoryConfigHandler,
   getMemoryStatusHandler,
@@ -26,8 +16,19 @@ import {
   getWorkingMemoryHandler,
   listThreadsHandler,
 } from '../handlers/memory';
-import { getSpeakersHandler } from '../handlers/voice';
+import { getAITracesPaginatedHandler } from '../handlers/observability';
 import { listScorersHandler } from '../handlers/scores';
+import { executeAgentToolHandler, getToolByIdHandler, listToolsHandler } from '../handlers/tools';
+import { getSpeakersHandler } from '../handlers/voice';
+import {
+  createWorkflowRunHandler,
+  getWorkflowByIdHandler,
+  getWorkflowRunByIdHandler,
+  listWorkflowRunsHandler,
+  listWorkflowsHandler,
+  resumeStreamWorkflowHandler,
+  streamWorkflowHandler,
+} from '../handlers/workflows';
 
 type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
   params: TParams & { mastra: Mastra },
@@ -40,6 +41,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   responseType: 'stream' | 'json';
   handler: ServerRouteHandler<TParams, TResponse>;
   queryParamSchema?: z.ZodSchema;
+  bodySchema?: z.ZodSchema;
 };
 
 export const SERVER_ROUTES: ServerRoute[] = [
@@ -108,6 +110,9 @@ export const SERVER_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: createWorkflowRunHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/create-run',
+    bodySchema: z.object({
+      runId: z.string().optional(),
+    }),
   },
   {
     method: 'POST',
@@ -120,6 +125,12 @@ export const SERVER_ROUTES: ServerRoute[] = [
     responseType: 'stream',
     handler: streamWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/streamVNext',
+  },
+  {
+    method: 'POST',
+    responseType: 'stream',
+    handler: resumeStreamWorkflowHandler as unknown as ServerRouteHandler,
+    path: '/api/workflows/:workflowId/resume-stream',
   },
   {
     method: 'GET',
@@ -224,5 +235,14 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
     }
 
     return queryParamSchema.parseAsync(params);
+  }
+
+  async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {
+    const bodySchema = route.bodySchema;
+    if (!bodySchema) {
+      return body;
+    }
+
+    return bodySchema.parseAsync(body);
   }
 }
