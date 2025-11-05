@@ -97,7 +97,6 @@ export default function ChatbotSidebar({
 
   return (
     <motion.aside
-      layout
       initial={false}
       className={clsx(
         styles.chatbotSidebarContainer,
