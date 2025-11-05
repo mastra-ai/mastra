@@ -467,6 +467,7 @@ describe('Memory Handlers', () => {
         mastra,
         threadId,
         resourceId,
+        agentId: 'test-agent',
       });
 
       // Verify both messages are returned
@@ -677,7 +678,7 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(listMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'testAgent' })).rejects.toThrow(
-        new HTTPException(400, { message: 'Storage is not initialized' }),
+        new HTTPException(400, { message: 'Memory is not initialized' }),
       );
     });
 
@@ -690,7 +691,7 @@ describe('Memory Handlers', () => {
         storage,
       });
       storage.getThreadById = vi.fn().mockResolvedValue(null);
-      await expect(listMessagesHandler({ mastra, threadId: 'non-existent' })).rejects.toThrow(
+      await expect(listMessagesHandler({ mastra, threadId: 'non-existent', agentId: 'test-agent' })).rejects.toThrow(
         new HTTPException(404, { message: 'Thread not found' }),
       );
     });
@@ -729,6 +730,7 @@ describe('Memory Handlers', () => {
         mastra,
         threadId: 'test-thread',
         resourceId: 'test-resource',
+        agentId: 'test-agent',
         perPage: 10,
         page: 0,
         orderBy: undefined,
@@ -796,7 +798,12 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'getThreadById');
       vi.spyOn(mockMemory, 'recall');
 
-      const result = await listMessagesHandler({ mastra, threadId, resourceId: 'test-resource' });
+      const result = await listMessagesHandler({
+        mastra,
+        threadId,
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+      });
 
       // Verify that messages contains the custom metadata
       expect(result.messages).toHaveLength(1);
@@ -872,7 +879,12 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'getThreadById');
       vi.spyOn(mockMemory, 'recall');
 
-      const result = await listMessagesHandler({ mastra, threadId, resourceId: 'test-resource' });
+      const result = await listMessagesHandler({
+        mastra,
+        threadId,
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+      });
 
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0]?.role).toBe('assistant');
@@ -924,7 +936,12 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'getThreadById');
       vi.spyOn(mockMemory, 'recall');
 
-      const result = await listMessagesHandler({ mastra, threadId, resourceId: 'test-resource' });
+      const result = await listMessagesHandler({
+        mastra,
+        threadId,
+        resourceId: 'test-resource',
+        agentId: 'test-agent',
+      });
 
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0]?.content.parts).toHaveLength(2);
@@ -1005,6 +1022,7 @@ describe('Memory Handlers', () => {
         mastra,
         threadId,
         resourceId: 'test-resource',
+        agentId: 'test-agent',
       });
 
       expect(result.messages).toHaveLength(3);
