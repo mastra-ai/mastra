@@ -341,6 +341,7 @@ export async function writeScorersSample(llmProvider: LLMProvider, destPath: str
   const content = `import { z } from 'zod';
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
 import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
 import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
@@ -366,8 +367,8 @@ export const translationScorer = createScorer({
   },
 })
   .preprocess(({ run }) => {
-    const userText = (run.input?.inputMessages?.[0]?.content as string) || '';
-    const assistantText = (run.output?.[0]?.content as string) || '';
+    const userText = getUserMessageFromRunInput(run.input) || '';
+    const assistantText = getAssistantMessageFromRunOutput(run.output) || '';
     return { userText, assistantText };
   })
   .analyze({
