@@ -5,6 +5,7 @@ import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import { toast } from 'sonner';
+import { ErrorDisplay } from '@/components/ui/error-display';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -12,7 +13,7 @@ export interface MCPToolPanelProps {
 }
 
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
-  const { data: tool, isLoading } = useMCPServerTool(serverId, toolId);
+  const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteMCPTool(serverId, toolId);
 
   const handleExecuteTool = async (data: any) => {
@@ -22,6 +23,11 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   };
 
   if (isLoading) return null;
+
+  if (error) {
+    return <ErrorDisplay title="Error loading tool" error={error} />;
+  }
+
   if (!tool)
     return (
       <div className="py-12 text-center px-6">

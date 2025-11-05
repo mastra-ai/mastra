@@ -49,3 +49,4 @@ export * from './components/assistant-ui/tools/tool-fallback';
 export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
+export * from './components/ui/error-display';

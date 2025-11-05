@@ -7,6 +7,7 @@ import { Txt } from '@/ds/components/Txt';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { useAgent } from '../hooks/use-agent';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
+import { ErrorDisplay } from '@/components/ui/error-display';
 
 export interface AgentToolPanelProps {
   toolId: string;
@@ -14,7 +15,7 @@ export interface AgentToolPanelProps {
 }
 
 export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
 
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
@@ -37,6 +38,11 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
     : z.object({});
 
   if (isAgentLoading) return null;
+
+  if (error) {
+    return <ErrorDisplay title="Error loading agent" error={error} />;
+  }
+
   if (!tool)
     return (
       <div className="py-12 text-center px-6">

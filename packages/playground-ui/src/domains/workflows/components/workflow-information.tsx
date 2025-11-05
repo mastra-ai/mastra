@@ -11,6 +11,7 @@ import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { Badge } from '@/ds/components/Badge';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import { ErrorDisplay } from '@/components/ui/error-display';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -18,7 +19,7 @@ export interface WorkflowInformationProps {
 }
 
 export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
-  const { data: workflow, isLoading } = useWorkflow(workflowId);
+  const { data: workflow, isLoading, error } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
   const {
@@ -41,6 +42,14 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
       closeStreamsAndReset();
     }
   }, [runId, initialRunId]);
+
+  if (error) {
+    return (
+      <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
+        <ErrorDisplay title="Error loading workflow" error={error} />
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">

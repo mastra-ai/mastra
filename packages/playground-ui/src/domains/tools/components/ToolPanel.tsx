@@ -9,6 +9,7 @@ import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo } from 'react';
+import { ErrorDisplay } from '@/components/ui/error-display';
 
 export interface ToolPanelProps {
   toolId: string;
@@ -20,10 +21,10 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   // Check if tool exists in any agent's tools
   const agentTool = useMemo(() => {
     for (const agent of Object.values(agents)) {
-      if ((agent as any).tools) {
-        const tool = Object.values((agent as any).tools).find((t: any) => t.id === toolId);
+      if (agent.tools) {
+        const tool = Object.values(agent.tools).find(t => t.id === toolId);
         if (tool) {
-          return tool as any;
+          return tool;
         }
       }
     }
@@ -53,6 +54,11 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     : z.object({});
 
   if (isLoading) return null;
+
+  if (error) {
+    return <ErrorDisplay title="Error loading tool" error={error} />;
+  }
+
   if (!tool)
     return (
       <div className="py-12 text-center px-6">

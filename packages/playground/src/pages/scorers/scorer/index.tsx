@@ -24,6 +24,7 @@ import {
   HeaderGroup,
   Combobox,
   useScorers,
+  ErrorDisplay,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router';
 import { GaugeIcon } from 'lucide-react';
@@ -44,10 +45,10 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
-  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
-  const { data: scorers = {} } = useScorers();
+  const { scorer, isLoading: isScorerLoading, error: scorerError } = useScorer(scorerId!);
+  const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { data: workflows, isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
+  const { data: scorers = {}, error: scorersError } = useScorers();
   const {
     data: scoresData,
     isLoading: isLoadingScores,
@@ -93,6 +94,27 @@ export default function Scorer() {
   }, [searchParams, selectedEntityOption, entityOptions]);
 
   if (isScorerLoading) return null;
+
+  if (scorerError || agentsError || workflowsError || scorersError) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/scorers`} isCurrent>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+        <ErrorDisplay
+          title="Error loading scorer"
+          error={scorerError || agentsError || workflowsError || scorersError}
+        />
+      </MainContentLayout>
+    );
+  }
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {
