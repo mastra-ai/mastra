@@ -242,15 +242,3 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
     // ...
   });
 ```
-
-### `experimental_generateMessageId` option
-
-The `experimental_generateMessageId` option has been removed from agent generate/stream methods. Message IDs are now automatically generated internally.
-
-To migrate, remove the `experimental_generateMessageId` option. Message ID generation is handled automatically by the Memory layer.
-
-```diff
-  agent.generate('Hello', {
--   experimental_generateMessageId: () => 'custom-id',
-  });
-```
