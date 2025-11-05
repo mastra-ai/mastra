@@ -11,7 +11,7 @@ import {
   listWorkflowsHandler,
   streamWorkflowHandler,
 } from '../handlers/workflows';
-import { listToolsHandler } from '../handlers/tools';
+import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, listToolsHandler } from '../handlers/tools';
 
 type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
   params: TParams & { mastra: Mastra },
@@ -98,6 +98,18 @@ export const SERVER_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: listToolsHandler as unknown as ServerRouteHandler,
     path: '/api/tools',
+  },
+  {
+    method: 'GET',
+    responseType: 'json',
+    handler: getToolByIdHandler as unknown as ServerRouteHandler,
+    path: '/api/tools/:toolId',
+  },
+  {
+    method: 'POST',
+    responseType: 'json',
+    handler: executeAgentToolHandler as unknown as ServerRouteHandler,
+    path: '/api/agents/:agentId/tools/:toolId/execute',
   },
   {
     method: 'GET',
