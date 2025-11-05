@@ -1,11 +1,6 @@
 - navigation:
-    - list:
-        - listitem:
-            - link "Workflows":
-                - /url: /workflows
-                - img
-        - separator:
-            - img
-        - listitem:
-            - link "complex-workflow":
-                - /url: /workflows/complexWorkflow
+  - list:
+    - listitem:
+      - link "Workflows":
+        - /url: /workflows
+        - img
