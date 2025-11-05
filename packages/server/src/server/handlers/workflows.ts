@@ -681,27 +681,22 @@ export async function resumeStreamWorkflowHandler({
 export async function listWorkflowRunsHandler({
   mastra,
   workflowId,
-  fromDate: fromDateRaw,
-  toDate: toDateRaw,
-  perPage: perPageRaw,
-  page: pageRaw,
+  fromDate,
+  toDate,
+  perPage,
+  page,
   resourceId,
 }: WorkflowContext & {
-  fromDate?: string;
-  toDate?: string;
-  perPage?: string;
-  page?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  perPage?: number | false;
+  page?: number;
   resourceId?: string;
 }): Promise<WorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
-
-    const fromDate = fromDateRaw ? new Date(fromDateRaw) : undefined;
-    const toDate = toDateRaw ? new Date(toDateRaw) : undefined;
-    const perPage = perPageRaw !== undefined ? parsePerPage(perPageRaw) : undefined;
-    const page = pageRaw ? Number(pageRaw) : undefined;
 
     // Validate pagination parameters
     if (perPage !== undefined && perPage !== false && (!Number.isInteger(perPage) || perPage <= 0)) {

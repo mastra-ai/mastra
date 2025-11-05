@@ -83,10 +83,10 @@ export const workflowRunResponseSchema = workflowRunSchema;
  * All query params come as strings from URL
  */
 export const listWorkflowRunsQuerySchema = z.object({
-  fromDate: z.string().optional(),
-  toDate: z.string().optional(),
-  perPage: z.string().optional(),
-  page: z.string().optional(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+  perPage: z.coerce.number().optional(),
+  page: z.coerce.number().optional(),
   resourceId: z.string().optional(),
 });
 
@@ -106,4 +106,39 @@ export const streamWorkflowBodySchema = z.object({
 export const resumeStreamBodySchema = z.object({
   step: z.union([z.string(), z.array(z.string())]),
   resumeData: z.unknown().optional(),
+});
+
+/**
+ * Schema for start async workflow body
+ */
+export const startAsyncWorkflowBodySchema = z.object({
+  runId: z.string().optional(),
+  inputData: z.unknown().optional(),
+  tracingOptions: z.object({}).passthrough().optional(),
+});
+
+/**
+ * Schema for send workflow run event body
+ */
+export const sendWorkflowRunEventBodySchema = z.object({
+  event: z.string(),
+  data: z.unknown(),
+});
+
+/**
+ * Schema for workflow execution result
+ */
+export const workflowExecutionResultSchema = z
+  .object({
+    status: z.string(),
+    result: z.unknown().optional(),
+    error: z.unknown().optional(),
+  })
+  .passthrough();
+
+/**
+ * Response schema for workflow control operations
+ */
+export const workflowControlResponseSchema = z.object({
+  message: z.string(),
 });

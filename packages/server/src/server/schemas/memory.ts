@@ -45,14 +45,16 @@ const threadSchema = z.object({
 /**
  * Message structure (simplified - uses passthrough for flexibility)
  */
-const messageSchema = z.object({
-  id: z.string(),
-  role: z.string(),
-  content: z.any(), // Complex nested structure, allow any
-  createdAt: z.date(),
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-}).passthrough();
+const messageSchema = z
+  .object({
+    id: z.string(),
+    role: z.string(),
+    content: z.any(), // Complex nested structure, allow any
+    createdAt: z.date(),
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+  })
+  .passthrough();
 
 // ============================================================================
 // Query Parameter Schemas
@@ -117,14 +119,13 @@ export const memoryStatusResponseSchema = z.object({
  * MemoryConfig is complex with many optional fields - using passthrough
  */
 export const memoryConfigResponseSchema = z.object({
-  config: z.object({
-    lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-    semanticRecall: z.union([
-      z.boolean(),
-      z.object({}).passthrough(),
-    ]).optional(),
-    workingMemory: z.object({}).passthrough().optional(),
-  }).passthrough(),
+  config: z
+    .object({
+      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+      semanticRecall: z.union([z.boolean(), z.object({}).passthrough()]).optional(),
+      workingMemory: z.object({}).passthrough().optional(),
+    })
+    .passthrough(),
 });
 
 /**
@@ -155,4 +156,107 @@ export const getWorkingMemoryResponseSchema = z.object({
   source: z.enum(['thread', 'resource']),
   workingMemoryTemplate: z.unknown(), // Template structure varies
   threadExists: z.boolean(),
+});
+
+// ============================================================================
+// Body Parameter Schemas for POST/PUT/DELETE
+// ============================================================================
+
+/**
+ * Body schema for POST /api/memory/messages
+ */
+export const saveMessagesBodySchema = z.object({
+  messages: z.array(z.unknown()), // Array of message objects
+});
+
+/**
+ * Body schema for POST /api/memory/threads
+ */
+export const createThreadBodySchema = z.object({
+  resourceId: z.string(),
+  title: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  threadId: z.string().optional(),
+});
+
+/**
+ * Body schema for PUT /api/memory/threads/:threadId
+ */
+export const updateThreadBodySchema = z.object({
+  title: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  resourceId: z.string().optional(),
+});
+
+/**
+ * Body schema for PUT /api/memory/threads/:threadId/working-memory
+ */
+export const updateWorkingMemoryBodySchema = z.object({
+  workingMemory: z.unknown(),
+  resourceId: z.string().optional(),
+  memoryConfig: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Query schema for GET /api/memory/messages
+ */
+export const listMessagesQuerySchema = z.object({
+  threadId: z.string(),
+  resourceId: z.string().optional(),
+  perPage: z.coerce.number().optional(),
+  page: z.coerce.number().optional(),
+  orderBy: storageOrderBySchema.optional(),
+  include: z.unknown().optional(),
+  filter: z.unknown().optional(),
+});
+
+/**
+ * Query schema for DELETE /api/memory/messages
+ */
+export const deleteMessagesQuerySchema = z.object({
+  messageIds: z.union([z.string(), z.array(z.string())]),
+});
+
+/**
+ * Query schema for GET /api/memory/search
+ */
+export const searchMemoryQuerySchema = z.object({
+  searchQuery: z.string(),
+  resourceId: z.string(),
+  threadId: z.string().optional(),
+  limit: z.coerce.number().optional(),
+  memoryConfig: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Response schemas
+ */
+export const saveMessagesResponseSchema = z.object({
+  ids: z.array(z.string()),
+});
+
+export const deleteThreadResponseSchema = z.object({
+  result: z.string(),
+});
+
+export const updateWorkingMemoryResponseSchema = z.object({
+  success: z.boolean(),
+});
+
+export const listMessagesResponseSchema = z.object({
+  messages: z.array(z.unknown()),
+  pagination: paginationInfoSchema.optional(),
+});
+
+export const deleteMessagesResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+});
+
+export const searchMemoryResponseSchema = z.object({
+  results: z.array(z.unknown()),
+  count: z.number(),
+  query: z.string(),
+  searchScope: z.string().optional(),
+  searchType: z.string().optional(),
 });

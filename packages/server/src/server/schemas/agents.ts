@@ -14,6 +14,11 @@ export const agentToolPathParams = z.object({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
+export const modelConfigIdPathParams = z.object({
+  agentId: z.string().describe('Unique identifier for the agent'),
+  modelConfigId: z.string().describe('Unique identifier for the model configuration'),
+});
+
 /**
  * Schema for serialized processor metadata
  */
@@ -150,10 +155,7 @@ export const listToolsResponseSchema = z.record(z.string(), serializedToolSchema
  * Schema for agent memory option
  */
 const agentMemoryOptionSchema = z.object({
-  thread: z.union([
-    z.string(),
-    z.object({ id: z.string() }).passthrough(),
-  ]),
+  thread: z.union([z.string(), z.object({ id: z.string() }).passthrough()]),
   resource: z.string(),
   options: z.record(z.string(), z.unknown()).optional(),
   readOnly: z.boolean().optional(),
@@ -283,3 +285,102 @@ export const voiceSpeakersResponseSchema = z.array(
     })
     .passthrough(), // Allow provider-specific fields like name, language, etc.
 );
+
+// ============================================================================
+// Tool Approval Schemas
+// ============================================================================
+
+/**
+ * Body schema for approving tool call
+ */
+export const approveToolCallBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.string().optional(),
+});
+
+/**
+ * Body schema for declining tool call
+ */
+export const declineToolCallBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.string().optional(),
+});
+
+/**
+ * Response schema for tool approval/decline
+ */
+export const toolCallResponseSchema = z.object({
+  fullStream: z.any(), // ReadableStream
+});
+
+// ============================================================================
+// Model Management Schemas
+// ============================================================================
+
+/**
+ * Body schema for updating agent model
+ */
+export const updateAgentModelBodySchema = z.object({
+  modelId: z.string(),
+  provider: z.string(),
+});
+
+/**
+ * Body schema for reordering agent model list
+ */
+export const reorderAgentModelListBodySchema = z.object({
+  reorderedModelIds: z.array(z.string()),
+});
+
+/**
+ * Body schema for updating model in model list
+ */
+export const updateAgentModelInModelListBodySchema = z.object({
+  model: z
+    .object({
+      modelId: z.string(),
+      provider: z.string(),
+    })
+    .optional(),
+  maxRetries: z.number().optional(),
+  enabled: z.boolean().optional(),
+});
+
+/**
+ * Response schema for model management operations
+ */
+export const modelManagementResponseSchema = z.object({
+  message: z.string(),
+});
+
+// ============================================================================
+// Voice Schemas
+// ============================================================================
+
+/**
+ * Body schema for generating speech
+ */
+export const generateSpeechBodySchema = z.object({
+  text: z.string(),
+  speakerId: z.string().optional(),
+});
+
+/**
+ * Body schema for transcribing speech
+ */
+export const transcribeSpeechBodySchema = z.object({
+  audioData: z.unknown(), // Buffer
+  options: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Response schema for transcribe speech
+ */
+export const transcribeSpeechResponseSchema = z.object({
+  text: z.string(),
+});
+
+/**
+ * Response schema for get listener
+ */
+export const getListenerResponseSchema = z.unknown(); // Listener info structure varies

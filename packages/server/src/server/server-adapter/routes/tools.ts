@@ -1,5 +1,10 @@
-import { getToolByIdHandler, listToolsHandler } from '../../handlers/tools';
-import { listToolsResponseSchema, serializedToolSchema, toolIdPathParams } from '../../schemas/agents';
+import { getToolByIdHandler, listToolsHandler, executeToolHandler } from '../../handlers/tools';
+import {
+  listToolsResponseSchema,
+  serializedToolSchema,
+  toolIdPathParams,
+  executeToolBodySchema,
+} from '../../schemas/agents';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
@@ -23,6 +28,17 @@ export const TOOLS_ROUTES: ServerRoute[] = [
     responseSchema: serializedToolSchema,
     summary: 'Get tool by ID',
     description: 'Returns details for a specific tool including its schema and configuration',
+    tags: ['Tools'],
+  }),
+  createRoute({
+    method: 'POST',
+    responseType: 'json',
+    handler: executeToolHandler as unknown as ServerRouteHandler,
+    path: '/api/tools/:toolId/execute',
+    pathParamSchema: toolIdPathParams,
+    bodySchema: executeToolBodySchema,
+    summary: 'Execute tool',
+    description: 'Executes a specific tool with the provided input data',
     tags: ['Tools'],
   }),
 ];

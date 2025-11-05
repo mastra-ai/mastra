@@ -66,3 +66,46 @@ export const getAITracesPaginatedResponseSchema = z.object({
   pagination: paginationInfoSchema,
   spans: z.array(aiSpanRecordSchema),
 });
+
+// Path parameter schemas
+export const traceIdPathParams = z.object({
+  traceId: z.string().describe('Unique identifier for the trace'),
+});
+
+export const traceSpanPathParams = z.object({
+  traceId: z.string().describe('Unique identifier for the trace'),
+  spanId: z.string().describe('Unique identifier for the span'),
+});
+
+// Body schema for scoring traces
+export const scoreTracesBodySchema = z.object({
+  scorerName: z.string(),
+  targets: z.array(
+    z.object({
+      traceId: z.string(),
+      spanId: z.string().optional(),
+    }),
+  ),
+});
+
+// Response schemas
+export const getAITraceResponseSchema = z.object({
+  spans: z.array(aiSpanRecordSchema),
+});
+
+export const scoreTracesResponseSchema = z.object({
+  status: z.string(),
+  message: z.string(),
+  traceCount: z.number(),
+});
+
+export const listScoresBySpanResponseSchema = z.object({
+  pagination: paginationInfoSchema,
+  scores: z.array(z.unknown()),
+});
+
+// Query schema for list scores by span
+export const listScoresBySpanQuerySchema = z.object({
+  page: z.coerce.number().optional().default(0),
+  perPage: z.coerce.number().optional().default(10),
+});

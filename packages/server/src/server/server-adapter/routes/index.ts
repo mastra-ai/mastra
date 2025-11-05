@@ -7,6 +7,10 @@ import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
 import { TOOLS_ROUTES } from './tools';
 import { WORKFLOWS_ROUTES } from './workflows';
+import { LOGS_ROUTES } from './logs';
+import { VECTORS_ROUTES } from './vectors';
+import { A2A_ROUTES } from './a2a';
+import { AGENT_BUILDER_ROUTES } from './agent-builder';
 
 export type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
   params: TParams & { mastra: Mastra },
@@ -32,6 +36,10 @@ export const SERVER_ROUTES: ServerRoute[] = [
   ...MEMORY_ROUTES,
   ...SCORES_ROUTES,
   ...OBSERVABILITY_ROUTES,
+  ...LOGS_ROUTES,
+  ...VECTORS_ROUTES,
+  ...A2A_ROUTES,
+  ...AGENT_BUILDER_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities
