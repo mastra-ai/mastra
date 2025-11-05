@@ -182,12 +182,12 @@
     },
     {
       "source": "/examples/memory",
-      "destination": "/examples/memory/memory-with-libsql",
+      "destination": "/examples/memory/working-memory-template",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank",
-      "destination": "/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
@@ -232,7 +232,7 @@
     },
     {
       "source": "/examples/memory/short-term-working-memory",
-      "destination": "/examples/memory/memory-with-libsql",
+      "destination": "/examples/memory/working-memory-template",
       "permanent": true
     },
     {
@@ -287,7 +287,7 @@
     },
     {
       "source": "/docs/guide/local-dev/integrations",
-      "destination": "/docs/server-db/local-dev-playground",
+      "destination": "/docs/server-db/mastra-client",
       "permanent": true
     },
     {
@@ -422,7 +422,7 @@
     },
     {
       "source": "/docs/local-dev/mastra-dev",
-      "destination": "/docs/server-db/local-dev-playground",
+      "destination": "/docs/server-db/mastra-client",
       "permanent": true
     },
     {
@@ -532,7 +532,7 @@
     },
     {
       "source": "/examples/rag/rerank-rag",
-      "destination": "/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
@@ -542,7 +542,7 @@
     },
     {
       "source": "/examples/rag/usage/rerank-rag",
-      "destination": "/examples/rag/rerank/rerank",
+      "destination": "/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
