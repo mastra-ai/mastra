@@ -20,6 +20,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   handler: ServerRouteHandler<TParams, TResponse>;
   queryParamSchema?: z.ZodSchema;
   bodySchema?: z.ZodSchema;
+  responseSchema?: z.ZodSchema;
 };
 
 export const SERVER_ROUTES: ServerRoute[] = [

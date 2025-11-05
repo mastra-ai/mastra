@@ -7,6 +7,11 @@ import {
 } from '../../handlers/agents';
 import { executeAgentToolHandler } from '../../handlers/tools';
 import { getSpeakersHandler } from '../../handlers/voice';
+import {
+  listAgentsResponseSchema,
+  providersResponseSchema,
+  serializedAgentSchema,
+} from '../../schemas/agents';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
 export const AGENTS_ROUTES: ServerRoute[] = [
@@ -15,18 +20,21 @@ export const AGENTS_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: listAgentsHandler as unknown as ServerRouteHandler,
     path: '/api/agents',
+    responseSchema: listAgentsResponseSchema,
   },
   {
     method: 'GET',
     responseType: 'json',
     handler: getProvidersHandler as unknown as ServerRouteHandler,
     path: '/api/agents/providers',
+    responseSchema: providersResponseSchema,
   },
   {
     method: 'GET',
     responseType: 'json',
     handler: getAgentByIdHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId',
+    responseSchema: serializedAgentSchema,
   },
   {
     method: 'GET',
