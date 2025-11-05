@@ -20,7 +20,7 @@ export const getMcpServerMessageHandler = async (c: Context) => {
     // Use Node.js res to send response since we are not returning a Hono response
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: `MCP server '${serverId}' not found` }));
-    return;
+    return await toFetchResponse(res);
   }
 
   try {
@@ -46,9 +46,11 @@ export const getMcpServerMessageHandler = async (c: Context) => {
           id: null, // Cannot determine original request ID in catch
         }),
       );
+      return await toFetchResponse(res);
     } else {
       // If headers were already sent (e.g., during SSE stream), just log the error
       c.get('logger')?.error('Error after headers sent:', error);
+      return await toFetchResponse(res);
     }
   }
 };
