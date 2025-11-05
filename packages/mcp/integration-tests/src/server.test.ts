@@ -140,7 +140,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     const tools = await client.listTools();
     console.log('Tools:', tools);
 
-    const tool = tools['myMcpServer_calculator'];
+    const tool = tools['my-mcp-server_calculator'];
     console.log('Tool:', tool);
 
     const result = await tool.execute(toolCallPayload.params.args);
@@ -196,7 +196,8 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
 
   // --- New tests for MCP Registry API Style Routes ---
   describe('MCP Registry API Style Endpoints', () => {
-    const defaultMcpServerLogicalId = 'myMcpServer'; // Assuming this is the ID of the default server
+    // Note: The ID gets slugified, so 'myMcpServer' becomes 'my-mcp-server'
+    const defaultMcpServerLogicalId = 'my-mcp-server';
 
     it('GET /api/mcp/v0/servers - should list available MCP servers', async () => {
       const response = await fetch(`http://localhost:${port}/api/mcp/v0/servers`);
@@ -213,9 +214,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       expect(defaultServerInfo).toBeDefined();
       expect(defaultServerInfo).toHaveProperty('name');
       expect(defaultServerInfo).toHaveProperty('version_detail');
-      // Based on default mastra dev setup, if myMcpServer is the key, its id becomes 'myMcpServer'
-      // And its name might be something like 'my-mcp-server' if not explicitly set in MCPServerConfig for it.
-      // For this test, we assume the `id` is the key used in Mastra config.
+      // The ID gets slugified in MCPServerBase constructor
       expect(defaultServerInfo.id).toBe(defaultMcpServerLogicalId);
     });
 
@@ -310,7 +309,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       };
 
       const tools = await client.listTools();
-      const tool = tools['myMcpServer_testMastraInstance'];
+      const tool = tools['my-mcp-server_testMastraInstance'];
       expect(tool).toBeDefined();
 
       const result = await tool.execute!(toolCallPayload.params.args, {});
