@@ -114,13 +114,13 @@ Include a `memory` object with both `resource` and `thread` to track conversatio
 
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
 
-```typescript {3-4}
+```typescript {5-6}
 const response = await memoryAgent.generate(
   "Remember my favorite color is blue.",
   {
     memory: {
-      thread: "user-123",
-      resource: "test-123",
+      resource: "user-123",
+      thread: "conversation-123",
     },
   },
 );
@@ -131,8 +131,8 @@ To recall information stored in memory, call the agent with the same `resource` 
 ```typescript {3-4}
 const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
-    thread: "user-123",
-    resource: "test-123",
+    resource: "user-123",
+    thread: "conversation-123",
   },
 });
 ```
