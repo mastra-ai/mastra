@@ -4,6 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { Observability } from '@mastra/observability';
 import { Client } from 'langsmith';
 import { it } from 'vitest';
 import { z } from 'zod';
@@ -29,14 +30,14 @@ it.skip('should initialize with correct configuration', async () => {
 
   const mastra = new Mastra({
     agents: { agent },
-    observability: {
+    observability: new Observability({
       configs: {
         langsmith: {
           serviceName: 'ai',
           exporters: [new LangSmithExporter({ logLevel: 'debug', client })],
         },
       },
-    },
+    }),
   });
 
   const res = await mastra.getAgent('agent').generate('What is 21 + 21? Use tools if needed.');

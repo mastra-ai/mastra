@@ -17,7 +17,7 @@ import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 
 import type {
   SpanRecord,
-  AITraceRecord,
+  TraceRecord,
   PaginationInfo,
   StorageColumn,
   StoragePagination,
@@ -322,8 +322,8 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.observability!.updateSpan(params);
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    return this.stores.observability!.getAITrace(traceId);
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    return this.stores.observability!.getTrace(traceId);
   }
 
   async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
@@ -336,8 +336,8 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.observability!.batchUpdateSpans(args);
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
-    return this.stores.observability!.batchDeleteAITraces(args);
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+    return this.stores.observability!.batchDeleteTraces(args);
   }
 }
 

@@ -490,7 +490,7 @@ describe('MongoDB Specific Tests', () => {
       await expect(store.createSpan(Span)).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await store.getAITrace('mongodb-trace-1');
+      const trace = await store.getTrace('mongodb-trace-1');
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe('mongodb-span-1');
@@ -560,7 +560,7 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await store.getAITrace('update-trace-1');
+      const trace = await store.getTrace('update-trace-1');
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });
