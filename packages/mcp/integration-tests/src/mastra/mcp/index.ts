@@ -3,6 +3,7 @@ import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
 
 export const myMcpServer = new MCPServer({
+  id: 'myMcpServer',
   name: 'My Calculation & Data MCP Server',
   version: '1.0.0',
   tools: {
