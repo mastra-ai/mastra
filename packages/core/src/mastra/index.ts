@@ -948,7 +948,6 @@ export class Mastra<
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
-      storage: this.getStorage(),
     });
     this.#internalMastraWorkflows[workflow.id] = workflow;
   }
