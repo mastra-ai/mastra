@@ -416,6 +416,13 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
           if (attempt > maxRetries) {
             break;
           }
+
+          // Add exponential backoff before retrying to avoid hammering the API
+          // This helps with rate limiting and gives transient failures time to recover
+          if (attempt <= maxRetries) {
+            const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 1s, 2s, 4s, 8s, max 10s
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
         }
       }
     }
