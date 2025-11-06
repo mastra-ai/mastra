@@ -128,9 +128,6 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
 
   await storage.init()
   mastra?.setStorage(storage)
-
-  mastra?.memory?.setStorage(storage)
-  mastra?.memory?.setVector(vector)
 }
 
 if (mastra?.getStorage()) {

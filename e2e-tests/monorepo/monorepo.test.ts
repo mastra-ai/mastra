@@ -54,7 +54,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       await mkdir(join(corePath, 'runtime-context'), { recursive: true });
       await writeFile(
         join(corePath, 'runtime-context', 'index.js'),
-        `export { RequestContext as RuntimeContext } from '../request-context';`,
+        `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
       );
     },
     10 * 60 * 1000,
@@ -119,7 +119,12 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
-          reject(new Error('failed to start dev: ' + data?.toString()));
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            // Ignore punycode warning
+            return;
+          }
+          reject(new Error('failed to start dev: ' + errMsg));
         });
         proc!.stdout?.on('data', data => {
           process.stdout.write(data?.toString());
@@ -169,7 +174,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
-          reject(new Error('failed to start: ' + data?.toString()));
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            // Ignore punycode warning
+            return;
+          }
+
+          reject(new Error('failed to start: ' + errMsg));
         });
         proc!.stdout?.on('data', data => {
           console.log(data?.toString());
