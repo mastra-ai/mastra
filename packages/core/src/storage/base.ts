@@ -387,7 +387,7 @@ export abstract class MastraStorage extends MastraBase {
     await this?.alterTable?.({
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['spanId'],
+      ifNotExists: ['spanId', 'requestContext'],
     });
   }
 
