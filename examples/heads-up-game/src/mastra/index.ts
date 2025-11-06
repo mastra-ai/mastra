@@ -11,6 +11,7 @@ export const mastra = new Mastra({
   workflows: { headsUpWorkflow },
   agents: { famousPersonAgent, gameAgent, guessVerifierAgent },
   storage: new LibSQLStore({
+    id: 'heads-up-game-storage',
     // stores observability, evals, ... into file storage for persistence across playground refreshes
     url: 'file:../mastra.db',
   }),

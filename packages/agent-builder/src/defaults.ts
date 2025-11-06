@@ -218,6 +218,7 @@ export const weatherAgent = new Agent({
   tools: { weatherTool },
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-memory-storage',
       url: 'file:../mastra.db', // ask user what database to use, use this as the default
     }),
   }),
@@ -385,6 +386,7 @@ export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     // stores observability, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),

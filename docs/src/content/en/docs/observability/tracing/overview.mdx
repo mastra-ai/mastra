@@ -31,7 +31,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   }),
   storage: new LibSQLStore({
-  id: 'mastra-storage',
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
 });
@@ -71,7 +71,7 @@ export const mastra = new Mastra({
     },
   }),
   storage: new LibSQLStore({
-  id: 'mastra-storage',
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
 });
