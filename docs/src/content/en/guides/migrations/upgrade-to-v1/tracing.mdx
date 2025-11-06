@@ -150,7 +150,7 @@ To migrate, wrap your configuration object with `new Observability()`.
 
 ```diff
 + import { Observability } from '@mastra/observability';
-+
+
   export const mastra = new Mastra({
 -   observability: {
 +   observability: new Observability({
@@ -168,7 +168,7 @@ To migrate, rename the property in your configuration objects.
 
 ```diff
 + import { SensitiveDataFilter } from '@mastra/observability';
-+
+
   export const mastra = new Mastra({
     observability: new Observability({
       configs: {

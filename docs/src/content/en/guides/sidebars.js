@@ -60,24 +60,34 @@ const sidebars = {
               label: "Overview",
             },
             {
-              id: "migrations/upgrade-to-v1/mastra",
-              type: "doc",
-              label: "Mastra",
-            },
-            {
               id: "migrations/upgrade-to-v1/agent",
               type: "doc",
               label: "Agents",
             },
             {
-              id: "migrations/upgrade-to-v1/tools",
-              type: "doc",
-              label: "Tools",
-            },
-            {
               id: "migrations/upgrade-to-v1/cli",
               type: "doc",
               label: "CLI",
+            },
+            {
+              id: "migrations/upgrade-to-v1/client",
+              type: "doc",
+              label: "Client SDK",
+            },
+            {
+              id: "migrations/upgrade-to-v1/evals",
+              type: "doc",
+              label: "Evals",
+            },
+            {
+              id: "migrations/upgrade-to-v1/mastra",
+              type: "doc",
+              label: "Mastra",
+            },
+            {
+              id: "migrations/upgrade-to-v1/mcp",
+              type: "doc",
+              label: "MCP",
             },
             {
               id: "migrations/upgrade-to-v1/memory",
@@ -90,14 +100,14 @@ const sidebars = {
               label: "Processors",
             },
             {
-              id: "migrations/upgrade-to-v1/workflows",
-              type: "doc",
-              label: "Workflows",
-            },
-            {
               id: "migrations/upgrade-to-v1/storage",
               type: "doc",
               label: "Storage",
+            },
+            {
+              id: "migrations/upgrade-to-v1/tools",
+              type: "doc",
+              label: "Tools",
             },
             {
               id: "migrations/upgrade-to-v1/tracing",
@@ -105,19 +115,19 @@ const sidebars = {
               label: "Tracing",
             },
             {
-              id: "migrations/upgrade-to-v1/evals",
+              id: "migrations/upgrade-to-v1/vectors",
               type: "doc",
-              label: "Evals",
-            },
-            {
-              id: "migrations/upgrade-to-v1/client",
-              type: "doc",
-              label: "Client SDK",
+              label: "Vectors",
             },
             {
               id: "migrations/upgrade-to-v1/voice",
               type: "doc",
               label: "Voice",
+            },
+            {
+              id: "migrations/upgrade-to-v1/workflows",
+              type: "doc",
+              label: "Workflows",
             },
           ],
         },

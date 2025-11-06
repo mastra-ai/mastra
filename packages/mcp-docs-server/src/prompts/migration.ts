@@ -91,6 +91,7 @@ function getUpgradeToV1Messages(area?: string): PromptMessage[] {
 1. First, list all available migration guides with path: "upgrade-to-v1/"
 2. Give me a high-level overview of what changed in each area
 3. Ask me which areas I'm using in my project so we can focus on relevant changes
+4. After I decided on the areas, check the migration guides for callouts to codemods. These callouts are marked with ":::tip[Codemod]" in the docs. Run the codemods with "npx @mastra/codemod v1" to automate all those changes. Afterwards, help me with any remaining manual changes needed.
 
 After I tell you which areas I use, we'll go through each one systematically.`,
       },
