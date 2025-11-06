@@ -9,7 +9,9 @@ import {
 
 /*
 This component is used to display a version selector in the navbar.
-It allows users to switch between different documentation versions (stable and beta).
+It allows users to switch between different documentation versions:
+- Stable = 0.x (default /docs)
+- Beta = v1/main (/docs/v1)
 */
 export default function VersionControl({
   className,
@@ -18,18 +20,19 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  // Initialize to beta to match SSR output and prevent hydration mismatch
+  // Initialize to stable to match SSR output and prevent hydration mismatch
+  // Stable = 0.x (default /docs), Beta = v1 (/docs/v1)
   const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
-    "beta",
+    "stable",
   );
 
   // Compute actual version on client after hydration
   useEffect(() => {
     const path = window.location.pathname;
     if (path.includes("/docs/v1")) {
-      setCurrentVersion("stable");
-    } else {
       setCurrentVersion("beta");
+    } else {
+      setCurrentVersion("stable");
     }
   }, []);
 
@@ -39,11 +42,11 @@ export default function VersionControl({
     const currentPath = window.location.pathname;
     let newPath: string;
 
-    if (nextVersion === "stable") {
-      // Switch to stable version (/docs/v1)
+    if (nextVersion === "beta") {
+      // Switch to beta version (v1 = /docs/v1)
       newPath = "/docs/v1";
     } else {
-      // Switch to beta version (root /docs)
+      // Switch to stable version (0.x = root /docs)
       if (currentPath.includes("/docs/v1")) {
         // Replace /docs/v1 with /docs
         newPath = currentPath.replace(/^\/docs\/v1.*/, "/docs");
