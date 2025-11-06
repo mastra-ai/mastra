@@ -43,13 +43,16 @@ export default function VersionControl({
     let newPath: string;
 
     if (nextVersion === "beta") {
-      // Switch to beta version (v1 = /docs/v1)
-      newPath = "/docs/v1";
+      // Switch to beta, preserve nested path
+      if (currentPath.startsWith("/docs/")) {
+        newPath = currentPath.replace(/^\/docs/, "/docs/v1");
+      } else {
+        newPath = "/docs/v1";
+      }
     } else {
-      // Switch to stable version (0.x = root /docs)
+      // Switch to stable, preserve nested path
       if (currentPath.includes("/docs/v1")) {
-        // Replace /docs/v1 with /docs
-        newPath = currentPath.replace(/^\/docs\/v1.*/, "/docs");
+        newPath = currentPath.replace(/^\/docs\/v1/, "/docs");
       } else {
         newPath = "/docs";
       }
