@@ -6,12 +6,8 @@ import { handleError } from './error';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
-<<<<<<< HEAD
-  pagination?: AITracesPaginatedArg['pagination'];
-  filters?: AITracesPaginatedArg['filters'];
-=======
-  body?: TracesPaginatedArg;
->>>>>>> 7e03d7558365972407cd33e787461c5498f8ad19
+  pagination?: TracesPaginatedArg['pagination'];
+  filters?: TracesPaginatedArg['filters'];
 }
 
 interface ScoreTracesContext extends Context {
