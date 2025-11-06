@@ -296,6 +296,7 @@ export const voiceSpeakersResponseSchema = z.array(
 export const approveToolCallBodySchema = z.object({
   runId: z.string(),
   requestContext: z.string().optional(),
+  toolCallId: z.string().optional(),
 });
 
 /**
@@ -304,6 +305,7 @@ export const approveToolCallBodySchema = z.object({
 export const declineToolCallBodySchema = z.object({
   runId: z.string(),
   requestContext: z.string().optional(),
+  toolCallId: z.string().optional(),
 });
 
 /**
