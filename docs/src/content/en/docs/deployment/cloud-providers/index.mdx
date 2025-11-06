@@ -34,7 +34,7 @@ Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
-  id: 'mastra-storage',
+    id: 'mastra-storage',
     // [!code --]
     // stores telemetry, scorer results, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
     url: ":memory:", // [!code --]
@@ -49,7 +49,7 @@ export const weatherAgent = new Agent({
   memory: new Memory({
     // [!code --]
     storage: new LibSQLStore({
-  id: 'mastra-storage',
+      id: 'mastra-storage',
       // [!code --]
       url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
     }), // [!code --]

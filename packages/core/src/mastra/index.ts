@@ -53,7 +53,7 @@ import { createOnScorerHook } from './hooks';
  *       model: 'openai/gpt-5'
  *     })
  *   },
- *   storage: new LibSQLStore({ url: ':memory:' }),
+ *   storage: new LibSQLStore({ id: 'mastra-storage', url: ':memory:' }),
  *   logger: new PinoLogger({ name: 'MyApp' })
  * });
  * ```
@@ -210,7 +210,7 @@ export interface Config<
  *     })
  *   },
  *   workflows: { dataWorkflow },
- *   storage: new LibSQLStore({ url: ':memory:' }),
+ *   storage: new LibSQLStore({ id: 'mastra-storage', url: ':memory:' }),
  *   logger: new PinoLogger({ name: 'MyApp' })
  * });
  * ```
@@ -1646,7 +1646,7 @@ export class Mastra<
    * @example
    * ```typescript
    * const mastra = new Mastra({
-   *   storage: new LibSQLStore({ url: 'file:./data.db' })
+   *   storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./data.db' })
    * });
    *
    * // Use the storage in agent memory

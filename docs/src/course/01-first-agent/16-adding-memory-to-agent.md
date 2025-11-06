@@ -24,6 +24,7 @@ export const financialAgent = new Agent({
   tools: { getTransactionsTool },
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "learning-memory-storage",
       url: "file:../../memory.db", // local file-system database. Location is relative to the output directory `.mastra/output`
     }),
   }), // Add memory here

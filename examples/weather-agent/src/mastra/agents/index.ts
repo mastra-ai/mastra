@@ -12,6 +12,7 @@ import { weatherTool } from '../tools';
 
 // const memory = new Memory({
 //   storage: new LibSQLStore({
+//     id: 'weather-agent-storage',
 //     url: 'file:../mastra.db', // Or your database URL
 //   }),
 // });

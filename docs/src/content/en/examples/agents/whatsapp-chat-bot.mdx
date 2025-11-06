@@ -126,7 +126,7 @@ export const chatAgent = new Agent({
   model: anthropic("claude-4-sonnet-20250514"),
   memory: new Memory({
     storage: new LibSQLStore({
-  id: 'agent-storage',
+      id: 'agent-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -165,7 +165,7 @@ export const textMessageAgent = new Agent({
   model: anthropic("claude-4-sonnet-20250514"),
   memory: new Memory({
     storage: new LibSQLStore({
-  id: 'agent-storage',
+      id: 'agent-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -316,7 +316,7 @@ export const mastra = new Mastra({
   workflows: { chatWorkflow },
   agents: { textMessageAgent, chatAgent },
   storage: new LibSQLStore({
-  id: 'agent-storage',
+    id: 'agent-storage',
     url: ":memory:",
   }),
   logger: new PinoLogger({
