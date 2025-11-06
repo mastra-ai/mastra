@@ -217,10 +217,17 @@ To migrate, use the built-in exporter system or implement custom exporters using
 If you were using `instrumentation.mjs` files to initialize OpenTelemetry instrumentation (common in deployment setups like AWS Lambda), these are no longer needed. The new observability system is configured directly in your Mastra instance.
 
 **Before (0.x):**
+
+You needed an instrumentation file:
 ```javascript
 // instrumentation.mjs
 import { NodeSDK } from '@opentelemetry/sdk-node';
 // ... OTEL setup
+```
+
+And had to import it when starting your process:
+```bash
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
 ```
 
 **After (v1):**
@@ -238,7 +245,12 @@ export const mastra = new Mastra({
 });
 ```
 
-No separate instrumentation files or environment-specific setup required.
+Start your process normally without the `--import` flag:
+```bash
+node --env-file=".env" .mastra/output/index.mjs
+```
+
+No separate instrumentation files or special startup flags required.
 
 ## Provider Migration Reference
 
