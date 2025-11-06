@@ -7,28 +7,17 @@ import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { Tool } from '@mastra/core/tools';
+import { HonoServerAdapter } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
-import { describeRoute, openAPISpecs } from 'hono-openapi';
-import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
+import { describeRoute } from 'hono-openapi';
 import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
-import { rootHandler } from './handlers/root';
-import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
-import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
-import { logsRouter } from './handlers/routes/logs/router';
-import { mcpRouter } from './handlers/routes/mcp/router';
-import { memoryRoutes } from './handlers/routes/memory/router';
-import { observabilityRouter } from './handlers/routes/observability/router';
-import { scoresRouter } from './handlers/routes/scores/router';
-import { toolsRouter } from './handlers/routes/tools/router';
-import { vectorRouter } from './handlers/routes/vector/router';
-import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
@@ -237,202 +226,23 @@ export async function createHonoServer(
     app.use(logger());
   }
 
-  /**
-   * A2A
-   */
-
-  app.get(
-    '/.well-known/:agentId/agent-card.json',
-    describeRoute({
-      description: 'Get agent configuration',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'Agent configuration',
-        },
-      },
-    }),
-    getAgentCardByIdHandler,
-  );
-
-  app.post(
-    '/a2a/:agentId',
-    describeRoute({
-      description: 'Execute agent via A2A protocol',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                method: {
-                  type: 'string',
-                  enum: ['message/send', 'message/stream', 'tasks/get', 'tasks/cancel'],
-                  description: 'The A2A protocol method to execute',
-                },
-                params: {
-                  type: 'object',
-                  oneOf: [
-                    {
-                      // MessageSendParams
-                      type: 'object',
-                      properties: {
-                        id: {
-                          type: 'string',
-                          description: 'Unique identifier for the task being initiated or continued',
-                        },
-                        sessionId: {
-                          type: 'string',
-                          description: 'Optional identifier for the session this task belongs to',
-                        },
-                        message: {
-                          type: 'object',
-                          description: 'The message content to send to the agent for processing',
-                        },
-                        pushNotification: {
-                          type: 'object',
-                          nullable: true,
-                          description:
-                            'Optional pushNotification information for receiving notifications about this task',
-                        },
-                        historyLength: {
-                          type: 'integer',
-                          nullable: true,
-                          description:
-                            'Optional parameter to specify how much message history to include in the response',
-                        },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata associated with sending this message',
-                        },
-                      },
-                      required: ['id', 'message'],
-                    },
-                    {
-                      // TaskQueryParams
-                      type: 'object',
-                      properties: {
-                        id: { type: 'string', description: 'The unique identifier of the task' },
-                        historyLength: {
-                          type: 'integer',
-                          nullable: true,
-                          description: 'Optional history length to retrieve for the task',
-                        },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata to include with the operation',
-                        },
-                      },
-                      required: ['id'],
-                    },
-                    {
-                      // TaskIdParams
-                      type: 'object',
-                      properties: {
-                        id: { type: 'string', description: 'The unique identifier of the task' },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata to include with the operation',
-                        },
-                      },
-                      required: ['id'],
-                    },
-                  ],
-                },
-              },
-              required: ['method', 'params'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'A2A response',
-        },
-        400: {
-          description: 'Missing or invalid request parameters',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-      },
-    }),
-    getAgentExecutionHandler,
-  );
-
-  // API routes
-  app.get(
-    '/api',
-    describeRoute({
-      description: 'Get API status',
-      tags: ['system'],
-      responses: {
-        200: {
-          description: 'Success',
-        },
-      },
-    }),
-    rootHandler,
-  );
-
-  // Agents routes
-  app.route('/api/agents', agentsRouter(bodyLimitOptions));
-
-  if (options.isDev) {
-    app.route('/api/agents', agentsRouterDev(bodyLimitOptions));
-  }
-
-  // MCP server routes
-  app.route('/api/mcp', mcpRouter(bodyLimitOptions));
-  // Network Memory routes
-  app.route('/api/memory', memoryRoutes(bodyLimitOptions));
-  // Observability routes
-  app.route('/api/observability', observabilityRouter());
-  // Legacy Workflow routes
-  app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
-  // Log routes
-  app.route('/api/logs', logsRouter());
-  // Scores routes
-  app.route('/api/scores', scoresRouter(bodyLimitOptions));
-  // Agent builder routes
-  app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
-  // Tool routes
-  app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
-  // Vector routes
-  app.route('/api/vector', vectorRouter(bodyLimitOptions));
-
+  // TODO: add option to exclude openapi route from server adapter
   if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
-    app.get(
-      '/openapi.json',
-      openAPISpecs(app, {
-        includeEmptyPaths: true,
-        documentation: {
-          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-        },
-      }),
-    );
+    // app.get(
+    //   '/openapi.json',
+    //   openAPISpecs(app, {
+    //     includeEmptyPaths: true,
+    //     documentation: {
+    //       info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
+    //     },
+    //   }),
+    // );
   }
+
+  const honoServerAdapter = new HonoServerAdapter({ mastra });
+  // TODO: fix generic args on hono
+  // @ts-ignore
+  await honoServerAdapter.registerRoutes(app);
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(

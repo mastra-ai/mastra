@@ -1,10 +1,9 @@
-import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerAdapter } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import type { Context, Hono, HonoRequest, Next } from 'hono';
+import type { Context, Hono, HonoRequest } from 'hono';
 import { stream } from 'hono/streaming';
 
-export class HonoServerAdapter extends MastraServerAdapter<Hono, HonoRequest, Context> {
+export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, HonoRequest, Context> {
   async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
     res.header('Content-Type', 'text/plain');
     res.header('Transfer-Encoding', 'chunked');
@@ -73,7 +72,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono, HonoRequest, Co
     }
   }
 
-  async registerRoute(app: Hono, route: ServerRoute): Promise<void> {
+  async registerRoute(app: Hono<any, any, any>, route: ServerRoute): Promise<void> {
     console.log('registering route', route);
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
       route.path,
@@ -115,12 +114,8 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono, HonoRequest, Co
     );
   }
 
-  async registerRoutes(app: Hono): Promise<void> {
-    app.use('*', async (c: Context, next: Next) => {
-      c.set('requestContext', new RequestContext());
-      return next();
-    });
-
+  async registerRoutes(app: Hono<any, any, any>): Promise<void> {
+    // TODO: move mastra variable bindings here from dev?
     await super.registerRoutes(app);
   }
 }
