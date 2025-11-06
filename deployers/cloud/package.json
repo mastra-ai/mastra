@@ -6,7 +6,6 @@
   "files": [
     "dist",
     "CHANGELOG.md",
-    "templates",
     "versions.json"
   ],
   "main": "dist/index.js",
