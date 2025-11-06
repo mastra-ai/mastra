@@ -96,6 +96,7 @@ describe('Agent Handlers', () => {
 
       expect(result).toEqual({
         'test-agent': {
+          id: 'test-agent',
           name: 'test-agent',
           description: 'A test agent for unit testing',
           instructions: 'test instructions',
@@ -113,6 +114,7 @@ describe('Agent Handlers', () => {
           modelList: undefined,
         },
         'test-multi-model-agent': {
+          id: 'test-multi-model-agent',
           name: 'test-multi-model-agent',
           description: 'A test agent with multiple model configurations',
           instructions: 'test instructions',
