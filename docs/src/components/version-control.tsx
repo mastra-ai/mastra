@@ -26,36 +26,40 @@ export default function VersionControl({
     "stable",
   );
 
-  useEffect(() => {
-    const path = window.location.pathname;
-    if (path.includes("/docs/v1")) {
-      setCurrentVersion("beta");
-    } else {
-      setCurrentVersion("stable");
-    }
-  }, []);
+  // this is always stable on load
+  // useEffect(() => {
+  //   const path = window.location.pathname;
+  //   let pathChunks = path.split("/");
+
+  //   if (pathChunks.length > 2 && pathChunks[2] === "v1") {
+  //     setCurrentVersion("beta");
+  //   } else {
+  //     setCurrentVersion("stable");
+  //   }
+  // }, []);
 
   const onChange = (nextVersion: string) => {
     if (typeof window === "undefined") return;
 
     const currentPath = window.location.pathname;
+    let pathChunks = currentPath.split("/");
     let newPath: string;
 
     if (nextVersion === "beta") {
-      if (currentPath.startsWith("/docs/")) {
-        newPath = currentPath.replace(/^\/docs/, "/docs/v1");
-      } else {
-        newPath = "/docs/v1";
+      if (pathChunks?.[2] !== "v1") {
+        pathChunks.splice(2, 0, "v1");
+        newPath = pathChunks.join("/");
       }
     } else {
-      if (currentPath.includes("/docs/v1")) {
-        newPath = currentPath.replace(/^\/docs\/v1/, "/docs");
-      } else {
-        newPath = "/docs";
+      if (pathChunks?.[2] === "v1") {
+        pathChunks.splice(2, 1);
+        newPath = pathChunks.join("/");
       }
     }
 
-    window.location.href = newPath;
+    if (newPath) {
+      window.location.href = newPath;
+    }
   };
 
   return (
