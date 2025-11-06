@@ -1,18 +1,15 @@
 ---
-title: "Human-in-the-loop | Workflows | Mastra Docs"
+title: "Human-in-the-loop (HITL) | Workflows | Mastra Docs"
 description: "Human-in-the-loop workflows in Mastra allow you to pause execution for manual approvals, reviews, or user input before continuing."
 ---
 
-# Human-in-the-loop
+# Human-in-the-loop (HITL)
 
 Some workflows need to pause for a human decision before continuing. When a workflow is [suspended](/docs/workflows/suspend-and-resume#pausing-a-workflow-with-suspend), it can include a message explaining why it paused. The workflow [resumes](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume) only after input is received. You can use this approach for manual approvals, gated decisions, or any step that requires human oversight.
 
-## Requesting human approval with `suspend()`
+## Pausing workflows for human approval
 
-Use `suspend()` to pause workflow execution at a specific step while waiting for human input. You can define a condition using values from `resumeData` to determine whether to continue or pause the workflow.
-
-- If the condition isn’t met, the workflow pauses at `return suspend()`, and values can be returned to provide feedback to the user.
-- If the condition is met, the workflow continues with the remaining logic in the step.
+Human-in-the-loop approval works much like [pausing a workflow](/docs/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
 
@@ -40,7 +37,7 @@ const step1 = createStep({
 
     if (!okToSend) {
       return await suspend({
-        reason: "Human approval required."
+        reason: "Confirm to send email."
       });
     }
 
@@ -68,9 +65,38 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-## Applying human input with `resume()`
+## Providing user feedback
 
-Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from where it left off.
+When a workflow is suspended, you can access the payload returned by `suspend()` by identifying the suspended step and reading its `suspendPayload`.
+
+```typescript {12} title="src/test-workflow.ts" showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    userEmail: "alex@example.com"
+  }
+});
+
+if (result.status === "suspended") {
+  const suspendStep = result.suspended[0];
+  const suspendedPayload = result.steps[suspendStep[0]].suspendPayload;
+
+  console.log(suspendedPayload);
+}
+```
+**Example output**
+
+The data returned by the step can include a reason and help the user understand what’s needed to resume the workflow.
+
+```typescript
+{ reason: 'Confirm to send email.' }
+```
+
+## Resuming workflows with human approval
+
+As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume), call `resume()` with `resumeData` to restart the workflow from where it was paused.
 
 ![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
 
@@ -91,36 +117,6 @@ const handleResume = async () => {
   });
   console.log(resumedResult);
 };
-```
-
-## Surfacing suspended reasons
-
-When a workflow is suspended, the step can return structured data that explains why it was paused and what input is needed to resume. The data is returned using `suspend()` and available in the `suspendPayload`.
-
-```typescript {12} title="src/test-workflow.ts" showLineNumbers copy
-const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
-
-const result = await run.start({
-  inputData: {
-    userEmail: "alex@example.com"
-  }
-});
-
-if (result.status === "suspended") {
-  const suspendStep = result.suspended[0];
-  const suspendedPayload = result.steps[suspendStep[0]].suspendPayload;
-
-  console.log(suspendedPayload);
-}
-```
-
-**Example output**
-
-The data returned by the step can include a reason and help the user understand what’s needed to resume the workflow.
-
-```typescript
-{ reason: 'Human approval required.' }
 ```
 
 ## Related

@@ -85,6 +85,23 @@ const handleResume = async () => {
 };
 ```
 
+### Ways to resume a workflow
+
+You can resume a suspended workflow using different triggers, including [human input](/docs/workflows/human-in-the-loop), external events from your application, or time-based conditions.
+
+```typescript {10} showLineNumbers copy
+const handleResume = async () => {
+  const result = await run.resume({
+    step: 'step-1',
+    resumeData: { okToSend: true }
+  });
+};
+
+const midnight = new Date();
+midnight.setUTCHours(24, 0, 0, 0);
+setTimeout(handleResume, midnight.getTime() - Date.now());
+```
+
 ## Identifying suspended executions
 
 When a workflow is suspended, it restarts from the step where it paused. You can check the workflow’s `status` to confirm it's suspended, and use `suspended` to identify the paused step or [nested workflow](/docs/workflows/overview#workflows-as-steps).
@@ -118,7 +135,7 @@ The `suspended` array contains the IDs of any suspended workflows and steps from
 
 ## Sleep & Events
 
-Workflows can also pause execution for timed delays or external events. These methods set the workflow status to `waiting` rather than `suspended`, and are useful for polling, delayed retries, or event-driven processes.
+Sleep and event methods can be used to pause execution at the workflow level, which sets the status to `waiting`. By comparison, `suspend()` pauses execution within a specific step and sets the status to `suspended`.
 
 **Available methods:**
 
