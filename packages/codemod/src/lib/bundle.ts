@@ -13,4 +13,5 @@ export const BUNDLE = [
   'v1/mcp-get-mcp-servers',
   'v1/mcp-get-tools',
   'v1/mcp-get-toolsets',
+  'v1/workflows-get-workflows',
 ];
