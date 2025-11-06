@@ -9,25 +9,6 @@ Memory configuration now requires explicit parameters, and default settings have
 
 ## Changed
 
-### Required configuration parameters
-
-The Memory constructor now requires `storage`, `vector`, and `embedder` parameters. These parameters no longer have defaults. This change makes dependencies explicit and prevents unexpected behavior from implicit defaults.
-
-To migrate, explicitly provide `storage`, `vector`, and `embedder` when creating a Memory instance.
-
-```diff
-  import { Memory } from '@mastra/memory';
-+ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-+ import { fastembed } from '@mastra/fastembed';
-
-  const memory = new Memory({
--   // storage, vector, embedder were optional with defaults
-+   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
-+   vector: new LibSQLVector({ url: 'file:./mastra.db' }),
-+   embedder: fastembed,
-  });
-```
-
 ### Default settings for semantic recall and last messages
 
 Default settings have changed to more reasonable values based on usage patterns. The `lastMessages` default decreased from 40 to 10, `semanticRecall` is now disabled by default, and thread title generation is disabled by default. These changes improve performance and reduce unexpected LLM API calls.

@@ -17,6 +17,7 @@ const connectionString = process.env.DB_URL || 'postgres://postgres:password@loc
 const parseConnectionString = (url: string) => {
   const parsedUrl = new URL(url);
   return {
+    id: 'perf-test-storage',
     host: parsedUrl.hostname,
     port: parseInt(parsedUrl.port),
     user: parsedUrl.username,
@@ -29,7 +30,7 @@ describe('Memory with PostgresStore Integration', () => {
   const config = parseConnectionString(connectionString);
   const memory = new Memory({
     storage: new PostgresStore(config),
-    vector: new PgVector({ connectionString }),
+    vector: new PgVector({ connectionString, id: 'perf-test-vector' }),
     options: {
       lastMessages: 10,
       semanticRecall: {

@@ -8,6 +8,7 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'pdf-question-agent-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });
