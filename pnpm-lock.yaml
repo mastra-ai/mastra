@@ -479,7 +479,7 @@ importers:
         version: 6.2.1(esbuild@0.25.11)(rollup@4.50.2)
     devDependencies:
       '@babel/types':
-        specifier: ^7.28.4
+        specifier: ^7.28.5
         version: 7.28.5
       '@internal/lint':
         specifier: workspace:*
