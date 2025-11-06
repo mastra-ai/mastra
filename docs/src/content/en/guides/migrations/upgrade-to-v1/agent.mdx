@@ -20,6 +20,16 @@ To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`
 + const agents = mastra.listAgents();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-get-agents .
+```
+
+:::
+
 ### `RuntimeContext` to `RequestContext`
 
 The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.

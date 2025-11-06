@@ -8,4 +8,5 @@ export const BUNDLE = [
   'v1/agent-processor-methods',
   'v1/agent-generate-stream-v-next',
   'v1/voice-property-names',
+  'v1/agent-get-agents',
 ];
