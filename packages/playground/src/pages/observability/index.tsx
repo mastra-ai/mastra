@@ -81,8 +81,8 @@ export default function Observability() {
     }
   }, [traceId]);
 
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([k, value]) => ({
-    value: k,
+  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([_, value]) => ({
+    value: value.id,
     label: value.name,
     type: 'agent' as const,
   }));
