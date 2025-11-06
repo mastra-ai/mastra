@@ -60,19 +60,9 @@ const sidebars = {
               label: "Overview",
             },
             {
-              id: "migrations/upgrade-to-v1/mastra",
-              type: "doc",
-              label: "Mastra",
-            },
-            {
               id: "migrations/upgrade-to-v1/agent",
               type: "doc",
               label: "Agents",
-            },
-            {
-              id: "migrations/upgrade-to-v1/tools",
-              type: "doc",
-              label: "Tools",
             },
             {
               id: "migrations/upgrade-to-v1/cli",
@@ -80,19 +70,9 @@ const sidebars = {
               label: "CLI",
             },
             {
-              id: "migrations/upgrade-to-v1/memory",
+              id: "migrations/upgrade-to-v1/client",
               type: "doc",
-              label: "Memory",
-            },
-            {
-              id: "migrations/upgrade-to-v1/workflows",
-              type: "doc",
-              label: "Workflows",
-            },
-            {
-              id: "migrations/upgrade-to-v1/storage",
-              type: "doc",
-              label: "Storage",
+              label: "Client SDK",
             },
             {
               id: "migrations/upgrade-to-v1/evals",
@@ -100,14 +80,54 @@ const sidebars = {
               label: "Evals",
             },
             {
-              id: "migrations/upgrade-to-v1/client",
+              id: "migrations/upgrade-to-v1/mastra",
               type: "doc",
-              label: "Client SDK",
+              label: "Mastra",
+            },
+            {
+              id: "migrations/upgrade-to-v1/mcp",
+              type: "doc",
+              label: "MCP",
+            },
+            {
+              id: "migrations/upgrade-to-v1/memory",
+              type: "doc",
+              label: "Memory",
+            },
+            {
+              id: "migrations/upgrade-to-v1/processors",
+              type: "doc",
+              label: "Processors",
+            },
+            {
+              id: "migrations/upgrade-to-v1/storage",
+              type: "doc",
+              label: "Storage",
+            },
+            {
+              id: "migrations/upgrade-to-v1/tools",
+              type: "doc",
+              label: "Tools",
+            },
+            {
+              id: "migrations/upgrade-to-v1/tracing",
+              type: "doc",
+              label: "Tracing",
+            },
+            {
+              id: "migrations/upgrade-to-v1/vectors",
+              type: "doc",
+              label: "Vectors",
             },
             {
               id: "migrations/upgrade-to-v1/voice",
               type: "doc",
               label: "Voice",
+            },
+            {
+              id: "migrations/upgrade-to-v1/workflows",
+              type: "doc",
+              label: "Workflows",
             },
           ],
         },

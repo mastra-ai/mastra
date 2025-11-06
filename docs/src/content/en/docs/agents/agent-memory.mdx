@@ -70,6 +70,7 @@ import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   // ..
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -97,6 +98,7 @@ export const memoryAgent = new Agent({
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: ":memory:",
     }),
   }),

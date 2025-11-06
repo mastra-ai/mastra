@@ -51,7 +51,7 @@ describe('Voice Handlers', () => {
 
     it('should throw error when agent is not found', async () => {
       await expect(getSpeakersHandler({ mastra, agentId: 'non-existent' })).rejects.toThrow(
-        'Agent with name non-existent not found',
+        'Agent with id non-existent not found',
       );
     });
 
@@ -117,7 +117,7 @@ describe('Voice Handlers', () => {
             speakerId: '1',
           },
         }),
-      ).rejects.toThrow('Agent with name non-existent not found');
+      ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw error when agent does not have voice capabilities', async () => {
@@ -242,7 +242,7 @@ describe('Voice Handlers', () => {
             audioData: Buffer.from('test'),
           },
         }),
-      ).rejects.toThrow('Agent with name non-existent not found');
+      ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw error when agent does not have voice capabilities', async () => {

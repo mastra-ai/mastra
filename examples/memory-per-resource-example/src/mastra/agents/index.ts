@@ -5,6 +5,7 @@ import { LibSQLStore } from '@mastra/libsql';
 
 // Create LibSQL storage for persistent per-resource working memory
 const storage = new LibSQLStore({
+  id: 'memory-demo-storage',
   url: 'file:./memory-demo.db',
 });
 

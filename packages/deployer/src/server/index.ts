@@ -18,6 +18,7 @@ import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2
 import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
+import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
 import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
@@ -177,6 +178,21 @@ export async function createHonoServer(
     };
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
+
+  // Health check endpoint (before auth middleware so it's publicly accessible)
+  app.get(
+    '/health',
+    describeRoute({
+      description: 'Health check endpoint',
+      tags: ['system'],
+      responses: {
+        200: {
+          description: 'Service is healthy',
+        },
+      },
+    }),
+    healthHandler,
+  );
 
   // Run AUTH middlewares after CORS middleware
   app.use('*', authenticationMiddleware);

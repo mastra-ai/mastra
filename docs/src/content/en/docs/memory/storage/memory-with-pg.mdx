@@ -40,6 +40,7 @@ export const pgAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     options: {
@@ -76,9 +77,11 @@ export const pgAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     vector: new PgVector({
+      id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL!,
     }),
     embedder: fastembed,

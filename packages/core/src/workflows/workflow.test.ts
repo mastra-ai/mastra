@@ -9006,7 +9006,9 @@ describe('Workflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      workflow.then(step1).then(createStep(randomTool)).commit();
+      const toolStep = createStep(randomTool);
+
+      workflow.then(step1).then(toolStep).commit();
 
       const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });

@@ -120,6 +120,7 @@ export const weatherAgent = new Agent({
   }
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "memory-storage",
       url: "file:../mastra.db", // path is relative to the .mastra/output directory
     })
   })
@@ -340,6 +341,7 @@ export async function writeScorersSample(llmProvider: LLMProvider, destPath: str
   const content = `import { z } from 'zod';
 import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
 import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
 import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
@@ -365,8 +367,8 @@ export const translationScorer = createScorer({
   },
 })
   .preprocess(({ run }) => {
-    const userText = (run.input?.inputMessages?.[0]?.content as string) || '';
-    const assistantText = (run.output?.[0]?.content as string) || '';
+    const userText = getUserMessageFromRunInput(run.input) || '';
+    const assistantText = getAssistantMessageFromRunOutput(run.output) || '';
     return { userText, assistantText };
   })
   .analyze({
@@ -504,6 +506,7 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
   storage: new LibSQLStore({
+    id: "mastra-storage",
     // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),

@@ -1,6 +1,6 @@
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
+import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -36,7 +36,7 @@ import type {
   ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
-  GetAITracesResponse,
+  GetTracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   ListMemoryThreadMessagesResponse,
@@ -90,7 +90,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing resource ID, pagination options, and optional request context
    * @returns Promise containing paginated array of memory threads with metadata
    */
-  public listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
+  public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
     const queryParams = new URLSearchParams({
       resourceId: params.resourceId,
       resourceid: params.resourceId,
@@ -101,9 +101,22 @@ export class MastraClient extends BaseResource {
       ...(params.sortDirection && { sortDirection: params.sortDirection }),
     });
 
-    return this.request(
+    const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
       `/api/memory/threads?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
     );
+
+    const actualResponse: ListMemoryThreadsResponse =
+      'threads' in response
+        ? response
+        : {
+            threads: response,
+            total: response.length,
+            page: params.page ?? 0,
+            perPage: params.perPage ?? 100,
+            hasMore: false,
+          };
+
+    return actualResponse;
   }
 
   /**
@@ -619,11 +632,11 @@ export class MastraClient extends BaseResource {
     });
   }
 
-  getAITrace(traceId: string): Promise<AITraceRecord> {
+  getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
   }
 
-  getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
+  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
     return this.observability.getTraces(params);
   }
 

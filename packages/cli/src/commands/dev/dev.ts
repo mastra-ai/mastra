@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'child_process';
 import process from 'node:process';
-import { join, posix } from 'path';
+import { join } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
@@ -323,22 +323,14 @@ export async function dev({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
-  const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
-  const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
-  const defaultToolsIgnorePaths = [
-    `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
-    `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
-  ];
-  // We pass an array to tinyglobby to allow for the aforementioned negations
-  const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
-  const discoveredTools = [defaultTools, ...(tools ?? [])];
-
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
+
+  // Use the bundler's getAllToolPaths method to prepare tools paths
+  const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ?? []);
 
   const loadedEnv = await bundler.loadEnvVars();
 

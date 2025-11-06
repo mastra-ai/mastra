@@ -242,6 +242,7 @@ Upstash Vector supports hybrid search that combines semantic search (dense vecto
 import { UpstashVector } from "@mastra/upstash";
 
 const vectorStore = new UpstashVector({
+  id: 'upstash-vector',
   url: process.env.UPSTASH_VECTOR_URL,
   token: process.env.UPSTASH_VECTOR_TOKEN,
 });

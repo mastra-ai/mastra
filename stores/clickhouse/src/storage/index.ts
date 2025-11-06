@@ -37,6 +37,7 @@ type IntervalUnit =
   | 'YEAR';
 
 export type ClickhouseConfig = {
+  id: string;
   url: string;
   username: string;
   password: string;
@@ -61,7 +62,7 @@ export class ClickhouseStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: ClickhouseConfig) {
-    super({ name: 'ClickhouseStore' });
+    super({ id: config.id, name: 'ClickhouseStore' });
 
     this.db = createClient({
       url: config.url,

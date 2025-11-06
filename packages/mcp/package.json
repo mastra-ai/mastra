@@ -47,7 +47,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.5",
+    "@hono/node-server": "^1.19.6",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
