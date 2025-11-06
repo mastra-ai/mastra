@@ -90,6 +90,25 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           {type === 'else' ? null : (
             <CollapsibleContent className="flex flex-col gap-2 pb-2">
               {conditions.map((condition, index) => {
+                // Compute the conjunction badge for ref-based conditions
+                const conjType = condition.conj || type;
+                const { icon: ConjIconComponent, color: conjColor } = getConditionIconAndColor(conjType);
+                const conjBadge =
+                  index === 0 ? null : (
+                    <Badge
+                      icon={
+                        ConjIconComponent ? (
+                          <ConjIconComponent
+                            className="text-current"
+                            {...(conjColor ? { style: { color: conjColor } } : {})}
+                          />
+                        ) : null
+                      }
+                    >
+                      {condition.conj?.toLocaleUpperCase() || 'WHEN'}
+                    </Badge>
+                  );
+
                 return condition.fnString ? (
                   <div key={`${condition.fnString}-${index}`} className="px-3">
                     <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
@@ -153,26 +172,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                   <Fragment key={`${condition.ref?.path}-${index}`}>
                     {condition.ref?.step ? (
                       <div className="flex items-center gap-1">
-                        {index === 0
-                          ? null
-                          : (() => {
-                              const conjType = condition.conj || type;
-                              const { icon: ConjIconComponent, color: conjColor } = getConditionIconAndColor(conjType);
-                              return (
-                                <Badge
-                                  icon={
-                                    ConjIconComponent ? (
-                                      <ConjIconComponent
-                                        className="text-current"
-                                        {...(conjColor ? { style: { color: conjColor } } : {})}
-                                      />
-                                    ) : null
-                                  }
-                                >
-                                  {condition.conj?.toLocaleUpperCase() || 'WHEN'}
-                                </Badge>
-                              );
-                            })()}
+                        {conjBadge}
 
                         <Text size={'xs'} className=" text-mastra-el-3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
