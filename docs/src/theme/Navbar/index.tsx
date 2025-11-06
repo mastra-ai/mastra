@@ -14,7 +14,7 @@ function NavbarContentDesktop() {
     <>
       <div className="flex px-4 border-b-[0.5px] h-[47px] border-(--border-subtle) mx-auto w-full items-center justify-between @container">
         <div className="flex gap-2 items-center">
-          <Link href="/docs">
+          <Link href="/docs/v1">
             <Logo />
           </Link>
           <div className="hidden @[1262px]:block">

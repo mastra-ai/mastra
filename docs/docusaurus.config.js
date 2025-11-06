@@ -4,6 +4,7 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
+import { join } from "path/posix";
 import prismMastraDark from "./src/theme/prism-mastra-dark.js";
 import prismMastraLight from "./src/theme/prism-mastra-light.js";
 import "dotenv/config";
@@ -100,7 +101,7 @@ const config = {
       {
         id: "models",
         path: "src/content/en/models",
-        routeBasePath: "models",
+        routeBasePath: "models/v1",
         sidebarPath: "./src/content/en/models/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -110,7 +111,7 @@ const config = {
       {
         id: "guides",
         path: "src/content/en/guides",
-        routeBasePath: "guides",
+        routeBasePath: "guides/v1",
         sidebarPath: "./src/content/en/guides/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -120,7 +121,7 @@ const config = {
       {
         id: "examples",
         path: "src/content/en/examples",
-        routeBasePath: "examples",
+        routeBasePath: "examples/v1",
         sidebarPath: "./src/content/en/examples/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -130,11 +131,37 @@ const config = {
       {
         id: "reference",
         path: "src/content/en/reference",
-        routeBasePath: "reference",
+        routeBasePath: "reference/v1",
         sidebarPath: "./src/content/en/reference/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
+    function assetPlugin() {
+      return {
+        name: "asset-plugin",
+        configureWebpack(config, isServer, utils, content) {
+          if (!isServer) {
+            for (const plugin of config.plugins) {
+              if (plugin.constructor.name === "CssExtractRspackPlugin") {
+                plugin.options.filename = join("v1", plugin.options.filename);
+                plugin.options.chunkFilename = join(
+                  "v1",
+                  plugin.options.chunkFilename,
+                );
+              }
+            }
+
+            return {
+              plugins: config.plugins,
+              output: {
+                filename: join("v1", config.output?.filename),
+                chunkFilename: join("v1", config.output?.chunkFilename),
+              },
+            };
+          }
+        },
+      };
+    },
   ],
 
   presets: [
@@ -144,7 +171,7 @@ const config = {
       ({
         docs: {
           path: "src/content/en/docs",
-          routeBasePath: "docs",
+          routeBasePath: "docs/v1",
           sidebarPath: "./src/content/en/docs/sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
@@ -181,7 +208,7 @@ const config = {
             items: [
               {
                 label: "Docs",
-                to: "/docs",
+                to: "/docs/v1",
               },
 
               {
