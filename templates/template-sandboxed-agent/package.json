@@ -17,7 +17,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@runloop/api-client": "latest",
+    "@runloop/api-client": "^0.67.1",
     "@mastra/core": "latest",
     "@mastra/fastembed": "latest",
     "@mastra/libsql": "latest",

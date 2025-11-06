@@ -19,7 +19,7 @@ This template demonstrates how to build an AI coding assistant that can work wit
 ## Prerequisites
 
 - Node.js 20 or higher
-- Runloop API key (sign up at [runloop.ai](https://runloop.ai))
+- Runloop API key (sign up at [platform.runloop.ai](https://platform.runloop.ai))
 - OpenAI API key
 
 ## Setup
@@ -42,7 +42,8 @@ This template demonstrates how to build an AI coding assistant that can work wit
    ```env
    RUNLOOP_API_KEY="your-runloop-api-key-here"
    OPENAI_API_KEY="your-openai-api-key-here"
-   RUNLOOP_PUBLIC_BLUEPRINT_NAME="runloop/mastra-base"  # Optional: specify a blueprint
+   # Optional: specify a different blueprint with mastra dependencies available
+   RUNLOOP_BLUEPRINT_NAME="runloop/mastra-base"  
    ```
 
 3. **Start the development server:**
@@ -71,7 +72,7 @@ Complete toolkit for devbox interaction:
 
 **Devbox Management:**
 
-- `createSandbox` - Initialize new isolated environments (supports optional blueprint via `RUNLOOP_PUBLIC_BLUEPRINT_NAME` env var)
+- `createSandbox` - Initialize new isolated environments (supports blueprint via `RUNLOOP_BLUEPRINT_NAME` env var)
 - Connection management with devbox ID
 
 **Code Execution:**
@@ -116,12 +117,12 @@ The agent includes a configured memory system:
 ```bash
 RUNLOOP_API_KEY=your_runloop_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
-RUNLOOP_PUBLIC_BLUEPRINT_NAME=runloop/mastra-base  # Optional: specify a blueprint for faster devbox creation
+RUNLOOP_BLUEPRINT_NAME=runloop/mastra-base  # Optional: specify a blueprint for faster devbox creation
 ```
 
 #### Blueprint Configuration
 
-Blueprints are pre-configured environments that speed up devbox creation. Set `RUNLOOP_PUBLIC_BLUEPRINT_NAME` to use a specific blueprint when creating devboxes. This is optional but recommended for faster startup times.
+Blueprints are pre-configured environments that speed up devbox creation. Set `RUNLOOP_BLUEPRINT_NAME` to use a specific blueprint when creating devboxes. This is optional but recommended for faster startup times.
 
 ### Customization
 

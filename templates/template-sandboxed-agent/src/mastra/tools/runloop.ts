@@ -130,7 +130,7 @@ export const createSandbox = createTool({
     ),
   execute: async sandboxOptions => {
     try {
-      const blueprintName = process.env.RUNLOOP_PUBLIC_BLUEPRINT_NAME;
+      const blueprintName = process.env.RUNLOOP_BLUEPRINT_NAME;
       
       const createOptions: any = {
         name: `devbox-${Date.now()}`,
