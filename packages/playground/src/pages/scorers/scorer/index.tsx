@@ -58,8 +58,8 @@ export default function Scorer() {
   });
 
   const agentOptions: EntityOptions[] =
-    scorer?.agentNames?.map(agentName => {
-      return { value: agentName, label: agentName, type: 'AGENT' as const };
+    scorer?.agentIds?.map(agentId => {
+      return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
     }) || [];
 
   const workflowOptions: EntityOptions[] =
