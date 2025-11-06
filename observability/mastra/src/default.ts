@@ -8,7 +8,7 @@ import type {
   ObservabilityEntrypoint,
   ObservabilityInstance,
 } from '@mastra/core/observability';
-import { SamplingStrategyType } from './config';
+import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
 import { CloudExporter, DefaultExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
@@ -37,12 +37,28 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       config = {};
     }
 
-    // Check for naming conflict if default is enabled
-    if (config.default?.enabled && config.configs?.['default']) {
-      throw new Error(
-        "Cannot use 'default' as a custom config name when default tracing is enabled. " +
-          'Please rename your custom config to avoid conflicts.',
-      );
+    // Validate config with Zod
+    const validationResult = observabilityRegistryConfigSchema.safeParse(config);
+    if (!validationResult.success) {
+      const errorMessages = validationResult.error.errors
+        .map(err => `${err.path.join('.') || 'config'}: ${err.message}`)
+        .join(', ');
+      throw new Error(`Invalid observability configuration: ${errorMessages}`);
+    }
+
+    // Validate individual configs if they are plain objects (not instances)
+    if (config.configs) {
+      for (const [name, configValue] of Object.entries(config.configs)) {
+        if (!isInstance(configValue)) {
+          const configValidation = observabilityConfigValueSchema.safeParse(configValue);
+          if (!configValidation.success) {
+            const errorMessages = configValidation.error.errors
+              .map(err => `configs.${name}.${err.path.join('.')}: ${err.message}`)
+              .join(', ');
+            throw new Error(`Invalid observability configuration: ${errorMessages}`);
+          }
+        }
+      }
     }
 
     // Setup default config if enabled
