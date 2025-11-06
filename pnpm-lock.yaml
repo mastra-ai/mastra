@@ -1112,7 +1112,7 @@ importers:
         specifier: 1.0.0-alpha.6
         version: 1.0.0-alpha.6
       '@inquirer/editor':
-        specifier: ^4.2.20
+        specifier: ^4.2.21
         version: 4.2.21(@types/node@20.19.23)
       '@manypkg/get-packages':
         specifier: ^2.2.2
