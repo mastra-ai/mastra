@@ -95,14 +95,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     try {
-      const { status, value, ...rest } = snapshot;
       const now = new Date().toISOString();
       await this.client.none(
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify({ status, value, ...rest }), now, now], // this is to ensure status is always just before value, for when querying the db by status
+        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
       throw new MastraError(
@@ -221,8 +220,8 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (status) {
-        conditions.push(`snapshot LIKE $${paramIndex}`);
-        values.push(`%"status":"${status}","value"%`); //this is a hack to make sure it matches the workflow status and not a step status, status is always just before value in the snapshot
+        conditions.push(`snapshot::jsonb ->> 'status' = $${paramIndex}`);
+        values.push(status);
         paramIndex++;
       }
 

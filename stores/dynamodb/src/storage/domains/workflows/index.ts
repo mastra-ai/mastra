@@ -87,13 +87,12 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       const now = new Date().toISOString();
-      const { status, value, ...rest } = snapshot;
       // Prepare data including the 'entity' type
       const data = {
         entity: 'workflow_snapshot', // Add entity type
         workflow_name: workflowName,
         run_id: runId,
-        snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
+        snapshot: JSON.stringify(snapshot),
         createdAt: now,
         updatedAt: now,
         resourceId,

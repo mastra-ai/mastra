@@ -82,7 +82,6 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot } = params;
     try {
-      const { status, value, ...rest } = snapshot;
       await this.operations.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
@@ -90,7 +89,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
-          snapshot: { status, value, ...rest }, // this is to ensure status is always just before value, for when querying the db by status
+          snapshot,
           createdAt: new Date(),
           updatedAt: new Date(),
         },

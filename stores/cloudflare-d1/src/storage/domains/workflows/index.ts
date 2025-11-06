@@ -70,20 +70,19 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
-    const { status, value, ...rest } = snapshot;
 
     const persisting = currentSnapshot
       ? {
           ...currentSnapshot,
           resourceId,
-          snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
+          snapshot: JSON.stringify(snapshot),
           updatedAt: now,
         }
       : {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
-          snapshot: { status, value, ...rest } as Record<string, any>, // this is to ensure status is always just before value, for when querying the db by status
+          snapshot: snapshot as Record<string, any>,
           createdAt: now,
           updatedAt: now,
         };
@@ -189,8 +188,8 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
       if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
       if (status) {
-        builder.whereAnd('snapshot LIKE ?', `%"status":"${status}","value"%`);
-        countBuilder.whereAnd('snapshot LIKE ?', `%"status":"${status}","value"%`);
+        builder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
+        countBuilder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
       }
       if (resourceId) {
         const hasResourceId = await this.operations.hasColumn(fullTableName, 'resourceId');

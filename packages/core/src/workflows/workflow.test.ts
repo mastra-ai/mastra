@@ -10799,7 +10799,7 @@ describe('Workflow', () => {
           runId,
           status: 'running',
           activePaths: [1],
-          activeStepsPath: { step2: [1] },
+          activeStepsPath: { promptAgent: [1] },
           value: {},
           context: {
             input: { input: 'test' },
@@ -11078,7 +11078,7 @@ describe('Workflow', () => {
               output: { value: 6 },
               endedAt: Date.now(),
             },
-            resume: {
+            next: {
               payload: { value: 6 },
               startedAt: Date.now(),
               status: 'running',

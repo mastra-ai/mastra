@@ -248,11 +248,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     const now = new Date().toISOString();
     try {
       const request = this.pool.request();
-      const { status, value, ...rest } = snapshot;
       request.input('workflow_name', workflowName);
       request.input('run_id', runId);
       request.input('resourceId', resourceId);
-      request.input('snapshot', JSON.stringify({ status, value, ...rest })); // this is to ensure status is always just before value, for when querying the db by status
+      request.input('snapshot', JSON.stringify(snapshot));
       request.input('createdAt', sql.DateTime2, new Date(now));
       request.input('updatedAt', sql.DateTime2, new Date(now));
       const mergeSql = `MERGE INTO ${table} AS target
@@ -384,8 +383,8 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       if (status) {
-        conditions.push(`[snapshot] LIKE @status`);
-        paramMap['status'] = `%"status":"${status}","value"%`; //this is a hack to make sure it matches the workflow status and not a step status, status is always just before value in the snapshot
+        conditions.push(`JSON_VALUE([snapshot], '$.status') = @status`);
+        paramMap['status'] = status;
       }
 
       if (resourceId) {

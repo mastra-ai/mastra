@@ -2477,6 +2477,12 @@ export class Run<
       stepResults: snapshot.context,
       state: snapshot.value,
     };
+    const requestContextToUse = requestContext ?? new RequestContext();
+    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+      if (!requestContextToUse.has(key)) {
+        requestContextToUse.set(key, value);
+      }
+    }
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
@@ -2490,7 +2496,7 @@ export class Run<
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
       tracingContext,
-      requestContext,
+      requestContext: requestContextToUse,
       mastra: this.#mastra,
     });
 

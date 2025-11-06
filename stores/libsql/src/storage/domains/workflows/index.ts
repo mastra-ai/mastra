@@ -269,12 +269,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     resourceId?: string;
     snapshot: WorkflowRunState;
   }) {
-    const { status, value, ...rest } = snapshot;
     const data = {
       workflow_name: workflowName,
       run_id: runId,
       resourceId,
-      snapshot: { status, value, ...rest }, // this is to ensure status is always just before value, for when querying the db by status
+      snapshot,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -366,8 +365,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       }
 
       if (status) {
-        conditions.push('snapshot LIKE ?');
-        args.push(`%"status":"${status}","value"%`); //this is a hack to make sure it matches the workflow status and not a step status, status is always just before value in the snapshot
+        conditions.push("json_extract(snapshot, '$.status') = ?");
+        args.push(status);
       }
 
       if (fromDate) {

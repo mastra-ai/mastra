@@ -10,7 +10,7 @@ const stepOne = createStep({
     doubledValue: z.number(),
   }),
   execute: async ({ inputData }) => {
-    await new Promise(resolve => setTimeout(resolve, 10_000));
+    await new Promise(resolve => setTimeout(resolve, 20_000));
     const doubledValue = inputData.inputValue * 2;
     return { doubledValue };
   },
@@ -24,16 +24,13 @@ const stepTwo = createStep({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  suspendSchema: z.object({}),
-  resumeSchema: z.object({
-    extraNumber: z.number(),
-  }),
-  execute: async ({ inputData, resumeData, suspend }) => {
-    if (!resumeData?.extraNumber) {
-      await suspend({});
-      return { incrementedValue: 0 };
-    }
-    const incrementedValue = inputData.doubledValue + 1 + resumeData.extraNumber;
+  // suspendSchema: z.object({})s
+  execute: async ({ inputData }) => {
+    // if (!resumeData?.extraNumber) {
+    //   await suspend({});
+    //   return { incrementedValue: 0 };
+    // }
+    const incrementedValue = inputData.doubledValue + 1;
     return { incrementedValue };
   },
 });

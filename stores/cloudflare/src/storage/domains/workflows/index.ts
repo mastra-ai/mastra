@@ -65,8 +65,6 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     try {
       const { workflowName, runId, resourceId, snapshot } = params;
 
-      const { status, value, ...rest } = snapshot;
-
       await this.operations.putKV({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         key: this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId }),
@@ -74,7 +72,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
-          snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
+          snapshot: JSON.stringify(snapshot),
           createdAt: new Date(),
           updatedAt: new Date(),
         },
