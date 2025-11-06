@@ -1,15 +1,15 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
-import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4/message';
+import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4';
 import type {
   LanguageModelV1Message,
   IdGenerator,
   LanguageModelV1Prompt,
   CoreMessage as CoreMessageV4,
   UIMessage as UIMessageV4,
-} from '@internal/ai-sdk-v4/message';
-import type * as AIV4Type from '@internal/ai-sdk-v4/message';
-import type { ToolInvocation as ToolInvocationV4 } from '@internal/ai-sdk-v4/tool';
+  ToolInvocation as ToolInvocationV4,
+} from '@internal/ai-sdk-v4';
+import type * as AIV4Type from '@internal/ai-sdk-v4';
 import { v4 as randomUUID } from '@lukeed/uuid';
 import * as AIV5 from 'ai-v5';
 

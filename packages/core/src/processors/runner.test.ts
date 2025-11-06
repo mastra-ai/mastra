@@ -1,4 +1,4 @@
-import type { TextPart } from '@internal/ai-sdk-v4/message';
+import type { TextPart } from '@internal/ai-sdk-v4';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';

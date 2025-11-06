@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4/model';
+import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';

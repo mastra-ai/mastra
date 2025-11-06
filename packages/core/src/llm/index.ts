@@ -1,4 +1,4 @@
-import type { EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult } from '@internal/ai-sdk-v4/embed';
+import type { EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult } from '@internal/ai-sdk-v4';
 import type {
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
@@ -6,7 +6,7 @@ import type {
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
   UIMessage,
-} from '@internal/ai-sdk-v4/message';
+} from '@internal/ai-sdk-v4';
 import type {
   streamText,
   streamObject,
@@ -14,7 +14,7 @@ import type {
   generateObject,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from '@internal/ai-sdk-v4/model';
+} from '@internal/ai-sdk-v4';
 import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';

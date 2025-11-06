@@ -1,6 +1,6 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel } from '@internal/ai-sdk-v4/embed';
-import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { EmbeddingModel } from '@internal/ai-sdk-v4';
+import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
