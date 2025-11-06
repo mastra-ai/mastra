@@ -42,7 +42,7 @@ import { weatherTool } from "../tools";
 
 export const memory = new Memory({
   storage: new LibSQLStore({
-  id: 'agent-storage',
+    id: 'agent-storage',
     url: `file:./mastra.db`,
   }),
   options: {

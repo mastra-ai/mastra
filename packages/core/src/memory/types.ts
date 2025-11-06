@@ -358,7 +358,7 @@ export type SharedMemoryConfig = {
    *
    * @example
    * ```typescript
-   * storage: new LibSQLStore({ url: "file:./agent-memory.db" })
+   * storage: new LibSQLStore({ id: 'agent-memory-storage', url: "file:./agent-memory.db" })
    * ```
    */
   storage?: MastraStorage;
