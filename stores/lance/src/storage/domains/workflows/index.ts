@@ -1,8 +1,8 @@
 import type { Connection } from '@lancedb/lancedb';
-import type { StepResult, WorkflowRunState, WorkflowRuns } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, StorageListWorkflowRunsInput } from '@mastra/core/storage';
-import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
+import { ensureDate, normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 function parseWorkflowRun(row: any): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot;
@@ -211,12 +211,23 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         total = await table.countRows();
       }
 
-      if (args?.limit) {
-        query.limit(args.limit);
-      }
+      if (args?.perPage !== undefined && args?.page !== undefined) {
+        const normalizedPerPage = normalizePerPage(args.perPage, Number.MAX_SAFE_INTEGER);
 
-      if (args?.offset) {
-        query.offset(args.offset);
+        if (args.page < 0 || !Number.isInteger(args.page)) {
+          throw new MastraError(
+            {
+              id: 'LANCE_STORE_INVALID_PAGINATION_PARAMS',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { page: args.page, perPage: args.perPage },
+            },
+            new Error(`Invalid pagination parameters: page=${args.page}, perPage=${args.perPage}`),
+          );
+        }
+        const offset = args.page * normalizedPerPage;
+        query.limit(normalizedPerPage);
+        query.offset(offset);
       }
 
       const records = await query.toArray();
@@ -228,7 +239,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'LANCE_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },

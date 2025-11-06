@@ -1,12 +1,14 @@
 import EventEmitter from 'events';
-import type { Emitter, LoopConditionFunction, Mastra, Step, StepFlowEntry, StepResult } from '../..';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { PubSub } from '../../events';
 import { RegisteredLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
+import type { LoopConditionFunction, Step } from '../step';
+import type { Emitter, StepFlowEntry, StepResult } from '../types';
 import { validateStepInput, createDeprecationProxy, runCountDeprecationMessage } from '../utils';
 
 export class StepExecutor extends MastraBase {
@@ -83,7 +85,6 @@ export class StepExecutor extends MastraBase {
               // TODO
               params.state = state;
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -253,7 +254,6 @@ export class StepExecutor extends MastraBase {
           setState: (_state: any) => {
             // TODO
           },
-          runCount: retryCount,
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
@@ -324,7 +324,6 @@ export class StepExecutor extends MastraBase {
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -398,7 +397,6 @@ export class StepExecutor extends MastraBase {
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,

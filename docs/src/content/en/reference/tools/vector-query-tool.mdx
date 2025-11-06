@@ -581,6 +581,7 @@ import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -592,10 +593,10 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 const requestContext = new RequestContext();
-const queryResult = await vectorQueryTool.execute({
-  context: { queryText: "foo", topK: 1 },
-  requestContext,
-});
+const queryResult = await vectorQueryTool.execute(
+  { queryText: "foo", topK: 1 },
+  { requestContext }
+);
 
 console.log(queryResult.sources);
 ```

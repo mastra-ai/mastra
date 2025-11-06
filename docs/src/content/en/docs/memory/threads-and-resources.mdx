@@ -15,8 +15,8 @@ The `resource` is especially important for [resource-scoped memory](./working-me
 ```typescript {4} showLineNumbers
 const stream = await agent.stream("message for agent", {
   memory: {
-    thread: "user-123",
-    resource: "test-123",
+    thread: "conversation-123",
+    resource: "user-123",
   },
 });
 ```
@@ -27,7 +27,7 @@ Even with memory configured, agents won’t store or recall information unless b
 
 :::
 
-> Mastra Playground sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
+> Studio sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
 
 ### Thread title generation
 

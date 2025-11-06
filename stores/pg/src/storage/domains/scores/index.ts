@@ -1,8 +1,14 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import {
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+  ScoresStorage,
+  TABLE_SCORERS,
+} from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
@@ -64,7 +70,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -103,29 +109,34 @@ export class ScoresPG extends ScoresStorage {
         `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause}`,
         queryParams,
       );
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
-
+      const limitValue = perPageInput === false ? Number(total?.count) : perPage;
+      const end = perPageInput === false ? Number(total?.count) : start + perPage;
       const result = await this.client.manyOrNone<ScoreRowData>(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
-        [...queryParams, pagination.perPage, pagination.page * pagination.perPage],
+        [...queryParams, limitValue, start],
       );
 
       return {
         pagination: {
           total: Number(total?.count) || 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < Number(total?.count),
         },
         scores: result.map(transformScoreRow),
       };
@@ -152,7 +163,7 @@ export class ScoresPG extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.name,
+            scorer: score.scorer.id,
             entityId: score.entityId,
             entityType: score.entityType,
             traceId: score.traceId || '',
@@ -213,7 +224,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -225,28 +236,35 @@ export class ScoresPG extends ScoresStorage {
         `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1`,
         [runId],
       );
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const limitValue = perPageInput === false ? Number(total?.count) : perPage;
+      const end = perPageInput === false ? Number(total?.count) : start + perPage;
+
       const result = await this.client.manyOrNone<ScoreRowData>(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
-        [runId, pagination.perPage, pagination.page * pagination.perPage],
+        [runId, limitValue, start],
       );
       return {
         pagination: {
           total: Number(total?.count) || 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < Number(total?.count),
         },
         scores: result.map(transformScoreRow),
       };
@@ -262,7 +280,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -276,29 +294,35 @@ export class ScoresPG extends ScoresStorage {
         `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2`,
         [entityId, entityType],
       );
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const limitValue = perPageInput === false ? Number(total?.count) : perPage;
+      const end = perPageInput === false ? Number(total?.count) : start + perPage;
+
       const result = await this.client.manyOrNone<ScoreRowData>(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
-        [entityId, entityType, pagination.perPage, pagination.page * pagination.perPage],
+        [entityId, entityType, limitValue, start],
       );
       return {
         pagination: {
           total: Number(total?.count) || 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < Number(total?.count),
         },
         scores: result.map(transformScoreRow),
       };
@@ -314,7 +338,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -331,21 +355,25 @@ export class ScoresPG extends ScoresStorage {
       );
 
       const total = Number(countSQLResult?.count ?? 0);
-
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
       const result = await this.client.manyOrNone<ScoreRowData>(
         `SELECT * FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
-        [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+        [traceId, spanId, limitValue, start],
       );
 
-      const hasMore = result.length > pagination.perPage;
-      const scores = result.slice(0, pagination.perPage).map(row => transformScoreRow(row)) ?? [];
+      const hasMore = end < total;
+      const scores = result.map(row => transformScoreRow(row)) ?? [];
 
       return {
         scores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore,
         },
       };

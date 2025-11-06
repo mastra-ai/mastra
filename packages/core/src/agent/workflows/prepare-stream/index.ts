@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { InternalSpans } from '../../../ai-tracing';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { Span, SpanType } from '../../../observability';
+import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
@@ -26,12 +26,8 @@ interface CreatePrepareStreamWorkflowOptions<
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
+  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
@@ -56,9 +52,8 @@ export function createPrepareStreamWorkflow<
   resourceId,
   runId,
   requestContext,
-  agentAISpan,
+  agentSpan,
   methodType,
-  format,
   instructions,
   memoryConfig,
   memory,
@@ -76,7 +71,7 @@ export function createPrepareStreamWorkflow<
     resourceId,
     runId,
     requestContext,
-    agentAISpan,
+    agentSpan,
     methodType,
     memory,
   });
@@ -88,9 +83,8 @@ export function createPrepareStreamWorkflow<
     resourceId,
     runId,
     requestContext,
-    agentAISpan,
+    agentSpan,
     methodType,
-    format,
     instructions,
     memoryConfig,
     memory,
@@ -100,7 +94,6 @@ export function createPrepareStreamWorkflow<
     capabilities,
     runId,
     returnScorerData,
-    format,
     requireToolApproval,
     resumeContext,
     agentId,
@@ -116,7 +109,7 @@ export function createPrepareStreamWorkflow<
     memory,
     memoryConfig,
     saveQueueManager,
-    agentAISpan,
+    agentSpan,
     agentId,
   });
 

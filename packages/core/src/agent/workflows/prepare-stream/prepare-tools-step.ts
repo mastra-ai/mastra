@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
+import type { Span, SpanType } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
@@ -19,7 +19,7 @@ interface PrepareToolsStepOptions<
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
+  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   memory?: MastraMemory;
 }
@@ -34,7 +34,7 @@ export function createPrepareToolsStep<
   resourceId,
   runId,
   requestContext,
-  agentAISpan,
+  agentSpan,
   methodType,
   memory,
 }: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
@@ -69,7 +69,7 @@ export function createPrepareToolsStep<
         resourceId,
         runId,
         requestContext,
-        tracingContext: { currentSpan: agentAISpan },
+        tracingContext: { currentSpan: agentSpan },
         writableStream: options.writableStream,
         methodType,
       });

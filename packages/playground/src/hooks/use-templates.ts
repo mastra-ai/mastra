@@ -173,7 +173,7 @@ export const useCreateTemplateInstallRun = () => {
   const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId?: string }) => {
-      return await client.getAgentBuilderAction('merge-template').createRunAsync({ runId });
+      return await client.getAgentBuilderAction('merge-template').createRun({ runId });
     },
   });
 };
@@ -493,7 +493,7 @@ export const useWatchTemplateInstall = (workflowInfo?: any) => {
 
           // Use correct callback API (fix the TypeScript issue when possible)
           await template.watch(
-            { runId, eventType: 'watch-v2' },
+            { runId, eventType: 'watch' },
             (record: { type: string; payload: any; runId?: string; eventTimestamp?: string }) => {
               try {
                 processTemplateRecord(record);

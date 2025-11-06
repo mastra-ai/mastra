@@ -77,6 +77,7 @@ Set up the Mastra agent:
 
 ```typescript copy showLineNumbers{23} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context.`,
   model: openai("gpt-4o-mini"),
@@ -257,6 +258,7 @@ Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{169} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -321,7 +323,7 @@ const prompt = `
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-const { runId, start } = await ragWorkflow.createRunAsync();
+const { runId, start } = await ragWorkflow.createRun();
 
 console.log("Run:", runId);
 

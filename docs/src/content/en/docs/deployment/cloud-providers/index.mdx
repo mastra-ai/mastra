@@ -19,7 +19,7 @@ For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/d
 Before deploying to a cloud provider, ensure you have:
 
 - A [Mastra application](/docs/getting-started/installation)
-- Node.js `v20.0` or higher
+- Node.js `v22.13.0` or later
 - A GitHub repository for your application (required for most CI/CD setups)
 - Domain name management access (for SSL and HTTPS)
 - Basic familiarity with server setup (e.g. Nginx, environment variables)
@@ -34,8 +34,9 @@ Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+  id: 'mastra-storage',
     // [!code --]
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
+    // stores telemetry, scorer results, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
     url: ":memory:", // [!code --]
   }), //[!code --]
 });
@@ -43,10 +44,12 @@ export const mastra = new Mastra({
 
 ```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   // ..
   memory: new Memory({
     // [!code --]
     storage: new LibSQLStore({
+  id: 'mastra-storage',
       // [!code --]
       url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
     }), // [!code --]

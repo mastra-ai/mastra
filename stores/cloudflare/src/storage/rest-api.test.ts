@@ -299,9 +299,9 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread: thread1 });
       await store.saveThread({ thread: thread2 });
 
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread1.resourceId }),
-        threads => threads?.length === 2,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, perPage: 10, page: 0 }),
+        result => result?.threads?.length === 2,
       );
       expect(threads).toHaveLength(2);
       expect(threads.map(t => t.id)).toEqual(expect.arrayContaining([thread1.id, thread2.id]));
@@ -362,11 +362,11 @@ describe.skip('CloudflareStore REST API', () => {
       );
 
       // Verify messages were also deleted with retry
-      const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 0,
+      const { messages: retrievedMessages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === 0,
       );
-      expect(retrievedMessages).toHaveLength(0);
+      expect(retrievedMessages.length).toBe(0);
     });
   });
 
@@ -386,12 +386,12 @@ describe.skip('CloudflareStore REST API', () => {
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages with retry
-      const retrievedMessages = await retryUntil(
+      const { messages: retrievedMessages } = await retryUntil(
         async () => {
-          const msgs = await store.getMessages({ threadId: thread.id });
-          return msgs;
+          const result = await store.listMessages({ threadId: thread.id });
+          return result;
         },
-        msgs => msgs.length === 2,
+        result => result.messages.length === 2,
       );
 
       expect(retrievedMessages).toEqual(expect.arrayContaining(messages));
@@ -414,143 +414,17 @@ describe.skip('CloudflareStore REST API', () => {
 
       await store.saveMessages({ messages });
 
-      const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
+      const { messages: retrievedMessages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length > 0,
       );
-      expect(retrievedMessages).toHaveLength(3);
+      expect(retrievedMessages.length).toBe(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
         expect(msg.content).toEqual(messages[idx].content);
       });
     });
-
-    // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-    //   const messages: MastraMessageV2[] = [
-    //     createSampleMessageV2({
-    //       threadId: 'thread-one',
-    //       content: 'First',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessageV2({
-    //       threadId: 'thread-one',
-    //       content: 'Second',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessageV2({
-    //       threadId: 'thread-one',
-    //       content: 'Third',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-
-    //     createSampleMessageV2({
-    //       threadId: 'thread-two',
-    //       content: 'Fourth',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessageV2({
-    //       threadId: 'thread-two',
-    //       content: 'Fifth',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-    //     createSampleMessageV2({
-    //       threadId: 'thread-two',
-    //       content: 'Sixth',
-    //       resourceId: 'cross-thread-resource',
-    //     }),
-
-    //     createSampleMessageV2({
-    //       threadId: 'thread-three',
-    //       content: 'Seventh',
-    //       resourceId: 'other-resource',
-    //     }),
-    //     createSampleMessageV2({
-    //       threadId: 'thread-three',
-    //       content: 'Eighth',
-    //       resourceId: 'other-resource',
-    //     }),
-    //   ];
-
-    //   await store.saveMessages({ messages: messages, format: 'v2' });
-
-    //   const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
-    //   expect(retrievedMessages).toHaveLength(3);
-    //   expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
-
-    //   const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
-    //   expect(retrievedMessages2).toHaveLength(3);
-    //   expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
-
-    //   const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
-    //   expect(retrievedMessages3).toHaveLength(2);
-    //   expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
-
-    //   const crossThreadMessages = await store.getMessages({
-    //     threadId: 'thread-doesnt-exist',
-    //     resourceId: 'cross-thread-resource',
-    //     format: 'v2',
-    //     selectBy: {
-    //       last: 0,
-    //       include: [
-    //         {
-    //           id: messages[1].id,
-    //           withNextMessages: 2,
-    //           withPreviousMessages: 2,
-    //         },
-    //         {
-    //           id: messages[4].id,
-    //           withPreviousMessages: 2,
-    //           withNextMessages: 2,
-    //         },
-    //       ],
-    //     },
-    //   });
-
-    //   expect(crossThreadMessages).toHaveLength(6);
-    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
-
-    //   const crossThreadMessages2 = await store.getMessages({
-    //     threadId: 'thread-one',
-    //     resourceId: 'cross-thread-resource',
-    //     format: 'v2',
-    //     selectBy: {
-    //       last: 0,
-    //       include: [
-    //         {
-    //           id: messages[4].id,
-    //           withPreviousMessages: 1,
-    //           withNextMessages: 30,
-    //         },
-    //       ],
-    //     },
-    //   });
-
-    //   expect(crossThreadMessages2).toHaveLength(3);
-    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
-    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
-
-    //   const crossThreadMessages3 = await store.getMessages({
-    //     threadId: 'thread-two',
-    //     resourceId: 'cross-thread-resource',
-    //     format: 'v2',
-    //     selectBy: {
-    //       last: 0,
-    //       include: [
-    //         {
-    //           id: messages[1].id,
-    //           withNextMessages: 1,
-    //           withPreviousMessages: 1,
-    //         },
-    //       ],
-    //     },
-    //   });
-
-    //   expect(crossThreadMessages3).toHaveLength(3);
-    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
-    // });
   });
 
   describe('Workflow Operations', () => {
@@ -1192,8 +1066,8 @@ describe.skip('CloudflareStore REST API', () => {
       // Get first page
       const page1 = await store.listWorkflowRuns({
         namespace: testNamespace,
-        limit: 2,
-        offset: 0,
+        perPage: 2,
+        page: 0,
       });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
@@ -1207,8 +1081,8 @@ describe.skip('CloudflareStore REST API', () => {
       // Get second page
       const page2 = await store.listWorkflowRuns({
         namespace: testNamespace,
-        limit: 2,
-        offset: 2,
+        perPage: 2,
+        page: 1,
       });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
@@ -1339,13 +1213,13 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Should be able to retrieve thread
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length > 0,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
+        result => result?.threads?.length === 1,
       );
       expect(threads).toHaveLength(1);
-      expect(threads[0].id).toBe(thread.id);
-      expect(threads[0].metadata).toStrictEqual({});
+      expect(threads[0]?.id).toBe(thread.id);
+      expect(threads[0]?.metadata).toStrictEqual({});
     });
 
     it('should sanitize and handle special characters', async () => {
@@ -1356,12 +1230,12 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveMessages({ messages: [message] });
 
       // Should retrieve correctly
-      const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
+      const { messages: retrievedMessages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length > 0,
       );
-      expect(messages).toHaveLength(1);
-      expect(messages[0].content).toEqual(message.content);
+      expect(retrievedMessages.length).toBe(1);
+      expect(retrievedMessages[0].content).toEqual(message.content);
     });
 
     it('should validate thread structure', async () => {
@@ -1541,8 +1415,8 @@ describe.skip('CloudflareStore REST API', () => {
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
-      const threads = await store.getThreadsByResourceId({ resourceId: thread.resourceId });
-      expect(threads).toHaveLength(0);
+      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 });
+      expect(threads?.length).toBe(0);
     });
 
     it('should handle namespace cleanup edge cases', async () => {
@@ -1557,11 +1431,11 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveMessages({ messages: testMessages });
 
       // Verify messages are saved
-      const initialMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === testMessages.length,
+      const { messages: initialMessages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === testMessages.length,
       );
-      expect(initialMessages).toHaveLength(testMessages.length);
+      expect(initialMessages.length).toBe(testMessages.length);
 
       // Delete thread
       await store.deleteThread({ threadId: thread.id });
@@ -1579,18 +1453,18 @@ describe.skip('CloudflareStore REST API', () => {
       );
 
       // Verify all data is cleaned up
-      const remainingMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 0,
+      const { messages: remainingMessages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === 0,
       );
-      expect(remainingMessages).toHaveLength(0);
+      expect(remainingMessages?.length).toBe(0);
 
       // Verify thread is gone
-      const threads = await retryUntil(
-        async () => await store.getThreadsByResourceId({ resourceId: thread.resourceId }),
-        threads => threads.length === 0,
+      const { threads } = await retryUntil(
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
+        result => result?.threads?.length === 0,
       );
-      expect(threads).toHaveLength(0);
+      expect(threads?.length).toBe(0);
 
       // Verify message order is cleaned up
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1724,12 +1598,12 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveMessages({ messages: [malformedMessage] });
 
       // Should still be able to retrieve and handle the message
-      const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 1,
+      const { messages: retrievedMessages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === 1,
       );
-      expect(messages).toHaveLength(1);
-      expect(messages[0].id).toBe(malformedMessage.id);
+      expect(retrievedMessages.length).toBe(1);
+      expect(retrievedMessages[0].id).toBe(malformedMessage.id);
     });
 
     it('should handle concurrent updates to sorted order', async () => {

@@ -102,25 +102,10 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * @deprecated Use createRunAsync() instead.
-   * @throws {Error} Always throws an error directing users to use createRunAsync()
-   */
-  async createRun(_params?: { runId?: string }): Promise<{ runId: string }> {
-    throw new Error(
-      'createRun() has been deprecated. ' +
-        'Please use createRunAsync() instead.\n\n' +
-        'Migration guide:\n' +
-        '  Before: const run = agentBuilder.createRun();\n' +
-        '  After:  const run = await agentBuilder.createRunAsync();\n\n' +
-        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
-    );
-  }
-
-  /**
    * Creates a new agent builder action run and returns the runId.
    * This calls `/api/agent-builder/:actionId/create-run`.
    */
-  async createRunAsync(params?: { runId?: string }): Promise<{ runId: string }> {
+  async createRun(params?: { runId?: string }): Promise<{ runId: string }> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {
@@ -361,40 +346,6 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Watches an existing agent builder action run by runId.
-   * This is used for hot reload recovery - it loads the existing run state
-   * and streams any remaining progress.
-   * This calls `/api/agent-builder/:actionId/watch`.
-   */
-  async watch(
-    { runId, eventType }: { runId: string; eventType?: 'watch' | 'watch-v2' },
-    onRecord: (record: { type: string; payload: any }) => void,
-  ) {
-    const url = `/api/agent-builder/${this.actionId}/watch?runId=${runId}${eventType ? `&eventType=${eventType}` : ''}`;
-    const response: Response = await this.request(url, {
-      method: 'GET',
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to watch agent builder action: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    // Use the exact same stream processing as workflows
-    for await (const record of this.streamProcessor(response.body)) {
-      if (typeof record === 'string') {
-        onRecord(JSON.parse(record));
-      } else {
-        onRecord(record);
-      }
-    }
-  }
-
-  /**
    * Observes an existing agent builder action run stream.
    * Replays cached execution from the beginning, then continues with live stream.
    * This is the recommended method for recovery after page refresh/hot reload.
@@ -531,7 +482,7 @@ export class AgentBuilder extends BaseResource {
    * Gets all runs for this agent builder action.
    * This calls `/api/agent-builder/:actionId/runs`.
    */
-  async runs(params?: { fromDate?: Date; toDate?: Date; limit?: number; offset?: number; resourceId?: string }) {
+  async runs(params?: { fromDate?: Date; toDate?: Date; perPage?: number; page?: number; resourceId?: string }) {
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());
@@ -539,11 +490,11 @@ export class AgentBuilder extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit !== undefined) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
     }
-    if (params?.offset !== undefined) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);
@@ -574,18 +525,6 @@ export class AgentBuilder extends BaseResource {
     const url = `/api/agent-builder/${this.actionId}/runs/${runId}/cancel`;
     return this.request(url, {
       method: 'POST',
-    });
-  }
-
-  /**
-   * Sends an event to an agent builder action run.
-   * This calls `/api/agent-builder/:actionId/runs/:runId/send-event`.
-   */
-  async sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
-    const url = `/api/agent-builder/${this.actionId}/runs/${params.runId}/send-event`;
-    return this.request(url, {
-      method: 'POST',
-      body: { event: params.event, data: params.data },
     });
   }
 }

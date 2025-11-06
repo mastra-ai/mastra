@@ -3,8 +3,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: {
-    'scorers/llm/index': 'src/scorers/llm/index.ts',
-    'scorers/code/index': 'src/scorers/code/index.ts',
+    'scorers/prebuilt/index': 'src/scorers/prebuilt/index.ts',
     'scorers/utils': 'src/scorers/utils.ts',
   },
   format: ['esm', 'cjs'],

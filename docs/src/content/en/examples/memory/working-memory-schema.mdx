@@ -45,6 +45,7 @@ import { LibSQLStore } from "@mastra/libsql";
 import { z } from "zod";
 
 export const workingMemorySchemaAgent = new Agent({
+  id: "working-memory-schema-agent",
   name: "working-memory-schema-agent",
   instructions: `
     You are a todo list AI agent.
@@ -57,6 +58,7 @@ export const workingMemorySchemaAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+  id: 'mastra-storage',
       url: "file:working-memory-schema.db",
     }),
     options: {

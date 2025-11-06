@@ -1,6 +1,7 @@
-import type { AITraceRecord, AITracesPaginatedArg, WorkflowInfo } from '@mastra/core';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
+import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
   MemoryThread,
@@ -28,17 +29,17 @@ import type {
   McpServerListResponse,
   McpServerToolListResponse,
   GetScorerResponse,
-  GetScoresByScorerIdParams,
-  GetScoresResponse,
-  GetScoresByRunIdParams,
-  GetScoresByEntityIdParams,
-  GetScoresBySpanParams,
+  ListScoresByScorerIdParams,
+  ListScoresResponse,
+  ListScoresByRunIdParams,
+  ListScoresByEntityIdParams,
+  ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
-  GetAITracesResponse,
+  GetTracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
-  GetMemoryThreadMessagesResponse,
+  ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
   ListMemoryThreadsParams,
@@ -89,19 +90,33 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing resource ID, pagination options, and optional request context
    * @returns Promise containing paginated array of memory threads with metadata
    */
-  public listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
+  public async listMemoryThreads(params: ListMemoryThreadsParams): Promise<ListMemoryThreadsResponse> {
     const queryParams = new URLSearchParams({
       resourceId: params.resourceId,
+      resourceid: params.resourceId,
       agentId: params.agentId,
-      ...(params.offset !== undefined && { offset: params.offset.toString() }),
-      ...(params.limit !== undefined && { limit: params.limit.toString() }),
+      ...(params.page !== undefined && { page: params.page.toString() }),
+      ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
       ...(params.orderBy && { orderBy: params.orderBy }),
       ...(params.sortDirection && { sortDirection: params.sortDirection }),
     });
 
-    return this.request(
+    const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
       `/api/memory/threads?${queryParams.toString()}${requestContextQueryString(params.requestContext, '&')}`,
     );
+
+    const actualResponse: ListMemoryThreadsResponse =
+      'threads' in response
+        ? response
+        : {
+            threads: response,
+            total: response.length,
+            page: params.page ?? 0,
+            perPage: params.perPage ?? 100,
+            hasMore: false,
+          };
+
+    return actualResponse;
   }
 
   /**
@@ -136,10 +151,13 @@ export class MastraClient extends BaseResource {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
-  public getThreadMessages(
+  public listThreadMessages(
     threadId: string,
     opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
-  ): Promise<GetMemoryThreadMessagesResponse> {
+  ): Promise<ListMemoryThreadMessagesResponse> {
+    if (!opts.agentId && !opts.networkId) {
+      throw new Error('Either agentId or networkId must be provided');
+    }
     let url = '';
     if (opts.agentId) {
       url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
@@ -376,16 +394,16 @@ export class MastraClient extends BaseResource {
 
   /**
    * Retrieves a list of available MCP servers.
-   * @param params - Optional parameters for pagination (limit, offset).
+   * @param params - Optional parameters for pagination (perPage, page).
    * @returns Promise containing the list of MCP servers and pagination info.
    */
-  public getMcpServers(params?: { limit?: number; offset?: number }): Promise<McpServerListResponse> {
+  public getMcpServers(params?: { perPage?: number; page?: number }): Promise<McpServerListResponse> {
     const searchParams = new URLSearchParams();
-    if (params?.limit !== undefined) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
     }
-    if (params?.offset !== undefined) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
     }
     const queryString = searchParams.toString();
     return this.request(`/api/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
@@ -539,7 +557,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public getScoresByScorerId(params: GetScoresByScorerIdParams): Promise<GetScoresResponse> {
+  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponse> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -565,7 +583,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByRunId(params: GetScoresByRunIdParams): Promise<GetScoresResponse> {
+  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponse> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -585,7 +603,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresByEntityId(params: GetScoresByEntityIdParams): Promise<GetScoresResponse> {
+  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponse> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -614,16 +632,16 @@ export class MastraClient extends BaseResource {
     });
   }
 
-  getAITrace(traceId: string): Promise<AITraceRecord> {
+  getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
   }
 
-  getAITraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
+  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
     return this.observability.getTraces(params);
   }
 
-  getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
-    return this.observability.getScoresBySpan(params);
+  listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
+    return this.observability.listScoresBySpan(params);
   }
 
   score(params: {

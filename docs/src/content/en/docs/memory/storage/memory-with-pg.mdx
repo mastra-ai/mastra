@@ -33,12 +33,14 @@ import { openai } from "@ai-sdk/openai";
 import { PostgresStore } from "@mastra/pg";
 
 export const pgAgent = new Agent({
-  name: "pg-agent",
+  id: "pg-agent",
+  name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     options: {
@@ -68,15 +70,18 @@ import { PostgresStore, PgVector } from "@mastra/pg";
 import { fastembed } from "@mastra/fastembed";
 
 export const pgAgent = new Agent({
-  name: "pg-agent",
+  id: "pg-agent",
+  name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     vector: new PgVector({
+      id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL!,
     }),
     embedder: fastembed,

@@ -7,8 +7,8 @@ import Arcade from '@arcadeai/arcadejs';
 import { executeOrAuthorizeZodTool, toZodToolSet } from '@arcadeai/arcadejs/lib';
 
 export const meetingSchedulerAgent = new Agent({
+  id: 'meeting-scheduler-agent',
   name: 'meetingSchedulerAgent',
-  id: 'meetingSchedulerAgent',
   instructions: () => `
 You're an intelligent email assistant that helps manage Gmail and Google Calendar integration. Your primary focus is identifying meeting requests in emails and automating calendar event creation.
 
@@ -55,9 +55,11 @@ Once authorized, you can proceed with the requested email analysis and calendar 
   model: anthropic('claude-4-sonnet-20250514'),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'meeting-scheduler-agent-storage',
       url: 'file:../../mastra.db',
     }),
     vector: new LibSQLVector({
+      id: 'meeting-scheduler-agent-vector',
       connectionUrl: 'file:../../mastra.db',
     }),
     embedder: fastembed,

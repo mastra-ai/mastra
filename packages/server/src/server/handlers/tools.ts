@@ -94,14 +94,19 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         return result;
       }
 
-      const result = await tool.execute({
-        context: data!,
+      const result = await tool.execute(data!, {
         mastra,
-        runId,
         requestContext,
         // TODO: Pass proper tracing context when server API supports tracing
         tracingContext: { currentSpan: undefined },
-        suspend: async () => {},
+        ...(runId
+          ? {
+              workflow: {
+                runId,
+                suspend: async () => {},
+              },
+            }
+          : {}),
       });
       return result;
     } catch (error) {
@@ -120,7 +125,7 @@ export async function getAgentToolHandler({
   requestContext: RequestContext;
 }) {
   try {
-    const agent = agentId ? mastra.getAgent(agentId) : null;
+    const agent = agentId ? mastra.getAgentById(agentId) : null;
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
     }
@@ -157,7 +162,7 @@ export async function executeAgentToolHandler({
   requestContext: RequestContext;
 }) {
   try {
-    const agent = agentId ? mastra.getAgent(agentId) : null;
+    const agent = agentId ? mastra.getAgentById(agentId) : null;
     if (!agent) {
       throw new HTTPException(404, { message: 'Tool not found' });
     }
@@ -179,14 +184,16 @@ export async function executeAgentToolHandler({
     //   return result;
     // }
 
-    const result = await tool.execute({
-      context: data,
-      requestContext,
+    const result = await tool.execute(data, {
       mastra,
-      runId: agentId,
+      requestContext,
       // TODO: Pass proper tracing context when server API supports tracing
       tracingContext: { currentSpan: undefined },
-      suspend: async () => {},
+      agent: {
+        messages: [],
+        toolCallId: '',
+        suspend: async () => {},
+      },
     });
 
     return result;

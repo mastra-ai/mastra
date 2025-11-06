@@ -248,6 +248,7 @@ const config = {
       prism: {
         theme: prismMastraLight,
         darkTheme: prismMastraDark,
+        additionalLanguages: ["diff"],
       },
     }),
 };

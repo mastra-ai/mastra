@@ -131,18 +131,17 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockExecute).toHaveBeenCalledWith(
-        {
-          context,
-          mastra: mockMastra,
-          runId: 'test-run',
-          requestContext: requestContext,
-          tracingContext: {
-            currentSpan: undefined,
-          },
+      expect(mockExecute).toHaveBeenCalledWith(context, {
+        mastra: mockMastra,
+        requestContext: requestContext,
+        tracingContext: {
+          currentSpan: undefined,
         },
-        undefined,
-      );
+        workflow: {
+          runId: 'test-run',
+          suspend: expect.any(Function),
+        },
+      });
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
@@ -164,6 +163,7 @@ describe('Tools Handlers', () => {
 
   describe('executeAgentToolHandler', () => {
     const mockAgent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant',
       tools: mockTools,
@@ -179,7 +179,7 @@ describe('Tools Handlers', () => {
           data: {},
           requestContext: new RequestContext(),
         }),
-      ).rejects.toThrow('Agent with name non-existent not found');
+      ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw 404 when tool is not found in agent', async () => {
@@ -200,6 +200,7 @@ describe('Tools Handlers', () => {
     it('should throw error when tool is not executable', async () => {
       const nonExecutableTool = { ...mockTool, execute: undefined };
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: `You're a helpful assistant`,
         tools: { [nonExecutableTool.id]: nonExecutableTool },
@@ -243,18 +244,18 @@ describe('Tools Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockExecute).toHaveBeenCalledWith(
-        {
-          context,
-          mastra: mockMastra,
-          runId: 'test-agent',
-          requestContext: requestContext,
-          tracingContext: {
-            currentSpan: undefined,
-          },
+      expect(mockExecute).toHaveBeenCalledWith(context, {
+        mastra: mockMastra,
+        requestContext: requestContext,
+        tracingContext: {
+          currentSpan: undefined,
         },
-        undefined,
-      );
+        agent: {
+          messages: [],
+          toolCallId: '',
+          suspend: expect.any(Function),
+        },
+      });
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
@@ -282,6 +283,7 @@ describe('Tools Handlers', () => {
 
   describe('getAgentToolHandler', () => {
     const mockAgent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'You are a helpful assistant',
       tools: mockTools,
@@ -298,7 +300,7 @@ describe('Tools Handlers', () => {
         }),
       ).rejects.toThrow(
         new HTTPException(404, {
-          message: 'Agent with name non-existent not found',
+          message: 'Agent with id non-existent not found',
         }),
       );
     });

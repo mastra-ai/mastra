@@ -40,6 +40,8 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     options: {
@@ -62,12 +64,13 @@ See the [Memory Class](/reference/memory/memory-class) docs for a full list of c
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
 ```typescript {6-8} title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ..
   storage: new LibSQLStore({
+  id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -90,9 +93,12 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
+  id: 'mastra-storage',
       url: ":memory:",
     }),
   }),
@@ -108,13 +114,13 @@ Include a `memory` object with both `resource` and `thread` to track conversatio
 
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
 
-```typescript {3-4}
+```typescript {5-6}
 const response = await memoryAgent.generate(
   "Remember my favorite color is blue.",
   {
     memory: {
-      thread: "user-123",
-      resource: "test-123",
+      resource: "user-123",
+      thread: "conversation-123",
     },
   },
 );
@@ -125,8 +131,8 @@ To recall information stored in memory, call the agent with the same `resource` 
 ```typescript {3-4}
 const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
-    thread: "user-123",
-    resource: "test-123",
+    resource: "user-123",
+    thread: "conversation-123",
   },
 });
 ```
@@ -151,6 +157,8 @@ const standardMemory = new Memory({
 });
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];

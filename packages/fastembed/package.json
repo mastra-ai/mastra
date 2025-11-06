@@ -49,5 +49,8 @@
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

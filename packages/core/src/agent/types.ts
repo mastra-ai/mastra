@@ -1,8 +1,9 @@
+import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4/model';
+import type { ToolSet } from '@internal/ai-sdk-v4/tool';
 import type { ProviderDefinedTool } from '@internal/external-types';
-import type { GenerateTextOnStepFinishCallback, ToolSet } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -24,9 +25,9 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import type { RequestContext } from '../request-context';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
@@ -39,8 +40,8 @@ import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
 
-export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from 'ai';
+export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type { Message as AiMessageType } from '@internal/ai-sdk-v4/message';
 export type { LLMStepResult } from '../stream/types';
 
 /**
@@ -212,10 +213,6 @@ export type AgentGenerateOptions<
   clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
-  /**
-   * @deprecated Use the `memory` property instead for all memory-related options.
-   */
-  memoryOptions?: MemoryConfig;
   /** New memory options (preferred) */
   memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
@@ -245,9 +242,9 @@ export type AgentGenerateOptions<
   inputProcessors?: InputProcessor[];
   /** Output processors to use for this generation call (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
-  /** AI tracing context for span hierarchy and metadata */
+  /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
-  /** AI tracing options for starting new traces */
+  /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
@@ -322,9 +319,9 @@ export type AgentStreamOptions<
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessor[];
-  /** AI tracing context for span hierarchy and metadata */
+  /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
-  /** AI tracing options for starting new traces */
+  /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
@@ -364,7 +361,7 @@ export type AgentExecuteOnFinishOptions = {
   threadId?: string;
   resourceId?: string;
   requestContext: RequestContext;
-  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   memoryConfig: MemoryConfig | undefined;
   outputText: string;
   messageList: MessageList;

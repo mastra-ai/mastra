@@ -71,10 +71,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor(config: PgVectorConfig) {
+  constructor(config: PgVectorConfig & { id: string }) {
     try {
       validateConfig('PgVector', config);
-      super();
+      super({ id: config.id });
 
       this.schema = config.schemaName;
 

@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import type { MastraMessageV1 } from '@mastra/core/memory';
+import type { MastraDBMessage } from '@mastra/core/memory';
+import { createTool } from '@mastra/core/tools';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { ToolCallPart } from 'ai';
 import { config } from 'dotenv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
@@ -16,6 +16,33 @@ import { z } from 'zod';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
+
+// Helper function to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+
+  if (message.content && typeof message.content === 'object') {
+    // Handle format 2 (MastraMessageContentV2)
+    if (message.content.parts && Array.isArray(message.content.parts)) {
+      const textParts = message.content.parts.filter((part: any) => part.type === 'text').map((part: any) => part.text);
+      return textParts.join(' ');
+    }
+
+    // Handle direct text property
+    if (message.content.text) {
+      return message.content.text;
+    }
+
+    // Handle nested content property
+    if (message.content.content && typeof message.content.content === 'string') {
+      return message.content.content;
+    }
+  }
+
+  return '';
+}
 
 // Test helpers
 const createTestThread = (title: string, metadata = {}) => ({
@@ -27,12 +54,15 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraMessageV1 => {
+const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => {
   messageCounter++;
   return {
     id: randomUUID(),
     threadId,
-    content,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content }],
+    },
     role,
     type: 'text',
     createdAt: new Date(Date.now() + messageCounter * 1000),
@@ -44,6 +74,14 @@ function extractUserData(obj: any) {
   // Remove common schema keys
   const { type, properties, required, additionalProperties, $schema, ...data } = obj;
   return data;
+}
+
+// Helper function at the top of the file (outside the test)
+function getErrorDetails(error: any): string | undefined {
+  if (!error) return undefined;
+  if (error.message) return error.message;
+  if (typeof error === 'string') return error;
+  return JSON.stringify(error);
 }
 
 config({ path: '.env.test' });
@@ -61,9 +99,11 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'working-memory-template-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'working-memory-template-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -107,6 +147,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -156,16 +197,16 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await memory.saveMessages({ messages, format: 'v2' });
+      await memory.saveMessages({ messages });
 
-      const remembered = await memory.rememberMessages({
+      const remembered = await memory.recall({
         threadId: thread.id,
-        config: { lastMessages: 10 },
+        perPage: 10,
       });
 
       // Working memory tags should be stripped from the messages
-      expect(remembered.messages[1].content).not.toContain('<working_memory>');
-      expect(remembered.messages[1].content).toContain('Hello John!');
+      expect(getTextContent(remembered.messages[1])).not.toContain('<working_memory>');
+      expect(getTextContent(remembered.messages[1])).toContain('Hello John!');
     });
 
     it('should respect working memory enabled/disabled setting', async () => {
@@ -174,9 +215,11 @@ describe('Working Memory Tests', () => {
       // Create memory instance with working memory disabled
       const disabledMemory = new Memory({
         storage: new LibSQLStore({
+          id: 'disabled-working-memory-storage',
           url: `file:${dbPath}`,
         }),
         vector: new LibSQLVector({
+          id: 'disabled-working-memory-vector',
           connectionUrl: `file:${dbPath}`,
         }),
         embedder: openai.embedding('text-embedding-3-small'),
@@ -215,7 +258,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await disabledMemory.saveMessages({ messages, format: 'v2' });
+      await disabledMemory.saveMessages({ messages });
 
       // Working memory should be null when disabled
       const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
@@ -228,6 +271,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using tool calls', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -253,6 +297,7 @@ describe('Working Memory Tests', () => {
 
     it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -302,20 +347,17 @@ describe('Working Memory Tests', () => {
         expect(workingMemory).toContain('**Location**: Vancouver Island');
       }
 
-      const history = await memory.query({
+      const history = await memory.recall({
         threadId: thread.id,
         resourceId,
-        selectBy: {
-          last: 20,
-        },
+        perPage: 20,
       });
 
       const memoryArgs: string[] = [];
 
       for (const message of history.messages) {
         if (message.role === `assistant`) {
-          for (const part of message.content) {
-            if (typeof part === `string`) continue;
+          for (const part of message.content.parts) {
             if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
               memoryArgs.push((part.args as any).memory);
             }
@@ -341,22 +383,28 @@ describe('Working Memory Tests', () => {
 
     it('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
       const threadId = thread.id;
-      const messages = [
+      const messages: MastraDBMessage[] = [
         createTestMessage(threadId, 'User says something'),
         // Pure tool-call message (should be removed)
         {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'tool-call',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              // ...other fields as needed
-            },
-          ],
-          toolNames: ['updateWorkingMemory'],
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: randomUUID(),
+                  toolName: 'updateWorkingMemory',
+                  args: {},
+                  state: 'result',
+                  result: {},
+                },
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
@@ -365,18 +413,25 @@ describe('Working Memory Tests', () => {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'text',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              args: { memory: 'should not persist' },
-            },
-            {
-              type: 'text',
-              text: 'Normal message',
-            },
-          ],
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolCallId: randomUUID(),
+                  toolName: 'updateWorkingMemory',
+                  args: { memory: 'should not persist' },
+                  state: 'result',
+                  result: {},
+                },
+              },
+              {
+                type: 'text',
+                text: 'Normal message',
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
@@ -385,21 +440,28 @@ describe('Working Memory Tests', () => {
           id: randomUUID(),
           threadId,
           role: 'assistant',
-          type: 'text',
-          content: 'Another normal message',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'text',
+                text: 'Another normal message',
+              },
+            ],
+          },
           createdAt: new Date(),
           resourceId,
         },
       ];
 
       // Save messages
-      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[], format: 'v2' });
+      const result = await memory.saveMessages({ messages: messages as MastraDBMessage[] });
+      const saved = result.messages;
 
       // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
             Array.isArray(m.content.parts) &&
             m.content.parts.some(
               c => c.type === 'tool-invocation' && c.toolInvocation.toolName === `updateWorkingMemory`,
@@ -411,7 +473,6 @@ describe('Working Memory Tests', () => {
       const assistantMessages = saved.filter(m => m.role === 'assistant');
       expect(
         assistantMessages.every(m => {
-          // TODO: seems like saveMessages says it returns MastraMessageV2 but it's returning V1
           return JSON.stringify(m).includes(`updateWorkingMemory`);
         }),
       ).toBe(false);
@@ -419,20 +480,20 @@ describe('Working Memory Tests', () => {
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
-            Array.isArray(m.content) &&
-            m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+            Array.isArray(m.content.parts) &&
+            m.content.parts.some(
+              c => c.type === 'tool-invocation' && c.toolInvocation.toolName === 'updateWorkingMemory',
+            ),
         ),
       ).toBe(false);
 
-      // TODO: again seems like we're getting V1 here but types say V2
-      // It actually should return V1 for now (CoreMessage compatible)
-
-      // Pure text message should be present
-      expect(saved.some(m => m.content.content === 'Another normal message')).toBe(true);
-      // User message should be present
+      // Pure text message should be present (check parts array for text)
       expect(
-        saved.some(m => typeof m.content.content === 'string' && m.content.content.includes('User says something')),
+        saved.some(m => m.content.parts?.some(p => p.type === 'text' && p.text === 'Another normal message')),
+      ).toBe(true);
+      // User message should be present (check parts array for text)
+      expect(
+        saved.some(m => m.content.parts?.some(p => p.type === 'text' && p.text.includes('User says something'))),
       ).toBe(true);
     });
   });
@@ -445,6 +506,7 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'agent-working-memory-storage',
         url: `file:${dbPath}`,
       });
 
@@ -470,6 +532,7 @@ describe('Working Memory Tests', () => {
       });
       expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
       agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -515,9 +578,11 @@ describe('Working Memory Tests', () => {
       beforeEach(async () => {
         const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
         storage = new LibSQLStore({
+          id: 'schema-working-memory-storage',
           url: `file:${dbPath}`,
         });
         vector = new LibSQLVector({
+          id: 'schema-working-memory-vector',
           connectionUrl: `file:${dbPath}`,
         });
 
@@ -552,6 +617,7 @@ describe('Working Memory Tests', () => {
         expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
         agent = new Agent({
+          id: 'memory-test-agent',
           name: 'Memory Test Agent',
           instructions: `
             You are a helpful AI agent. Always add working memory tags to remember user information.
@@ -674,9 +740,11 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-jsonschema-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'jsonschema7-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'jsonschema7-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -727,6 +795,7 @@ describe('Working Memory Tests', () => {
       expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
       agent = new Agent({
+        id: 'jsonschema-memory-test-agent',
         name: 'JSONSchema Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always update working memory with user information.',
         model: openai('gpt-4o'),
@@ -877,9 +946,11 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'resource-scoped-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'resource-scoped-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -1240,9 +1311,11 @@ describe('Working Memory Tests', () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-thread-working-test-`)), 'test.db');
 
       storage = new LibSQLStore({
+        id: 'thread-scoped-metadata-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'thread-scoped-metadata-vector',
         connectionUrl: `file:${dbPath}`,
       });
 
@@ -1371,34 +1444,20 @@ describe('Working Memory Tests', () => {
   });
 
   describe('Agent Network with Working Memory', () => {
-    let memory: Memory;
     let storage: LibSQLStore;
     let vector: LibSQLVector;
 
     beforeEach(async () => {
       // Create a new unique database file in the temp directory for each test
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-network-test-${Date.now()}`)), 'test.db');
-      console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'agent-network-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
+        id: 'agent-network-vector',
         connectionUrl: `file:${dbPath}`,
-      });
-
-      // Create memory instance with working memory enabled
-      memory = new Memory({
-        options: {
-          workingMemory: {
-            enabled: true,
-            scope: 'thread', // Test with thread scope first
-          },
-          lastMessages: 10,
-        },
-        storage,
-        vector,
-        embedder: fastembed,
       });
     });
 
@@ -1409,116 +1468,487 @@ describe('Working Memory Tests', () => {
       await vector.turso.close();
     });
 
-    // TODO: investigate why this test is flaky
-    it('should handle working memory tools in agent network - thread scope', { retry: 3 }, async () => {
-      // Create an agent that has memory capabilities
-      const memoryAgent = new Agent({
-        name: 'memory-agent',
-        instructions: 'You are a helpful assistant that can remember things when asked.',
-        description: 'Agent that can use working memory',
-        model: openai('gpt-4o'),
-        memory,
+    describe('Standard Working Memory Tool - Thread Scope', () => {
+      let memory: Memory;
+
+      beforeEach(() => {
+        memory = new Memory({
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'thread',
+            },
+            lastMessages: 10,
+          },
+          storage,
+          vector,
+          embedder: fastembed,
+        });
       });
 
-      // Create the network orchestrator agent
-      const networkAgent = new Agent({
-        id: 'network-orchestrator',
-        name: 'network-orchestrator',
-        instructions: 'You help users and can remember things when they ask you to.',
-        model: openai('gpt-4o'),
-        agents: {
-          memoryAgent,
-        },
-        memory,
-      });
-
-      // This should trigger the routing agent to select the updateWorkingMemory tool
-      // and reproduce the error where inputData is undefined in toolStep
-      const threadId = randomUUID();
-      const result = await networkAgent.network('Please remember that my name is Goku', {
-        memory: {
-          thread: threadId,
-          resource: resourceId,
-        },
-      });
-
-      // Consume the stream
-      const chunks = [];
-      for await (const chunk of result) {
-        chunks.push(chunk);
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk:', chunk);
-        }
-      }
-
-      // Verify the working memory was updated
-      const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
-      console.log('Thread scope working memory:', workingMemory);
-      expect(workingMemory).toBeTruthy();
-      expect(workingMemory).toContain('Goku');
+      runWorkingMemoryTests(() => memory);
     });
 
-    // TODO: investigate why this test is flaky
-    it('should handle working memory tools in agent network - resource scope', { retry: 3 }, async () => {
-      // Create memory instance with resource-scoped working memory
-      const resourceMemory = new Memory({
-        options: {
-          workingMemory: {
-            enabled: true,
-            scope: 'resource', // Test with resource scope
+    describe('Standard Working Memory Tool - Resource Scope', () => {
+      let memory: Memory;
+
+      beforeEach(() => {
+        memory = new Memory({
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+            },
+            lastMessages: 10,
           },
-          lastMessages: 10,
-        },
-        storage,
-        vector,
-        embedder: fastembed,
+          storage,
+          vector,
+          embedder: fastembed,
+        });
       });
 
-      // Create an agent that has memory capabilities
-      const memoryAgent = new Agent({
-        name: 'memory-agent',
-        instructions: 'You are a helpful assistant that can remember things when asked.',
-        description: 'Agent that can use working memory',
-        model: openai('gpt-4o'),
-        memory: resourceMemory,
+      runWorkingMemoryTests(() => memory);
+    });
+
+    describe.skip('Experimental Working Memory Tool - Thread Scope', () => {
+      let memory: Memory;
+
+      beforeEach(() => {
+        memory = new Memory({
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'thread',
+              version: 'vnext',
+              template: `# User Information
+- **First Name**:
+- **Last Name**:
+- **Preferences**: `,
+            },
+            lastMessages: 10,
+          },
+          storage,
+          vector,
+          embedder: fastembed,
+        });
       });
 
-      // Create the network orchestrator agent
-      const networkAgent = new Agent({
-        id: 'network-orchestrator',
-        name: 'network-orchestrator',
-        instructions: 'You help users and can remember things when they ask you to.',
-        model: openai('gpt-4o'),
-        agents: {
-          memoryAgent,
-        },
-        memory: resourceMemory,
+      runWorkingMemoryTests(() => memory);
+    });
+
+    describe.skip('Experimental Working Memory Tool - Resource Scope', () => {
+      let memory: Memory;
+
+      beforeEach(() => {
+        memory = new Memory({
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+              version: 'vnext',
+              template: `# User Information
+- **First Name**:
+- **Last Name**:
+- **Preferences**: `,
+            },
+            lastMessages: 10,
+          },
+          storage,
+          vector,
+          embedder: fastembed,
+        });
       });
 
-      // This should trigger the routing agent to select the updateWorkingMemory tool
-      const threadId = randomUUID();
-      const result = await networkAgent.network('Please remember that my favorite color is blue', {
-        memory: {
-          thread: threadId,
-          resource: resourceId,
-        },
-      });
-
-      // Consume the stream
-      const chunks = [];
-      for await (const chunk of result) {
-        chunks.push(chunk);
-        if (chunk.type?.includes('error')) {
-          console.log('Error chunk:', chunk);
-        }
-      }
-
-      // Verify the working memory was updated
-      const workingMemory = await resourceMemory.getWorkingMemory({ threadId, resourceId });
-      console.log('Resource scope working memory:', workingMemory);
-      expect(workingMemory).toBeTruthy();
-      // Check for 'blue' case-insensitively since AI might capitalize it
-      expect(workingMemory?.toLowerCase()).toContain('blue');
+      runWorkingMemoryTests(() => memory);
     });
   });
 });
+
+/**
+ * Shared test suite for agent network with working memory.
+ * Can be run with any memory configuration (thread/resource scope, standard/vnext).
+ */
+function runWorkingMemoryTests(getMemory: () => Memory) {
+  // Create a math agent that can do calculations
+  const mathAgent = new Agent({
+    name: 'math-agent',
+    instructions: 'You are a helpful math assistant.',
+    model: openai('gpt-4o'),
+  });
+
+  // Create a weather tool
+  const getWeather = createTool({
+    id: 'get-weather',
+    description: 'Get current weather for a city',
+    inputSchema: z.object({ city: z.string() }),
+    execute: async inputData => {
+      return { city: inputData.city, temp: 68, condition: 'partly cloudy' };
+    },
+  });
+
+  // Helper functions to reduce code duplication
+  async function collectChunksAndCheckExecution(result: any) {
+    const chunks: any[] = [];
+    for await (const chunk of result) {
+      chunks.push(chunk);
+    }
+
+    const executionResult = await result.result;
+    const errorDetails = executionResult?.status === 'failed' ? getErrorDetails(executionResult.error) : undefined;
+    expect(errorDetails).toBeUndefined();
+    expect(executionResult?.status).not.toBe('failed');
+
+    return chunks;
+  }
+
+  function expectRoutingOrder(chunks: any[], expectedOrder: Array<{ primitiveId: string; primitiveType: string }>) {
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingDecisions.length).toBeGreaterThanOrEqual(expectedOrder.length);
+
+    expectedOrder.forEach((expected, index) => {
+      const decision = routingDecisions[index];
+      expect(decision.payload?.primitiveId).toBe(expected.primitiveId);
+      expect(decision.payload?.primitiveType).toBe(expected.primitiveType);
+    });
+  }
+
+  function extractFullText(chunks: any[]) {
+    const textChunks = chunks.filter(
+      c =>
+        c.type === 'agent-execution-event-text-delta' ||
+        c.type === 'routing-agent-text-delta' ||
+        c.type === 'text-delta' ||
+        c.type === 'text',
+    );
+    return textChunks
+      .map(c => {
+        if (c.type === 'agent-execution-event-text-delta') {
+          return c.payload?.payload?.textDelta || '';
+        }
+        if (c.type === 'routing-agent-text-delta') {
+          return c.payload?.text || '';
+        }
+        return c.textDelta || c.text || '';
+      })
+      .join('');
+  }
+
+  it('should call memory tool directly and end loop when only memory update needed', async () => {
+    const memory = getMemory();
+    const networkAgent = new Agent({
+      id: 'network-orchestrator',
+      name: 'network-orchestrator',
+      instructions: 'You help users and can remember things when they ask you to.',
+      model: openai('gpt-4o'),
+      memory,
+    });
+
+    const threadId = randomUUID();
+
+    const result = await networkAgent.network('My email is test@example.com', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 3,
+    });
+
+    const chunks = await collectChunksAndCheckExecution(result);
+
+    // 1. Working memory was updated
+    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+    expect(workingMemory).toBeTruthy();
+    expect(workingMemory).toContain('test@example.com');
+
+    // 2. Loop ended after memory update (no tool execution chunks, only routing + done)
+    const stepTypes = chunks.map(c => c.type);
+    expect(stepTypes).not.toContain('tool-call');
+
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    const memoryToolRoutes = routingDecisions.filter(c => c.payload?.primitiveId === 'updateWorkingMemory').length;
+    expect(memoryToolRoutes).toBe(1);
+
+    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+  });
+
+  it('should call memory tool first, then query agent', async () => {
+    const memory = getMemory();
+
+    const networkAgent = new Agent({
+      id: 'network-orchestrator',
+      name: 'network-orchestrator',
+      instructions: 'You help users with math and remember things.',
+      model: openai('gpt-4o'),
+      agents: { mathAgent },
+      memory,
+    });
+
+    const threadId = randomUUID();
+
+    const result = await networkAgent.network(
+      'Remember that my favorite number is 42, then calculate what 42 multiplied by 3 is',
+      {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 5,
+      },
+    );
+
+    const chunks = await collectChunksAndCheckExecution(result);
+
+    // 1. Working memory was updated with favorite number
+    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+    expect(workingMemory).toBeTruthy();
+    expect(workingMemory).toContain('42');
+
+    // 2. Math agent was queried (should see agent-execution chunks)
+    const stepTypes = chunks.map(c => c.type);
+    expect(stepTypes).toContain('agent-execution-start');
+    expect(stepTypes).toContain('agent-execution-end');
+
+    // 3. Final result contains calculation answer (126)
+    const fullText = extractFullText(chunks);
+    expect(fullText).toContain('126');
+
+    // 4. Verify routing order: memory first, then agent
+    expectRoutingOrder(chunks, [
+      { primitiveId: 'updateWorkingMemory', primitiveType: 'tool' },
+      { primitiveId: 'mathAgent', primitiveType: 'agent' },
+    ]);
+
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingDecisions.length).toBeLessThanOrEqual(3);
+
+    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+  });
+
+  it('should query agent first, then call memory tool', async () => {
+    const memory = getMemory();
+
+    const networkAgent = new Agent({
+      id: 'network-orchestrator',
+      name: 'network-orchestrator',
+      instructions: 'You help users with math and remember things.',
+      model: openai('gpt-4o'),
+      agents: { mathAgent },
+      memory,
+    });
+
+    const threadId = randomUUID();
+
+    const result = await networkAgent.network('Calculate 15 times 4, then remember the result', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 5,
+    });
+
+    const chunks = await collectChunksAndCheckExecution(result);
+
+    // 1. Math agent was queried (should see agent-execution chunks)
+    const stepTypes = chunks.map(c => c.type);
+    expect(stepTypes).toContain('agent-execution-start');
+    expect(stepTypes).toContain('agent-execution-end');
+
+    // 2. Final result contains calculation answer (60)
+    const fullText = extractFullText(chunks);
+    expect(fullText).toContain('60');
+
+    // 3. Working memory was updated with result
+    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+    expect(workingMemory).toBeTruthy();
+    expect(workingMemory).toContain('60');
+
+    // 4. Verify routing order: agent first, then memory
+    expectRoutingOrder(chunks, [
+      { primitiveId: 'mathAgent', primitiveType: 'agent' },
+      { primitiveId: 'updateWorkingMemory', primitiveType: 'tool' },
+    ]);
+
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingDecisions.length).toBeLessThanOrEqual(3);
+
+    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+  });
+
+  it('should call memory tool first, then execute user-defined tool', async () => {
+    const memory = getMemory();
+    const networkAgent = new Agent({
+      id: 'network-orchestrator',
+      name: 'network-orchestrator',
+      instructions: 'You help users with weather and remember their preferences.',
+      model: openai('gpt-4o'),
+      tools: { getWeather },
+      memory,
+    });
+
+    const threadId = randomUUID();
+
+    const result = await networkAgent.network(
+      'Remember that I live in San Francisco, then get me the weather for my city',
+      {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 5, // Allow multiple steps for memory + tool
+      },
+    );
+
+    const chunks = await collectChunksAndCheckExecution(result);
+
+    // 1. Working memory was updated with location
+    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+    expect(workingMemory?.toLowerCase()).toContain('san francisco');
+
+    // 2. Weather tool was executed (should see tool-execution chunks)
+    const stepTypes = chunks.map(c => c.type);
+    expect(stepTypes).toContain('tool-execution-start');
+    expect(stepTypes).toContain('tool-execution-end');
+
+    // 3. Final result contains weather information
+    const fullText = extractFullText(chunks);
+    expect(fullText.toLowerCase()).toMatch(/weather|sunny|72/);
+
+    // 4. Verify routing order: memory first, then tool
+    expectRoutingOrder(chunks, [
+      { primitiveId: 'updateWorkingMemory', primitiveType: 'tool' },
+      { primitiveId: 'getWeather', primitiveType: 'tool' },
+    ]);
+
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingDecisions.length).toBeLessThanOrEqual(3);
+
+    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+  });
+
+  it('should execute user-defined tool first, then call memory tool', async () => {
+    const memory = getMemory();
+    const networkAgent = new Agent({
+      id: 'network-orchestrator',
+      name: 'network-orchestrator',
+      instructions: 'You help users with weather and remember their preferences.',
+      model: openai('gpt-4o'),
+      tools: { getWeather },
+      memory,
+    });
+
+    const threadId = randomUUID();
+
+    const result = await networkAgent.network('Get the weather for Boston, then remember that is where I live', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 5,
+    });
+
+    const chunks = await collectChunksAndCheckExecution(result);
+
+    // 1. Weather tool was executed (should see tool-execution chunks)
+    const stepTypes = chunks.map(c => c.type);
+    expect(stepTypes).toContain('tool-execution-start');
+    expect(stepTypes).toContain('tool-execution-end');
+
+    // 2. Final result contains weather information
+    const fullText = extractFullText(chunks);
+    expect(fullText.toLowerCase()).toMatch(/weather|cloudy|68/);
+
+    // 3. Working memory was updated with location
+    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+    expect(workingMemory).toBeTruthy();
+    expect(workingMemory?.toLowerCase()).toContain('boston');
+
+    // 4. Verify routing order: tool first, then memory
+    expectRoutingOrder(chunks, [
+      { primitiveId: 'getWeather', primitiveType: 'tool' },
+      { primitiveId: 'updateWorkingMemory', primitiveType: 'tool' },
+    ]);
+
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingDecisions.length).toBeLessThanOrEqual(3);
+
+    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+  });
+
+  it('should handle multiple memory updates in single network call', async () => {
+    const memory = getMemory();
+
+    const networkAgent = new Agent({
+      id: 'network-orchestrator',
+      name: 'network-orchestrator',
+      instructions: 'You help users and remember things they tell you.',
+      model: openai('gpt-4o'),
+      memory,
+    });
+
+    const threadId = randomUUID();
+
+    // Single request with multiple pieces of information to remember
+    const result = await networkAgent.network('My name is Alice and I work as a software engineer', {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 5,
+    });
+
+    const chunks = await collectChunksAndCheckExecution(result);
+
+    // Verify both pieces of information are in working memory
+    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+    expect(workingMemory).toContain('Alice');
+    expect(workingMemory?.toLowerCase()).toContain('software engineer');
+
+    // Should handle in one or two memory tool calls (either combined or separate)
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    const memoryToolRoutes = routingDecisions.filter(c => c.payload?.primitiveId === 'updateWorkingMemory').length;
+    expect(memoryToolRoutes).toBe(1);
+
+    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+  });
+
+  it('should handle complex multi-step workflow with memory, agents, and tools', async () => {
+    const memory = getMemory();
+
+    const networkAgent = new Agent({
+      id: 'network-orchestrator',
+      name: 'network-orchestrator',
+      instructions: 'You help users with various tasks efficiently. Complete all parts of multi-step requests.',
+      model: openai('gpt-4o'),
+      agents: { mathAgent },
+      tools: { getWeather },
+      memory,
+    });
+
+    const threadId = randomUUID();
+
+    // Complex multi-step task with memory in the middle
+    const result = await networkAgent.network(
+      'Calculate what 15 times 4 is, then remember that my name is Bob and I live in Seattle, then tell me the weather in Seattle.',
+      {
+        memory: { thread: threadId, resource: resourceId },
+        maxSteps: 5,
+      },
+    );
+
+    const chunks = await collectChunksAndCheckExecution(result);
+
+    // 1. Memory should be saved
+    const workingMemory = await memory.getWorkingMemory({ threadId, resourceId });
+    expect(workingMemory).toBeTruthy();
+    expect(workingMemory).toContain('Bob');
+    expect(workingMemory?.toLowerCase()).toContain('seattle');
+
+    // 2. Should have completed calculation (60)
+    const fullText = extractFullText(chunks);
+    expect(fullText).toContain('60');
+
+    // 3. Should have called weather tool
+    const stepTypes = chunks.map(c => c.type);
+    expect(stepTypes).toContain('tool-execution-start');
+    expect(stepTypes).toContain('tool-execution-end');
+
+    // Verify weather info is in response
+    expect(fullText.toLowerCase()).toMatch(/weather|cloudy|68/);
+
+    // 4. Should have called multiple primitive types (memory, agent, tool)
+    const routingDecisions = chunks.filter(c => c.type === 'routing-agent-end');
+    const primitiveTypes = routingDecisions.map(d => d.payload?.primitiveType);
+
+    expect(primitiveTypes).toContain('tool'); // Both memory and weather are tools
+    expect(primitiveTypes).toContain('agent'); // Math agent
+
+    expect(routingDecisions.length).toBeLessThan(8);
+
+    const memoryToolRoutes = routingDecisions.filter(c => c.payload?.primitiveId === 'updateWorkingMemory').length;
+    expect(memoryToolRoutes).toBe(1);
+
+    expect(chunks.some(c => c.type?.includes('error'))).toBe(false);
+  });
+}

@@ -61,6 +61,7 @@ import { Agent } from "@mastra/core/agent";
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   name: "Test Agent",
   description: "You are a helpful AI assistant",
   instructions: `
@@ -88,8 +89,8 @@ import { testWorkflow } from "../workflows/test-workflow";
 import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
-  id: "test-mcp-server",
-  name: "Test Server",
+  id: "test-mcp-server",  // Required: unique identifier for the server
+  name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
   tools: { testTool },
@@ -99,19 +100,31 @@ export const testMcpServer = new MCPServer({
 
 > See [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
 
+### Serverless deployments
+
+`MCPServer` can be deployed in serverless environments (Cloudflare Workers, Vercel Edge Functions, AWS Lambda, etc.) by enabling the `serverless: true` option in `startHTTP()`. This runs the server in stateless mode, where each request is handled independently without session management.
+
+**Note:** Some MCP features require persistent connections and won't work in serverless mode, including elicitation, resource subscriptions, and update notifications. See the [serverless section](/reference/tools/mcp-server#starthttp) in the API reference for full details and limitations.
+
 ## Registering an `MCPServer`
 
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
   // ...
-  mcpServers: { testMcpServer },
+  mcpServers: {
+    testMcpServer,  // Registry key: 'testMcpServer'
+  },
 });
+
+// Both retrieval methods work:
+mastra.getMCPServer('testMcpServer');          // By registry key
+mastra.getMCPServerById('test-mcp-server');    // By intrinsic ID
 ```
 
 ## Static and dynamic tools

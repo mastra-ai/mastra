@@ -41,9 +41,7 @@ export async function build({
         projectRoot: rootDir,
       });
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
-      logger.info(
-        `To start the server, run: node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs`,
-      );
+      logger.info(`To start the server, run: node .mastra/output/index.mjs`);
       return;
     }
 

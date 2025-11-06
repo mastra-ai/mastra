@@ -1,6 +1,6 @@
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { WorkflowRunStatus } from '@mastra/core';
+import { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Check, CirclePause, CircleSlash, Clock, Plus, X } from 'lucide-react';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';

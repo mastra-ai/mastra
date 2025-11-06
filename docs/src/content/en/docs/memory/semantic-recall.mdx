@@ -36,6 +36,7 @@ import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
+  id: "support-agent",
   name: "SupportAgent",
   instructions: "You are a helpful support agent.",
   model: openai("gpt-4o"),
@@ -78,10 +79,12 @@ const agent = new Agent({
   memory: new Memory({
     // this is the default storage db if omitted
     storage: new LibSQLStore({
+      id: 'agent-storage',
       url: "file:./local.db",
     }),
     // this is the default vector db if omitted
     vector: new LibSQLVector({
+      id: 'agent-vector',
       connectionUrl: "file:./local.db",
     }),
   }),
@@ -175,9 +178,11 @@ import { PgStore, PgVector } from "@mastra/pg";
 const agent = new Agent({
   memory: new Memory({
     storage: new PgStore({
+      id: 'agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),
     vector: new PgVector({
+      id: 'agent-vector',
       connectionString: process.env.DATABASE_URL,
     }),
     options: {

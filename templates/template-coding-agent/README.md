@@ -123,6 +123,7 @@ You can customize the agent behavior by modifying the instructions in `src/mastr
 
 ```typescript
 export const codingAgent = new Agent({
+  id: 'coding-agent',
   name: 'Coding Agent',
   instructions: `
     // Customize agent instructions here

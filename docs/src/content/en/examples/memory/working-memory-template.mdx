@@ -44,7 +44,8 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const workingMemoryTemplateAgent = new Agent({
-  name: "working-memory-template-agent",
+  id: "working-memory-template-agent",
+  name: "Working Memory Template Agent",
   instructions: `
     You are a todo list AI agent.
     Always show the current list when starting a conversation.
@@ -56,6 +57,7 @@ export const workingMemoryTemplateAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+  id: 'mastra-storage',
       url: "file:working-memory-template.db",
     }),
     options: {

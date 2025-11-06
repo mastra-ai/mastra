@@ -1,6 +1,23 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/scores';
-import type { ToolInvocation, UIMessage } from 'ai';
+import type { ToolInvocation } from 'ai';
+
+/**
+ * Extract text content from MastraDBMessage
+ * Matches the logic used in MessageList.mastraDBMessageToAIV4UIMessage
+ */
+export function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
+  if (typeof message.content.content === 'string' && message.content.content !== '') {
+    return message.content.content;
+  }
+  if (message.content.parts && Array.isArray(message.content.parts)) {
+    // Return only the last text part like AI SDK does
+    const textParts = message.content.parts.filter(p => p.type === 'text');
+    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
+  }
+  return '';
+}
 
 export const roundToTwoDecimals = (num: number) => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
@@ -37,8 +54,9 @@ export const createTestRun = (
   };
 };
 
-export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent) => {
-  return input?.inputMessages.find(({ role }) => role === 'user')?.content;
+export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent): string | undefined => {
+  const message = input?.inputMessages.find(({ role }) => role === 'user');
+  return message ? getTextContentFromMastraDBMessage(message) : undefined;
 };
 
 export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): string[] => {
@@ -85,7 +103,8 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
 };
 
 export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
-  return output?.find(({ role }) => role === 'assistant')?.content;
+  const message = output?.find(({ role }) => role === 'assistant');
+  return message ? getTextContentFromMastraDBMessage(message) : undefined;
 };
 
 export const createToolInvocation = ({
@@ -110,15 +129,19 @@ export const createToolInvocation = ({
   };
 };
 
-export const createUIMessage = ({
+/**
+ * Helper function to create MastraDBMessage objects for tests
+ * Supports optional tool invocations for testing tool call scenarios
+ */
+export function createTestMessage({
   content,
   role,
   id = 'test-message',
   toolInvocations = [],
 }: {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
   content: string;
+  role: 'user' | 'assistant' | 'system';
+  id?: string;
   toolInvocations?: Array<{
     toolCallId: string;
     toolName: string;
@@ -126,15 +149,27 @@ export const createUIMessage = ({
     result: Record<string, any>;
     state: any;
   }>;
-}): UIMessage => {
+}): MastraDBMessage {
   return {
     id,
     role,
-    content,
-    parts: [{ type: 'text', text: content }],
-    toolInvocations,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content }],
+      content,
+      ...(toolInvocations.length > 0 && {
+        toolInvocations: toolInvocations.map(ti => ({
+          toolCallId: ti.toolCallId,
+          toolName: ti.toolName,
+          args: ti.args,
+          result: ti.result,
+          state: ti.state,
+        })),
+      }),
+    },
+    createdAt: new Date(),
   };
-};
+}
 
 export const createAgentTestRun = ({
   inputMessages = [],
@@ -184,9 +219,10 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 
   for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
     const message = output[messageIndex];
-    if (message?.toolInvocations) {
-      for (let invocationIndex = 0; invocationIndex < message.toolInvocations.length; invocationIndex++) {
-        const invocation = message.toolInvocations[invocationIndex];
+    // Tool invocations are now nested under content
+    if (message?.content?.toolInvocations) {
+      for (let invocationIndex = 0; invocationIndex < message.content.toolInvocations.length; invocationIndex++) {
+        const invocation = message.content.toolInvocations[invocationIndex];
         if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
           toolCalls.push(invocation.toolName);
           toolCallInfos.push({
@@ -204,9 +240,9 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 }
 
 export const extractInputMessages = (runInput: ScorerRunInputForAgent | undefined): string[] => {
-  return runInput?.inputMessages?.map(msg => msg.content) || [];
+  return runInput?.inputMessages?.map(msg => getTextContentFromMastraDBMessage(msg)) || [];
 };
 
 export const extractAgentResponseMessages = (runOutput: ScorerRunOutputForAgent): string[] => {
-  return runOutput.filter(msg => msg.role === 'assistant').map(msg => msg.content);
+  return runOutput.filter(msg => msg.role === 'assistant').map(msg => getTextContentFromMastraDBMessage(msg));
 };

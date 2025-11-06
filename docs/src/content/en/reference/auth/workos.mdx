@@ -5,18 +5,18 @@ description: "API reference for the MastraAuthWorkos class, which authenticates 
 
 # MastraAuthWorkos Class
 
-The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthWorkos({
+    auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
       clientId: process.env.WORKOS_CLIENT_ID,
     }),

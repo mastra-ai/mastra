@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'path';
 import { Deployer } from '@mastra/deployer';
-import { copy, readJSON } from 'fs-extra/esm';
+import { readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
@@ -15,12 +15,6 @@ export class CloudDeployer extends Deployer {
   }
 
   async deploy(_outputDirectory: string): Promise<void> {}
-  async writeInstrumentationFile(outputDirectory: string) {
-    const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-
-    await copy(join(__dirname, '../templates', 'instrumentation-template.js'), instrumentationFile);
-  }
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
     const versions = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as
       | Record<string, string>
@@ -74,7 +68,7 @@ import { MultiLogger } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
+import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -131,9 +125,6 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
 
   await storage.init()
   mastra?.setStorage(storage)
-
-  mastra?.memory?.setStorage(storage)
-  mastra?.memory?.setVector(vector)
 }
 
 if (mastra?.getStorage()) {

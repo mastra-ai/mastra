@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import {
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
@@ -136,7 +142,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -184,26 +190,31 @@ export class ScoresMSSQL extends ScoresStorage {
 
       const totalResult = await countRequest.query(`SELECT COUNT(*) as count FROM ${tableName} WHERE ${whereClause}`);
       const total = totalResult.recordset[0]?.count || 0;
-
+      const { page, perPage: perPageInput } = pagination;
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       // Data query
       const dataRequest = this.pool.request();
       Object.entries(params).forEach(([key, value]) => {
         dataRequest.input(key, value);
       });
-      dataRequest.input('perPage', pagination.perPage);
-      dataRequest.input('offset', pagination.page * pagination.perPage);
+      dataRequest.input('perPage', limitValue);
+      dataRequest.input('offset', start);
 
       const dataQuery = `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY [createdAt] DESC OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
 
@@ -212,9 +223,9 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
@@ -231,7 +242,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -247,23 +258,29 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       const dataRequest = this.pool.request();
       dataRequest.input('p1', runId);
-      dataRequest.input('p2', pagination.perPage);
-      dataRequest.input('p3', pagination.page * pagination.perPage);
+      dataRequest.input('p2', limitValue);
+      dataRequest.input('p3', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
@@ -272,9 +289,9 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
@@ -291,7 +308,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -310,24 +327,29 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
       const dataRequest = this.pool.request();
       dataRequest.input('p1', entityId);
       dataRequest.input('p2', entityType);
-      dataRequest.input('p3', pagination.perPage);
-      dataRequest.input('p4', pagination.page * pagination.perPage);
+      dataRequest.input('p3', limitValue);
+      dataRequest.input('p4', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
@@ -336,9 +358,9 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
@@ -355,7 +377,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -374,25 +396,30 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
+
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
-      const limit = pagination.perPage + 1;
       const dataRequest = this.pool.request();
       dataRequest.input('p1', traceId);
       dataRequest.input('p2', spanId);
-      dataRequest.input('p3', limit);
-      dataRequest.input('p4', pagination.page * pagination.perPage);
+      dataRequest.input('p3', limitValue);
+      dataRequest.input('p4', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
@@ -401,11 +428,11 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.recordset.length > pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
-        scores: result.recordset.slice(0, pagination.perPage).map(row => transformScoreRow(row)),
+        scores: result.recordset.map(row => transformScoreRow(row)),
       };
     } catch (error) {
       throw new MastraError(
