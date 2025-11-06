@@ -13,7 +13,7 @@ import "dotenv/config";
 const config = {
   title: "Mastra Documentation",
   tagline: "TypeScript agent framework",
-  favicon: "favicon.ico",
+  favicon: "/favicon.ico",
 
   // Set the production url of your site here
   url: "https://mastra.ai",
@@ -78,15 +78,15 @@ const config = {
     // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
     ...(process.env.POSTHOG_API_KEY
       ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
-            },
-          ],
-        ]
+        [
+          "posthog-docusaurus",
+          {
+            apiKey: process.env.POSTHOG_API_KEY,
+            appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
+            enableInDevelopment: false,
+          },
+        ],
+      ]
       : []),
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
