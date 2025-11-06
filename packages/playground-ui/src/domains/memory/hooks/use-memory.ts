@@ -15,7 +15,6 @@ export const useMemory = (agentId?: string) => {
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
-    retry: false,
   });
 };
 
@@ -29,8 +28,6 @@ export const useMemoryConfig = (agentId?: string) => {
     enabled: Boolean(agentId),
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
-    retry: false,
-    refetchOnWindowFocus: false,
   });
 };
 
@@ -56,8 +53,6 @@ export const useThreads = ({
     enabled: Boolean(isMemoryEnabled),
     staleTime: 0,
     gcTime: 0,
-    retry: false,
-    refetchOnWindowFocus: false,
   });
 };
 

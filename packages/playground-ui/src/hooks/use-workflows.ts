@@ -9,8 +9,6 @@ export const useWorkflow = (workflowId?: string) => {
     queryKey: ['workflow', workflowId],
     queryFn: () => (workflowId ? client.getWorkflow(workflowId).details(requestContext) : null),
     enabled: Boolean(workflowId),
-    retry: false,
-    refetchOnWindowFocus: false,
     throwOnError: false,
   });
 };

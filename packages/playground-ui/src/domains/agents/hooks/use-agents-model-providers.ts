@@ -7,6 +7,5 @@ export const useAgentsModelProviders = () => {
   return useQuery({
     queryKey: ['agents-model-providers'],
     queryFn: () => client.listAgentsModelProviders(),
-    retry: false,
   });
 };

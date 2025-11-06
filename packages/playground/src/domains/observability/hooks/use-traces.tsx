@@ -60,7 +60,6 @@ export const useTraces = ({ filters, dateRange }: TracesFilters) => {
     select: data => {
       return data.pages.flatMap(page => page);
     },
-    retry: false,
     refetchInterval: 3000,
   });
 

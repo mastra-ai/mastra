@@ -9,7 +9,6 @@ export const useAgent = (agentId?: string) => {
   return useQuery({
     queryKey: ['agent', agentId, JSON.stringify(requestContext)],
     queryFn: () => (agentId ? client.getAgent(agentId).details(requestContext) : null),
-    retry: false,
     enabled: Boolean(agentId),
   });
 };

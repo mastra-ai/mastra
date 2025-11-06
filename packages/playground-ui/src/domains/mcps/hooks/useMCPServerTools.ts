@@ -19,7 +19,5 @@ export const useMCPServerTools = (selectedServer: ServerInfo) => {
 
       return transformedTools;
     },
-    retry: false,
-    refetchOnWindowFocus: false,
   });
 };
