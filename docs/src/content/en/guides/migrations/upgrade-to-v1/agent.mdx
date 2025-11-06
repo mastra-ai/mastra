@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/agent-get-agents .
+npx @mastra/codemod@beta v1/agent-get-agents .
 ```
 
 :::
@@ -54,7 +54,7 @@ To migrate, update all imports and parameter names from `RuntimeContext`/`runtim
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/runtime-context .
+npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::
@@ -79,7 +79,7 @@ To migrate, replace property access with the corresponding getter methods.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/agent-property-access .
+npx @mastra/codemod@beta v1/agent-property-access .
 ```
 
 :::
@@ -104,7 +104,7 @@ To migrate, update voice method calls to use the `agent.voice` namespace.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/agent-voice .
+npx @mastra/codemod@beta v1/agent-voice .
 ```
 
 :::
@@ -140,7 +140,7 @@ To migrate, update processor method names.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/agent-processor-methods .
+npx @mastra/codemod@beta v1/agent-processor-methods .
 ```
 
 :::
@@ -212,7 +212,7 @@ To migrate, use the standard `generate()` and `stream()` methods.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod v1/agent-generate-stream-v-next .
+npx @mastra/codemod@beta v1/agent-generate-stream-v-next .
 ```
 
 :::
