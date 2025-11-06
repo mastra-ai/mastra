@@ -75,6 +75,11 @@ const sidebars = {
               label: "Client SDK",
             },
             {
+              id: "migrations/upgrade-to-v1/tracing",
+              type: "doc",
+              label: "Tracing",
+            },
+            {
               id: "migrations/upgrade-to-v1/evals",
               type: "doc",
               label: "Evals",
@@ -95,6 +100,11 @@ const sidebars = {
               label: "Memory",
             },
             {
+              id: "migrations/upgrade-to-v1/processors",
+              type: "doc",
+              label: "Processors",
+            },
+            {
               id: "migrations/upgrade-to-v1/storage",
               type: "doc",
               label: "Storage",
@@ -103,6 +113,11 @@ const sidebars = {
               id: "migrations/upgrade-to-v1/tools",
               type: "doc",
               label: "Tools",
+            },
+            {
+              id: "migrations/upgrade-to-v1/tracing",
+              type: "doc",
+              label: "Tracing",
             },
             {
               id: "migrations/upgrade-to-v1/vectors",
