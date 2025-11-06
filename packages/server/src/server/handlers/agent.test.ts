@@ -6,7 +6,6 @@ import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
 import type { MastraStorage } from '@mastra/core/storage';
-import type { AISDKV5OutputStream } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
