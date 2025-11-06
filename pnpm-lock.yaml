@@ -1469,6 +1469,9 @@ importers:
 
   packages/codemod:
     dependencies:
+      '@clack/prompts':
+        specifier: 1.0.0-alpha.6
+        version: 1.0.0-alpha.6
       commander:
         specifier: ^14.0.2
         version: 14.0.2

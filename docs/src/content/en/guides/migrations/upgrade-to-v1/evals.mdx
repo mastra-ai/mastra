@@ -20,6 +20,16 @@ To migrate, replace all calls to `getScorers()` with `listScorers()`.
 + const scorers = mastra.listScorers();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/evals-get-scorers .
+```
+
+:::
+
 ### `runExperiment` to `runEvals`
 
 The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.
