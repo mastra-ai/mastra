@@ -7,6 +7,29 @@ import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
 
+/**
+ * Validates that iteration counter works correctly in agent network loops.
+ * Prevents regression of issue #9314 where iteration counter was stuck at 0.
+ * Also prevents skipping the first iteration (should start at 0, not 1).
+ */
+async function checkIterations(anStream: AsyncIterable<any>) {
+  const iterations: number[] = [];
+  for await (const chunk of anStream) {
+    if (chunk.type === 'routing-agent-end') {
+      const iteration = (chunk.payload as any)?.iteration;
+      iterations.push(iteration);
+    }
+  }
+
+  // Check that iterations start at 0 and increment correctly
+  for (let i = 0; i < iterations.length; i++) {
+    expect(iterations[i], `Iteration ${i} should be ${i}, but got ${iterations[i]}. `).toBe(i);
+  }
+
+  // Explicitly verify first iteration is 0 (not 1)
+  expect(iterations[0], 'First iteration must start at 0, not 1').toBe(0);
+}
+
 describe('Agent - network', () => {
   const memory = new MockMemory();
 
@@ -184,9 +207,7 @@ describe('Agent - network', () => {
       requestContext,
     });
 
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
   });
 
   it('LOOP - execute a single workflow', async () => {
@@ -194,9 +215,7 @@ describe('Agent - network', () => {
       requestContext,
     });
 
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
   });
 
   it('LOOP - execute a single agent', async () => {
@@ -204,9 +223,7 @@ describe('Agent - network', () => {
       requestContext,
     });
 
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
   });
 
   it('LOOP - execute a single agent then workflow', async () => {
@@ -218,9 +235,7 @@ describe('Agent - network', () => {
       },
     );
 
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
   });
 
   it('LOOP - should track usage data from workflow with agent stream agent.network()', async () => {
@@ -399,10 +414,7 @@ describe('Agent - network', () => {
       requestContext,
     });
 
-    // Consume the stream
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
 
     // Wait a bit for async title generation to complete
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -460,10 +472,7 @@ describe('Agent - network', () => {
       },
     });
 
-    // Consume the stream
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
 
     // Wait a bit for async title generation to complete
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -509,10 +518,7 @@ describe('Agent - network', () => {
       requestContext,
     });
 
-    // Consume the stream
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
 
     // Wait for any async operations
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -558,10 +564,7 @@ describe('Agent - network', () => {
       },
     });
 
-    // Consume the stream
-    for await (const _chunk of anStream) {
-      // console.log(chunk);
-    }
+    await checkIterations(anStream);
 
     // Wait for any async operations
     await new Promise(resolve => setTimeout(resolve, 100));

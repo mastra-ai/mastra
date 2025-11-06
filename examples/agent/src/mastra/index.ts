@@ -43,14 +43,6 @@ export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
   },
-  serverMiddleware: [
-    {
-      handler: (c, next) => {
-        console.log('Middleware called');
-        return next();
-      },
-    },
-  ],
   scorers: {
     testScorer,
   },
