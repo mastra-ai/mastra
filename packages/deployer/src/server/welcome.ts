@@ -82,7 +82,7 @@ export const html = `
     <main>
       <h1>Welcome to Mastra</h1>
       <p class="subtitle">
-        From the team that brought you Gatsby: prototype and productionize AI features with a modern JS/TS stack.
+        Prototype and productionize AI features with a modern JS/TS stack.
       </p>
 
       <a href="https://mastra.ai/docs" class="docs-link">
