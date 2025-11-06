@@ -174,7 +174,7 @@ export const mastra = new Mastra({
     sendEmailWorkflow,      // Use camelCase for keys
     dataProcessingWorkflow
   },
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }), // Required for suspend/resume
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }), // Required for suspend/resume
 });
 \`\`\`
 
