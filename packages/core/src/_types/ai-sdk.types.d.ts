@@ -1,3 +1,4 @@
+/* eslint-disable */
 import type { ServerResponse } from 'http';
 import type { ServerResponse as ServerResponse_2 } from 'node:http';
 import type { JSONSchema7 } from 'json-schema';

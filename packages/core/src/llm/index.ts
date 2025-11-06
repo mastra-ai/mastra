@@ -1,13 +1,12 @@
-import type { EmbedManyResult as AiEmbedManyResult, EmbedResult as AiEmbedResult } from '@internal/ai-sdk-v4';
 import type {
+  EmbedManyResult as AiEmbedManyResult,
+  EmbedResult as AiEmbedResult,
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
   CoreSystemMessage as AiCoreSystemMessage,
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
   UIMessage,
-} from '@internal/ai-sdk-v4';
-import type {
   streamText,
   streamObject,
   generateText,

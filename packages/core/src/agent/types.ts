@@ -1,5 +1,4 @@
-import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
-import type { ToolSet } from '@internal/ai-sdk-v4';
+import type { GenerateTextOnStepFinishCallback, ToolSet } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';

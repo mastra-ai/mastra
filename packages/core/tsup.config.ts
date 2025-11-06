@@ -42,7 +42,6 @@ let treeshakeDecorators = {
 } satisfies Plugin;
 
 function fixDtsFiles(dir: string) {
-  console.log(dir);
   const files = readdirSync(dir, { recursive: true });
 
   const typeFile = process.cwd() + '/dist/ai-sdk.types.d.ts';
