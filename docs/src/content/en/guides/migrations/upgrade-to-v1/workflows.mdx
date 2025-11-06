@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod v1/workflows-get-workflows .
+npx @mastra/codemod@beta v1/workflows-get-workflows .
 ```
 
 :::
@@ -52,7 +52,7 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod v1/runtime-context .
+npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::
