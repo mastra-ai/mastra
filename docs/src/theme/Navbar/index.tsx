@@ -8,6 +8,7 @@ import SearchContainer from "./Search";
 import { Logo } from "./logo";
 import { TabSwitcher } from "./tab-switcher";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
+import VersionControl from "@site/src/components/version-control";
 
 function NavbarContentDesktop() {
   return (
@@ -26,14 +27,20 @@ function NavbarContentDesktop() {
         </div>
 
         <div className="flex gap-2 items-center">
+          <div className="flex items-center">
+            <GithubStarCount />
+            <VersionControl
+              size="sm"
+              className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
+            />
+          </div>
+
+          <div className="hidden lg:block">
+            <ThemeSwitcher />
+          </div>
+
           <div className="hidden @[798px]:block">
             <SearchContainer locale="en" />
-          </div>
-          <div className="flex gap-4 items-center">
-            <GithubStarCount />
-            <div className="hidden lg:block">
-              <ThemeSwitcher />
-            </div>
           </div>
           <NavbarMobileSidebarToggle />
         </div>
