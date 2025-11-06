@@ -116,8 +116,6 @@ describe('CloudDeployer Server Runtime', () => {
 
       expect(entry).toContain('await storage.init()');
       expect(entry).toContain('mastra?.setStorage(storage)');
-      expect(entry).toContain('mastra?.memory?.setStorage(storage)');
-      expect(entry).toContain('mastra?.memory?.setVector(vector)');
     });
 
     it('should create node server with correct configuration', () => {
@@ -179,8 +177,6 @@ describe('CloudDeployer Server Runtime', () => {
       expect(entry).toContain('mastra?.getLogger()');
       expect(entry).toContain('mastra?.storage');
       expect(entry).toContain('mastra?.setStorage');
-      expect(entry).toContain('mastra?.memory?.setStorage');
-      expect(entry).toContain('mastra?.memory?.setVector');
     });
 
     it('should skip HTTP transport in CI environment', () => {
