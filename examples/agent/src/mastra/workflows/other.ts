@@ -11,7 +11,8 @@ const stepOne = createStep({
   }),
   execute: async ({ inputData }) => {
     await new Promise(resolve => setTimeout(resolve, 10_000));
-    return { doubledValue: inputData.inputValue * 2 };
+    const doubledValue = inputData.inputValue * 2;
+    return { doubledValue };
   },
 });
 
