@@ -11,6 +11,7 @@ import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { Badge } from '@/ds/components/Badge';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import { toast } from '@/lib/toast';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -18,7 +19,7 @@ export interface WorkflowInformationProps {
 }
 
 export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
-  const { data: workflow, isLoading } = useWorkflow(workflowId);
+  const { data: workflow, isLoading, error } = useWorkflow(workflowId);
 
   const { createWorkflowRun } = useExecuteWorkflow();
   const {
@@ -41,6 +42,17 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
       closeStreamsAndReset();
     }
   }, [runId, initialRunId]);
+
+  useEffect(() => {
+    if (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load workflow';
+      toast.error(`Error loading workflow: ${errorMessage}`);
+    }
+  }, [error]);
+
+  if (error) {
+    return null;
+  }
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">

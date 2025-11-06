@@ -10,6 +10,8 @@ import {
   Button,
   DocsIcon,
   ToolPanel,
+  HeaderGroup,
+  ToolCombobox,
 } from '@mastra/playground-ui';
 
 const Tool = () => {
@@ -19,16 +21,19 @@ const Tool = () => {
     <div className="h-full w-full overflow-y-hidden">
       <Header>
         <Breadcrumb>
-          <Crumb as={Link} to={`/tools`}>
+          <Crumb as={Link} to={`/tools`} isCurrent>
             <Icon>
               <ToolsIcon />
             </Icon>
             Tools
           </Crumb>
-          <Crumb as={Link} to={`/tools/all/${toolId}`} isCurrent>
-            {toolId}
-          </Crumb>
         </Breadcrumb>
+
+        <HeaderGroup>
+          <div className="w-[240px]">
+            <ToolCombobox value={toolId} />
+          </div>
+        </HeaderGroup>
 
         <HeaderAction>
           <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">

@@ -11,6 +11,7 @@ import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX } from './workflows/other';
 
 const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: 'file:./mastra.db',
 });
 

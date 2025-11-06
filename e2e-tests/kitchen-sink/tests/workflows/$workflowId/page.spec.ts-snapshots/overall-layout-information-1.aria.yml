@@ -4,8 +4,3 @@
             - link "Workflows":
                 - /url: /workflows
                 - img
-        - separator:
-            - img
-        - listitem:
-            - link "complex-workflow":
-                - /url: /workflows/complexWorkflow

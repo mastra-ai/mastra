@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
+import { useEffect } from 'react';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -12,8 +13,15 @@ export interface MCPToolPanelProps {
 }
 
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
-  const { data: tool, isLoading } = useMCPServerTool(serverId, toolId);
+  const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteMCPTool(serverId, toolId);
+
+  useEffect(() => {
+    if (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load tool';
+      toast.error(`Error loading tool: ${errorMessage}`);
+    }
+  }, [error]);
 
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
@@ -21,7 +29,8 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
     return await executeTool(data);
   };
 
-  if (isLoading) return null;
+  if (isLoading || error) return null;
+
   if (!tool)
     return (
       <div className="py-12 text-center px-6">

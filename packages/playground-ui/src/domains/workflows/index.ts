@@ -5,5 +5,6 @@ export * from './context/use-current-run';
 export * from './runs/workflow-run-details';
 export * from './components/workflow-table/workflow-table';
 export * from './components/workflow-information';
+export * from './components/workflow-combobox';
 export * from './utils';
 export * from './hooks';

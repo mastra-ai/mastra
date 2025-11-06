@@ -11,24 +11,28 @@ import {
   Icon,
   DocsIcon,
   AgentIcon,
+  AgentCombobox,
 } from '@mastra/playground-ui';
 
 export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
   return (
     <Header>
       <Breadcrumb>
-        <Crumb as={Link} to={`/agents`}>
+        <Crumb as={Link} to={`/agents`} isCurrent>
           <Icon>
             <AgentIcon />
           </Icon>
           Agents
         </Crumb>
-        <Crumb as={Link} to={`/agents/${agentId}`} isCurrent>
-          {agentName}
-        </Crumb>
       </Breadcrumb>
 
       <HeaderGroup>
+        <div className="w-[240px]">
+          <AgentCombobox value={agentId} />
+        </div>
+
+        <DividerIcon />
+
         <Button as={Link} to={`/agents/${agentId}/chat`}>
           Chat
         </Button>

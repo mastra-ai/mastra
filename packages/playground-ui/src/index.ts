@@ -42,6 +42,7 @@ export * from './components/ui/searchbar';
 export * from './components/ui/tooltip';
 export * from './components/ui/kbd';
 export * from './components/ui/collapsible';
+export * from './components/ui/combobox';
 export * from './domains/conversation/index';
 export * from './lib/errors';
 export * from './components/assistant-ui/tools/tool-fallback';
