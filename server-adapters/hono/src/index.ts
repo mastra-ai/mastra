@@ -73,7 +73,6 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
   }
 
   async registerRoute(app: Hono<any, any, any>, route: ServerRoute): Promise<void> {
-    console.log('registering route', route);
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
       route.path,
       async (c: Context) => {
@@ -106,10 +105,13 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
           mastra: this.mastra,
         };
 
-        console.dir({ params }, { depth: null });
-        const result = await route.handler(handlerParams);
-        console.dir({ result }, { depth: null });
-        return this.sendResponse(route, c, result);
+        try {
+          const result = await route.handler(handlerParams);
+          return this.sendResponse(route, c, result);
+        } catch (error) {
+          console.error('Error calling handler', error);
+          return c.status(500);
+        }
       },
     );
   }

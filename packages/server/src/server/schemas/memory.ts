@@ -76,8 +76,11 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 export const listThreadsQuerySchema = z.object({
   agentId: z.string().optional(),
   resourceId: z.string(),
-  page: z.coerce.number(),
-  perPage: z.union([z.coerce.number(), z.literal(false)]),
+  page: z.coerce.number().optional().default(0),
+  perPage: z
+    .union([z.coerce.number(), z.literal(false)])
+    .optional()
+    .default(false),
   orderBy: storageOrderBySchema.optional(),
 });
 
@@ -91,7 +94,15 @@ export const getThreadByIdQuerySchema = agentIdQuerySchema;
  */
 export const getMessagesQuerySchema = z.object({
   agentId: z.string().optional(),
-  limit: z.coerce.number().positive().optional(),
+  page: z.coerce.number().optional().default(0),
+  orderBy: storageOrderBySchema.optional(),
+  include: z.unknown().optional(),
+  filter: z.unknown().optional(),
+  // TODO: make pagination generic
+  perPage: z
+    .union([z.coerce.number(), z.literal(false)])
+    .optional()
+    .default(false),
 });
 
 /**
