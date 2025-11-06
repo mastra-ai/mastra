@@ -41,7 +41,7 @@ body:
       description: Please provide details about your environment.
       placeholder: |
         - Mastra Version: (e.g., 0.1.11)
-        - Node.js Version: (e.g., v20.0.0)
+        - Node.js Version: (e.g., v22.13.0)
         - OS: (e.g., Windows 11, macOS, Ubuntu 22.04)
         - LLM Provider: (e.g., OpenAI, Anthropic, Google Gemini)
         - Browser (if applicable): (e.g., Chrome 120)

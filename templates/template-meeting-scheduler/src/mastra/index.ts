@@ -6,6 +6,7 @@ import { meetingSchedulerAgent } from './agents/meeting-scheduler';
 export const mastra = new Mastra({
   agents: { meetingSchedulerAgent },
   storage: new LibSQLStore({
+    id: 'meeting-scheduler-storage',
     url: 'file:../../mastra.db',
   }),
   logger: new PinoLogger({

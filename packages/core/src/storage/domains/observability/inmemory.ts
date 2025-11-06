@@ -2,8 +2,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { TracingStorageStrategy } from '../../../observability';
 import type {
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
@@ -71,7 +71,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     return `${traceId}-${spanId}`;
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
     const spans = Array.from(this.collection.values()).filter(span => span.traceId === traceId);
     if (spans.length === 0) {
       return null;
@@ -84,10 +84,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     };
   }
 
-  async getAITracesPaginated({
+  async getTracesPaginated({
     filters,
     pagination,
-  }: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     const allRootSpans = this.filterForRootSpans(Array.from(this.collection.values()));
     const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filters);
 
@@ -121,7 +121,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private filterSpansByFilter(spans: SpanRecord[], filter: AITracesPaginatedArg['filters']): SpanRecord[] {
+  private filterSpansByFilter(spans: SpanRecord[], filter: TracesPaginatedArg['filters']): SpanRecord[] {
     return spans.filter(span => {
       if (filter?.name && span.name !== filter.name) return false;
       if (filter?.spanType && span.spanType !== filter.spanType) return false;
@@ -134,7 +134,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     });
   }
 
-  private filterSpansByPagination(spans: SpanRecord[], pagination: AITracesPaginatedArg['pagination']): SpanRecord[] {
+  private filterSpansByPagination(spans: SpanRecord[], pagination: TracesPaginatedArg['pagination']): SpanRecord[] {
     const page = pagination?.page ?? 0;
     const perPage = pagination?.perPage ?? 10;
     const start = page * perPage;
@@ -148,7 +148,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     if (!span) {
       throw new MastraError({
-        id: 'OBSERVABILITY_UPDATE_AI_SPAN_NOT_FOUND',
+        id: 'OBSERVABILITY_UPDATE_SPAN_NOT_FOUND',
         domain: ErrorDomain.MASTRA_OBSERVABILITY,
         category: ErrorCategory.SYSTEM,
         text: 'Span not found for update',
@@ -170,7 +170,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     for (const traceId of args.traceIds) {
       const spans = Array.from(this.collection.values()).filter(span => span.traceId === traceId);
       for (const span of spans) {

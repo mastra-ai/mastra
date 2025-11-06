@@ -1,0 +1,23 @@
+---
+title: "Vectors | v1 Migration Guide"
+description: "Learn how to migrate vector-related changes when upgrading to v1."
+---
+
+# Vectors
+
+Vector store methods have been renamed to follow consistent naming conventions.
+
+## Changed
+
+### `getVectors` to `listVectors`
+
+The `getVectors()` method has been renamed to `listVectors()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
+
+To migrate, replace all calls to `getVectors()` with `listVectors()`.
+
+```diff
+  const vectorStore = new VectorStore({ ... });
+
+- const vectors = await vectorStore.getVectors({ ... });
++ const vectors = await vectorStore.listVectors({ ... });
+```

@@ -1066,6 +1066,53 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     // Mastra will be passed to the LLM when it's created in getLLM()
+
+    // Auto-register tools with the Mastra instance
+    if (this.#tools && typeof this.#tools === 'object') {
+      Object.entries(this.#tools).forEach(([key, tool]) => {
+        try {
+          // Only add tools that have an id property (ToolAction type)
+          if (tool && typeof tool === 'object' && 'id' in tool) {
+            // Use tool's intrinsic ID to avoid collisions across agents
+            const toolKey = typeof (tool as any).id === 'string' ? (tool as any).id : key;
+            mastra.addTool(tool as any, toolKey);
+          }
+        } catch (error) {
+          // Tool might already be registered, that's okay
+          if (error instanceof MastraError && error.id !== 'MASTRA_ADD_TOOL_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register input processors with the Mastra instance
+    if (this.#inputProcessors && Array.isArray(this.#inputProcessors)) {
+      this.#inputProcessors.forEach(processor => {
+        try {
+          mastra.addProcessor(processor);
+        } catch (error) {
+          // Processor might already be registered, that's okay
+          if (error instanceof MastraError && error.id !== 'MASTRA_ADD_PROCESSOR_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register output processors with the Mastra instance
+    if (this.#outputProcessors && Array.isArray(this.#outputProcessors)) {
+      this.#outputProcessors.forEach(processor => {
+        try {
+          mastra.addProcessor(processor);
+        } catch (error) {
+          // Processor might already be registered, that's okay
+          if (error instanceof MastraError && error.id !== 'MASTRA_ADD_PROCESSOR_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
   }
 
   /**

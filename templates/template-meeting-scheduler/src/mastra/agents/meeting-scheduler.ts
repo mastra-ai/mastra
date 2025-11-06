@@ -55,9 +55,11 @@ Once authorized, you can proceed with the requested email analysis and calendar 
   model: anthropic('claude-4-sonnet-20250514'),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'meeting-scheduler-agent-storage',
       url: 'file:../../mastra.db',
     }),
     vector: new LibSQLVector({
+      id: 'meeting-scheduler-agent-vector',
       connectionUrl: 'file:../../mastra.db',
     }),
     embedder: fastembed,

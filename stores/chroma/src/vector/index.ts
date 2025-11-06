@@ -52,8 +52,8 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
   private client: ChromaClient;
   private collections: Map<string, Collection>;
 
-  constructor(chromaClientArgs?: ChromaVectorArgs) {
-    super();
+  constructor({ id, ...chromaClientArgs }: ChromaVectorArgs & { id: string }) {
+    super({ id });
     if (chromaClientArgs?.apiKey) {
       this.client = new CloudClient({
         apiKey: chromaClientArgs.apiKey,

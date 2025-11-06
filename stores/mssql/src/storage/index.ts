@@ -15,8 +15,8 @@ import type {
   StoragePagination,
   StorageDomains,
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   UpdateSpanRecord,
   CreateIndexOptions,
   IndexInfo,
@@ -32,6 +32,7 @@ import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
 export type MSSQLConfigType = {
+  id: string;
   schemaName?: string;
 } & (
   | {
@@ -56,7 +57,10 @@ export class MSSQLStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
-    super({ name: 'MSSQLStore' });
+    if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+      throw new Error('MSSQLStore: id must be provided and cannot be empty.');
+    }
+    super({ id: config.id, name: 'MSSQLStore' });
     try {
       if ('connectionString' in config) {
         if (
@@ -426,12 +430,12 @@ export class MSSQLStore extends MastraStorage {
     return this.getObservabilityStore().updateSpan({ spanId, traceId, updates });
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    return this.getObservabilityStore().getAITrace(traceId);
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    return this.getObservabilityStore().getTrace(traceId);
   }
 
-  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    return this.getObservabilityStore().getAITracesPaginated(args);
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    return this.getObservabilityStore().getTracesPaginated(args);
   }
 
   async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
@@ -448,8 +452,8 @@ export class MSSQLStore extends MastraStorage {
     return this.getObservabilityStore().batchUpdateSpans(args);
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
-    return this.getObservabilityStore().batchDeleteAITraces(args);
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+    return this.getObservabilityStore().batchDeleteTraces(args);
   }
 
   /**

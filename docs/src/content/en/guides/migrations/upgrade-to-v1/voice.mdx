@@ -9,47 +9,6 @@ Voice packages have been renamed from speech to voice with updated class names a
 
 ## Changed
 
-### Class names from `*TTS` to `*Voice`
-
-TTS class names have been renamed to Voice classes. `MurfTTS`, `SpeechifyTTS`, and `PlayAITTS` are now `MurfVoice`, `SpeechifyVoice`, and `PlayAIVoice` respectively. This change aligns class names with the package rename.
-
-To migrate, update class names in your code.
-
-```diff
-- import { MurfTTS } from '@mastra/voice-murf';
-- import { SpeechifyTTS } from '@mastra/voice-speechify';
-- import { PlayAITTS } from '@mastra/voice-playai';
-+ import { MurfVoice } from '@mastra/voice-murf';
-+ import { SpeechifyVoice } from '@mastra/voice-speechify';
-+ import { PlayAIVoice } from '@mastra/voice-playai';
-
-- const tts = new MurfTTS({ apiKey: '...' });
-+ const voice = new MurfVoice({ apiKey: '...' });
-```
-
-### `generate` and `stream` methods to `speak`
-
-The `generate()` and `stream()` methods have been combined into a single `speak()` method. This change simplifies the voice API by consolidating speech generation methods.
-
-To migrate, replace `generate()` and `stream()` calls with `speak()`.
-
-```diff
-- await tts.generate('Hello');
-- await tts.stream('Hello');
-+ await voice.speak('Hello');
-```
-
-### `voices` method to `getSpeakers`
-
-The `voices()` method has been renamed to `getSpeakers()`. This change provides clearer naming that better describes the method's purpose.
-
-To migrate, rename method calls from `voices` to `getSpeakers`.
-
-```diff
-- const voices = await tts.voices();
-+ const speakers = await voice.getSpeakers();
-```
-
 ### Voice configuration property names
 
 Voice configuration properties have been renamed for consistency. `speakProvider` is now `output`, `listenProvider` is now `input`, and `realtimeProvider` is now `realtime`. This change provides more intuitive property names.
@@ -69,16 +28,12 @@ To migrate, update configuration property names when configuring agents with voi
   });
 ```
 
-## Removed
+:::tip[Codemod]
 
-### TTS exports from `@mastra/core`
+You can use Mastra's codemod CLI to update your code automatically:
 
-TTS exports have been removed from `@mastra/core`. All TTS functionality is now in dedicated voice packages. This change improves tree-shaking by removing voice-specific code from the core package.
-
-To migrate, import voice functionality from dedicated voice packages instead of `@mastra/core`.
-
-```diff
-- import { TTS } from '@mastra/core/tts';
-+ import { MurfVoice } from '@mastra/voice-murf';
-+ // or other voice packages as needed
+```shell
+npx @mastra/codemod v1/voice-property-names .
 ```
+
+:::

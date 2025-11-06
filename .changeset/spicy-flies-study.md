@@ -5,7 +5,6 @@
 '@mastra/auth-supabase': major
 '@mastra/auth-workos': major
 '@mastra/ai-sdk': major
-'@mastra/react': major
 '@mastra/client-js': major
 '@mastra/deployer-cloud': major
 '@mastra/deployer-netlify': major
@@ -27,7 +26,7 @@
 '@mastra/clickhouse': major
 '@mastra/cloudflare': major
 '@mastra/astra': major
-'@mastra/google-cloud-pubsub': major
+'@mastra/google-cloud-pubsub': minor
 '@mastra/server': major
 '@mastra/schema-compat': major
 '@mastra/memory': major

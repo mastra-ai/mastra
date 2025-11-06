@@ -3,6 +3,7 @@ import { MCPServer } from '@mastra/mcp';
 
 import { logger, createLogger } from './logger';
 import { prepare } from './prepare-docs/prepare';
+import { migrationPromptMessages } from './prompts/migration';
 import { blogTool } from './tools/blog';
 import { changesTool } from './tools/changes';
 import {
@@ -14,6 +15,7 @@ import {
 } from './tools/course';
 import { docsTool } from './tools/docs';
 import { examplesTool } from './tools/examples';
+import { migrationTool } from './tools/migration';
 import { fromPackageRoot } from './utils';
 
 let server: MCPServer;
@@ -36,12 +38,14 @@ server = new MCPServer({
     mastraDocs: docsTool,
     mastraExamples: examplesTool,
     mastraChanges: changesTool,
+    mastraMigration: migrationTool,
     startMastraCourse,
     getMastraCourseStatus,
     startMastraCourseLesson,
     nextMastraCourseStep,
     clearMastraCourseHistory,
   },
+  prompts: migrationPromptMessages,
 });
 
 // Update logger with server instance

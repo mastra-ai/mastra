@@ -57,6 +57,7 @@ export const routingAgent = new Agent({
   },
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: "file:../mastra.db",
     }),
   }),

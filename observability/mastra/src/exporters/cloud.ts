@@ -59,7 +59,7 @@ export class CloudExporter extends BaseExporter {
     }
 
     const endpoint =
-      config.endpoint ?? process.env.MASTRA_CLOUD_AI_TRACES_ENDPOINT ?? 'https://api.mastra.ai/ai/spans/publish';
+      config.endpoint ?? process.env.MASTRA_CLOUD_TRACES_ENDPOINT ?? 'https://api.mastra.ai/ai/spans/publish';
 
     this.config = {
       logger: this.logger,

@@ -22,7 +22,7 @@ export async function getSpeakersHandler({ mastra, agentId, requestContext }: Vo
       throw new HTTPException(400, { message: 'Agent ID is required' });
     }
 
-    const agent = mastra.getAgent(agentId);
+    const agent = mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -64,7 +64,7 @@ export async function generateSpeechHandler({
       text: body?.text,
     });
 
-    const agent = mastra.getAgent(agentId);
+    const agent = mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -119,7 +119,7 @@ export async function transcribeSpeechHandler({
       throw new HTTPException(400, { message: 'Audio data is required' });
     }
 
-    const agent = mastra.getAgent(agentId);
+    const agent = mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });
@@ -151,7 +151,7 @@ export async function getListenerHandler({ mastra, agentId, requestContext }: Vo
       throw new HTTPException(400, { message: 'Agent ID is required' });
     }
 
-    const agent = mastra.getAgent(agentId);
+    const agent = mastra.getAgentById(agentId);
 
     if (!agent) {
       throw new HTTPException(404, { message: 'Agent not found' });

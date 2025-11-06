@@ -11,7 +11,7 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
   const agentsLink = paths.agentsLink();
   const workflowsLink = paths.workflowsLink();
   const agentLink = paths.agentLink(trace?.metadata?.resourceId!);
-  const workflowLink = paths.workflowLink(trace?.metadata?.resourceId!);
+  const workflowLink = paths.workflowLink(trace?.attributes?.workflowId!);
 
   return [
     {

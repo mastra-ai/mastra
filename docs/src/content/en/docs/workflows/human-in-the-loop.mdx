@@ -54,6 +54,7 @@ Return only the person's name, nothing else.`,
   model: openai("gpt-4o"),
   memory: new Memory({
     vector: new LibSQLVector({
+      id: 'workflow-vector',
       connectionUrl: "file:../mastra.db",
     }),
     embedder: openai.embedding("text-embedding-3-small"),

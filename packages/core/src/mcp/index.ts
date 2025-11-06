@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import slugify from '@sindresorhus/slugify';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
+import { MastraError } from '../error';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { InternalCoreTool, MCPToolType } from '../tools';
+import type { InternalCoreTool, MCPToolType, ToolAction, ToolExecutionContext } from '../tools';
 import type {
   MCPServerConfig,
   MCPServerHonoSSEOptions,
@@ -112,6 +113,53 @@ export abstract class MCPServerBase extends MastraBase {
     this.mastra = mastra;
     // Re-convert tools now that we have the Mastra instance to populate MCP tools execute with mastra instance
     this.convertedTools = this.convertTools(this.originalTools, this.agents, this.workflows);
+
+    // Auto-register tools with the Mastra instance
+    if (this.originalTools && typeof this.originalTools === 'object') {
+      Object.entries(this.originalTools).forEach(([key, tool]) => {
+        try {
+          // Only add tools that have an id property (ToolAction type)
+          if (tool && typeof tool === 'object' && 'id' in tool) {
+            // Use tool's intrinsic ID to avoid collisions across MCP servers
+            const toolKey = typeof (tool as any).id === 'string' ? (tool as any).id : key;
+            mastra.addTool(tool as ToolAction<any, any, any, any, ToolExecutionContext<any, any>>, toolKey);
+          }
+        } catch (error) {
+          // Tool might already be registered, that's okay
+          if (!(error instanceof MastraError) || error.id !== 'MASTRA_ADD_TOOL_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register agents with the Mastra instance
+    if (this.agents && typeof this.agents === 'object') {
+      Object.entries(this.agents).forEach(([key, agent]) => {
+        try {
+          mastra.addAgent(agent, key);
+        } catch (error) {
+          // Agent might already be registered, that's okay
+          if (!(error instanceof MastraError) || error.id !== 'MASTRA_ADD_AGENT_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register workflows with the Mastra instance
+    if (this.workflows && typeof this.workflows === 'object') {
+      Object.entries(this.workflows).forEach(([key, workflow]) => {
+        try {
+          mastra.addWorkflow(workflow, key);
+        } catch (error) {
+          // Workflow might already be registered, that's okay
+          if (!(error instanceof MastraError) || error.id !== 'MASTRA_ADD_WORKFLOW_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
   }
 
   /**

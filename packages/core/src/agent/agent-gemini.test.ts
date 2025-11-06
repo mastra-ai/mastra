@@ -232,7 +232,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle empty user message with system context in network', async () => {
@@ -269,7 +269,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 60000);
 
     it('should handle single turn with maxSteps=1 and messages ending with assistant in network', async () => {
@@ -306,7 +306,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle conversation ending with tool result in network (with follow-up user message)', async () => {
@@ -366,7 +366,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle conversation ending with tool result in network (agentic loop pattern)', async () => {
@@ -425,7 +425,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle messages starting with assistant-with-tool-call in network', async () => {
@@ -484,7 +484,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle network with workflow execution', async () => {
@@ -540,7 +540,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 20000);
 
     it('should handle simple conversation ending with assistant in network', async () => {
@@ -569,7 +569,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
 
     it('should handle messages with only assistant role in network', async () => {
@@ -600,7 +600,7 @@ describe('Gemini Model Compatibility Tests', () => {
       }
 
       expect(chunks).toBeDefined();
-      expect(chunks.length).toBeGreaterThanOrEqual(1);
+      expect(chunks.length).toBeGreaterThan(1);
     }, 15000);
   });
 });
