@@ -1,7 +1,5 @@
-import { PostgresStore } from "@mastra/pg";
+import { LibSQLStore } from "@mastra/libsql";
 
-const url = "postgresql://postgres:postgres@localhost:5433/mastra";
-
-export const storage = new PostgresStore({
-  connectionString: url,
+export const storage = new LibSQLStore({
+  url: "file:mastra.db",
 });

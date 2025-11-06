@@ -1,7 +1,7 @@
 import type { TextStreamPart } from '@internal/ai-sdk-v4/model';
 import type { z } from 'zod';
-import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
@@ -233,7 +233,6 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
-  | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
       steps: { type: 'step'; step: Step }[];
@@ -284,12 +283,6 @@ export type SerializedStepFlowEntry =
       id: string;
       date?: Date;
       fn?: string;
-    }
-  | {
-      type: 'waitForEvent';
-      event: string;
-      step: SerializedStep;
-      timeout?: number;
     }
   | {
       type: 'parallel';

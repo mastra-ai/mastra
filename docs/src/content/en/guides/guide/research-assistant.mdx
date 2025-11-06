@@ -14,7 +14,7 @@ You'll use the foundational Transformer paper ["Attention Is All You Need"](http
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -128,6 +128,7 @@ import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
+  id: 'research-vectors',
   connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
@@ -158,6 +159,7 @@ import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
 
 const libSqlVector = new LibSQLVector({
+  id: 'research-vectors',
   connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 

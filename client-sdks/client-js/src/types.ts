@@ -23,12 +23,12 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
-  AITraceRecord,
-  AISpanRecord,
-  StorageGetMessagesArg,
+  TraceRecord,
+  SpanRecord,
   PaginationInfo,
   WorkflowRun,
   WorkflowRuns,
+  StorageListMessagesInput,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 
@@ -79,6 +79,7 @@ export type NetworkStreamParams = {
 } & MultiPrimitiveExecutionOptions;
 
 export interface GetAgentResponse {
+  id: string;
   name: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
@@ -162,7 +163,7 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number;
+  perPage?: number | false;
   page?: number;
   resourceId?: string;
 }
@@ -285,20 +286,9 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export interface GetMemoryThreadMessagesParams {
-  /**
-   * Limit the number of messages to retrieve (default: 40)
-   */
-  limit?: number;
-}
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
 
-export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
-
-export interface GetMemoryThreadMessagesResponse {
-  messages: MastraDBMessage[];
-}
-
-export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
+export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
 };
 
@@ -493,12 +483,12 @@ export interface TemplateInstallationRequest {
   variables?: Record<string, string>;
 }
 
-export interface GetAITraceResponse {
-  trace: AITraceRecord;
+export interface GetTraceResponse {
+  trace: TraceRecord;
 }
 
-export interface GetAITracesResponse {
-  spans: AISpanRecord[];
+export interface GetTracesResponse {
+  spans: SpanRecord[];
   pagination: PaginationInfo;
 }
 

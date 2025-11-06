@@ -1,7 +1,7 @@
 {
   "name": "@mastra/langfuse",
   "version": "0.1.2",
-  "description": "Langfuse observability provider for Mastra - includes AI tracing and future observability features",
+  "description": "Langfuse observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,7 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "langfuse": "^3.38.5"
+    "langfuse": "^3.38.5",
+    "@mastra/observability": "workspace:*"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -55,5 +56,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

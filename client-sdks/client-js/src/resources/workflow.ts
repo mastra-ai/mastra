@@ -1,4 +1,4 @@
-import type { TracingOptions } from '@mastra/core/ai-tracing';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
   ClientOptions,
@@ -52,8 +52,12 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.perPage !== null && params?.perPage !== undefined && !isNaN(Number(params?.perPage))) {
-      searchParams.set('perPage', String(params.perPage));
+    if (params?.perPage !== null && params?.perPage !== undefined) {
+      if (params.perPage === false) {
+        searchParams.set('perPage', 'false');
+      } else if (typeof params.perPage === 'number' && params.perPage > 0 && Number.isInteger(params.perPage)) {
+        searchParams.set('perPage', String(params.perPage));
+      }
     }
     if (params?.page !== null && params?.page !== undefined && !isNaN(Number(params?.page))) {
       searchParams.set('page', String(params.page));
@@ -105,18 +109,6 @@ export class Workflow extends BaseResource {
   cancelRun(runId: string): Promise<{ message: string }> {
     return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/cancel`, {
       method: 'POST',
-    });
-  }
-
-  /**
-   * Sends an event to a specific workflow run by its ID
-   * @param params - Object containing the runId, event and data
-   * @returns Promise containing a success message
-   */
-  sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${params.runId}/send-event`, {
-      method: 'POST',
-      body: { event: params.event, data: params.data },
     });
   }
 

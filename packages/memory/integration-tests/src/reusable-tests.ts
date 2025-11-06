@@ -22,8 +22,8 @@ export enum StorageType {
 
 interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
-  storageConfigForWorker: LibSQLConfig | PostgresStoreConfig | UpstashConfig;
-  vectorConfigForWorker?: LibSQLVectorConfig;
+  storageConfigForWorker: (LibSQLConfig | PostgresStoreConfig | UpstashConfig) & { id: string };
+  vectorConfigForWorker?: LibSQLVectorConfig & { id: string };
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
@@ -136,21 +136,21 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const messages = Array.from({ length: 15 }, (_, i) => createTestMessage(thread.id, `Message ${i + 1}`));
         await memory.saveMessages({ messages });
 
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 10 },
+          perPage: 10,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result.messages).toHaveLength(10); // lastMessages is set to 10
         expect(getTextContent(result.messages[0])).toBe('Message 6'); // First message
         expect(getTextContent(result.messages[9])).toBe('Message 15'); // Last message
 
-        const result2 = await memory.rememberMessages({
+        const result2 = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: {
-            lastMessages: 15,
-          },
+          perPage: 15,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result2.messages).toHaveLength(15); // lastMessages is set to 10
         expect(getTextContent(result2.messages[0])).toBe('Message 1'); // First message
@@ -166,10 +166,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ];
 
         await memory.saveMessages({ messages: conversation });
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 10 },
+          perPage: 10,
         });
 
         // Verify conversation flow is maintained
@@ -204,12 +204,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           }),
         ).resolves.not.toThrow();
 
-        const { messages } = await memory.query({
+        const { messages } = await memory.recall({
           threadId,
           resourceId,
-          selectBy: {
-            vectorSearchString: content,
-          },
+          vectorSearchString: content,
           threadConfig: {
             semanticRecall: {
               topK: 2,
@@ -232,11 +230,14 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         await memory.saveMessages({ messages });
 
         // Search for weather-related messages
-        const weatherQuery = await memory.rememberMessages({
+        const weatherQuery = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 0, semanticRecall: { messageRange: 1, topK: 1 } },
-          vectorMessageSearch: "How's the temperature outside?",
+          vectorSearchString: "How's the temperature outside?",
+          threadConfig: {
+            lastMessages: 0,
+            semanticRecall: { messageRange: 1, topK: 1 },
+          },
         });
 
         // Should find the weather-related messages due to semantic similarity
@@ -245,11 +246,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(getTextContent(weatherQuery.messages[1])).toBe("Yes, it's sunny and warm");
 
         // Search for location-related messages
-        const locationQuery = await memory.rememberMessages({
+        const locationQuery = await memory.recall({
           threadId: thread.id,
           resourceId,
-          vectorMessageSearch: 'Tell me about cities in France',
-          config: {
+          vectorSearchString: 'Tell me about cities in France',
+          threadConfig: {
             semanticRecall: {
               topK: 1,
               messageRange: { after: 1, before: 0 },
@@ -264,11 +265,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(getTextContent(locationQuery.messages[1])).toBe('The capital of France is Paris');
 
         // Search for location-related messages
-        const locationQuery2 = await memory.rememberMessages({
+        const locationQuery2 = await memory.recall({
           threadId: thread.id,
           resourceId,
-          vectorMessageSearch: 'Tell me about cities in France',
-          config: {
+          vectorSearchString: 'Tell me about cities in France',
+          threadConfig: {
             semanticRecall: {
               topK: 1,
               messageRange: { after: 0, before: 1 },
@@ -283,11 +284,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(getTextContent(locationQuery2.messages[1])).toBe("What's the capital of France?");
 
         // Search for location-related messages
-        const locationQuery3 = await memory.rememberMessages({
+        const locationQuery3 = await memory.recall({
           threadId: thread.id,
           resourceId,
-          vectorMessageSearch: 'Tell me about cities in France',
-          config: {
+          vectorSearchString: 'Tell me about cities in France',
+          threadConfig: {
             semanticRecall: {
               topK: 1,
               messageRange: { after: 1, before: 1 },
@@ -316,11 +317,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ];
         await memory.saveMessages({ messages });
 
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          vectorMessageSearch: 'topic X',
-          config: {
+          vectorSearchString: 'topic X',
+          threadConfig: {
             lastMessages: 0,
             semanticRecall: {
               topK: 1,
@@ -380,28 +381,28 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         });
 
         // Semantic search for a TextPart topic
-        const resultProgramming = await memory.rememberMessages({
+        const resultProgramming = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: {
+          vectorSearchString: 'JavaScript',
+          threadConfig: {
             lastMessages: 0,
             semanticRecall: { messageRange: 0, topK: 1 },
           },
-          vectorMessageSearch: 'JavaScript',
         });
         const programmingContents = resultProgramming.messages.map(m => getTextContent(m));
         expect(programmingContents).toContain('JavaScript is a versatile language.');
         expect(programmingContents).not.toContain('The weather is rainy and cold.');
 
         // Semantic search for a string topic
-        const resultWeather = await memory.rememberMessages({
+        const resultWeather = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: {
+          vectorSearchString: 'rainy',
+          threadConfig: {
             lastMessages: 0,
             semanticRecall: { messageRange: 0, topK: 1 },
           },
-          vectorMessageSearch: 'rainy',
         });
         const weatherContents = resultWeather.messages.map(m => getTextContent(m));
         expect(weatherContents).toContain('The weather is rainy and cold.');
@@ -421,11 +422,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         );
         await memory.saveMessages({ messages: [multiTextParts] });
 
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
-          vectorMessageSearch: 'world',
+          vectorSearchString: 'world',
+          threadConfig: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
         });
         const contents = result.messages.map(m => getTextContent(m));
         expect(contents[0]).toContain('world');
@@ -445,11 +446,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         );
         await memory.saveMessages({ messages: [assistantTextParts] });
 
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
-          vectorMessageSearch: 'assistant',
+          vectorSearchString: 'assistant',
+          threadConfig: { lastMessages: 0, semanticRecall: { messageRange: 0, topK: 1, scope: 'thread' } },
         });
         const contents = result.messages.map(m => getTextContent(m));
         expect(contents[0]).toContain('Assistant says hello.');
@@ -481,11 +482,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const searchQuery = 'Tell me about the color blue';
 
         // 1. Test thread scope (explicitly set)
-        const threadScopeResult = await memory.rememberMessages({
+        const threadScopeResult = await memory.recall({
           threadId: thread1.id,
           resourceId, // resourceId is defined globally in this file
-          vectorMessageSearch: searchQuery,
-          config: {
+          vectorSearchString: searchQuery,
+          threadConfig: {
             lastMessages: 0,
             semanticRecall: {
               topK: 1,
@@ -502,11 +503,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(getTextContent(threadScopeResult.messages[1])).toBe('Yes, very clear skies');
 
         // 2. Test resource scope (explicitly set)
-        const resourceScopeResult = await memory.rememberMessages({
+        const resourceScopeResult = await memory.recall({
           threadId: thread1.id, // Still need a threadId, but scope overrides
           resourceId,
-          vectorMessageSearch: searchQuery,
-          config: {
+          vectorSearchString: searchQuery,
+          threadConfig: {
             lastMessages: 0,
             semanticRecall: {
               topK: 5, // Increase topK to potentially get both matches
@@ -537,11 +538,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ).toBe(true);
 
         // 3. Test default scope (should be resource now)
-        const defaultScopeResult = await memory.rememberMessages({
+        const defaultScopeResult = await memory.recall({
           threadId: thread1.id,
           resourceId,
-          vectorMessageSearch: searchQuery,
-          config: {
+          vectorSearchString: searchQuery,
+          threadConfig: {
             lastMessages: 0,
             semanticRecall: {
               topK: 5,
@@ -588,12 +589,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const messages = messageList.get.all.db();
 
         await memory.saveMessages({ messages });
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: {
-            lastMessages: 10,
-          },
+          perPage: 10,
         });
 
         expect(result.messages).toHaveLength(3);
@@ -612,10 +611,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           createTestMessage(thread.id, [assistantPart], 'assistant', 'text'),
         ];
         await memory.saveMessages({ messages });
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 10 },
+          perPage: 10,
         });
         expect(result.messages).toHaveLength(2);
         expect(result.messages[0]).toMatchObject({
@@ -647,12 +646,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           messages: [createTestMessage(thread.id, complexMessage, 'assistant')],
         });
 
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: {
-            lastMessages: 10,
-          },
+          perPage: 10,
         });
         expect(result.messages[0].content.parts).toEqual(complexMessage);
       });
@@ -672,9 +669,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         await memory.deleteMessages([messageToDelete.id]);
 
         // Verify message is deleted
-        const remainingMessages = await memory.query({
+        const remainingMessages = await memory.recall({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
 
         expect(remainingMessages.messages).toHaveLength(2);
@@ -725,9 +722,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         // Delete the complex message
         await memory.deleteMessages([savedMessages.messages[1].id]);
 
-        const remainingMessages = await memory.query({
+        const remainingMessages = await memory.recall({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
 
         expect(remainingMessages.messages).toHaveLength(1);
@@ -750,16 +747,16 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         await memory.deleteMessages([message1.id]);
 
         // Verify first thread has no messages
-        const thread1Messages = await memory.query({
+        const thread1Messages = await memory.recall({
           threadId: thread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
         expect(thread1Messages.messages).toHaveLength(0);
 
         // Verify second thread still has its message
-        const thread2Messages = await memory.query({
+        const thread2Messages = await memory.recall({
           threadId: otherThread.id,
-          selectBy: { last: 10 },
+          perPage: 10,
         });
         expect(thread2Messages.messages).toHaveLength(1);
         expect(getTextContent(thread2Messages.messages[0])).toBe('Thread 2 message');
@@ -775,10 +772,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const messages = [createTestMessage(thread.id, 'Test message')];
         await memory.saveMessages({ messages });
 
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 10 },
+          perPage: 10,
         });
 
         expect(result.messages).toHaveLength(1);
@@ -791,10 +788,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         await memory.saveMessages({ messages });
 
         await expect(
-          memory.rememberMessages({
+          memory.recall({
             threadId: thread.id,
             resourceId: 'wrong-resource',
-            config: { lastMessages: 10 },
+            perPage: 10,
           }),
         ).rejects.toThrow(
           `Thread with id ${thread.id} is for resource with id ${resourceId} but resource wrong-resource was queried`,
@@ -805,9 +802,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const messages = [createTestMessage(thread.id, 'Test message')];
         await memory.saveMessages({ messages });
 
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
-          config: { lastMessages: 10 },
+          perPage: 10,
         });
 
         expect(result.messages).toHaveLength(1);
@@ -836,10 +833,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         await expect(Promise.all(promises)).resolves.not.toThrow();
 
         // Verify all messages were saved
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 20 },
+          perPage: 20,
         });
         expect(result.messages).toHaveLength(messagesBatches.flat().length);
       });
@@ -862,7 +859,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result.threads).toHaveLength(10);
@@ -882,7 +878,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId: 'non-existent-resource',
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(emptyResult.threads).toHaveLength(0);
@@ -902,7 +897,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: 10,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(lastPageResult.threads).toHaveLength(5);
@@ -925,7 +919,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 1,
         perPage: 7,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page2Result.threads).toHaveLength(7);
@@ -937,7 +930,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 2,
         perPage: 7,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(page3Result.threads).toHaveLength(1);
@@ -955,7 +947,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           resourceId,
           page: -1,
           perPage: 10,
-          orderBy: { field: 'createdAt', direction: 'DESC' },
         }),
       ).rejects.toThrow();
     });
@@ -970,7 +961,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       expect(zeroResult.threads).toHaveLength(0);
       expect(zeroResult.perPage).toBe(0);
@@ -980,7 +970,6 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         resourceId,
         page: 0,
         perPage: -5,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       expect(negativeResult.threads.length).toBeGreaterThan(0);
       expect(negativeResult.perPage).toBe(100); // Default for listThreadsByResourceId
@@ -1041,10 +1030,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           console.error('Error during reusable worker execution:', error);
           throw error;
         }
-        const result = await memory.rememberMessages({
+        const result = await memory.recall({
           threadId: mainThread.id,
           resourceId,
-          config: { lastMessages: totalMessages },
+          perPage: totalMessages,
         });
         expect(result.messages).toHaveLength(totalMessages);
 

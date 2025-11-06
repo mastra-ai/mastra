@@ -16,7 +16,7 @@ In this guide, you'll learn how to build a complete MCP (Model Context Protocol)
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
@@ -53,6 +53,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
@@ -116,7 +117,8 @@ In `src/mastra/mcp/server.ts`, define the MCP server instance:
 import { MCPServer } from "@mastra/mcp";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   tools: {},
 });
@@ -132,6 +134,7 @@ import { notes } from "./mcp/server";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
@@ -212,7 +215,8 @@ import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   tools: {},
   resources: resourceHandlers,
@@ -273,7 +277,8 @@ import { resourceHandlers } from "./resources";
 import { writeNoteTool } from "../tools/write-note";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   resources: resourceHandlers,
   tools: {
@@ -415,7 +420,8 @@ import { writeNoteTool } from "../tools/write-note";
 import { promptHandlers } from "./prompts";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   resources: resourceHandlers,
   prompts: promptHandlers,

@@ -26,7 +26,7 @@ refer to our [getting started guide](/docs/getting-started/installation)
 - A domain name with an A record pointing to your instance
 - A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
 - SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
-- Node.js 18+ installed on your instance
+- Node.js 22.13.0 or later installed on your instance
 
 ## Deployment Steps
 
@@ -104,7 +104,7 @@ npm run build
 Run the application:
 
 ```bash copy
-node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+node --env-file=".env" .mastra/output/index.mjs
 ```
 
 :::note

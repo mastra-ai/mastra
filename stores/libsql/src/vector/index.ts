@@ -53,8 +53,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     syncInterval,
     maxRetries = 5,
     initialBackoffMs = 100,
-  }: LibSQLVectorConfig) {
-    super();
+    id,
+  }: LibSQLVectorConfig & { id: string }) {
+    super({ id });
 
     this.turso = createClient({
       url: connectionUrl,

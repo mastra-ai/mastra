@@ -254,6 +254,7 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ${getGeneratedComment()}
 
 import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+import PropertiesTable from "@site/src/components/PropertiesTable";
 
 ${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import Tabs from "@theme/Tabs";\nimport TabItem from "@theme/TabItem";' : ''}
 
@@ -862,7 +863,7 @@ const agent = new Agent({
   model: groq('gemma2-9b-it')
 })
 \`\`\`
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/scorers/overview).`;
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {

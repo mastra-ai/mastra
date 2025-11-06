@@ -10,9 +10,9 @@ import {
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod';
-import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
+import { SpanType, wrapMastra } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -172,7 +172,7 @@ export class CoreToolBuilder extends MastraBase {
 
       // Create tool span if we have a current span available
       const toolSpan = tracingContext?.currentSpan?.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
         attributes: {

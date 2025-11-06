@@ -12,12 +12,12 @@ import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType, ModelSpanTracker } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import { SpanType } from '../../observability';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ModelManagerModelConfig } from '../../stream/types';
@@ -179,9 +179,9 @@ export class MastraLLMVNext extends MastraBase {
       tools: Object.keys(tools || {}),
     });
 
-    const llmAISpan = tracingContext?.currentSpan?.createChildSpan({
+    const modelSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
@@ -200,7 +200,7 @@ export class MastraLLMVNext extends MastraBase {
     });
 
     // Create model span tracker that will be shared across all LLM execution steps
-    const modelSpanTracker = new ModelSpanTracker(llmAISpan);
+    const modelSpanTracker = modelSpan?.createTracker();
 
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {

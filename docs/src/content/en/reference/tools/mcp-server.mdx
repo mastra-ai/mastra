@@ -39,6 +39,7 @@ const weatherTool = createTool({
 });
 
 const server = new MCPServer({
+  id: "my-custom-server",
   name: "My Custom Server",
   version: "1.0.0",
   tools: { weatherTool },
@@ -55,6 +56,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: false,
+      description:
+        "Unique identifier for the server. This ID is preserved when the server is registered with Mastra and can be used to retrieve the server via getMCPServerById().",
+    },
     {
       name: "name",
       type: "string",
@@ -88,13 +96,6 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       isOptional: true,
       description:
         "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description:
-        "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
     },
     {
       name: "description",
@@ -201,7 +202,10 @@ Here's how you would start the server using stdio:
 
 ```typescript
 const server = new MCPServer({
-  // example configuration above
+  id: "my-server",
+  name: "My Server",
+  version: "1.0.0",
+  tools: { /* ... */ },
 });
 await server.startStdio();
 ```
@@ -408,7 +412,8 @@ import { MCPServer } from "@mastra/mcp";
 import { toReqRes, toFetchResponse } from "fetch-to-node";
 
 const server = new MCPServer({
-  name: "my-serverless-mcp",
+  id: "my-serverless-mcp",
+  name: "My Serverless MCP",
   version: "1.0.0",
   tools: { /* your tools */ },
 });
@@ -437,7 +442,8 @@ serve(async (req) => {
 });
 ```
 
-<Callout type="info">
+:::info
+
 **When to use `serverless: true`**
 
 Use `serverless: true` when deploying to environments where each request runs in a fresh, stateless execution context:
@@ -462,7 +468,8 @@ The serverless mode disables session management and creates fresh server instanc
 - **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
 
 These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
-</Callout>
+
+:::
 
 Here are the details for the values needed by the `startHTTP` method:
 
@@ -742,6 +749,7 @@ const myResourceHandlers: MCPServerResources = {
 };
 
 const serverWithResources = new MCPServer({
+  id: "resourceful-server",
   name: "Resourceful Server",
   version: "1.0.0",
   tools: {
@@ -874,6 +882,7 @@ const myPromptHandlers: MCPServerPrompts = {
 };
 
 const serverWithPrompts = new MCPServer({
+  id: "promptful-server",
   name: "Promptful Server",
   version: "1.0.0",
   tools: {
@@ -968,6 +977,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 const server = new MCPServer({
+  id: "interactive-server",
   name: "Interactive Server",
   version: "1.0.0",
   tools: {

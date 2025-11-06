@@ -1,0 +1,153 @@
+---
+title: "Client SDK | v1 Migration Guide"
+description: "Learn how to migrate client SDK changes when upgrading to v1."
+---
+
+# Client SDK
+
+Client SDK changes align with server-side API updates including renamed utilities, updated pagination, and type naming conventions.
+
+## Changed
+
+### Client SDK types from `Get*` to `List*`
+
+Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.
+
+To migrate, update type imports to use the new naming pattern.
+
+```diff
+- import type {
+-   GetWorkflowRunsParams,
+-   GetWorkflowRunsResponse,
+-   GetMemoryThreadParams,
+- } from '@mastra/client-js';
++ import type {
++   ListWorkflowRunsParams,
++   ListWorkflowRunsResponse,
++   ListMemoryThreadsParams,
++ } from '@mastra/client-js';
+```
+
+### Pagination parameters from `offset/limit` to `page/perPage`
+
+All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
+
+To migrate, update pagination parameters in all client SDK method calls. Example:
+
+```diff
+  client.memory.listMessages({
+    threadId: 'thread-123',
+-   offset: 0,
+-   limit: 20,
++   page: 0,
++   perPage: 20,
+  });
+```
+
+### `getMemoryThread` parameter structure
+
+The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
+
+To migrate, update the method call with the new parameter structure. Check the updated API documentation for the specific changes.
+
+```diff
+- const thread = await client.memory.getMemoryThread(threadId, agentId);
++ const thread = await client.memory.getMemoryThread({ threadId, agentId });
+```
+
+## Removed
+
+### `toAISdkFormat` function
+
+The `toAISdkFormat()` function has been removed from `@mastra/ai-sdk`. This change provides clearer naming for stream conversion utilities.
+
+To migrate, use `toAISdkStream()` instead.
+
+```diff
+- import { toAISdkFormat } from '@mastra/ai-sdk';
+- const stream = toAISdkFormat(agentStream, { from: 'agent' });
++ import { toAISdkStream } from '@mastra/ai-sdk';
++ const stream = toAISdkStream(agentStream, { from: 'agent' });
+```
+
+### Network memory methods
+
+Network memory methods have been removed from `@mastra/client-js`. The `NetworkMemoryThread` class and all network memory-related methods are no longer available. This change simplifies the memory API by removing specialized network memory functionality.
+
+To migrate, use regular memory APIs instead of network memory.
+
+```diff
+- import { MastraClient } from '@mastra/client-js';
+- 
+- const client = new MastraClient({ baseUrl: '...' });
+- const networkThread = client.networkMemory.getThread('thread-id');
+- const networkThread = client.memory.networkThread('thread-id', 'network-id');
+- await networkThread.get();
+- await networkThread.getMessages();
+
++ // Use regular memory thread APIs instead
++ const client = new MastraClient({ baseUrl: '...' });
++ const thread = client.memory.getThread('thread-id');
++ await thread.get();
++ const messages = await thread.listMessages();
+```
+
+### Watch-related types
+
+Watch-related types have been removed from `@mastra/client-js`. This includes `WorkflowWatchResult`, `WatchEvent`, and related types. This change reflects the removal of the watch API in favor of streaming.
+
+To migrate, use workflow streaming APIs instead of watch.
+
+```diff
+- import type { WorkflowWatchResult, WatchEvent } from '@mastra/client-js';
+- 
+- const workflow = client.getWorkflow('my-workflow');
+- const run = await workflow.createRun();
+- await run.watch((event: WatchEvent) => {
+-   console.log('Event:', event);
+- });
+
++ const workflow = client.getWorkflow('my-workflow');
++ const run = await workflow.createRun();
++ const stream = await run.stream({ inputData: { ... } });
++ for await (const chunk of stream) {
++   console.log('Event:', chunk);
++ }
+```
+
+### Deprecated stream endpoints
+
+Some stream endpoints are deprecated and will be removed. The `/api/agents/:agentId/stream/vnext` endpoint returns 410 Gone, and `/api/agents/:agentId/stream/ui` is deprecated. This change consolidates on standard streaming endpoints.
+
+To migrate, use the standard stream endpoint or `@mastra/ai-sdk` for UI message transformations.
+
+```diff
+- const response = await fetch('/api/agents/my-agent/stream/vnext', {
+-   method: 'POST',
+-   body: JSON.stringify({ messages: [...] }),
+- });
+
++ const response = await fetch('/api/agents/my-agent/stream', {
++   method: 'POST',
++   body: JSON.stringify({ messages: [...] }),
++ });
++ 
++ // Or use @mastra/ai-sdk for UI message transformations
+```
+
+### Network memory API endpoints
+
+Network memory API endpoints have been removed including `/api/memory/network/*`. This change simplifies the memory API surface.
+
+To migrate, use regular memory API endpoints.
+
+```diff
+- const networkThread = await fetch('/api/memory/network/threads/thread-123');
++ const thread = await fetch('/api/memory/threads/thread-123');
+```
+
+### Eval-related client SDK types
+
+Several eval-related types have been removed from the client SDK including `GetEvalsByAgentIdResponse`, `GetTelemetryResponse`, and `GetTelemetryParams`. This change reflects the removal of legacy evals functionality.
+
+To migrate, use the new scorers API instead of legacy evals.

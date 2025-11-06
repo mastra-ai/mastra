@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, rm, readFile } from 'fs/promises';
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -48,6 +48,14 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-test-${pkgManager}-`));
       process.env.npm_config_registry = registry;
       await setupMonorepo(fixturePath, pkgManager);
+
+      // fix temporary 0.x patch for copilotkit
+      const corePath = join(fixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+      await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+      await writeFile(
+        join(corePath, 'runtime-context', 'index.js'),
+        `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+      );
     },
     10 * 60 * 1000,
   );
@@ -111,7 +119,12 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
-          reject(new Error('failed to start dev: ' + data?.toString()));
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            // Ignore punycode warning
+            return;
+          }
+          reject(new Error('failed to start dev: ' + errMsg));
         });
         proc!.stdout?.on('data', data => {
           process.stdout.write(data?.toString());
@@ -161,7 +174,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
-          reject(new Error('failed to start: ' + data?.toString()));
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            // Ignore punycode warning
+            return;
+          }
+
+          reject(new Error('failed to start: ' + errMsg));
         });
         proc!.stdout?.on('data', data => {
           console.log(data?.toString());

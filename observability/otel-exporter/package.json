@@ -36,7 +36,8 @@
     "@opentelemetry/resources": "^2.1.0",
     "@opentelemetry/sdk-trace-base": "^2.1.0",
     "@opentelemetry/sdk-trace-node": "^2.1.0",
-    "@opentelemetry/semantic-conventions": "^1.37.0"
+    "@opentelemetry/semantic-conventions": "^1.37.0",
+    "@mastra/observability": "workspace:*"
   },
   "optionalDependencies": {
     "@grpc/grpc-js": "^1.14.0",
@@ -89,5 +90,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -5,15 +5,12 @@ import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastr
 import {
   MemoryStorage,
   normalizePerPage,
-  preservePerPageForResponse,
-  resolveMessageLimit,
+  calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
-  StorageGetMessagesArg,
-  PaginationInfo,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -110,7 +107,7 @@ export class MemoryMSSQL extends MemoryStorage {
   ): Promise<StorageListThreadsByResourceIdOutput> {
     const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
     const perPage = normalizePerPage(perPageInput, 100);
-    const offset = page * perPage;
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
     try {
       const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
@@ -126,18 +123,24 @@ export class MemoryMSSQL extends MemoryStorage {
           threads: [],
           total: 0,
           page,
-          perPage: preservePerPageForResponse(perPageInput, perPage),
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
 
       const orderByField = field === 'createdAt' ? '[createdAt]' : '[updatedAt]';
       const dir = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
       dataRequest.input('resourceId', resourceId);
-      dataRequest.input('perPage', perPage);
       dataRequest.input('offset', offset);
+
+      if (limitValue > 2147483647) {
+        dataRequest.input('perPage', sql.BigInt, limitValue);
+      } else {
+        dataRequest.input('perPage', limitValue);
+      }
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const threads = rows.map(thread => ({
@@ -151,8 +154,8 @@ export class MemoryMSSQL extends MemoryStorage {
         threads,
         total,
         page,
-        perPage: preservePerPageForResponse(perPageInput, perPage),
-        hasMore: offset + perPage < total,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
       const mastraError = new MastraError(
@@ -173,7 +176,7 @@ export class MemoryMSSQL extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
@@ -339,14 +342,13 @@ export class MemoryMSSQL extends MemoryStorage {
 
   private async _getIncludedMessages({
     threadId,
-    selectBy,
+    include,
   }: {
     threadId: string;
-    selectBy: StorageGetMessagesArg['selectBy'];
+    include: StorageListMessagesInput['include'];
   }) {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const include = selectBy?.include;
     if (!include) return null;
 
     const unionQueries: string[] = [];
@@ -429,81 +431,6 @@ export class MemoryMSSQL extends MemoryStorage {
     return dedupedRows;
   }
 
-  /**
-   * @deprecated use getMessagesPaginated instead
-   */
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-
-    const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
-    const orderByStatement = `ORDER BY [seq_id] DESC`;
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      let rows: any[] = [];
-      const include = selectBy?.include || [];
-      if (include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          rows.push(...includeMessages);
-        }
-      }
-      const excludeIds = rows.map(m => m.id).filter(Boolean);
-
-      let query = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE [thread_id] = @threadId`;
-      const request = this.pool.request();
-      request.input('threadId', threadId);
-
-      if (excludeIds.length > 0) {
-        const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
-        query += ` AND id NOT IN (${excludeParams.join(', ')})`;
-        excludeIds.forEach((id, idx) => {
-          request.input(`id${idx}`, id);
-        });
-      }
-
-      query += ` ${orderByStatement} OFFSET 0 ROWS FETCH NEXT @limit ROWS ONLY`;
-      request.input('limit', limit);
-      const result = await request.query(query);
-      const remainingRows = result.recordset || [];
-      rows.push(...remainingRows);
-      rows.sort((a, b) => {
-        const timeDiff = a.seq_id - b.seq_id;
-        return timeDiff;
-      });
-      const messagesWithParsedContent = rows.map(row => {
-        if (typeof row.content === 'string') {
-          try {
-            return { ...row, content: JSON.parse(row.content) };
-          } catch {
-            return row;
-          }
-        }
-        return row;
-      });
-      const cleanMessages = messagesWithParsedContent.map(({ seq_id, ...rest }) => rest);
-      const list = new MessageList().add(cleanMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-      return { messages: list.get.all.db() };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException?.(mastraError);
-      return { messages: [] };
-    }
-  }
-
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
@@ -570,13 +497,11 @@ export class MemoryMSSQL extends MemoryStorage {
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
-    const responsePerPage = preservePerPageForResponse(perPageInput, perPage);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const offset = page * perPage;
-
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const orderByStatement = `ORDER BY [${field}] ${direction}`;
 
       const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
@@ -610,25 +535,27 @@ export class MemoryMSSQL extends MemoryStorage {
       const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
       request.input('offset', offset);
 
-      if (perPage > 2147483647) {
-        request.input('limit', sql.BigInt, perPage);
+      if (limitValue > 2147483647) {
+        request.input('limit', sql.BigInt, limitValue);
       } else {
-        request.input('limit', perPage);
+        request.input('limit', limitValue);
       }
 
       const rowsResult = await request.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const messages: any[] = [...rows];
 
-      if (total === 0 && messages.length === 0) {
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total: 0,
           page,
-          perPage,
+          perPage: perPageForResponse,
           hasMore: false,
         };
       }
@@ -636,8 +563,7 @@ export class MemoryMSSQL extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const selectBy = { include };
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        const includeMessages = await this._getIncludedMessages({ threadId, include });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {
@@ -665,13 +591,13 @@ export class MemoryMSSQL extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput === false ? false : allThreadMessagesReturned ? false : offset + rows.length < total;
+      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
         total,
         page,
-        perPage: responsePerPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
@@ -693,134 +619,9 @@ export class MemoryMSSQL extends MemoryStorage {
         messages: [],
         total: 0,
         page,
-        perPage: responsePerPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
-    }
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    const { threadId, resourceId, selectBy } = args;
-    const { page = 0, perPage: perPageInput, dateRange } = selectBy?.pagination || {};
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const fromDate = dateRange?.start;
-      const toDate = dateRange?.end;
-
-      const selectStatement = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId`;
-      const orderByStatement = `ORDER BY [seq_id] DESC`;
-
-      let messages: any[] = [];
-
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) messages.push(...includeMessages);
-      }
-
-      const perPage =
-        perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-      const currentOffset = page * perPage;
-
-      const conditions: string[] = ['[thread_id] = @threadId'];
-      const request = this.pool.request();
-      request.input('threadId', threadId);
-
-      if (fromDate instanceof Date && !isNaN(fromDate.getTime())) {
-        conditions.push('[createdAt] >= @fromDate');
-        request.input('fromDate', fromDate.toISOString());
-      }
-      if (toDate instanceof Date && !isNaN(toDate.getTime())) {
-        conditions.push('[createdAt] <= @toDate');
-        request.input('toDate', toDate.toISOString());
-      }
-
-      const whereClause = `WHERE ${conditions.join(' AND ')}`;
-      const countQuery = `SELECT COUNT(*) as total FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} ${whereClause}`;
-      const countResult = await request.query(countQuery);
-      const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
-
-      if (total === 0 && messages.length > 0) {
-        const messagesWithParsedContent = messages.map(msg => {
-          if (typeof msg.content === 'string') {
-            try {
-              return { ...msg, content: JSON.parse(msg.content) };
-            } catch {
-              return msg;
-            }
-          }
-          return msg;
-        });
-        const cleanMessages = messagesWithParsedContent.map(({ seq_id, ...rest }) => rest);
-        const list = new MessageList().add(cleanMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-        const parsedIncluded = list.get.all.db();
-        return {
-          messages: parsedIncluded,
-          total: parsedIncluded.length,
-          page,
-          perPage,
-          hasMore: false,
-        };
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      if (excludeIds.length > 0) {
-        const excludeParams = excludeIds.map((_, idx) => `@id${idx}`);
-        conditions.push(`id NOT IN (${excludeParams.join(', ')})`);
-        excludeIds.forEach((id, idx) => request.input(`id${idx}`, id));
-      }
-
-      const finalWhereClause = `WHERE ${conditions.join(' AND ')}`;
-      const dataQuery = `${selectStatement} FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} ${finalWhereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-
-      request.input('offset', currentOffset);
-      request.input('limit', perPage);
-
-      const rowsResult = await request.query(dataQuery);
-      const rows = rowsResult.recordset || [];
-      rows.sort((a, b) => a.seq_id - b.seq_id);
-      messages.push(...rows);
-
-      const messagesWithParsedContent = messages.map(msg => {
-        if (typeof msg.content === 'string') {
-          try {
-            return { ...msg, content: JSON.parse(msg.content) };
-          } catch {
-            return msg;
-          }
-        }
-        return msg;
-      });
-      const cleanMessages = messagesWithParsedContent.map(({ seq_id, ...rest }) => rest);
-      const list = new MessageList().add(cleanMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-      const parsed = list.get.all.db();
-      return {
-        messages: parsed,
-        total,
-        page,
-        perPage,
-        hasMore: currentOffset + rows.length < total,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-            page,
-          },
-        },
-        error,
-      );
-      this.logger?.error?.(mastraError.toString());
-      this.logger?.trackException?.(mastraError);
-      return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
   }
 

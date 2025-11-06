@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createToneScorer } from './index';
 
 describe('ToneConsistencyMetric', () => {
@@ -11,7 +11,7 @@ describe('ToneConsistencyMetric', () => {
       });
 
       const output = [
-        createUIMessage({ content: 'I love this amazing product!', role: 'assistant', id: 'test-output' }),
+        createTestMessage({ content: 'I love this amazing product!', role: 'assistant', id: 'test-output' }),
       ];
 
       const result = await scorer.run(createAgentTestRun({ output }));
@@ -29,7 +29,7 @@ describe('ToneConsistencyMetric', () => {
       });
 
       const output = [
-        createUIMessage({ content: 'This is terrible and disappointing.', role: 'assistant', id: 'test-output' }),
+        createTestMessage({ content: 'This is terrible and disappointing.', role: 'assistant', id: 'test-output' }),
       ];
 
       const result = await scorer.run(createAgentTestRun({ output }));
@@ -46,7 +46,7 @@ describe('ToneConsistencyMetric', () => {
       });
 
       const output = [
-        createUIMessage({ content: 'The sky is blue. The grass is green.', role: 'assistant', id: 'test-output' }),
+        createTestMessage({ content: 'The sky is blue. The grass is green.', role: 'assistant', id: 'test-output' }),
       ];
 
       const result = await scorer.run(createAgentTestRun({ output }));
@@ -63,7 +63,7 @@ describe('ToneConsistencyMetric', () => {
       });
 
       const output = [
-        createUIMessage({
+        createTestMessage({
           content: 'The product has great features but some annoying bugs.',
           role: 'assistant',
           id: 'test-output',
@@ -81,7 +81,7 @@ describe('ToneConsistencyMetric', () => {
     it('should handle consistent positive tone', async () => {
       const scorer = createToneScorer();
       const output = [
-        createUIMessage({
+        createTestMessage({
           content: 'I love this product! It works amazingly well. The features are fantastic.',
           role: 'assistant',
           id: 'test-output',
@@ -98,7 +98,7 @@ describe('ToneConsistencyMetric', () => {
     it('should handle consistent negative tone', async () => {
       const scorer = createToneScorer();
       const output = [
-        createUIMessage({
+        createTestMessage({
           content: 'This is terrible. It never works properly. The support is awful.',
           role: 'assistant',
           id: 'test-output',
@@ -115,7 +115,7 @@ describe('ToneConsistencyMetric', () => {
     it('should detect inconsistent tone', async () => {
       const scorer = createToneScorer();
       const output = [
-        createUIMessage({
+        createTestMessage({
           content: 'This is amazing! But it has terrible flaws. Yet somehow I love it. Though it frustrates me.',
           role: 'assistant',
           id: 'test-output',
@@ -131,7 +131,7 @@ describe('ToneConsistencyMetric', () => {
 
     it('should handle single sentence', async () => {
       const scorer = createToneScorer();
-      const output = [createUIMessage({ content: 'This is a great product.', role: 'assistant', id: 'test-output' })];
+      const output = [createTestMessage({ content: 'This is a great product.', role: 'assistant', id: 'test-output' })];
 
       const result = await scorer.run(createAgentTestRun({ output }));
       const metrics = result.preprocessStepResult;
@@ -141,7 +141,7 @@ describe('ToneConsistencyMetric', () => {
 
     it('should handle empty input', async () => {
       const scorer = createToneScorer();
-      const output = [createUIMessage({ content: '', role: 'assistant', id: 'test-output' })];
+      const output = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
 
       const result = await scorer.run(createAgentTestRun({ output }));
       const metrics = result.preprocessStepResult;
@@ -153,7 +153,7 @@ describe('ToneConsistencyMetric', () => {
     it('should handle neutral consistent tone', async () => {
       const scorer = createToneScorer();
       const output = [
-        createUIMessage({
+        createTestMessage({
           content: 'The sky is blue. The grass is green. The tree is tall.',
           role: 'assistant',
           id: 'test-output',

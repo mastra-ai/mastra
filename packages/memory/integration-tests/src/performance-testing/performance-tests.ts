@@ -133,10 +133,10 @@ export function getPerformanceTests(memory: Memory) {
 
         for (const thread of threads) {
           const start = performance.now();
-          await memory.rememberMessages({
+          await memory.recall({
             threadId: thread.id,
-            vectorMessageSearch: searchQuery,
-            config: {
+            vectorSearchString: searchQuery,
+            threadConfig: {
               semanticRecall: {
                 topK: 50,
                 messageRange: { before: 5, after: 5 },

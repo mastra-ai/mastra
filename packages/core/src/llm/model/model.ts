@@ -21,10 +21,10 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
+import { SpanType } from '../../observability';
 import { delay, isZodType } from '../../utils';
 
 import type {
@@ -165,7 +165,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
         schema,
@@ -310,7 +310,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
       },
@@ -462,7 +462,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
       },
@@ -646,7 +646,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
       },

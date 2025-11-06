@@ -4,8 +4,8 @@ import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
 import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
-import type { TracingContext } from '../../ai-tracing/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -269,7 +269,9 @@ export async function createNetworkLoop({
 
       let completionResult;
 
-      let iterationCount = (inputData.iteration ? inputData.iteration : -1) + 1;
+      // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
+      // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
+      const iterationCount = (inputData.iteration ?? -1) + 1;
 
       await writer.write({
         type: 'routing-agent-start',
@@ -580,8 +582,6 @@ export async function createNetworkLoop({
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
-        // resourceId: inputData.resourceId,
-        // threadId: inputData.threadId,
         requestContext: requestContext,
         runId,
       });
@@ -902,11 +902,14 @@ export async function createNetworkLoop({
       });
 
       const finalResult = await tool.execute(
+        inputDataToUse,
         {
           requestContext,
           mastra: agent.getMastraInstance(),
-          resourceId: initData.threadResourceId || networkName,
-          threadId: initData.threadId,
+          agent: {
+            resourceId: initData.threadResourceId || networkName,
+            threadId: initData.threadId,
+          },
           runId,
           memory,
           context: inputDataToUse,
@@ -1230,7 +1233,8 @@ export async function networkLoop<
           task,
           primitiveId: '',
           primitiveType: 'none',
-          iteration: 0,
+          // Start at -1 so first iteration increments to 0 (not 1)
+          iteration: -1,
           threadResourceId: thread?.resourceId,
           threadId: thread?.id,
           isOneOff: false,

@@ -5,11 +5,11 @@ import { augmentWithInit } from './storageWithInit';
 it('should augment the storage with init', async () => {
   const mockStorage = {
     init: vi.fn().mockResolvedValue(true),
-    getMessages: vi.fn().mockResolvedValue([]),
+    listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false }),
   } as unknown as MastraStorage;
 
   const augmentedStorage = augmentWithInit(mockStorage);
-  await augmentedStorage.getMessages({ threadId: '1' });
+  await augmentedStorage.listMessages({ threadId: '1' });
 
   expect(mockStorage.init).toHaveBeenCalled();
 });
@@ -17,7 +17,7 @@ it('should augment the storage with init', async () => {
 it("shouln't double augment the storage", async () => {
   const mockStorage = {
     init: vi.fn().mockResolvedValue(true),
-    getMessages: vi.fn().mockResolvedValue([]),
+    listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0, hasMore: false }),
   } as unknown as MastraStorage;
 
   const augmentedStorage = augmentWithInit(mockStorage);

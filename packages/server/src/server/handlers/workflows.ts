@@ -1,6 +1,6 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import type { TracingOptions } from '@mastra/core/ai-tracing';
 import type { RequestContext } from '@mastra/core/di';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, WorkflowInfo, ChunkType, StreamEvent, WorkflowState } from '@mastra/core/workflows';
 import { HTTPException } from '../http-exception';
@@ -40,7 +40,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
 
   if (!workflow) {
     try {
-      workflow = mastra.getWorkflow(workflowId);
+      workflow = mastra.getWorkflowById(workflowId);
     } catch (error) {
       logger.debug('Error getting workflow, searching agents for workflow', error);
     }
@@ -688,7 +688,7 @@ export async function listWorkflowRunsHandler({
 }: WorkflowContext & {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number;
+  perPage?: number | false;
   page?: number;
   resourceId?: string;
 }): Promise<WorkflowRuns> {
@@ -698,8 +698,8 @@ export async function listWorkflowRunsHandler({
     }
 
     // Validate pagination parameters
-    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
-      throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+    if (perPage !== undefined && perPage !== false && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new HTTPException(400, { message: 'perPage must be a positive integer or false' });
     }
     if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
       throw new HTTPException(400, { message: 'page must be a non-negative integer' });
@@ -754,46 +754,5 @@ export async function cancelWorkflowRunHandler({
     return { message: 'Workflow run cancelled' };
   } catch (error) {
     return handleError(error, 'Error canceling workflow run');
-  }
-}
-
-export async function sendWorkflowRunEventHandler({
-  mastra,
-  workflowId,
-  runId,
-  event,
-  data,
-}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
-  event: string;
-  data: unknown;
-}) {
-  try {
-    if (!workflowId) {
-      throw new HTTPException(400, { message: 'Workflow ID is required' });
-    }
-
-    if (!runId) {
-      throw new HTTPException(400, { message: 'runId required to send workflow run event' });
-    }
-
-    const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-
-    if (!workflow) {
-      throw new HTTPException(404, { message: 'Workflow not found' });
-    }
-
-    const run = await workflow.getWorkflowRunById(runId);
-
-    if (!run) {
-      throw new HTTPException(404, { message: 'Workflow run not found' });
-    }
-
-    const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-
-    await _run.sendEvent(event, data);
-
-    return { message: 'Workflow run event sent' };
-  } catch (error) {
-    return handleError(error, 'Error sending workflow run event');
   }
 }
