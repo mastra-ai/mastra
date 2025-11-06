@@ -82,7 +82,9 @@ export async function downloadAssetsFromMessages({
           mediaType: part.mediaType,
           supportedUrls: supportedUrls ?? {},
         }),
-    }));
+    }))
+    // Only download URLs that are NOT supported by the provider
+    .filter(fileItem => !fileItem.isUrlSupportedByModel);
 
   const downloadedFiles = await pMap(
     filesToDownload,
