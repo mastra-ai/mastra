@@ -197,9 +197,10 @@ describe('CloudDeployer Integration Tests', () => {
       expect(capturedEntry).toContain('import { createNodeServer');
       expect(capturedEntry).toContain('import { LibSQLStore, LibSQLVector }');
 
-      // Verify tools path was included
+      // Verify tools path was included - now it's an array of glob patterns
       expect(capturedToolsPaths).toHaveLength(1);
-      expect(capturedToolsPaths[0]).toContain('src/mastra/tools');
+      expect(Array.isArray(capturedToolsPaths[0])).toBe(true);
+      expect(capturedToolsPaths[0][0]).toContain('tools');
     });
   });
 });

@@ -1865,7 +1865,14 @@ export class Mastra<
    * ```
    */
   public addMCPServer<M extends MCPServerBase>(server: M, key?: string): void {
-    const resolvedId = server.id ?? key;
+    // If a key is provided, try to set it as the ID
+    // The setId method will only update if the ID wasn't explicitly set by the user
+    if (key) {
+      server.setId(key);
+    }
+
+    // Now resolve the ID after potentially setting it
+    const resolvedId = server.id;
     if (!resolvedId) {
       const error = new MastraError({
         id: 'MASTRA_ADD_MCP_SERVER_MISSING_ID',
@@ -1887,9 +1894,6 @@ export class Mastra<
     }
 
     // Initialize the server
-    if (!server.id) {
-      server.setId(resolvedId);
-    }
     server.__registerMastra(this);
     server.__setLogger(this.getLogger());
     servers[serverKey] = server;
