@@ -41,6 +41,16 @@ To migrate, replace all calls to `mcp.getTools()` with `mcp.listTools()`.
 + const tools = await mcp.listTools();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mcp-get-tools .
+```
+
+:::
+
 ### `getToolsets` to `listToolsets`
 
 The `mcp.getToolsets()` method has been renamed to `mcp.listToolsets()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
