@@ -1,13 +1,11 @@
 ---
-title: "Cloudflare Deployer"
+title: "CloudflareDeployer | Deployment | Mastra Docs"
 description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
 ---
 
-import { FileTree } from "nextra/components";
-
 # CloudflareDeployer
 
-The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/deployer) class with Cloudflare specific functionality.
+The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/deployer/) class with Cloudflare specific functionality.
 
 ## Installation
 
@@ -17,8 +15,8 @@ npm install @mastra/deployer-cloudflare@latest
 
 ## Usage example
 
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
@@ -56,15 +54,13 @@ npm run build && wrangler deploy --config .mastra/output/wrangler.json
 
 The build output for Mastra applications using the `CloudflareDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Cloudflare.
 
-<FileTree>
-  <FileTree.Folder name=".mastra" defaultOpen>
-    <FileTree.Folder name="output" defaultOpen>
-      <FileTree.File name="index.mjs" />
-      <FileTree.File name="wrangler.json" />
-      </FileTree.Folder>
-  </FileTree.Folder>
-  <FileTree.File name="package.json" />
-</FileTree>
+```
+.mastra/
+└── output/
+    ├── index.mjs
+    └── wrangler.json
+package.json
+```
 
 The `CloudflareDeployer` automatically generates a `wrangler.json` configuration file in `.mastra/output` with the following settings:
 
@@ -73,15 +69,18 @@ The `CloudflareDeployer` automatically generates a `wrangler.json` configuration
   "name": "hello-mastra",
   "main": "./index.mjs",
   "compatibility_date": "2025-04-01",
-  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
   "observability": { "logs": { "enabled": true } },
   "vars": {
     "OPENAI_API_KEY": "...",
     "CLOUDFLARE_API_TOKEN": "..."
   }
 }
-
 ```
+
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/reference/client-js/mastra-client)

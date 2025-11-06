@@ -1,11 +1,9 @@
 ---
-title: "Templates Reference"
+title: "Reference: LLM provider API keys (choose one or more) | Templates | Mastra Docs"
 description: "Complete guide to creating, using, and contributing Mastra templates"
 ---
 
-import { FileTree, Tabs, Callout } from 'nextra/components'
-
-## Overview
+# Overview
 
 This reference provides comprehensive information about Mastra templates, including how to use existing templates, create your own, and contribute to the community ecosystem.
 
@@ -62,29 +60,6 @@ After installation:
 
 All templates follow this standardized structure:
 
-<FileTree>
-  <FileTree.Folder name="template-name" defaultOpen>
-    <FileTree.Folder name="src" defaultOpen>
-      <FileTree.Folder name="mastra" defaultOpen>
-        <FileTree.Folder name="agents">
-          <FileTree.File name="example-agent.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="tools">
-          <FileTree.File name="example-tool.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="workflows">
-          <FileTree.File name="example-workflow.ts" />
-        </FileTree.Folder>
-        <FileTree.File name="index.ts" />
-      </FileTree.Folder>
-    </FileTree.Folder>
-    <FileTree.File name=".env.example" />
-    <FileTree.File name="package.json" />
-    <FileTree.File name="README.md" />
-    <FileTree.File name="tsconfig.json" />
-  </FileTree.Folder>
-</FileTree>
-
 ## Creating Templates
 
 ### Requirements
@@ -104,7 +79,7 @@ Templates must meet these technical requirements:
 
 Use the standard Mastra TypeScript configuration:
 
-```json filename="tsconfig.json"
+```json title="tsconfig.json"
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -125,7 +100,7 @@ Use the standard Mastra TypeScript configuration:
 
 Include a `.env.example` file with all required environment variables:
 
-```bash filename=".env.example"
+```bash title=".env.example"
 # LLM provider API keys (choose one or more)
 OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
@@ -141,16 +116,16 @@ OTHER_SERVICE_API_KEY=your_api_key_here
 
 We recommend using OpenAI, Anthropic, or Google model providers for templates. Choose the provider that best fits your use case:
 
-```typescript filename="src/mastra/agents/example-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+```typescript title="src/mastra/agents/example-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 // Or use: import { anthropic } from '@ai-sdk/anthropic';
 // Or use: import { google } from '@ai-sdk/google';
 
 const agent = new Agent({
-  name: 'example-agent',
-  model: openai('gpt-4'), // or anthropic('') or google('')
-  instructions: 'Your agent instructions here',
+  name: "example-agent",
+  model: openai("gpt-4"), // or anthropic('') or google('')
+  instructions: "Your agent instructions here",
   // ... other configuration
 });
 ```
@@ -163,7 +138,7 @@ Templates must be:
 - **Framework-free** - No Next.js, Express, or other web framework boilerplate
 - **Mastra-focused** - Demonstrate Mastra functionality without additional layers
 - **Mergeable** - Structure code for easy integration into existing projects
-- **Node.js compatible** - Support Node.js 18 and higher
+- **Node.js compatible** - Support Node.js v22.13.0 and later
 - **ESM modules** - Use ES modules (`"type": "module"` in package.json)
 
 ### Documentation Requirements
@@ -172,7 +147,7 @@ Templates must be:
 
 Every template must include a comprehensive README:
 
-```markdown filename="README.md"
+```markdown title="README.md"
 # Template Name
 
 Brief description of what the template demonstrates.
@@ -223,6 +198,8 @@ Templates must demonstrate:
 
 For information on contributing your own templates to the Mastra ecosystem, see the [Contributing Templates](/docs/community/contributing-templates) guide in the community section.
 
-<Callout type="info">
-  Templates provide an excellent way to learn Mastra patterns and accelerate development. Contributing templates helps the entire community build better AI applications.
-</Callout>
+:::info
+
+Templates provide an excellent way to learn Mastra patterns and accelerate development. Contributing templates helps the entire community build better AI applications.
+
+:::

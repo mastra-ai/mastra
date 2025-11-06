@@ -34,7 +34,8 @@ export interface BatchPartsOptions {
  * Only implements processOutputStream - does not process final results.
  */
 export class BatchPartsProcessor implements Processor {
-  public readonly name = 'batch-parts';
+  public readonly id = 'batch-parts';
+  public readonly name = 'Batch Parts';
 
   constructor(private options: BatchPartsOptions = {}) {
     this.options = {

@@ -1,5 +1,5 @@
 import type { MastraStorage } from '@mastra/core/storage';
-import { TABLE_THREADS, TABLE_MESSAGES, TABLE_TRACES, TABLE_EVALS } from '@mastra/core/storage';
+import { TABLE_THREADS, TABLE_MESSAGES, TABLE_TRACES } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 export function createIndexManagementTests({ storage }: { storage: MastraStorage }) {
@@ -112,7 +112,6 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
             { name: `${testIndexPrefix}_threads`, table: TABLE_THREADS, columns: ['resourceId'] },
             { name: `${testIndexPrefix}_messages`, table: TABLE_MESSAGES, columns: ['thread_id'] },
             { name: `${testIndexPrefix}_traces`, table: TABLE_TRACES, columns: ['name'] },
-            { name: `${testIndexPrefix}_evals`, table: TABLE_EVALS, columns: ['agent_name'] },
           ];
 
           for (const indexDef of testIndexes) {
@@ -318,8 +317,10 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
 
           // Perform a query that should use the index
-          await storage.getThreadsByResourceId({
+          await storage.listThreadsByResourceId({
             resourceId: testThread.resourceId,
+            page: 0,
+            perPage: 10,
           });
 
           // Get updated statistics
@@ -385,7 +386,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should list indexes for all mastra tables', async () => {
-          const tables = ['mastra_threads', 'mastra_messages', 'mastra_traces', 'mastra_evals'];
+          const tables = ['mastra_threads', 'mastra_messages', 'mastra_traces'];
 
           for (const table of tables) {
             const indexes = await storage.listIndexes(table);
@@ -483,10 +484,11 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
           // Measure query performance
           const startTime = Date.now();
-          await storage.getThreadsByResourceId({
+          await storage.listThreadsByResourceId({
             resourceId: `perf-resource-5`,
-            orderBy: 'createdAt',
-            sortDirection: 'DESC',
+            page: 0,
+            perPage: 10,
+            orderBy: { field: 'createdAt', direction: 'DESC' },
           });
           const queryTime = Date.now() - startTime;
 

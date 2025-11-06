@@ -1,25 +1,25 @@
 ---
-title: "Reference: Run.resumeStreamVNext() | Workflows | Mastra Docs"
+title: "Reference: Run.resumeStreamVNext() (Experimental) | Streaming | Mastra Docs"
 description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
-import { StreamVNextCallout } from "@/components/streamVNext-callout.tsx"
-
 # Run.resumeStreamVNext() (Experimental)
 
-<StreamVNextCallout />
+:::caution Experimental Feature
+This is an experimental API that may change in future versions. The `resumeStreamVNext()` method is part of the enhanced streaming system that will eventually replace the current streaming methods. Use with caution in production environments.
+:::
 
 The `.resumeStreamVNext()` method resumes a suspended workflow run with new data, allowing you to continue execution from a specific step and to observe the stream of events.
 
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
-    value: "initial data"
-  }
+    value: "initial data",
+  },
 });
 
 const result = await stream.result;
@@ -27,8 +27,8 @@ const result = await stream.result;
 if (result!.status === "suspended") {
   const resumedStream = await run.resumeStreamVNext({
     resumeData: {
-      value: "resume data"
-    }
+      value: "resume data",
+    },
   });
 }
 ```
@@ -44,9 +44,9 @@ if (result!.status === "suspended") {
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -59,17 +59,20 @@ if (result!.status === "suspended") {
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for Tracing configuration.",
       properties: [
         {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -81,7 +84,8 @@ if (result!.status === "suspended") {
     {
       name: "stream",
       type: "MastraWorkflowStream<ChunkType>",
-      description: "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
+      description:
+        "A custom stream that extends ReadableStream<ChunkType> with additional workflow-specific properties",
     },
     {
       name: "stream.status",
@@ -113,6 +117,6 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](../../../docs/workflows/overview.mdx#run-workflow)
-- [Workflow.createRunAsync()](../../../reference/workflows/workflow-methods/create-run.mdx)
-- [Run.streamVNext()](./streamVNext.mdx)
+- [Workflows overview](/docs/workflows/overview#running-workflows)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
+- [Run.streamVNext()](./streamVNext)

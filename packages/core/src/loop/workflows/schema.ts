@@ -1,4 +1,3 @@
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
 import type { ReasoningPart } from '@ai-sdk/provider-utils-v5';
 import type {
   LanguageModelV2FinishReason,
@@ -6,7 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata } from 'ai';
+import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4/model';
 import type {
   StepResult,
   ModelMessage,

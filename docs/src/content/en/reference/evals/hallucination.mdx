@@ -1,158 +1,105 @@
 ---
-title: "Reference: Hallucination | Metrics | Evals | Mastra Docs"
-description: Documentation for the Hallucination Metric in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
+title: "Reference: Hallucination Scorer | Evals | Mastra Docs"
+description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
+# Hallucination Scorer
 
-# HallucinationMetric
+The `createHallucinationScorer()` function evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This scorer measures hallucination by identifying direct contradictions between the context and the output.
 
-<ScorerCallout />
+## Parameters
 
-The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
-
-## Basic Usage
-
-```typescript
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
-
-// Configure the model for evaluation
-const model = openai("gpt-4o-mini");
-
-const metric = new HallucinationMetric(model, {
-  context: [
-    "Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California.",
-  ],
-});
-
-const result = await metric.measure(
-  "Tell me about Tesla's founding.",
-  "Tesla was founded in 2004 by Elon Musk in California.",
-);
-
-console.log(result.score); // Score from 0-1
-console.log(result.info.reason); // Explanation of the score
-
-// Example output:
-// {
-//   score: 0.67,
-//   info: {
-//     reason: "The score is 0.67 because two out of three statements from the context
-//           (founding year and founders) were contradicted by the output, while the
-//           location statement was not contradicted."
-//   }
-// }
-```
-
-## Constructor Parameters
+The `createHallucinationScorer()` function accepts a single options object with the following properties:
 
 <PropertiesTable
   content={[
     {
       name: "model",
       type: "LanguageModel",
-      description: "Configuration for the model used to evaluate hallucination",
-      isOptional: false,
+      required: true,
+      description:
+        "Configuration for the model used to evaluate hallucination.",
     },
-    {
-      name: "options",
-      type: "HallucinationMetricOptions",
-      description: "Configuration options for the metric",
-      isOptional: false,
-    },
-  ]}
-/>
-
-### HallucinationMetricOptions
-
-<PropertiesTable
-  content={[
     {
       name: "scale",
       type: "number",
-      description: "Maximum score value",
-      isOptional: true,
+      required: false,
       defaultValue: "1",
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of context pieces used as the source of truth",
-      isOptional: false,
+      description: "Maximum score value.",
     },
   ]}
 />
 
-## measure() Parameters
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
+
+## .run() Returns
 
 <PropertiesTable
   content={[
     {
-      name: "input",
+      name: "runId",
       type: "string",
-      description: "The original query or prompt",
-      isOptional: false,
+      description: "The id of the run (optional).",
     },
     {
-      name: "output",
-      type: "string",
-      description: "The LLM's response to evaluate",
-      isOptional: false,
+      name: "preprocessStepResult",
+      type: "object",
+      description: "Object with extracted claims: { claims: string[] }",
     },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the preprocess step (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the analyze step (optional).",
+    },
     {
       name: "score",
       type: "number",
-      description: "Hallucination score (0 to scale, default 0-1)",
+      description: "Hallucination score (0 to scale, default 0-1).",
     },
     {
-      name: "info",
-      type: "object",
-      description: "Object containing the reason for the score",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description:
-                "Detailed explanation of the score and identified contradictions",
-            },
-          ],
-        },
-      ],
+      name: "reason",
+      type: "string",
+      description:
+        "Detailed explanation of the score and identified contradictions.",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the generateReason step (optional).",
     },
   ]}
 />
 
 ## Scoring Details
 
-The metric evaluates hallucination through contradiction detection and unsupported claim analysis.
+The scorer evaluates hallucination through contradiction detection and unsupported claim analysis.
 
 ### Scoring Process
 
 1. Analyzes factual content:
-
    - Extracts statements from context
    - Identifies numerical values and dates
    - Maps statement relationships
-
 2. Analyzes output for hallucinations:
-
    - Compares against context statements
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations
    - Evaluates numerical accuracy
    - Considers approximation context
-
 3. Calculates hallucination score:
    - Counts hallucinated statements (contradictions and unsupported claims)
    - Divides by total statements
@@ -174,54 +121,132 @@ Final score: `(hallucinated_statements / total_statements) * scale`
 
 ### Score interpretation
 
-(0 to scale, default 0-1)
+A hallucination score between 0 and 1:
 
-- 1.0: Complete hallucination - contradicts all context statements
-- 0.75: High hallucination - contradicts 75% of context statements
-- 0.5: Moderate hallucination - contradicts half of context statements
-- 0.25: Low hallucination - contradicts 25% of context statements
-- 0.0: No hallucination - output aligns with all context statements
+- **0.0**: No hallucination — all claims match the context.
+- **0.3–0.4**: Low hallucination — a few contradictions.
+- **0.5–0.6**: Mixed hallucination — several contradictions.
+- **0.7–0.8**: High hallucination — many contradictions.
+- **0.9–1.0**: Complete hallucination — most or all claims contradict the context.
 
 **Note:** The score represents the degree of hallucination - lower scores indicate better factual alignment with the provided context
 
-## Example with Analysis
+## Examples
+
+### No hallucination example
+
+In this example, the response is fully aligned with the provided context. All claims are factually correct and directly supported by the source material, resulting in a low hallucination score.
+
+```typescript title="src/example-no-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "The iPhone was first released in 2007.",
+    "Steve Jobs unveiled it at Macworld.",
+    "The original model had a 3.5-inch screen."
+  ]
+});
+
+const query = "When was the first iPhone released?";
+const response = "The iPhone was first released in 2007, when Steve Jobs unveiled it at Macworld. The original iPhone featured a 3.5-inch screen.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+#### No hallucination output
+
+The response receives a score of 0 because there are no contradictions. Every statement is consistent with the context, and no new or fabricated information has been introduced.
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
+{
+  score: 0,
+  reason: 'The score is 0 because none of the statements from the context were contradicted by the output.'
+}
+```
 
-// Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+### Mixed hallucination example
 
-const metric = new HallucinationMetric(model, {
+In this example, the response includes both accurate and inaccurate claims. Some details align with the context, while others directly contradict it—such as inflated numbers or incorrect locations. These contradictions increase the hallucination score.
+
+```typescript title="src/example-mixed-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
   context: [
-    "OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.",
-    "The company launched with a $1 billion investment commitment.",
-    "Elon Musk was an early supporter but left the board in 2018.",
-  ],
+    "The first Star Wars movie was released in 1977.",
+    "It was directed by George Lucas.",
+    "The film earned $775 million worldwide.",
+    "The movie was filmed in Tunisia and England."
+  ]
 });
 
-const result = await metric.measure({
-  input: "What are the key details about OpenAI?",
-  output:
-    "OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.",
+const query = "Tell me about the first Star Wars movie.";
+const response = "The first Star Wars movie came out in 1977 and was directed by George Lucas. It made over $1 billion at the box office and was filmed entirely in California.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
 });
 
-// Example output:
-// {
-//   score: 0.33,
-//   info: {
-//     reason: "The score is 0.33 because one out of three statements from the context
-//           was contradicted (the investment amount was stated as $2 billion instead
-//           of $1 billion). The founding date was correct, and while the output's
-//           description of founders was incomplete, it wasn't strictly contradictory."
-//   }
-// }
+console.log(result);
+```
+
+#### Mixed hallucination output
+
+The Scorer assigns a mid-range score because parts of the response conflict with the context. While some facts are correct, others are inaccurate or fabricated, reducing overall reliability.
+
+```typescript
+{
+  score: 0.5,
+  reason: 'The score is 0.5 because two out of four statements from the output were contradicted by claims in the context, indicating a balance of accurate and inaccurate information.'
+}
+```
+
+### Complete hallucination example
+
+In this example, the response contradicts every key fact in the context. None of the claims can be verified, and all presented details are factually incorrect.
+
+```typescript title="src/example-complete-hallucination.ts" showLineNumbers copy
+import { createHallucinationScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createHallucinationScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "The Wright brothers made their first flight in 1903.",
+    "The flight lasted 12 seconds.",
+    "It covered a distance of 120 feet."
+  ]
+});
+
+const query = "When did the Wright brothers first fly?";
+const response = "The Wright brothers achieved their historic first flight in 1908. The flight lasted about 2 minutes and covered nearly a mile.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+
+```
+
+#### Complete hallucination output
+
+The Scorer assigns a score of 1 because every statement in the response conflicts with the context. The details are fabricated or inaccurate across the board.
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1.0 because all three statements from the output directly contradict the context: the first flight was in 1903, not 1908; it lasted 12 seconds, not about 2 minutes; and it covered 120 feet, not nearly a mile.'
+}
 ```
 
 ## Related
 
-- [Faithfulness Metric](./faithfulness)
-- [Answer Relevancy Metric](./answer-relevancy)
-- [Context Precision Metric](./context-precision)
-- [Context Relevancy Metric](./context-relevancy)
+- [Faithfulness Scorer](./faithfulness)
+- [Answer Relevancy Scorer](./answer-relevancy)

@@ -1,8 +1,9 @@
 import { execSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Mastra, Agent } from '@mastra/core';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { workflowBuilderWorkflow } from '../../src/workflows';
@@ -47,6 +48,7 @@ describe.skip('Workflow Builder Integration Tests', () => {
       },
       logger: false,
       storage: new LibSQLStore({
+        id: 'mastra-storage',
         url: 'file:mastra.db',
       }),
     });
@@ -75,7 +77,8 @@ describe.skip('Workflow Builder Integration Tests', () => {
 
     // Create an agent that will answer questions during the workflow
     const questionAnsweringAgent = new Agent({
-      name: 'question-answering-agent',
+      id: 'question-answering-agent',
+      name: 'Question Answering Agent',
       model: openai('gpt-4o-mini'),
       instructions: `You are an assistant that answers technical questions about workflow creation. 
       
@@ -85,9 +88,9 @@ describe.skip('Workflow Builder Integration Tests', () => {
       Keep responses concise and focused.`,
     });
 
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
-    const run = await workflowBuilderWorkflow.createRunAsync();
+    const run = await workflowBuilderWorkflow.createRun();
 
     const inputData = {
       workflowName: 'send_email_workflow',
@@ -102,7 +105,7 @@ describe.skip('Workflow Builder Integration Tests', () => {
 
     const { stream, getWorkflowState } = run.stream({
       inputData,
-      runtimeContext,
+      requestContext,
     });
 
     let suspensionCount = 0;

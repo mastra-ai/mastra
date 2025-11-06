@@ -1,5 +1,5 @@
-import { createTool } from '@mastra/core';
 import { getErrorFromUnknown } from '@mastra/core/error';
+import { createTool } from '@mastra/core/tools';
 import { APICallError } from 'ai-v5';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
 import z from 'zod';

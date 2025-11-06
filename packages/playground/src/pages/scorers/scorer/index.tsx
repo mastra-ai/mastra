@@ -21,9 +21,11 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
+  HeaderGroup,
+  ScorerCombobox,
+  toast,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
-import { Skeleton } from '@/components/ui/skeleton';
 import { GaugeIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -41,9 +43,9 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
-  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+  const { scorer, isLoading: isScorerLoading, error: scorerError } = useScorer(scorerId!);
+  const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { data: workflows, isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
   const {
     data: scoresData,
     isLoading: isLoadingScores,
@@ -80,6 +82,29 @@ export default function Scorer() {
       }
     }
   }, [searchParams, selectedEntityOption, entityOptions]);
+
+  useEffect(() => {
+    if (scorerError) {
+      const errorMessage = scorerError instanceof Error ? scorerError.message : 'Failed to load scorer';
+      toast.error(`Error loading scorer: ${errorMessage}`);
+    }
+  }, [scorerError]);
+
+  useEffect(() => {
+    if (agentsError) {
+      const errorMessage = agentsError instanceof Error ? agentsError.message : 'Failed to load agents';
+      toast.error(`Error loading agents: ${errorMessage}`);
+    }
+  }, [agentsError]);
+
+  useEffect(() => {
+    if (workflowsError) {
+      const errorMessage = workflowsError instanceof Error ? workflowsError.message : 'Failed to load workflows';
+      toast.error(`Error loading workflows: ${errorMessage}`);
+    }
+  }, [workflowsError]);
+
+  if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {
@@ -134,17 +159,19 @@ export default function Scorer() {
       <MainContentLayout>
         <Header>
           <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`}>
+            <Crumb as={Link} to={`/scorers`} isCurrent>
               <Icon>
                 <GaugeIcon />
               </Icon>
               Scorers
             </Crumb>
-
-            <Crumb as={Link} to={`/scorers/${scorerId}`} isCurrent>
-              {isScorerLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
-            </Crumb>
           </Breadcrumb>
+
+          <HeaderGroup>
+            <div className="w-[240px]">
+              <ScorerCombobox value={scorerId} />
+            </div>
+          </HeaderGroup>
 
           <HeaderAction>
             <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank">

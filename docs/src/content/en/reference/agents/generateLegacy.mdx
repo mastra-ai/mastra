@@ -3,13 +3,13 @@ title: "Reference: Agent.generateLegacy() (Legacy) | Agents | Mastra Docs"
 description: "Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
 ---
 
-import { Callout } from 'nextra/components';
-
 # Agent.generateLegacy() (Legacy)
 
-<Callout type="warning">
-  **Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate.mdx) method instead. See the [migration guide](../../guides/migrations/vnext-to-standard-apis) for details on upgrading.
-</Callout>
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate) method instead.
+
+:::
 
 The `.generateLegacy()` method is the legacy version of the agent generation API, used to interact with V1 model agents to produce text or structured responses. This method accepts messages and optional generation options.
 
@@ -26,7 +26,8 @@ await agent.generateLegacy("message for agent");
     {
       name: "messages",
       type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
-      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects with multimodal content (text, images, etc.).",
+      description:
+        "The messages to send to the agent. Can be a single string, array of strings, or structured message objects with multimodal content (text, images, etc.).",
     },
     {
       name: "options",
@@ -58,61 +59,75 @@ await agent.generateLegacy("message for agent");
       name: "structuredOutput",
       type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
       isOptional: true,
-      description: "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
+      description:
+        "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
       properties: [
         {
-          parameters: [{
-            name: "schema",
-            type: "z.ZodSchema<S>",
-            isOptional: false,
-            description: "Zod schema to validate the output against."
-          }]
+          parameters: [
+            {
+              name: "schema",
+              type: "z.ZodSchema<S>",
+              isOptional: false,
+              description: "Zod schema to validate the output against.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "model",
-            type: "MastraLanguageModel",
-            isOptional: false,
-            description: "Model to use for the internal structuring agent."
-          }]
+          parameters: [
+            {
+              name: "model",
+              type: "MastraLanguageModel",
+              isOptional: false,
+              description: "Model to use for the internal structuring agent.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "errorStrategy",
-            type: "'strict' | 'warn' | 'fallback'",
-            isOptional: true,
-            description: "Strategy when parsing or validation fails. Defaults to 'strict'."
-          }]
+          parameters: [
+            {
+              name: "errorStrategy",
+              type: "'strict' | 'warn' | 'fallback'",
+              isOptional: true,
+              description:
+                "Strategy when parsing or validation fails. Defaults to 'strict'.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "fallbackValue",
-            type: "<S extends ZodTypeAny>",
-            isOptional: true,
-            description: "Fallback value when errorStrategy is 'fallback'."
-          }]
+          parameters: [
+            {
+              name: "fallbackValue",
+              type: "<S extends ZodTypeAny>",
+              isOptional: true,
+              description: "Fallback value when errorStrategy is 'fallback'.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "instructions",
-            type: "string",
-            isOptional: true,
-            description: "Custom instructions for the structuring agent."
-          }]
+          parameters: [
+            {
+              name: "instructions",
+              type: "string",
+              isOptional: true,
+              description: "Custom instructions for the structuring agent.",
+            },
+          ],
         },
-      ]
+      ],
     },
     {
       name: "outputProcessors",
       type: "Processor[]",
       isOptional: true,
-      description: "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+      description:
+        "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
     },
     {
       name: "inputProcessors",
       type: "Processor[]",
       isOptional: true,
-      description: "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
+      description:
+        "Overrides the input processors set on the agent. Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
     },
     {
       name: "experimental_output",
@@ -139,33 +154,43 @@ await agent.generateLegacy("message for agent");
       name: "memory",
       type: "object",
       isOptional: true,
-      description: "Configuration for memory. This is the preferred way to manage memory.",
+      description:
+        "Configuration for memory. This is the preferred way to manage memory.",
       properties: [
         {
-          parameters: [{
+          parameters: [
+            {
               name: "thread",
               type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
               isOptional: false,
-              description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
-          }]
+              description:
+                "The conversation thread, as a string ID or an object with an `id` and optional `metadata`.",
+            },
+          ],
         },
         {
-          parameters: [{
+          parameters: [
+            {
               name: "resource",
               type: "string",
               isOptional: false,
-              description: "Identifier for the user or resource associated with the thread."
-          }]
+              description:
+                "Identifier for the user or resource associated with the thread.",
+            },
+          ],
         },
         {
-          parameters: [{
+          parameters: [
+            {
               name: "options",
               type: "MemoryConfig",
               isOptional: true,
-              description: "Configuration for memory behavior, like message history and semantic recall. See `MemoryConfig` below."
-          }]
-        }
-      ]
+              description:
+                "Configuration for memory behavior, like message history and semantic recall. See `MemoryConfig` below.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "maxSteps",
@@ -192,48 +217,60 @@ await agent.generateLegacy("message for agent");
       name: "runId",
       type: "string",
       isOptional: true,
-      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
+      description:
+        "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
-      description:
-        "Settings for telemetry collection during generation.",
+      description: "Settings for telemetry collection during generation.",
       properties: [
         {
-          parameters: [{
-            name: "isEnabled",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable telemetry. Disabled by default while experimental."
-          }]
+          parameters: [
+            {
+              name: "isEnabled",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable telemetry. Disabled by default while experimental.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "recordInputs",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
-          }]
+          parameters: [
+            {
+              name: "recordInputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "recordOutputs",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
-          }]
+          parameters: [
+            {
+              name: "recordOutputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "functionId",
-            type: "string",
-            isOptional: true,
-            description: "Identifier for this function. Used to group telemetry data by function."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "functionId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Identifier for this function. Used to group telemetry data by function.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "temperature",
@@ -250,34 +287,43 @@ await agent.generateLegacy("message for agent");
       description: "Controls how the agent uses tools during generation.",
       properties: [
         {
-          parameters: [{
-            name: "'auto'",
-            type: "string",
-            description: "Let the model decide whether to use tools (default)."
-          }]
+          parameters: [
+            {
+              name: "'auto'",
+              type: "string",
+              description:
+                "Let the model decide whether to use tools (default).",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "'none'",
-            type: "string",
-            description: "Do not use any tools."
-          }]
+          parameters: [
+            {
+              name: "'none'",
+              type: "string",
+              description: "Do not use any tools.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "'required'",
-            type: "string",
-            description: "Require the model to use at least one tool."
-          }]
+          parameters: [
+            {
+              name: "'required'",
+              type: "string",
+              description: "Require the model to use at least one tool.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "{ type: 'tool'; toolName: string }",
-            type: "object",
-            description: "Require the model to use a specific tool by name."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "{ type: 'tool'; toolName: string }",
+              type: "object",
+              description: "Require the model to use a specific tool by name.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "toolsets",
@@ -297,53 +343,68 @@ await agent.generateLegacy("message for agent");
       name: "savePerStep",
       type: "boolean",
       isOptional: true,
-      description: "Save messages incrementally after each stream step completes (default: false).",
+      description:
+        "Save messages incrementally after each stream step completes (default: false).",
     },
     {
       name: "providerOptions",
       type: "Record<string, Record<string, JSONValue>>",
       isOptional: true,
-      description: "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. Since Mastra extends AI SDK, see the [AI SDK documentation](https://sdk.vercel.ai/docs/providers/ai-sdk-providers) for complete provider options.",
+      description:
+        "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. Since Mastra extends AI SDK, see the [AI SDK documentation](https://sdk.vercel.ai/docs/providers/ai-sdk-providers) for complete provider options.",
       properties: [
         {
-          parameters: [{
-            name: "openai",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`"
-          }]
+          parameters: [
+            {
+              name: "openai",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "OpenAI-specific options. Example: `{ reasoningEffort: 'high' }`",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "anthropic",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "Anthropic-specific options. Example: `{ maxTokens: 1000 }`"
-          }]
+          parameters: [
+            {
+              name: "anthropic",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "Anthropic-specific options. Example: `{ maxTokens: 1000 }`",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "google",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "Google-specific options. Example: `{ safetySettings: [...] }`"
-          }]
+          parameters: [
+            {
+              name: "google",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "Google-specific options. Example: `{ safetySettings: [...] }`",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "[providerName]",
-            type: "Record<string, JSONValue>",
-            isOptional: true,
-            description: "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "[providerName]",
+              type: "Record<string, JSONValue>",
+              isOptional: true,
+              description:
+                "Other provider-specific options. The key is the provider name and the value is a record of provider-specific options.",
+            },
+          ],
+        },
+      ],
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "maxTokens",
@@ -355,44 +416,51 @@ await agent.generateLegacy("message for agent");
       name: "topP",
       type: "number",
       isOptional: true,
-      description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either `temperature` or `topP`, but not both.",
+      description:
+        "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either `temperature` or `topP`, but not both.",
     },
     {
       name: "topK",
       type: "number",
       isOptional: true,
-      description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
+      description:
+        "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
     },
     {
       name: "presencePenalty",
       type: "number",
       isOptional: true,
-      description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+      description:
+        "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
     },
     {
       name: "frequencyPenalty",
       type: "number",
       isOptional: true,
-      description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+      description:
+        "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
     },
     {
       name: "stopSequences",
       type: "string[]",
       isOptional: true,
-      description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
+      description:
+        "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
     },
     {
       name: "seed",
       type: "number",
       isOptional: true,
-      description: "The seed (integer) to use for random sampling. If set and supported by the model, calls will generate deterministic results.",
+      description:
+        "The seed (integer) to use for random sampling. If set and supported by the model, calls will generate deterministic results.",
     },
     {
       name: "headers",
       type: "Record<string, string | undefined>",
       isOptional: true,
-      description: "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
-    }
+      description:
+        "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
+    },
   ]}
 />
 
@@ -404,64 +472,75 @@ await agent.generateLegacy("message for agent");
       name: "text",
       type: "string",
       isOptional: true,
-      description: "The generated text response. Present when output is 'text' (no schema provided).",
+      description:
+        "The generated text response. Present when output is 'text' (no schema provided).",
     },
     {
       name: "object",
       type: "object",
       isOptional: true,
-      description: "The generated structured response. Present when a schema is provided via `output`, `structuredOutput`, or `experimental_output`.",
+      description:
+        "The generated structured response. Present when a schema is provided via `output`, `structuredOutput`, or `experimental_output`.",
     },
     {
       name: "toolCalls",
       type: "Array<ToolCall>",
       isOptional: true,
-      description: "The tool calls made during the generation process. Present in both text and object modes.",
+      description:
+        "The tool calls made during the generation process. Present in both text and object modes.",
       properties: [
         {
-          parameters: [{
-            name: "toolName",
-            type: "string",
-            required: true,
-            description: "The name of the tool invoked."
-          }]
+          parameters: [
+            {
+              name: "toolName",
+              type: "string",
+              required: true,
+              description: "The name of the tool invoked.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "args",
-            type: "any",
-            required: true,
-            description: "The arguments passed to the tool."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "args",
+              type: "any",
+              required: true,
+              description: "The arguments passed to the tool.",
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
 
 ## Migration to New API
 
-<Callout type="info">
-  The new `.generate()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved streaming support. See the [migration guide](../../guides/migrations/vnext-to-standard-apis) for detailed migration instructions.
-</Callout>
+:::info
+
+The new `.generate()` method offers enhanced capabilities including AI SDK v5 compatibility, better structured output handling, and improved streaming support. See the [migration guide](../../guides/migrations/vnext-to-standard-apis) for detailed migration instructions.
+
+:::
 
 ### Quick Migration Example
 
 #### Before (Legacy)
+
 ```typescript
 const result = await agent.generateLegacy("message", {
   temperature: 0.7,
-  maxSteps: 3
+  maxSteps: 3,
 });
 ```
 
 #### After (New API)
+
 ```typescript
 const result = await agent.generate("message", {
   modelSettings: {
-    temperature: 0.7
+    temperature: 0.7,
   },
-  maxSteps: 3
+  maxSteps: 3,
 });
 ```
 
@@ -469,7 +548,10 @@ const result = await agent.generate("message", {
 
 ```typescript showLineNumbers copy
 import { z } from "zod";
-import { ModerationProcessor, TokenLimiterProcessor } from "@mastra/core/processors";
+import {
+  ModerationProcessor,
+  TokenLimiterProcessor,
+} from "@mastra/core/processors";
 
 await agent.generateLegacy(
   [
@@ -479,50 +561,50 @@ await agent.generateLegacy(
       content: [
         {
           type: "text",
-          text: "message for agent"
+          text: "message for agent",
         },
         {
           type: "image",
           imageUrl: "https://example.com/image.jpg",
-          mimeType: "image/jpeg"
-        }
-      ]
-    }
+          mimeType: "image/jpeg",
+        },
+      ],
+    },
   ],
   {
     temperature: 0.7,
     maxSteps: 3,
     memory: {
       thread: "user-123",
-      resource: "test-app"
+      resource: "test-app",
     },
     toolChoice: "auto",
     providerOptions: {
       openai: {
-        reasoningEffort: "high"
-      }
+        reasoningEffort: "high",
+      },
     },
     // Structured output with better DX
     structuredOutput: {
       schema: z.object({
-        sentiment: z.enum(['positive', 'negative', 'neutral']),
+        sentiment: z.enum(["positive", "negative", "neutral"]),
         confidence: z.number(),
       }),
       model: openai("gpt-4o-mini"),
-      errorStrategy: 'warn',
+      errorStrategy: "warn",
     },
     // Output processors for response validation
     outputProcessors: [
       new ModerationProcessor({ model: openai("gpt-4.1-nano") }),
       new TokenLimiterProcessor({ maxTokens: 1000 }),
     ],
-  }
+  },
 );
 ```
 
 ## Related
 
 - [Migration Guide](../../guides/migrations/vnext-to-standard-apis)
-- [New .generate() method](./generate.mdx)
-- [Generating responses](../../docs/agents/overview.mdx#generating-responses)
-- [Streaming responses](../../docs/agents/overview.mdx#streaming-responses)
+- [New .generate() method](./generate)
+- [Generating responses](/docs/agents/overview#generating-responses)
+- [Streaming responses](/docs/agents/overview#generating-responses)

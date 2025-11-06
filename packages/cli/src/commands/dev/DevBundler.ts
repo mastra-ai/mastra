@@ -5,7 +5,7 @@ import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, getBundlerOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import type { Plugin, RollupWatcherEvent } from 'rollup';
+import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
 
@@ -73,7 +73,7 @@ export class DevBundler extends Bundler {
       },
       { sourcemap: sourcemapEnabled },
     );
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
 
@@ -96,8 +96,7 @@ export class DevBundler extends Bundler {
           }
         },
         plugins: [
-          // inputOptions.plugins is guaranteed to be Plugin[] by getWatcherInputOptions
-          ...((inputOptions.plugins as Plugin[]) || []),
+          ...(inputOptions.plugins as InputPluginOption[]),
           {
             name: 'env-watcher',
             buildStart() {

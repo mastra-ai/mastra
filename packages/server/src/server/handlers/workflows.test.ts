@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getWorkflowInfo } from '../utils';
 import {
-  getWorkflowsHandler,
+  listWorkflowsHandler,
   getWorkflowByIdHandler,
   startAsyncWorkflowHandler,
   getWorkflowRunByIdHandler,
@@ -15,11 +15,9 @@ import {
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   resumeStreamWorkflowHandler,
-  watchWorkflowHandler,
   observeStreamWorkflowHandler,
   cancelWorkflowRunHandler,
-  sendWorkflowRunEventHandler,
-  getWorkflowRunsHandler,
+  listWorkflowRunsHandler,
   getWorkflowRunExecutionResultHandler,
 } from './workflows';
 
@@ -58,7 +56,6 @@ function createMockWorkflow(name: string) {
     .then(stepA)
     .commit();
 
-  // workflow.getWorkflowRuns = vi.fn();
   return workflow;
 }
 function createReusableMockWorkflow(name: string) {
@@ -111,9 +108,9 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getWorkflowsHandler', () => {
+  describe('listWorkflowsHandler', () => {
     it('should get all workflows successfully', async () => {
-      const result = await getWorkflowsHandler({ mastra: mockMastra });
+      const result = await listWorkflowsHandler({ mastra: mockMastra });
       expect(result).toEqual({
         'test-workflow': serializeWorkflow(mockWorkflow),
         'reusable-workflow': serializeWorkflow(reusableWorkflow),
@@ -228,7 +225,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -274,7 +271,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow run execution result successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -363,7 +360,7 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should start workflow run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -384,7 +381,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-start-test';
 
       // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run-start-resource',
         resourceId,
       });
@@ -453,7 +450,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-async-resume-test';
 
       // Start a workflow with resourceId and let it suspend (using the shared instance)
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run-async-resume',
         resourceId,
       });
@@ -515,19 +512,8 @@ describe('vNext Workflow Handlers', () => {
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
-    it('should throw error when step is not provided', async () => {
-      await expect(
-        resumeWorkflowHandler({
-          mastra: mockMastra,
-          workflowId: 'test-workflow',
-          runId: 'test-run',
-          body: { step: '', resumeData: {} },
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'step required to resume workflow' }));
-    });
-
     it('should resume workflow run successfully', async () => {
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -550,7 +536,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-test-123';
 
       // Start a workflow with resourceId and let it suspend
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run-with-resource',
         resourceId,
       });
@@ -588,7 +574,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-stream-resume-test';
 
       // Start a workflow with resourceId and let it suspend
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run-stream-resume',
         resourceId,
       });
@@ -623,15 +609,15 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getWorkflowRunsHandler', () => {
+  describe('listWorkflowRunsHandler', () => {
     it('should throw error when workflowId is not provided', async () => {
-      await expect(getWorkflowRunsHandler({ mastra: mockMastra })).rejects.toThrow(
+      await expect(listWorkflowRunsHandler({ mastra: mockMastra })).rejects.toThrow(
         new HTTPException(400, { message: 'Workflow ID is required' }),
       );
     });
 
     it('should get workflow runs successfully (empty)', async () => {
-      const result = await getWorkflowRunsHandler({
+      const result = await listWorkflowRunsHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
       });
@@ -643,11 +629,11 @@ describe('vNext Workflow Handlers', () => {
     });
 
     it('should get workflow runs successfully (not empty)', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
-      const result = await getWorkflowRunsHandler({
+      const result = await listWorkflowRunsHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
       });
@@ -656,47 +642,12 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('watchWorkflowHandler', () => {
-    it('should preserve resourceId when watching workflow run after server restart', async () => {
-      const resourceId = 'user-watch-test';
-
-      // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
-        runId: 'test-run-watch-resource',
-        resourceId,
-      });
-      await run.start({ inputData: {} });
-
-      const runBefore = await mockWorkflow.getWorkflowRunById('test-run-watch-resource');
-      expect(runBefore?.resourceId).toBe(resourceId);
-
-      // Simulate server restart
-      const freshWorkflow = createMockWorkflow('test-workflow');
-      const freshMastra = new Mastra({
-        logger: false,
-        workflows: { 'test-workflow': freshWorkflow },
-        storage: mockMastra.getStorage(),
-      });
-
-      const stream = await watchWorkflowHandler({
-        mastra: freshMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run-watch-resource',
-      });
-      expect(stream).toBeDefined();
-
-      // Verify resourceId is preserved in storage
-      const runAfter = await freshWorkflow.getWorkflowRunById('test-run-watch-resource');
-      expect(runAfter?.resourceId).toBe(resourceId);
-    });
-  });
-
   describe('observeStreamWorkflowHandler', () => {
     it('should preserve resourceId when observing stream after server restart', async () => {
       const resourceId = 'user-observe-test';
 
       // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run-observe-resource',
         resourceId,
       });
@@ -736,7 +687,7 @@ describe('vNext Workflow Handlers', () => {
       const resourceId = 'user-cancel-test';
 
       // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run-cancel-resource',
         resourceId,
       });
@@ -762,43 +713,6 @@ describe('vNext Workflow Handlers', () => {
 
       // Verify resourceId is preserved
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
-      expect(runAfter?.resourceId).toBe(resourceId);
-    });
-  });
-
-  describe('sendEventToWorkflowHandler', () => {
-    it('should preserve resourceId when sending event after server restart', async () => {
-      const resourceId = 'user-event-test';
-
-      // Create run with resourceId
-      const run = await mockWorkflow.createRunAsync({
-        runId: 'test-run-event-resource',
-        resourceId,
-      });
-      await run.start({ inputData: {} });
-
-      const runBefore = await mockWorkflow.getWorkflowRunById('test-run-event-resource');
-      expect(runBefore?.resourceId).toBe(resourceId);
-
-      // Simulate server restart
-      const freshWorkflow = createMockWorkflow('test-workflow');
-      const freshMastra = new Mastra({
-        logger: false,
-        workflows: { 'test-workflow': freshWorkflow },
-        storage: mockMastra.getStorage(),
-      });
-
-      const result = await sendWorkflowRunEventHandler({
-        mastra: freshMastra,
-        workflowId: 'test-workflow',
-        runId: 'test-run-event-resource',
-        event: 'test-event',
-        data: { test: 'data' },
-      });
-      expect(result).toEqual({ message: 'Workflow run event sent' });
-
-      // Verify resourceId is preserved
-      const runAfter = await freshWorkflow.getWorkflowRunById('test-run-event-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
     });
   });

@@ -1,13 +1,14 @@
 import { anthropic } from '@ai-sdk/anthropic';
 import { input } from '@inquirer/prompts';
 import { Agent } from '@mastra/core/agent';
-import { Step, Workflow, getStepResult } from '@mastra/core/workflows';
+import { Step, Workflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const llm = anthropic('claude-3-5-sonnet-20241022');
 
 const agent = new Agent({
-  name: 'telephoneGameAgent',
+  id: 'telephone-game-agent',
+  name: 'Telephone Game Agent',
   instructions: `Telephone game agent`,
   model: llm,
 });
@@ -38,7 +39,7 @@ const stepA2 = new Step({
   execute: async () => {
     const content = await input({
       message: 'Give me a message',
-      validate: input => input.trim().length > 0 || 'Message cannot be empty',
+      validate: value => value.trim().length > 0 || 'Message cannot be empty',
     });
 
     return {
@@ -53,12 +54,12 @@ const stepB2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    if (context?.steps.stepA2?.status !== 'success') {
+  execute: async (inputData, context) => {
+    if (context?.workflow?.state?.steps.stepA2?.status !== 'success') {
       throw new Error('Message not found');
     }
 
-    const msg = context.steps.stepA2.output.message;
+    const msg = context.workflow.state.steps.stepA2.output.message;
 
     return {
       message: msg,
@@ -72,25 +73,26 @@ const stepC2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ suspend, context }) => {
-    const oMsg = getStepResult(context?.steps.stepA2);
-    if (context?.steps.stepC2?.status === 'success') {
-      const msg = getStepResult(context?.steps.stepC2);
-      if (msg.confirm) {
-        const result = await agent.generate(`
-            You are playing a game of telephone.
-            Here is the message the previous person sent ${oMsg.message}.
-            But you want to change the message.
-            Only return the message
-            `);
-        return {
-          message: result.text,
-        };
-      }
-
-      return oMsg;
+  execute: async (inputData, context) => {
+    if (!context?.workflow?.state?.steps.stepA2) {
+      throw new Error('Previous step result not found');
     }
-    await suspend();
+
+    const oMsg = context.workflow.state.steps.stepA2.output;
+
+    if (context.workflow.resumeData?.confirm) {
+      const result = await agent.generate(`
+          You are playing a game of telephone.
+          Here is the message the previous person sent ${oMsg.message}.
+          But you want to change the message.
+          Only return the message
+          `);
+      return {
+        message: result.text,
+      };
+    }
+
+    await context.workflow.suspend();
     return { message: 'Suspended' };
   },
 });
@@ -101,9 +103,12 @@ const stepD2 = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    const msg = getStepResult(context?.steps.stepC2);
-    return msg;
+  execute: async (inputData, context) => {
+    if (!context?.workflow?.state?.steps.stepC2) {
+      throw new Error('Previous step result not found');
+    }
+
+    return context.workflow.state.steps.stepC2.output;
   },
 });
 

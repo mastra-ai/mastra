@@ -1,7 +1,8 @@
-import type { AIV4Type, AIV5Type } from '../../types';
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4/message';
+import type { AIV5Type } from '../../types';
 
 export function hasAIV5CoreMessageCharacteristics(
-  msg: AIV4Type.CoreMessage | AIV5Type.ModelMessage,
+  msg: CoreMessageV4 | AIV5Type.ModelMessage,
 ): msg is AIV5Type.ModelMessage {
   if (`experimental_providerMetadata` in msg) return false; // is v4 cause v5 doesn't have this property
 

@@ -32,8 +32,8 @@ const getBrokenLinks = new Step({
   outputSchema: z.object({
     brokenLinks: z.array(linkSchema),
   }),
-  execute: async ({ context }) => {
-    const targetUrl = context?.triggerData?.targetUrl;
+  execute: async (inputData, context) => {
+    const targetUrl = context?.workflow?.state?.triggerData?.targetUrl;
 
     const res = await exec(`npx linkinator ${targetUrl} --format json`, {
       encoding: 'utf-8',
@@ -59,8 +59,10 @@ const reportBrokenLinks = new Step({
   outputSchema: z.object({
     message: z.string(),
   }),
-  execute: async ({ context, mastra }) => {
-    const brokenLinks = context?.getStepResult<{ brokenLinks: z.infer<typeof linkSchema>[] }>('get-broken-links');
+  execute: async (inputData, context) => {
+    const brokenLinks = context?.workflow?.state?.getStepResult<{ brokenLinks: z.infer<typeof linkSchema>[] }>(
+      'get-broken-links',
+    );
 
     if (!brokenLinks) {
       return {
@@ -81,7 +83,7 @@ const reportBrokenLinks = new Step({
       console.error(e);
     }
 
-    const triggerPayload = context?.getStepResult<{ channelId: string; targetUrl: string }>('trigger');
+    const triggerPayload = context?.workflow?.state?.getStepResult<{ channelId: string; targetUrl: string }>('trigger');
 
     if (!triggerPayload) {
       return {
@@ -89,14 +91,14 @@ const reportBrokenLinks = new Step({
       };
     }
 
-    const agent = mastra?.getAgent('daneLinkChecker');
+    const agent = context?.mastra?.getAgent('daneLinkChecker');
 
     if (!agent) {
       return {
         message: 'Agent not found',
       };
     }
-    const tools = await slack.getTools();
+    const tools = await slack.listTools();
 
     console.log(`🤖Generating...`);
     const res = await agent.generate(

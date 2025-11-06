@@ -1,0 +1,1372 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* =====================================================================
+   COLOR MAPPING: Docusaurus → Nextra (globals.css)
+   =====================================================================
+
+   This mapping shows how Docusaurus variables correspond to the
+   Nextra docs colors from globals.css
+
+   LIGHT MODE MAPPINGS:
+   =====================================================================
+
+   GREEN ACCENTS:
+   --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
+   --mastra-green-accent-2       → --light-green-accent-2: hsla(125, 66%, 50%, 1)
+   --mastra-green-muted          → --light-green-muted: #84d291
+   --mastra-green-code           → --light-green-code: #177326
+   --ifm-color-primary           → --light-green-accent: #0d8020
+
+   TEXT COLORS (darkest to lightest):
+   --mastra-text-primary         → --light-color-text-6: #0a0a0a
+   --mastra-text-secondary       → --light-color-text-5: #141414
+   --mastra-text-tertiary        → --light-color-text-4: #5f5f5f
+   --mastra-text-quaternary      → --light-color-text-3: #7f7e7e
+   --mastra-text-muted           → --light-color-text-2: #8f8f8f
+   --mastra-text-muted-2         → --light-color-text-1: #929292
+
+   SURFACE/BACKGROUND COLORS:
+   --ifm-background-color        → --light-color-surface-15: #fafafa
+   --mastra-surface-1            → --light-color-surface-1: #f0f0f0
+   --mastra-surface-2            → --light-color-surface-2: #f2f2f2
+   --mastra-surface-3            → --light-color-surface-3: #ededed
+   --mastra-surface-4            → --light-color-surface-4: #ebebeb
+   --mastra-surface-5            → --light-color-surface-5: hsla(0, 0%, 88%, 0.9)
+
+   BORDER COLORS:
+   --border                      → --light-border-muted: #ccc
+   --border-subtle               → --border: hsla(0, 0%, 80%, 1)
+   --border-code                 → --light-border-code: #b8b8b8
+   --border-secondary            → --border-2: hsla(0, 0%, 72%, 1)
+
+   =====================================================================
+
+   DARK MODE MAPPINGS:
+   =====================================================================
+
+   GREEN ACCENTS:
+   --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
+   --mastra-green-accent-2       → hsla(125, 66%, 50%, 1)
+   --ifm-color-primary           → hsl(143, 97%, 54%)
+
+   TEXT COLORS (lightest to darkest):
+   --mastra-text-primary         → --color-primary: #ffffff
+   --mastra-text-secondary       → --color-el-4: #e6e6e6
+   --mastra-text-tertiary        → --color-el-3: #939393
+   --mastra-text-quaternary      → --color-el-2: #707070
+
+   SURFACE/BACKGROUND COLORS:
+   --ifm-background-color        → --primary-bg: #050505
+   --ifm-background-surface      → --secondary-bg: #121212
+   --ifm-code-background         → --tertiary-bg: #171717
+   --mastra-surface-1            → --color-surface-3: hsla(0, 0%, 8%, 1)
+   --mastra-surface-2            → --color-surface-4: hsla(0, 0%, 10%, 1)
+   --mastra-surface-3            → #121212
+   --mastra-surface-4            → #171717
+   --mastra-surface-5            → --color-surface-5: hsla(0, 0%, 18%, 0.9)
+
+   BORDER COLORS:
+   --mastra-border               → --border: #343434
+   --mastra-border-subtle        → --color-borders-1: hsla(0, 0%, 19%, 1)
+   --mastra-border-code          → --color-borders-2: hsla(0, 0%, 26%, 1)
+
+   =====================================================================
+*/
+
+/* Import Google Fonts */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
+
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+/* ==================== LIGHT MODE ==================== */
+:root {
+  /* Primary colors - Light mode uses darker green to match Nextra */
+  --ifm-color-primary: #0d8020;
+  --ifm-color-primary-dark: #0b6e1b;
+  --ifm-color-primary-darker: #0a6619;
+  --ifm-color-primary-darkest: #085314;
+  --ifm-color-primary-light: #177326;
+  --ifm-color-primary-lighter: #198128;
+  --ifm-color-primary-lightest: #1f9d2f;
+
+  /* Nextra green accent colors */
+  --mastra-green-accent: hsl(143, 97%, 54%);
+  --mastra-green-accent-2: hsla(125, 66%, 50%, 1);
+  --mastra-green-accent-3: hsla(143, 97%, 24%, 1);
+  --mastra-green-muted: #84d291;
+  --mastra-green-code: #177326;
+
+  /* Nextra text colors - Light mode */
+  --mastra-text-primary: #0a0a0a;
+  --mastra-text-secondary: #141414;
+  --mastra-text-tertiary: #5f5f5f;
+  --mastra-text-quaternary: #7f7e7e;
+  --mastra-text-muted: #8f8f8f;
+  --mastra-text-muted-2: #929292;
+
+  /* Icon colors */
+  --mastra-icons-2: hsla(0, 0%, 44%, 1);
+  --mastra-icons-3: #949494;
+  --mastra-icons-4: hsla(0, 0%, 66%, 1);
+  --mastra-icons-5: hsla(0, 0%, 90%, 1);
+  --mastra-icons-6: hsla(0, 0%, 100%, 1);
+  --mastra-icons-7: #808080;
+
+  /* Nextra surface colors - Light mode */
+  --mastra-surface-1: #f0f0f0;
+  --mastra-surface-2: #f2f2f2;
+  --mastra-surface-3: #ededed;
+  --mastra-surface-4: #ebebeb;
+  --mastra-surface-5: hsla(0, 0%, 88%, 0.9);
+
+  /* Nextra border colors - Light mode */
+  --border: #ccc;
+  --border-subtle: hsla(0, 0%, 80%, 1);
+  --border-code: #b8b8b8;
+  --border-secondary: hsla(0, 0%, 72%, 1);
+  --sidebar-border: oklch(92.8% 0.006 264.531);
+
+  /* Border width */
+  --border-sm: 0.5px;
+  /* Fonts */
+  --ifm-font-family-base:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  --ifm-font-family-monospace:
+    "Geist Mono", "Menlo", "Monaco", "Courier New", monospace;
+  --ifm-h1-font-size: 2.25rem;
+  --ifm-h2-font-size: 1.8rem;
+  --ifm-h3-font-size: 1.25rem;
+  --ifm-h4-font-size: 1.2rem;
+  --ifm-h5-font-size: 1rem;
+  --ifm-h6-font-size: 0.875rem;
+
+  /* Typography */
+  --ifm-font-size-base: 16px;
+  --ifm-line-height-base: 1.6;
+  --ifm-code-font-size: 0.875rem;
+  --ifm-heading-color: var(--mastra-text-primary);
+  --ifm-list-margin: 0.5rem;
+  --ifm-list-left-padding: 1.5rem;
+
+  /* Background colors */
+  --ifm-background-color: #fafafa;
+  --ifm-navbar-background-color: #fafafa;
+  --ifm-footer-background-color: #050505;
+  --ifm-code-background: var(--mastra-surface-2);
+
+  --ifm-navbar-height: calc(58px);
+
+  /* Code blocks */
+  --docusaurus-highlighted-code-line-bg: color-mix(
+    in oklab,
+    #e0e0e0e6 90%,
+    transparent
+  );
+
+  /* Syntax highlighting colors - Light mode */
+  --prism-color-string: #158d29;
+  --prism-color-keyword: #d81717;
+  --prism-color-function: #9829c7;
+  --prism-color-comment: #939393;
+  --prism-color-variable: #0a0a0a;
+  --prism-color-inserted: #177326;
+  --prism-color-deleted: #d81717;
+
+  /* Border radius */
+  --ifm-global-radius: 0.5rem;
+  --ifm-code-border-radius: 0.5rem;
+
+  /* Container width */
+  --ifm-container-width: 1400px;
+  --ifm-container-width-xl: 1400px;
+
+  /* Override Docusaurus text colors */
+  --ifm-font-color-base: var(--mastra-text-secondary);
+  --ifm-font-color-base-inverse: #fff;
+  --ifm-link-color: var(--mastra-text-primary);
+  --ifm-link-hover-color: var(--mastra-green-accent-2);
+
+  /* Navbar */
+  --ifm-navbar-link-color: var(--mastra-text-secondary);
+  --ifm-navbar-link-hover-color: var(--mastra-text-primary);
+
+  /* Menu/Sidebar */
+  --doc-sidebar-width: 280px;
+  --ifm-menu-color: var(--mastra-text-secondary);
+  --ifm-menu-color-active: var(--mastra-text-primary);
+  --ifm-menu-link-sublist-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16px" height="16px" viewBox="0 0 24 24"><path fill="rgba(95,95,95,1)" d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"></path></svg>');
+}
+
+/* ==================== DARK MODE ==================== */
+[data-theme="dark"] {
+  /* Primary colors - Dark mode uses brighter green */
+  --ifm-color-primary: hsl(143, 97%, 54%);
+  --ifm-color-primary-dark: #2aed73;
+  --ifm-color-primary-darker: #1fea6a;
+  --ifm-color-primary-darkest: #16c858;
+  --ifm-color-primary-light: #62f69d;
+  --ifm-color-primary-lighter: #77f7ab;
+  --ifm-color-primary-lightest: #a1fac7;
+
+  /* Nextra colors for dark mode */
+  --mastra-green-accent: hsl(143, 97%, 54%);
+  --mastra-green-accent-2: hsla(125, 66%, 50%, 1);
+
+  /* Dark backgrounds */
+  --ifm-background-color: #050505;
+  --ifm-navbar-background-color: #050505;
+  --ifm-footer-background-color: #050505;
+  --ifm-background-surface-color: #121212;
+  --ifm-code-background: #171717;
+
+  /* Nextra text colors - Dark mode */
+  --mastra-text-primary: #ffffff;
+  --mastra-text-secondary: #e6e6e6;
+  --mastra-text-tertiary: #939393;
+  --mastra-text-quaternary: #707070;
+
+  /* Nextra surface colors - Dark mode */
+  --mastra-surface-1: hsla(0, 0%, 8%, 1);
+  --mastra-surface-2: hsla(0, 0%, 10%, 1);
+  --mastra-surface-3: #121212;
+  --mastra-surface-4: #171717;
+  --mastra-surface-5: hsla(0, 0%, 18%, 0.9);
+
+  /* Nextra border colors - Dark mode */
+  --border: #343434;
+  --border-subtle: hsla(0, 0%, 19%, 1);
+  --border-code: hsla(0, 0%, 26%, 1);
+  --sidebar-border: oklch(26.9% 0 0);
+
+  /* Code blocks */
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.1);
+
+  /* Syntax highlighting colors - Dark mode */
+  --prism-color-string: #46f488;
+  --prism-color-keyword: #fa7b6a;
+  --prism-color-function: #d06bee;
+  --prism-color-comment: #939393;
+  --prism-color-variable: #fff;
+  --prism-color-inserted: #62f69d;
+  --prism-color-deleted: #d81717;
+
+  /* Override Docusaurus text colors for dark mode */
+  --ifm-font-color-base: var(--mastra-text-secondary);
+  --ifm-heading-color: var(--mastra-text-primary);
+  --ifm-link-color: var(--mastra-text-primary);
+  --ifm-link-hover-color: var(--mastra-green-accent);
+
+  /* Navbar */
+  --ifm-navbar-link-color: var(--mastra-text-secondary);
+  --ifm-navbar-link-hover-color: var(--mastra-text-primary);
+
+  /* Menu/Sidebar */
+  --ifm-menu-color: var(--mastra-text-secondary);
+  --ifm-menu-color-active: var(--mastra-text-primary);
+}
+
+/* ==================== SELECTION COLORS ==================== */
+::selection {
+  background: #e3e3e3;
+  color: #158d29;
+}
+
+[data-theme="dark"] ::selection {
+  background: #2a2a2a;
+  color: #46f488;
+}
+
+[data-theme="dark"] body,
+html {
+  background-color: var(--ifm-navbar-background-color);
+}
+
+/* ==================== NAVBAR ==================== */
+.theme-layout-navbar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: auto;
+  padding-inline: 0;
+  padding-block: 0;
+  border-bottom: transparent;
+  box-shadow: none;
+  background-color: var(--ifm-navbar-background-color);
+}
+
+.theme-layout-navbar a {
+  &:hover {
+    color: var(--mastra-text-primary);
+    text-decoration: none;
+  }
+}
+
+.theme-layout-navbar .tab a {
+  color: var(--mastra-text-tertiary);
+
+  &[data-active="true"] {
+    color: var(--mastra-text-primary);
+  }
+
+  &:hover {
+    text-decoration: none;
+    color: var(--mastra-text-primary);
+  }
+}
+
+.navbar-sidebar__brand {
+  height: calc(var(--ifm-navbar-height));
+  border: none;
+  box-shadow: none;
+}
+
+.dialog-panel__content {
+  box-shadow:
+    0 0 0 1px #00000014,
+    0px 1px 1px #00000005,
+    0px 8px 16px -4px #0000000a,
+    0px 24px 32px -8px #0000000f,
+    0 0 0 1px hsla(0, 0%, 98%, 1);
+}
+
+.dialog-panel ul {
+  padding-left: 0;
+  margin-bottom: 0;
+}
+
+[data-theme="dark"] .navbar {
+  border-bottom-color: var(--mastra-border);
+}
+
+.navbar__link {
+  font-weight: 500;
+}
+
+.navbar__link:hover {
+  color: var(--ifm-navbar-link-hover-color);
+}
+
+input[type="search"]::-ms-clear {
+  display: none;
+}
+
+/* ====================  Sidebar ==================== */
+span[class*="categoryLinkLabel"] {
+  color: var(--mastra-text-primary);
+}
+
+.menu__link {
+  font-size: 14px;
+  color: var(--mastra-text-tertiary);
+  font-weight: 400;
+  padding-block: 0.25rem;
+
+  &:after {
+    background: var(--ifm-menu-link-sublist-icon) center;
+    transform-origin: center;
+  }
+}
+
+.theme-doc-sidebar-item-link-level-2 .menu__link {
+  padding-inline-start: 0.25rem;
+}
+
+.menu__caret {
+  &:hover {
+    background: transparent;
+  }
+
+  &::before {
+    content: "";
+    background: var(--ifm-menu-link-sublist-icon) center;
+    transform-origin: center;
+    position: absolute;
+    right: 12%;
+  }
+}
+
+.menu__link--active:not(.menu__link--sublist) {
+  &after {
+    background: var(--ifm-menu-link-sublist-icon) center;
+    transform-origin: center;
+  }
+
+  background: transparent;
+}
+
+.menu__link:hover {
+  background: transparent;
+  color: var(--ifm-menu-color-active);
+}
+
+.menu__link--active {
+  background: transparent;
+  color: var(--ifm-menu-color-active);
+  font-weight: 500;
+  position: relative;
+}
+
+@media (min-width: 997px) {
+  [class*="docSidebarContainer"] {
+    width: 280px !important;
+  }
+
+  .theme-doc-sidebar-container [class*="sidebar"] {
+    width: 280px !important;
+  }
+  /* [class*='docMainContainer'][class*='docMainContainer'] { */
+  /* use a container query to define behaviour below this point */
+  /* min-width: 69rem; */
+  /* } */
+  .menu,
+  pre,
+  [class*="tableOfContents"],
+  .tabs,
+  .toc-wrapper {
+    padding-inline: 0 !important;
+    scrollbar-width: thin;
+    scrollbar-color: #dedede transparent;
+  }
+
+  .table-of-contents__left-border {
+    border: none;
+    padding-inline-start: 0;
+  }
+
+  [data-theme="dark"] {
+    .menu,
+    pre,
+    [class*="tableOfContents"],
+    .tabs,
+    .toc-wrapper {
+      scrollbar-color: #2a2a2a transparent;
+      scrollbar-width: thin;
+    }
+  }
+
+  /* ======= BreadCrumbs ==================== */
+  .breadcrumbs {
+    margin-bottom: 0;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .breadcrumbs__link {
+    font-size: 14px;
+    padding: 0;
+  }
+
+  .breadcrumbs__item:not(:last-child):after {
+    margin: 0;
+    margin-inline-start: var(--ifm-breadcrumb-spacing);
+  }
+
+  .breadcrumbs__item--active .breadcrumbs__link {
+    background: transparent;
+    color: var(--mastra-text-primary);
+  }
+
+  .breadcrumbs__item a {
+    text-transform: capitalize;
+    font-size: 14px;
+    text-decoration: none;
+    color: var(--mastra-text-tertiary);
+    padding: 0;
+    font-size: 14px;
+  }
+
+  /* ======= Markdown headings ==================== */
+  .markdown h1:first-child {
+    --ifm-h1-font-size: 2.25rem;
+    letter-spacing: -0.028em;
+  }
+
+  .markdown {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      letter-spacing: -0.028em;
+    }
+
+    h2,
+    h3 {
+      border-bottom: 1px solid oklch(92.8% 0.006 264.531);
+      padding-bottom: 0.5rem;
+      font-weight: 600;
+    }
+  }
+
+  [data-theme="dark"] {
+    .markdown h2,
+    .markdown h3 {
+      border-bottom-color: var(--border);
+    }
+  }
+
+  h2:has(code) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  h1 code,
+  h2 code,
+  h3 code,
+  h4 code,
+  h5 code,
+  h6 code {
+    font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
+    border-radius: 10px;
+  }
+
+  iframe,
+  img,
+  video {
+    border-radius: 12px;
+    max-width: 100%;
+  }
+
+  ul {
+    list-style: disc;
+  }
+
+  ol {
+    list-style: decimal;
+  }
+
+  /* ==================== PAGINATION ==================== */
+
+  .pagination-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .pagination-nav a {
+    text-decoration: none;
+  }
+
+  .pagination-nav__link:not(.pagination-nav__link--next) {
+    padding-inline-start: 0px;
+  }
+
+  .pagination-nav__link--next:is(.pagination-nav__link--next) {
+    padding-inline-end: 0px;
+  }
+
+  .pagination-nav__label.pagination-nav__label {
+    padding-inline-start: 0px;
+
+    &::before {
+      content: "";
+    }
+
+    &::after {
+      content: "";
+    }
+  }
+
+  /* ==================== CODE BLOCKS ==================== */
+  .theme-code-block.theme-code-block {
+    box-shadow: none;
+    background: none;
+  }
+
+  pre {
+    --prism-background-color: var(--mastra-surface-2);
+    background: var(--mastra-surface-2);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  pre * {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  code {
+    --bg-color: : var(--mastra-surface-5);
+    font-family: var(--ifm-font-family-monospace);
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    border: 1px solid color-mix(in oklab, #000 4%, transparent);
+    background: color-mix(in oklab, #000 3%, transparent);
+    padding: 0.12em 0.25em;
+  }
+
+  [data-theme="dark"] code {
+    background: color-mix(in oklab, #fff 10%, transparent);
+    border-color: color-mix(in oklab, #fff 10%, transparent);
+  }
+
+  pre code {
+    font-size: 13px;
+    line-height: 1.6;
+    background: transparent !important;
+    border: none !important;
+    padding: 0;
+    color: var(--mastra-text-muted);
+  }
+
+  [data-theme="dark"] pre code {
+    background: transparent;
+  }
+
+  /* Code block title bar */
+  div[class*="codeBlockTitle"] {
+    border: 0.5px solid var(--border);
+    border-bottom: none;
+    background: var(--mastra-surface-2);
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    font-size: 0.875rem;
+    color: var(--mastra-text-tertiary);
+    font-family: var(--ifm-font-family-monospace);
+  }
+
+  [data-theme="dark"] div[class*="codeBlockTitle"] {
+    border-color: var(--border);
+    background: #171717;
+    color: var(--mastra-text-tertiary);
+  }
+
+  /* Pre with title above - remove top border radius */
+  div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+
+  /* Highlighted lines in code blocks */
+  .theme-code-block-highlighted-line {
+    box-shadow: 2px 0 var(--mastra-green-accent-2) inset;
+  }
+
+  .theme-code-block-highlighted-line.codeLine_lJS_ [class*="codeLineContent"] {
+    &:before {
+      content: "";
+      inset-block: 0;
+      left: 20px;
+      background: var(--docusaurus-highlighted-code-line-bg);
+      position: absolute;
+      z-index: -1;
+    }
+    position: relative;
+    background: transparent;
+  }
+
+  .theme-code-block-highlighted-line.codeLine_lJS_ [class*="codeLineNumber"] {
+    &:after {
+      content: "";
+      inset-block: 0;
+      left: 0;
+      background: var(--docusaurus-highlighted-code-line-bg);
+      position: absolute;
+      z-index: -1;
+    }
+
+    position: relative;
+    background: transparent;
+  }
+
+  [data-theme="dark"] .theme-code-block-highlighted-line {
+    background-color: var(--mastra-surface-5);
+  }
+
+  /* Copy button */
+  button[class*="copyButton"],
+  button[class*="clean-btn"] {
+    border: none;
+    background: transparent;
+  }
+
+  button[class*="copyButton"]:hover {
+    background: var(--mastra-surface-3);
+  }
+
+  [data-theme="dark"] button[class*="copyButton"]:hover {
+    background: var(--mastra-surface-4);
+  }
+
+  pre code > span,
+  .prism-code > span {
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+
+  article p code,
+  article li code,
+  article td code {
+    font-size: 0.875rem;
+    padding: 0.12em 0.25em;
+    border-radius: 0.375rem;
+    white-space: nowrap;
+    background: color-mix(in oklab, #000 3%, transparent);
+    border: 1px solid color-mix(in oklab, #000 4%, transparent);
+  }
+
+  [data-theme="dark"] article p code,
+  [data-theme="dark"] article li code,
+  [data-theme="dark"] article td code {
+    border-color: var(--border-code);
+  }
+
+  /* Language label in code blocks */
+  div[class*="codeBlockLines"] {
+    font-family: var(--ifm-font-family-monospace);
+  }
+
+  /* Line numbers in code blocks */
+  .prism-code .token-line::before {
+    color: var(--mastra-text-muted-2);
+  }
+
+  [data-theme="dark"] .prism-code .token-line::before {
+    color: var(--mastra-text-quaternary);
+  }
+
+  /* ==================== SIDEBAR ==================== */
+  .theme-doc-sidebar-container {
+    border-right: 0.5px solid var(--border);
+  }
+
+  [data-theme="dark"] .theme-doc-sidebar-container {
+    border-right-color: var(--border);
+  }
+
+  /* ==================== FOOTER ==================== */
+  .footer {
+    background-color: var(--ifm-navbar-background-color);
+    border-top: var(--border-sm) solid var(--border);
+    color: var(--mastra-text-secondary);
+    padding: 2rem 0;
+    display: none !important;
+  }
+
+  .footer__link-item {
+    color: var(--mastra-text-tertiary);
+    font-weight: 400;
+  }
+
+  .footer__link-item:hover {
+    color: var(--mastra-text-primary);
+    text-decoration: none;
+  }
+
+  .footer__copyright {
+    color: var(--mastra-text-tertiary);
+    font-size: 0.8125rem;
+  }
+
+  /* ==================== LINKS ==================== */
+  article a {
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    text-decoration-color: var(--mastra-green-muted);
+    color: var(--mastra-text-primary);
+  }
+
+  article a:hover {
+    color: var(--mastra-green-accent-2);
+    text-decoration-color: var(--mastra-green-accent-2);
+  }
+
+  [data-theme="dark"] .markdown a {
+    text-decoration-color: var(--mastra-green-accent);
+    color: var(--mastra-green-accent);
+  }
+
+  [data-theme="dark"] article a:hover {
+    color: var(--mastra-green-accent-2);
+  }
+
+  /* ==================== TYPOGRAPHY ==================== */
+  article p {
+    line-height: 1.7;
+    color: var(--mastra-text-secondary);
+  }
+
+  article h1,
+  article h2,
+  article h3,
+  article h4,
+  article h5,
+  article h6 {
+    color: var(--mastra-text-primary);
+  }
+
+  article li {
+    color: var(--mastra-text-secondary);
+  }
+
+  /* ==================== TABLES ==================== */
+  table {
+    border: none;
+    border-collapse: collapse;
+  }
+
+  table thead tr {
+    border-bottom: 1px solid var(--border);
+  }
+
+  table tbody tr {
+    border-bottom: 1px solid var(--border);
+  }
+
+  table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  thead th {
+    text-align: left;
+    color: var(--mastra-text-primary);
+    font-weight: 600;
+    padding: 0.8rem;
+  }
+
+  tbody td {
+    padding: 0.8rem;
+    color: var(--mastra-text-secondary);
+  }
+
+  table code {
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--ifm-global-radius);
+    background: transparent;
+    padding-inline: 0.62rem;
+    padding-block: 0.31rem 0.44rem;
+    font-size: 0.875rem;
+    height: 1.625rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+  }
+
+  [data-theme="dark"] table code {
+    border-color: var(--border-code);
+  }
+
+  /* ==================== ADMONITIONS ==================== */
+  .theme-admonition {
+    border-left-width: 4px;
+  }
+
+  .alert {
+    border: var(--border-sm) solid var(--border);
+    box-shadow: none;
+  }
+
+  [data-theme="dark"] .alert {
+    border-color: var(--border);
+  }
+
+  /* ==================== TABS ==================== */
+  .tabs {
+    border-bottom: var(--border-sm) solid var(--border);
+  }
+
+  .tabs__item {
+    color: var(--mastra-text-tertiary);
+    font-weight: 500;
+    padding: 0.5rem;
+    padding-inline: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .tabs__item:hover {
+    background: transparent;
+    color: var(--mastra-text-primary);
+  }
+
+  .tabs__item--active {
+    border-bottom: 1.5px solid var(--mastra-green-accent-2);
+    color: var(--mastra-text-primary);
+  }
+
+  [data-theme="dark"] .tabs__item--active {
+    border-bottom-color: var(--mastra-green-accent);
+  }
+
+  /* ==================== BREADCRUMBS ==================== */
+  .breadcrumbs__link {
+    color: var(--mastra-text-tertiary);
+  }
+
+  .breadcrumbs__link:hover {
+    color: var(--mastra-text-primary);
+    background: transparent;
+  }
+
+  /* ==================== PAGINATION ==================== */
+  .pagination-nav__link {
+    border: var(--border-sm) solid var(--border);
+  }
+
+  .pagination-nav__link:hover {
+    border-color: var(--mastra-green-accent-2);
+  }
+
+  [data-theme="dark"] .pagination-nav__link:hover {
+    border-color: var(--mastra-green-accent);
+  }
+
+  /* ==================== TOC (Table of Contents) ==================== */
+  .table-of-contents__link {
+    color: var(--mastra-text-tertiary);
+    font-weight: 400;
+  }
+
+  .table-of-contents__link:hover {
+    color: var(--mastra-text-primary);
+  }
+
+  .table-of-contents__link--active {
+    color: var(--mastra-text-primary);
+    font-weight: 500;
+  }
+
+  /* ==================== CONTAINER MAX-WIDTH ==================== */
+  .container {
+    max-width: 1400px;
+  }
+
+  /* ==================== DOC MAIN CONTAINER ==================== */
+  .container {
+    padding-top: 2rem !important;
+    padding-bottom: 5rem !important;
+  }
+
+  header h1 {
+    text-wrap: balance;
+  }
+
+  kbd {
+    all: unset;
+    background: var(--ifm-background-color);
+    border-radius: 4px;
+    padding-inline: 0.38rem;
+    padding-block: 0.2rem;
+    display: flex;
+  }
+
+  [data-theme="dark"] kbd {
+    background: var(--ifm-navbar-background-color);
+  }
+
+  /* Hide in Safari */
+  input,
+  button {
+    font-family: var(--ifm-font-family-base);
+  }
+
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* ==================== DROPDOWN ANIMATIONS ==================== */
+  @keyframes slideDownAndFade {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideUpAndFade {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideLeftAndFade {
+    from {
+      opacity: 0;
+      transform: translateX(2px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideRightAndFade {
+    from {
+      opacity: 0;
+      transform: translateX(-2px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Data attribute animation triggers */
+  [data-side="bottom"][data-slot="dropdown-menu-content"] {
+    animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-side="top"][data-slot="dropdown-menu-content"] {
+    animation: slideUpAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-side="left"][data-slot="dropdown-menu-content"] {
+    animation: slideLeftAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-side="right"][data-slot="dropdown-menu-content"] {
+    animation: slideRightAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Fallback for when side is not specified */
+  [data-state="open"][data-slot="dropdown-menu-content"]:not([data-side]) {
+    animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0px 1000px var(--ifm-background-color) inset !important;
+    /* you might also set text-fill colour if needed */
+    -webkit-text-fill-color: #000 !important;
+  }
+
+  .grecaptcha-badge {
+    visibility: hidden;
+  }
+
+  .copilotKitMarkdown p {
+    font-size: 14px !important;
+    margin-bottom: 8px;
+  }
+
+  .copilotKitMarkdown pre {
+    padding: 0px;
+  }
+
+  .copilotKitMarkdown hr {
+    margin-block: 12px !important;
+    color: var(--borders-subtle) !important;
+  }
+
+  .copilotKitMarkdown h3 {
+    font-size: calc((16 / 16) * 1rem) !important;
+    font-weight: 500;
+    word-spacing: -1px;
+    margin-bottom: 8px;
+    margin-top: 20px;
+  }
+
+  .copilotKitMarkdown h2 {
+    font-size: calc((18 / 16) * 1rem) !important;
+    font-weight: 500;
+    word-spacing: -1px;
+    margin-bottom: 8px;
+    margin-top: 20px;
+    text-decoration: underline;
+  }
+
+  .copilotKitMarkdown a {
+    color: var(--mastra-green-accent-2) !important;
+    padding-left: 2px !important;
+    font-weight: 500;
+
+    &:where(.dark, .dark *) {
+      color: var(--mastra-green-accent) !important;
+    }
+  }
+
+  .copilotKitCodeBlockToolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+  }
+
+  .copilotKitMarkdown ul {
+    :where(& > :not(:last-child)) {
+      --tw-space-y-reverse: 0;
+      /* --spacing: 0.25rem; */
+      margin-block-start: calc(
+        calc(var(--spacing) * 2) /* 0.25rem = 4px */ * var(--tw-space-y-reverse)
+      );
+      margin-block-end: calc(
+        calc(var(--spacing) * 2) /* 0.25rem = 4px */ *
+          calc(1 - var(--tw-space-y-reverse))
+      );
+    }
+  }
+
+  button.copilotKitCodeBlockToolbarButton {
+    cursor: pointer !important;
+  }
+
+  .copilotKitCodeBlockToolbarButtons {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .copilotKitCodeBlock > div {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  #custom-chat-input {
+    /* hide scroll bar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  #custom-chat-input::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide TOC when chatbot sidebar is open using CSS variable */
+  /* Note: Container style queries (@container style()) only work on properties
+   set directly on the container element itself, not on root/ancestor elements.
+   Since --chatbot-sidebar-open is set on document.documentElement (:root),
+   we use attribute selectors instead to check for the inline style. */
+
+  /*html[style*="--chatbot-sidebar-open: 1"] #toc-column {
+    display: none;
+  }*/
+
+  #doc-item-container {
+    container-name: doc;
+  }
+
+  @container doc (max-width: 984px) {
+    #toc-column {
+      display: none !important;
+    }
+  }
+
+  /*/*
+
+  html[style*="--chatbot-sidebar-open: 0"] #doc-item-container {
+    max-width: 100% !important;
+  } */
+
+  #doc-item-container {
+    max-width: 64rem;
+    margin: 0 auto;
+  }
+
+  /* #toc-column {
+  display: none;
+} */
+  .card__grid a {
+    color: var(--mastra-text-secondary);
+  }
+
+  [data-theme="dark"] .card__grid a {
+    color: white;
+  }
+
+  .navbar-sidebar__item {
+    padding-inline: 0.5rem !important;
+  }
+
+  .theme-doc-toc-mobile {
+    ul {
+      border-color: var(--border) !important;
+    }
+
+    button {
+      &:after {
+        background: var(--ifm-menu-link-sublist-icon) center;
+        transform-origin: center;
+      }
+    }
+  }
+}
+
+#docs-search-results {
+  scrollbar-width: none;
+}
+
+p {
+  @apply tracking-[-0.09px] leading-[1.6];
+}
+
+@media (min-width: 997px) {
+  .theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
+    padding-inline-start: 0.5rem;
+  }
+
+  p {
+    @apply tracking-[-0.09px] leading-[1.6];
+  }
+
+  [class*="docItemContainer"] {
+    padding-inline: 3rem;
+    max-width: 48rem;
+    margin: 0 auto;
+  }
+
+  li:has(ul.menu__list) .menu__list {
+    margin-bottom: 0.25rem;
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      width: 1px;
+      inset-inline-start: calc(0.25rem * 3);
+      inset-block: calc(0.25rem * 1);
+      background-color: var(--sidebar-border);
+    }
+  }
+
+  .menu__link--active:not(.menu__link--sublist)::before {
+    content: "";
+    position: absolute;
+    left: calc(0.25rem * -2.5);
+    top: calc(0.25rem * 1);
+    bottom: 0;
+    width: 1.5px;
+    background: var(--mastra-text-primary);
+    border-radius: 8px;
+  }
+
+  .theme-doc-sidebar-item-link-level-3,
+  .theme-doc-sidebar-item-link-level-4 {
+    .menu__link--active::before {
+      inset-inline-start: 0px;
+    }
+  }
+
+  .menu__list-item:not(:first-child) {
+    margin-top: 0.5rem;
+  }
+
+  .menu__list-item-collapsible:hover {
+    background: transparent;
+  }
+
+  .menu__list-item-collapsible--active {
+    background: transparent;
+  }
+
+  .theme-doc-sidebar-container.theme-doc-sidebar-container {
+    padding-inline-start: 0rem;
+    border-right: var(--border-sm) solid var(--border);
+  }
+
+  [class*="sidebar"]:has(> .menu) {
+    padding-inline-start: 1rem;
+  }
+
+  .theme-doc-toc-desktop.theme-doc-toc-desktop {
+    position: static !important;
+  }
+
+  .toc-wrapper {
+    @apply sticky overflow-y-auto;
+    top: calc(var(--ifm-navbar-height) + 1rem);
+    max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
+  }
+
+  .menu__link--sublist {
+    &::after {
+      @apply absolute right-[12%];
+    }
+  }
+
+  .theme-doc-sidebar-item-link:not(.theme-doc-sidebar-item-link-level-2)
+    .menu__link {
+    @apply relative;
+  }
+
+  .menu__list-item-collapsible {
+    margin-inline-start: -0.25rem;
+  }
+
+  .theme-doc-sidebar-item-link-level-2 {
+    padding-inline-start: 0.65rem;
+    margin-block-end: calc(0.25rem * 1.5);
+  }
+
+  .theme-doc-sidebar-item-link-level-3 > a {
+    margin-inline-start: -0.25rem;
+  }
+
+  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible {
+    margin-inline-start: 0.18rem;
+  }
+
+  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible a {
+    &::after {
+      right: 16.5%;
+    }
+  }
+
+  .theme-doc-sidebar-item-category-level-3 > .menu__list-item-collapsible a {
+    &::after {
+      right: 20.4%;
+    }
+  }
+}
+
+.docusaurus-mt-lg {
+  overflow-x: hidden;
+}
+
+@media (min-width: 997px) {
+  .docusaurus-mt-lg {
+    overflow-x: revert;
+  }
+}
+
+/* Hide sidebar items with sidebar-hidden class */
+.sidebar-hidden {
+  display: none !important;
+}
+
+/* Code block overrides */
+.language-diff .inserted {
+  color: var(--prism-color-inserted) !important;
+}
+
+.language-diff .deleted {
+  color: var(--prism-color-deleted) !important;
+}

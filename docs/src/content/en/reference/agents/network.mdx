@@ -1,29 +1,31 @@
 ---
-title: "Reference: Agent.network() (Experimental) | Agents | Mastra Docs"
+title: "Reference: Agent.network() | Agents | Mastra Docs"
 description: "Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing."
 ---
 
-import { NetworkCallout } from "@/components/network-callout.tsx"
-
 # Agent.network()
 
-<NetworkCallout />
+:::caution Experimental Feature
+This is an experimental API that may change in future versions. The `network()` method enables multi-agent collaboration and workflow orchestration. Use with caution in production environments.
+:::
 
 The `.network()` method enables multi-agent collaboration and routing. This method accepts messages and optional execution options.
 
 ## Usage example
 
 ```typescript copy
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { agent1, agent2 } from './agents';
-import { workflow1 } from './workflows';
-import { tool1, tool2 } from './tools';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { agent1, agent2 } from "./agents";
+import { workflow1 } from "./workflows";
+import { tool1, tool2 } from "./tools";
 
 const agent = new Agent({
-  name: 'network-agent',
-  instructions: 'You are a network agent that can help users with a variety of tasks.',
-  model: openai('gpt-4o'),
+  id: "network-agent",
+  name: "Network Agent",
+  instructions:
+    "You are a network agent that can help users with a variety of tasks.",
+  model: openai("gpt-4o"),
   agents: {
     agent1,
     agent2,
@@ -35,7 +37,7 @@ const agent = new Agent({
     tool1,
     tool2,
   },
-})
+});
 
 await agent.network(`
   Find me the weather in Tokyo. 
@@ -50,7 +52,8 @@ await agent.network(`
     {
       name: "messages",
       type: "string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]",
-      description: "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
+      description:
+        "The messages to send to the agent. Can be a single string, array of strings, or structured message objects.",
     },
     {
       name: "options",
@@ -75,106 +78,135 @@ await agent.network(`
       name: "memory",
       type: "object",
       isOptional: true,
-      description: "Configuration for memory. This is the preferred way to manage memory.",
+      description:
+        "Configuration for memory. This is the preferred way to manage memory.",
       properties: [
         {
-          parameters: [{
+          parameters: [
+            {
               name: "thread",
               type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
               isOptional: false,
-              description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
-          }]
+              description:
+                "The conversation thread, as a string ID or an object with an `id` and optional `metadata`.",
+            },
+          ],
         },
         {
-          parameters: [{
+          parameters: [
+            {
               name: "resource",
               type: "string",
               isOptional: false,
-              description: "Identifier for the user or resource associated with the thread."
-          }]
+              description:
+                "Identifier for the user or resource associated with the thread.",
+            },
+          ],
         },
         {
-          parameters: [{
+          parameters: [
+            {
               name: "options",
               type: "MemoryConfig",
               isOptional: true,
-              description: "Configuration for memory behavior, like message history and semantic recall."
-          }]
-        }
-      ]
+              description:
+                "Configuration for memory behavior, like message history and semantic recall.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
-      description: "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+      description:
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
-          parameters: [{
-            name: "currentSpan",
-            type: "AISpan",
-            isOptional: true,
-            description: "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "Span",
+              isOptional: true,
+              description:
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for Tracing configuration.",
       properties: [
         {
-          parameters: [{
-            name: "metadata",
-            type: "Record<string, any>",
-            isOptional: true,
-            description: "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for OTLP telemetry collection during streaming (not AI tracing).",
+        "Settings for OTLP telemetry collection during streaming (not Tracing).",
       properties: [
         {
-          parameters: [{
-            name: "isEnabled",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable telemetry. Disabled by default while experimental."
-          }]
+          parameters: [
+            {
+              name: "isEnabled",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable telemetry. Disabled by default while experimental.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "recordInputs",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information."
-          }]
+          parameters: [
+            {
+              name: "recordInputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "recordOutputs",
-            type: "boolean",
-            isOptional: true,
-            description: "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information."
-          }]
+          parameters: [
+            {
+              name: "recordOutputs",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "functionId",
-            type: "string",
-            isOptional: true,
-            description: "Identifier for this function. Used to group telemetry data by function."
-          }]
-        }
-      ]
+          parameters: [
+            {
+              name: "functionId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Identifier for this function. Used to group telemetry data by function.",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "modelSettings",
@@ -184,80 +216,103 @@ await agent.network(`
         "Model-specific settings like temperature, maxTokens, topP, etc. These are passed to the underlying language model.",
       properties: [
         {
-          parameters: [{
-            name: "temperature",
-            type: "number",
-            isOptional: true,
-            description: "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic."
-          }]
+          parameters: [
+            {
+              name: "temperature",
+              type: "number",
+              isOptional: true,
+              description:
+                "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "maxRetries",
-            type: "number",
-            isOptional: true,
-            description: "Maximum number of retries for failed requests."
-          }]
+          parameters: [
+            {
+              name: "maxRetries",
+              type: "number",
+              isOptional: true,
+              description: "Maximum number of retries for failed requests.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "topP",
-            type: "number",
-            isOptional: true,
-            description: "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either temperature or topP, but not both."
-          }]
+          parameters: [
+            {
+              name: "topP",
+              type: "number",
+              isOptional: true,
+              description:
+                "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either temperature or topP, but not both.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "topK",
-            type: "number",
-            isOptional: true,
-            description: "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses."
-          }]
+          parameters: [
+            {
+              name: "topK",
+              type: "number",
+              isOptional: true,
+              description:
+                "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "presencePenalty",
-            type: "number",
-            isOptional: true,
-            description: "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition)."
-          }]
+          parameters: [
+            {
+              name: "presencePenalty",
+              type: "number",
+              isOptional: true,
+              description:
+                "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "frequencyPenalty",
-            type: "number",
-            isOptional: true,
-            description: "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition)."
-          }]
+          parameters: [
+            {
+              name: "frequencyPenalty",
+              type: "number",
+              isOptional: true,
+              description:
+                "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
+            },
+          ],
         },
         {
-          parameters: [{
-            name: "stopSequences",
-            type: "string[]",
-            isOptional: true,
-            description: "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated."
-          }]
+          parameters: [
+            {
+              name: "stopSequences",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
+            },
+          ],
         },
-      ]
+      ],
     },
     {
       name: "runId",
       type: "string",
       isOptional: true,
-      description: "Unique ID for this generation run. Useful for tracking and debugging purposes.",
+      description:
+        "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "traceId",
       type: "string",
       isOptional: true,
-      description: "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+      description:
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />
@@ -269,7 +324,8 @@ await agent.network(`
     {
       name: "stream",
       type: "MastraAgentNetworkStream<NetworkChunkType>",
-      description: "A custom stream that extends ReadableStream<NetworkChunkType> with additional network-specific properties",
+      description:
+        "A custom stream that extends ReadableStream<NetworkChunkType> with additional network-specific properties",
     },
     {
       name: "status",

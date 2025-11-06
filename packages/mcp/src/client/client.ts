@@ -1,8 +1,9 @@
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
+import type { Tool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -59,7 +60,7 @@ export interface LogMessage {
   serverName: string;
   /** Optional additional details */
   details?: Record<string, any>;
-  runtimeContext?: RuntimeContext | null;
+  requestContext?: RequestContext | null;
 }
 
 /**
@@ -219,7 +220,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableServerLogs?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private currentOperationContext: RuntimeContext | null = null;
+  private currentOperationContext: RequestContext | null = null;
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -288,7 +289,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
-        runtimeContext: this.currentOperationContext,
+        requestContext: this.currentOperationContext,
       });
     }
   }
@@ -662,10 +663,10 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  async tools() {
+  async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ timeout: this.timeout });
-    const toolsRes: Record<string, any> = {};
+    const toolsRes: Record<string, Tool<any, any, any, any>> = {};
     for (const tool of tools) {
       this.log('debug', `Processing tool: ${tool.name}`);
       try {
@@ -674,15 +675,15 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+          execute: async (input: any, context?: { requestContext?: RequestContext | null }) => {
             const previousContext = this.currentOperationContext;
-            this.currentOperationContext = runtimeContext || null; // Set current context
+            this.currentOperationContext = context?.requestContext || null; // Set current context
             try {
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
+              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input });
               const res = await this.client.callTool(
                 {
                   name: tool.name,
-                  arguments: context,
+                  arguments: input,
                 },
                 CallToolResultSchema,
                 {
@@ -695,7 +696,7 @@ export class InternalMastraMCPClient extends MastraBase {
             } catch (e) {
               this.log('error', `Error calling tool: ${tool.name}`, {
                 error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                toolArgs: context,
+                toolArgs: input,
               });
               throw e;
             } finally {
@@ -717,23 +718,5 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     return toolsRes;
-  }
-}
-
-/**
- * @deprecated MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.
- */
-
-export class MastraMCPClient extends InternalMastraMCPClient {
-  constructor(args: InternalMastraMCPClientOptions) {
-    super(args);
-    throw new MastraError(
-      {
-        id: 'MASTRA_MCP_CLIENT_DEPRECATED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        text: '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
-      },
-    );
   }
 }

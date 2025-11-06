@@ -35,7 +35,7 @@ jobs:
               -H 'Referer: https://cloud.mastra.ai/' \
               -H 'User-Agent: Github Action' \
               -H 'Content-Type: application/json' \
-              --data-raw '{"inputData":{"forumChannelId":"1349006916902191125","fetchLimit":1},"runtimeContext":{}}')
+              --data-raw '{"inputData":{"forumChannelId":"1349006916902191125","fetchLimit":1},"requestContext":{}}')
             
             echo "Workflow start response:"
             echo "$start_response" | jq .

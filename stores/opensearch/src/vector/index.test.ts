@@ -38,8 +38,8 @@ describe('OpenSearchVector', () => {
   const testIndexName2 = 'test-index2-' + Date.now();
 
   beforeAll(async () => {
-    // Initialize PgVector
-    vectorDB = new OpenSearchVector({ url });
+    // Initialize OpenSearchVector
+    vectorDB = new OpenSearchVector({ url, id: 'opensearch-test' });
   });
 
   afterAll(async () => {

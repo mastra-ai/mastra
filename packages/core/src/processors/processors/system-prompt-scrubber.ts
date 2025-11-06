@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
-import type { TracingContext } from '../../ai-tracing';
+import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -57,7 +57,8 @@ export interface SystemPromptDetection {
 }
 
 export class SystemPromptScrubber implements Processor {
-  public readonly name = 'system-prompt-scrubber';
+  public readonly id = 'system-prompt-scrubber';
+  public readonly name = 'System Prompt Scrubber';
 
   private strategy: 'block' | 'warn' | 'filter' | 'redact';
   private customPatterns: string[];
@@ -88,6 +89,7 @@ export class SystemPromptScrubber implements Processor {
     this.model = options.model;
 
     this.detectionAgent = new Agent({
+      id: 'system-prompt-detector',
       name: 'system-prompt-detector',
       model: this.model,
       instructions: this.instructions,
@@ -170,11 +172,11 @@ export class SystemPromptScrubber implements Processor {
     abort,
     tracingContext,
   }: {
-    messages: MastraMessageV2[];
+    messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
-    const processedMessages: MastraMessageV2[] = [];
+  }): Promise<MastraDBMessage[]> {
+    const processedMessages: MastraDBMessage[] = [];
 
     for (const message of messages) {
       if (message.role !== 'assistant' || !message.content?.parts) {
@@ -340,7 +342,7 @@ export class SystemPromptScrubber implements Processor {
   /**
    * Extract text content from a message
    */
-  private extractTextFromMessage(message: MastraMessageV2): string | null {
+  private extractTextFromMessage(message: MastraDBMessage): string | null {
     if (!message.content?.parts) {
       return null;
     }
@@ -359,7 +361,7 @@ export class SystemPromptScrubber implements Processor {
   /**
    * Create a redacted message with the given text
    */
-  private createRedactedMessage(originalMessage: MastraMessageV2, redactedText: string): MastraMessageV2 {
+  private createRedactedMessage(originalMessage: MastraDBMessage, redactedText: string): MastraDBMessage {
     return {
       ...originalMessage,
       content: {

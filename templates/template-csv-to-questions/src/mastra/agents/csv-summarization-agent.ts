@@ -6,11 +6,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'csv-summarization-agent-storage',
     url: process.env.MASTRA_DB_URL || 'file:../mastra.db',
   }),
 });
 
 export const csvSummarizationAgent = new Agent({
+  id: 'csv-summarization-agent',
   name: 'CSV Summarization Agent',
   description: 'An agent that summarizes and analyzes CSV data using a large context window model',
   instructions: `

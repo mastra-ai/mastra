@@ -1,5 +1,5 @@
 ---
-title: "LibSQL Storage | Storage System | Mastra Core"
+title: "Reference: LibSQL Storage | Storage | Mastra Docs"
 description: Documentation for the LibSQL storage implementation in Mastra.
 ---
 
@@ -20,11 +20,13 @@ import { LibSQLStore } from "@mastra/libsql";
 
 // File database (development)
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
 // Persistent database (production)
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: process.env.DATABASE_URL,
 });
 ```
@@ -66,7 +68,7 @@ For production use cases, use a persistent database URL: `libsql://your-database
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
 - `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata  
+- `mastra_evals`: Stores evaluation results and metadata
 - `mastra_threads`: Stores conversation threads
 - `mastra_messages`: Stores individual messages
 - `mastra_traces`: Stores telemetry and tracing data

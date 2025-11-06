@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { anthropic } from '@ai-sdk/anthropic';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -10,9 +9,10 @@ import { MastraProvider } from '@composio/mastra';
 const MAX_STEPS = 1000;
 
 export const financialModelingAgent = new Agent({
+  id: 'financial-modeling-agent',
   name: 'Financial Modeling Agent',
-  instructions: ({ runtimeContext }) => {
-    const redirectUrl = runtimeContext.get<'redirectUrl', string | undefined>('redirectUrl');
+  instructions: ({ requestContext }) => {
+    const redirectUrl = requestContext.get<'redirectUrl', string | undefined>('redirectUrl');
 
     if (redirectUrl && redirectUrl !== '<redirectUrl>') {
       return `
@@ -26,12 +26,14 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: anthropic('claude-3-7-sonnet-20250219'),
+  model: 'anthropic/claude-3-7-sonnet-20250219',
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'financial-modeling-agent-storage',
       url: 'file:../../mastra.db',
     }),
     vector: new LibSQLVector({
+      id: 'financial-modeling-agent-vector',
       connectionUrl: 'file:../../mastra.db',
     }),
     embedder: fastembed,
@@ -50,14 +52,14 @@ ${getFinancialModelingAgentPrompt(true)}
       },
     },
   }),
-  tools: async ({ runtimeContext }) => {
+  tools: async ({ requestContext }) => {
     const composio = new Composio({
       provider: new MastraProvider(),
     });
 
-    // retrieve userId and activeAccount from the runtimeContext
-    const userId = runtimeContext.get<'userId', string>('userId');
-    const activeAccount = runtimeContext.get<
+    // retrieve userId and activeAccount from the requestContext
+    const userId = requestContext.get<'userId', string>('userId');
+    const activeAccount = requestContext.get<
       'activeAccount',
       Awaited<ReturnType<typeof composio.connectedAccounts.list>>['items'][number]
     >('activeAccount');
@@ -72,8 +74,7 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return composioTools;
   },
-  defaultGenerateOptions: { maxSteps: MAX_STEPS },
-  defaultStreamOptions: { maxSteps: MAX_STEPS },
+  defaultOptions: { maxSteps: MAX_STEPS },
 });
 
 const getFinancialModelingAgentPrompt = (needsAuth: boolean) => `

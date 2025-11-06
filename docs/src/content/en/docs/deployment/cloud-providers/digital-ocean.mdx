@@ -1,28 +1,31 @@
 ---
-title: "Digital Ocean"
+title: "Digital Ocean | Deployment | Mastra Docs"
 description: "Deploy your Mastra applications to Digital Ocean."
 ---
 
-import { Callout, Steps, Tabs } from "nextra/components";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Digital Ocean
 
 Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 
-<Callout>
-  This guide assumes your Mastra application has been created using the default
-  `npx create-mastra@latest` command.
-  For more information on how to create a new Mastra application,
-  refer to our [getting started guide](./../../getting-started/installation.mdx)
-</Callout>
+:::note
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@latest` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](./../../getting-started/installation)
+:::
 
-<Tabs items={["App Platform", "Droplets"]}>
+<Tabs>
 
-<Tabs.Tab>
+  <TabItem value="app-platform" label="App Platform">
 
 ## App Platform
 
-### Prerequisites [#app-platform-prerequisites]
+### Prerequisites
 
 - A Git repository containing your Mastra application. This can be a [GitHub](https://github.com/) repository, [GitLab](https://gitlab.com/) repository, or any other compatible source provider.
 - A [Digital Ocean account](https://www.digitalocean.com/)
@@ -31,45 +34,47 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 
 <Steps>
 
-### Create a new App
+<StepItem>
+
+Create a new App
 
 - Log in to your [Digital Ocean dashboard](https://cloud.digitalocean.com/).
 - Navigate to the [App Platform](https://docs.digitalocean.com/products/app-platform/) service.
 - Select your source provider and create a new app.
 
-### Configure Deployment Source
+</StepItem>
+
+<StepItem>
+
+Configure Deployment Source
 
 - Connect and select your repository. You may also choose a container image or a sample app.
 - Select the branch you want to deploy from.
 - Configure the source directory if necessary. If your Mastra application uses the default directory structure, no action is required here.
 - Head to the next step.
 
-### Configure Resource Settings and Environment Variables
+</StepItem>
+
+<StepItem>
+
+Configure Resource Settings and Environment Variables
 
 - A Node.js build should be detected automatically.
 - **Configure Build Command**: You need to add a custom build command for the app platform to build your Mastra project successfully. Set the build command based on your package manager:
 
-<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
-  <Tabs.Tab>
-    ```
-    npm run build
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```
-    pnpm build
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```
-    yarn build
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```
-    bun run build
-    ```
-  </Tabs.Tab>
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ``` npm run build ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ``` pnpm build ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ``` yarn build ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ``` bun run build ```
+  </TabItem>
 </Tabs>
 
 - Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
@@ -77,63 +82,71 @@ Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
 - Other things you may optionally configure include, the region of your resource, the unique app name, and what project the resource belongs to.
 - Once you're done, you may create the app after reviewing your configuration and pricing estimates.
 
-### Deployment
+</StepItem>
+
+<StepItem>
+
+Deployment
 
 - Your app will be built and deployed automatically.
 - Digital Ocean will provide you with a URL to access your deployed application.
+
+</StepItem>
 
 </Steps>
 
 You can now access your deployed application at the URL provided by Digital Ocean.
 
-<Callout>
+:::note
 The Digital Ocean App Platform uses an ephemeral file system,
 meaning that any files written to the file system are short-lived and may be lost.
 Avoid using a Mastra storage provider that uses the file system,
 such as `LibSQLStore` with a file URL.
-</Callout>
+:::
 
-</Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab>
+  <TabItem value="droplets" label="Droplets">
 
 ## Droplets
 
 Deploy your Mastra application to Digital Ocean's Droplets.
 
-### Prerequisites [#droplets-prerequisites]
+### Prerequisites
 
 - A [Digital Ocean account](https://www.digitalocean.com/)
 - A [Droplet](https://docs.digitalocean.com/products/droplets/) running Ubuntu 24+
 - A domain name with an A record pointing to your droplet
 - A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
 - SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
-- Node.js 18+ installed on your droplet
+- Node.js 22.13.0 or later installed on your droplet
 
 ### Deployment Steps
 
 <Steps>
 
-### Clone your Mastra application
+<StepItem>
+
+Clone your Mastra application
 
 Connect to your Droplet and clone your repository:
 
-<Tabs items={["Public Repository", "Private Repository"]}>
-<Tabs.Tab>
+<Tabs>
+  <TabItem value="public" label="Public Repository">
 
 ```bash copy
 git clone https://github.com/<your-username>/<your-repository>.git
 ```
 
-</Tabs.Tab>
+  </TabItem>
 
-<Tabs.Tab>
+  <TabItem value="private" label="Private Repository">
 
 ```bash copy
 git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
 ```
 
-</Tabs.Tab>
+  </TabItem>
 </Tabs>
 
 Navigate to the repository directory:
@@ -142,13 +155,21 @@ Navigate to the repository directory:
 cd "<your-repository>"
 ```
 
-### Install dependencies
+</StepItem>
+
+<StepItem>
+
+Install dependencies
 
 ```bash copy
 npm install
 ```
 
-### Set up environment variables
+</StepItem>
+
+<StepItem>
+
+Set up environment variables
 
 Create a `.env` file and add your environment variables:
 
@@ -163,25 +184,35 @@ OPENAI_API_KEY=<your-openai-api-key>
 # Add other required environment variables
 ```
 
-### Build the application
+</StepItem>
+
+<StepItem>
+
+Build the application
 
 ```bash copy
 npm run build
 ```
 
-### Run the application
+</StepItem>
+
+<StepItem>
+
+Run the application
 
 ```bash copy
-node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+node --env-file=".env" .mastra/output/index.mjs
 ```
 
-<Callout>
+:::note
 Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
-</Callout>
+:::
+
+</StepItem>
 
 </Steps>
 
-</Tabs.Tab>
+</TabItem>
 
 </Tabs>
 
@@ -201,6 +232,6 @@ const mastraClient = new MastraClient({
 
 ## Next steps
 
-- [Mastra Client SDK](/docs/client-js/overview)
+- [Mastra Client SDK](/reference/client-js/mastra-client)
 - [Digital Ocean App Platform documentation](https://docs.digitalocean.com/products/app-platform/)
 - [Digital Ocean Droplets documentation](https://docs.digitalocean.com/products/droplets/)

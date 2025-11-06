@@ -10,7 +10,7 @@ It can take either a tool or an agent as a parameter to automatically create a s
 
 ## Usage example
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -18,17 +18,17 @@ const step1 = createStep({
   id: "step-1",
   description: "passes value from input to output",
   inputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   outputSchema: z.object({
-    value: z.number()
+    value: z.number(),
   }),
   execute: async ({ inputData }) => {
     const { value } = inputData;
     return {
-      value
+      value,
     };
-  }
+  },
 });
 ```
 
@@ -75,7 +75,8 @@ const step1 = createStep({
     {
       name: "stateSchema",
       type: "z.ZodObject<any>",
-      description: "Optional Zod schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
+      description:
+        "Optional Zod schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
       required: false,
     },
     {
@@ -83,7 +84,7 @@ const step1 = createStep({
       type: "(params: ExecuteParams) => Promise<any>",
       description: "Async function containing step logic",
       required: true,
-    }
+    },
   ]}
 />
 
@@ -126,7 +127,8 @@ const step1 = createStep({
     {
       name: "setState",
       type: "(state: z.infer<TState>) => void",
-      description: "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
+      description:
+        "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
     },
     {
       name: "runId",
@@ -134,22 +136,23 @@ const step1 = createStep({
       description: "Current run id",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "runCount",
       type: "number",
-      description: "The run count for this specific step, it automatically increases each time the step runs",
+      description:
+        "The run count for this specific step, it automatically increases each time the step runs",
       isOptional: true,
-    }
+    },
   ]}
 />
 
 ## Related
 
-- [Control flow](../../docs/workflows/control-flow.mdx)
-- [Using agents and tools](../../docs/workflows/agents-and-tools.mdx)
+- [Control flow](/docs/workflows/control-flow)
+- [Using agents and tools](/docs/workflows/agents-and-tools)

@@ -1,5 +1,5 @@
 ---
-title: RAG (Retrieval-Augmented Generation) in Mastra | Mastra Docs
+title: "RAG (Retrieval-Augmented Generation) in Mastra | RAG | Mastra Docs"
 description: Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
 ---
 
@@ -43,6 +43,7 @@ const { embeddings } = await embedMany({
 
 // 4. Store in vector database
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 await pgVector.upsert({
@@ -64,24 +65,13 @@ This example shows the essentials: initialize a document, create chunks, generat
 
 ## Document Processing
 
-The basic building block of RAG is document processing. Documents can be chunked using various strategies (recursive, sliding window, etc.) and enriched with metadata. See the [chunking and embedding doc](./chunking-and-embedding.mdx).
+The basic building block of RAG is document processing. Documents can be chunked using various strategies (recursive, sliding window, etc.) and enriched with metadata. See the [chunking and embedding doc](./chunking-and-embedding).
 
 ## Vector Storage
 
-Mastra supports multiple vector stores for embedding persistence and similarity search, including pgvector, Pinecone, Qdrant, and MongoDB. See the [vector database doc](./vector-databases.mdx).
-
-## Observability and Debugging
-
-Mastra's RAG system includes observability features to help you optimize your retrieval pipeline:
-
-- Track embedding generation performance and costs
-- Monitor chunk quality and retrieval relevance
-- Analyze query patterns and cache hit rates
-- Export metrics to your observability platform
-
-See the [OTel Configuration](../../reference/observability/otel-config.mdx) page for more details.
+Mastra supports multiple vector stores for embedding persistence and similarity search, including pgvector, Pinecone, Qdrant, and MongoDB. See the [vector database doc](./vector-databases).
 
 ## More resources
 
-- [Chain of Thought RAG Example](../../examples/rag/usage/cot-rag.mdx)
+- [Chain of Thought RAG Example](/examples/rag/usage/cot-rag)
 - [All RAG Examples](../../examples/) (including different chunking strategies, embedding models, and vector stores)

@@ -48,6 +48,7 @@
   "dependencies": {
     "@ai-sdk/ui-utils": "^1.2.11",
     "@assistant-ui/react": "^0.10.45",
+    "@mastra/ai-sdk": "workspace:^",
     "@assistant-ui/react-markdown": "^0.10.9",
     "@assistant-ui/react-syntax-highlighter": "^0.10.10",
     "@assistant-ui/react-ui": "^0.1.8",
@@ -60,7 +61,7 @@
     "@dagrejs/dagre": "^1.1.5",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
-    "@lezer/highlight": "^1.2.1",
+    "@lezer/highlight": "^1.2.3",
     "@lukeed/uuid": "^2.0.1",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -114,7 +115,7 @@
   },
   "peerDependencies": {
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=0.22.1-0 <2.0.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.81.5",
     "lucide-react": "^0.474.0",
@@ -155,5 +156,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

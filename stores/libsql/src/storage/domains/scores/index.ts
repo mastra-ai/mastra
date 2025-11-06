@@ -1,8 +1,14 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { TABLE_SCORERS, ScoresStorage, safelyParseJSON } from '@mastra/core/storage';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import {
+  TABLE_SCORERS,
+  ScoresStorage,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsLibSQL } from '../operations';
 
@@ -15,7 +21,7 @@ export class ScoresLibSQL extends ScoresStorage {
     this.client = client;
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -23,17 +29,46 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+
+      // Get total count first
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = ?`,
+        args: [runId],
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [runId, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [runId, limitValue, start],
       });
+
+      const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
+
       return {
-        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        scores,
         pagination: {
-          total: result.rows?.length ?? 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.rows?.length > pagination.perPage,
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -48,7 +83,7 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -62,6 +97,8 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
@@ -87,18 +124,44 @@ export class ScoresLibSQL extends ScoresStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // Get total count first
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [...queryParams, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [...queryParams, limitValue, start],
       });
 
+      const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
+
       return {
-        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        scores,
         pagination: {
-          total: result.rows?.length ?? 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.rows?.length > pagination.perPage,
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -118,7 +181,7 @@ export class ScoresLibSQL extends ScoresStorage {
     const inputValue = safelyParseJSON(row.input ?? '{}');
     const outputValue = safelyParseJSON(row.output ?? '{}');
     const additionalLLMContextValue = row.additionalLLMContext ? safelyParseJSON(row.additionalLLMContext) : null;
-    const runtimeContextValue = row.runtimeContext ? safelyParseJSON(row.runtimeContext) : null;
+    const requestContextValue = row.requestContext ? safelyParseJSON(row.requestContext) : null;
     const metadataValue = row.metadata ? safelyParseJSON(row.metadata) : null;
     const entityValue = row.entity ? safelyParseJSON(row.entity) : null;
     const preprocessStepResultValue = row.preprocessStepResult ? safelyParseJSON(row.preprocessStepResult) : null;
@@ -142,7 +205,7 @@ export class ScoresLibSQL extends ScoresStorage {
       input: inputValue,
       output: outputValue,
       additionalContext: additionalLLMContextValue,
-      runtimeContext: runtimeContextValue,
+      requestContext: requestContextValue,
       entityType: row.entityType,
       entity: entityValue,
       entityId: row.entityId,
@@ -174,7 +237,7 @@ export class ScoresLibSQL extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.name,
+            scorer: score.scorer.id,
             entityId: score.entityId,
             entityType: score.entityType,
             traceId: score.traceId || '',
@@ -212,7 +275,7 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -222,17 +285,46 @@ export class ScoresLibSQL extends ScoresStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+
+      // Get total count first
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ?`,
+        args: [entityId, entityType],
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [entityId, entityType, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [entityId, entityType, limitValue, start],
       });
+
+      const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
+
       return {
-        scores: result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [],
+        scores,
         pagination: {
-          total: result.rows?.length ?? 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.rows?.length > pagination.perPage,
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -247,7 +339,7 @@ export class ScoresLibSQL extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -257,6 +349,10 @@ export class ScoresLibSQL extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const countSQLResult = await this.client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
         args: [traceId, spanId],
@@ -264,21 +360,23 @@ export class ScoresLibSQL extends ScoresStorage {
 
       const total = Number(countSQLResult.rows?.[0]?.count ?? 0);
 
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       const result = await this.client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+        args: [traceId, spanId, limitValue, start],
       });
 
-      const hasMore = result.rows?.length > pagination.perPage;
-      const scores = result.rows?.slice(0, pagination.perPage).map(row => this.transformScoreRow(row)) ?? [];
+      const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
 
       return {
         scores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {

@@ -1,10 +1,11 @@
 ---
-title: Setting Up a Project
+title: "Setting Up and Deploying | Mastra Cloud | Mastra Docs"
 description: Configuration steps for Mastra Cloud projects
 ---
 
-import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
-import { Steps } from "nextra/components";
+import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Setting Up and Deploying
 
@@ -23,36 +24,44 @@ This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/c
 
 <Steps>
 
-### Sign in to Mastra Cloud
+<StepItem>
 
 Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
 
 - **GitHub**
 - **Google**
 
-### Install the Mastra GitHub app
+</StepItem>
+
+<StepItem>
 
 When prompted, install the Mastra GitHub app.
 
-![Install GitHub](/image/mastra-cloud/mastra-cloud-install-github.jpg)
+![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
 
-### Create a new project
+</StepItem>
+
+<StepItem>
 
 Click the **Create new project** button to create a new project.
 
-![Create new project](/image/mastra-cloud/mastra-cloud-create-new-project.jpg)
+![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
 
-### Import a Git repository
+</StepItem>
+
+<StepItem>
 
 Search for a repository, then click **Import**.
 
-![Import Git repository](/image/mastra-cloud/mastra-cloud-import-git-repository.jpg)
+![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
 
-### Configure the deployment
+</StepItem>
+
+<StepItem>
 
 Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
 
-![Deployment details](/image/mastra-cloud/mastra-cloud-deployment-details.jpg)
+![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
 
 - **Importing from GitHub**: The GitHub repository name
 - **Project name**: Customize the project name
@@ -61,15 +70,19 @@ Mastra Cloud automatically detects the right build settings, but you can customi
 - **Mastra directory**: Where Mastra files are located
 - **Environment variables**: Add environment variables used by the application
 - **Build and Store settings**:
-   - **Install command**: Runs pre-build to install project dependencies
-   - **Project setup command**: Runs pre-build to prepare any external dependencies
-   - **Port**: The network port the server will use
-   - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/storage/overview) storage
+  - **Install command**: Runs pre-build to install project dependencies
+  - **Project setup command**: Runs pre-build to prepare any external dependencies
+  - **Port**: The network port the server will use
+  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/server-db/storage) storage
 - **Deploy Project**: Starts the deployment process
 
-### Deploy project
+</StepItem>
 
-Click **Deploy Project** to create and deploy your application using the configuration you’ve set.
+<StepItem>
+
+Click **Deploy Project** to create and deploy your application using the configuration you've set.
+
+</StepItem>
 
 </Steps>
 
@@ -77,7 +90,7 @@ Click **Deploy Project** to create and deploy your application using the configu
 
 After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
 
-![Successful deployment](/image/mastra-cloud/mastra-cloud-successful-deployment.jpg)
+![Successful deployment](/img/mastra-cloud/mastra-cloud-successful-deployment.jpg)
 
 ## Continuous integration
 
@@ -85,7 +98,7 @@ Your project is now configured with automatic deployments which occur whenever y
 
 ## Testing your application
 
-After a successful deployment you can test your agents and workflows from the [Playground](/docs/mastra-cloud/dashboard#playground) in Mastra Cloud, or interact with them using our [Client SDK](/docs/client-js/overview).
+After a successful deployment you can test your agents and workflows [Studio](/docs/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/server-db/mastra-client).
 
 ## Next steps
 

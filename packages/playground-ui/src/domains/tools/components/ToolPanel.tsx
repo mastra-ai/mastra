@@ -7,16 +7,44 @@ import { parse } from 'superjson';
 import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from './ToolExecutor';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useMemo, useEffect } from 'react';
+import { toast } from '@/lib/toast';
 
 export interface ToolPanelProps {
   toolId: string;
 }
 
 export const ToolPanel = ({ toolId }: ToolPanelProps) => {
-  const { data: tool, isLoading } = useTool(toolId!);
+  const { data: agents = {} } = useAgents();
+
+  // Check if tool exists in any agent's tools
+  const agentTool = useMemo(() => {
+    for (const agent of Object.values(agents)) {
+      if (agent.tools) {
+        const tool = Object.values(agent.tools).find(t => t.id === toolId);
+        if (tool) {
+          return tool;
+        }
+      }
+    }
+    return null;
+  }, [agents, toolId]);
+
+  // Only fetch from API if tool not found in agents
+  const { data: apiTool, isLoading, error } = useTool(toolId!, { enabled: !agentTool });
+
+  const tool: any = agentTool || apiTool;
 
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
-  const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
+  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
+
+  useEffect(() => {
+    if (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load tool';
+      toast.error(`Error loading tool: ${errorMessage}`);
+    }
+  }, [error]);
 
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
@@ -24,7 +52,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     return executeTool({
       toolId: tool.id,
       input: data,
-      runtimeContext: playgroundRuntimeContext,
+      requestContext: playgroundRequestContext,
     });
   };
 
@@ -32,7 +60,8 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
     : z.object({});
 
-  if (isLoading) return null;
+  if (isLoading || error) return null;
+
   if (!tool)
     return (
       <div className="py-12 text-center px-6">

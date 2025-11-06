@@ -9,7 +9,8 @@ vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
   const port: number = 4114;
-  const mcpServerId = 'myMcpServer';
+  // Note: The ID gets slugified in MCPServerBase constructor, so 'myMcpServer' becomes 'my-mcp-server'
+  const mcpServerId = 'my-mcp-server';
   const testToolId = 'calculator';
   let client: MCPClient;
 
@@ -30,18 +31,73 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     // Wait for server to be ready
     await new Promise<void>((resolve, reject) => {
       let output = '';
+      let errorOutput = '';
+
+      const checkServer = async () => {
+        try {
+          // Try to fetch the MCP servers list endpoint to check if server is ready
+          const response = await fetch(`http://localhost:${port}/api/mcp/v0/servers`, {
+            signal: AbortSignal.timeout(1000),
+          });
+          if (response.ok) {
+            // Check that the expected MCP server is actually registered
+            const data = await response.json();
+            const hasExpectedServer = data.servers?.some((s: any) => s.id === mcpServerId);
+            if (hasExpectedServer) {
+              resolve();
+              return true;
+            }
+          }
+        } catch (e) {
+          // Server not ready yet
+        }
+        return false;
+      };
+
+      // Check if server is ready every 500ms
+      const healthCheckInterval = setInterval(async () => {
+        if (await checkServer()) {
+          clearInterval(healthCheckInterval);
+        }
+      }, 500);
+
       mastraServer.stdout?.on('data', data => {
         output += data.toString();
-        console.log(output);
-        if (output.includes('http://localhost:')) {
-          resolve();
+        console.log(data.toString());
+
+        // Also check via output as a fallback
+        if (output.includes('http://localhost:') || output.includes('ready in')) {
+          checkServer(); // Trigger immediate health check
         }
       });
+
       mastraServer.stderr?.on('data', data => {
+        errorOutput += data.toString();
         console.error('Mastra server error:', data.toString());
+
+        // Check for port conflicts
+        if (errorOutput.includes('EADDRINUSE') || errorOutput.includes('address already in use')) {
+          clearInterval(healthCheckInterval);
+          reject(new Error(`Port ${port} is already in use. Server stderr: ${errorOutput}`));
+        }
       });
 
-      setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
+      mastraServer.on('error', err => {
+        clearInterval(healthCheckInterval);
+        reject(new Error(`Failed to spawn Mastra server: ${err.message}`));
+      });
+
+      mastraServer.on('exit', code => {
+        if (code !== null && code !== 0) {
+          clearInterval(healthCheckInterval);
+          reject(new Error(`Mastra server exited with code ${code}. Stderr: ${errorOutput}`));
+        }
+      });
+
+      setTimeout(() => {
+        clearInterval(healthCheckInterval);
+        reject(new Error(`Mastra server failed to start within 100s. Output: ${output}\nErrors: ${errorOutput}`));
+      }, 100000);
     });
 
     client = new MCPClient({
@@ -75,14 +131,11 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       },
     };
 
-    const tools = await client.getTools();
-    console.log('Tools:', tools);
+    const tools = await client.listTools();
 
-    const tool = tools['myMcpServer_calculator'];
-    console.log('Tool:', tool);
+    const tool = tools['my-mcp-server_calculator'];
 
-    const result = await tool.execute({ context: toolCallPayload.params.args });
-    console.log('Result:', result);
+    const result = await tool.execute!(toolCallPayload.params.args);
 
     expect(result).toBeDefined();
     expect(result.isError).toBe(false);
@@ -111,14 +164,14 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     const toolCallPayloadParams = { num1: 10, num2: 5, operation: 'add' };
 
     // Get tools (this will connect the client internally if not already connected)
-    const tools = await sseClient.getTools();
+    const tools = await sseClient.listTools();
 
     const toolName = `${mcpServerId}_${testToolId}`;
     const tool = tools[toolName];
     expect(tool, `Tool '${toolName}' should be available via SSE client`).toBeDefined();
 
     // Execute the tool
-    const result = await tool.execute({ context: toolCallPayloadParams });
+    const result = await tool.execute!(toolCallPayloadParams);
 
     expect(result).toBeDefined();
     expect(result.isError).toBe(false);
@@ -134,7 +187,8 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
 
   // --- New tests for MCP Registry API Style Routes ---
   describe('MCP Registry API Style Endpoints', () => {
-    const defaultMcpServerLogicalId = 'myMcpServer'; // Assuming this is the ID of the default server
+    // Note: The ID gets slugified, so 'myMcpServer' becomes 'my-mcp-server'
+    const defaultMcpServerLogicalId = 'my-mcp-server';
 
     it('GET /api/mcp/v0/servers - should list available MCP servers', async () => {
       const response = await fetch(`http://localhost:${port}/api/mcp/v0/servers`);
@@ -151,9 +205,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       expect(defaultServerInfo).toBeDefined();
       expect(defaultServerInfo).toHaveProperty('name');
       expect(defaultServerInfo).toHaveProperty('version_detail');
-      // Based on default mastra dev setup, if myMcpServer is the key, its id becomes 'myMcpServer'
-      // And its name might be something like 'my-mcp-server' if not explicitly set in MCPServerConfig for it.
-      // For this test, we assume the `id` is the key used in Mastra config.
+      // The ID gets slugified in MCPServerBase constructor
       expect(defaultServerInfo.id).toBe(defaultMcpServerLogicalId);
     });
 
@@ -230,6 +282,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       const agentJson = await agent.json();
       const tools = agentJson.tools;
 
+      expect(tools).toBeDefined();
       expect(tools).toHaveProperty('weather_fetchWeather');
       expect(Object.keys(tools).length).toBe(5);
     });
@@ -247,11 +300,11 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         },
       };
 
-      const tools = await client.getTools();
-      const tool = tools['myMcpServer_testMastraInstance'];
+      const tools = await client.listTools();
+      const tool = tools['my-mcp-server_testMastraInstance'];
       expect(tool).toBeDefined();
 
-      const result = await tool.execute({ context: toolCallPayload.params.args }, { suspend: async () => {} });
+      const result = await tool.execute!(toolCallPayload.params.args, {});
 
       expect(result).toBeDefined();
       expect(result.isError).toBe(false);

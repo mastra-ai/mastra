@@ -107,12 +107,7 @@ const getStepNodeAndEdge = ({
 }): { nodes: Node[]; edges: Edge[]; nextPrevNodeIds: string[]; nextPrevStepIds: string[] } => {
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
-  if (
-    nextStepFlow?.type === 'step' ||
-    nextStepFlow?.type === 'foreach' ||
-    nextStepFlow?.type === 'loop' ||
-    nextStepFlow?.type === 'waitForEvent'
-  ) {
+  if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
     const nextStepId = allPrevNodeIds?.includes(nextStepFlow.step.id)
       ? `${nextStepFlow.step.id}-${yIndex + 1}`
       : nextStepFlow.step.id;
@@ -127,18 +122,18 @@ const getStepNodeAndEdge = ({
   if (nextStepFlow?.type === 'parallel') {
     nextNodeIds =
       nextStepFlow?.steps.map(step => {
-        const stepId = (step as { type: 'step'; step: { id: string } }).step.id;
+        const stepId = step.step.id;
         const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
         return nextStepId;
       }) || [];
-    nextStepIds = nextStepFlow?.steps.map(step => (step as { type: 'step'; step: { id: string } }).step.id) || [];
+    nextStepIds = nextStepFlow?.steps.map(step => step.step.id) || [];
   }
   if (nextStepFlow?.type === 'conditional') {
     nextNodeIds = nextStepFlow?.serializedConditions.map(cond => cond.id) || [];
-    nextStepIds = nextStepFlow?.steps?.map(step => (step as { type: 'step'; step: { id: string } }).step.id) || [];
+    nextStepIds = nextStepFlow?.steps?.map(step => step.step.id) || [];
   }
 
-  if (stepFlow.type === 'step' || stepFlow.type === 'foreach' || stepFlow.type === 'waitForEvent') {
+  if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
     const hasGraph = stepFlow.step.component === 'WORKFLOW';
     const nodeId = allPrevNodeIds?.includes(stepFlow.step.id) ? `${stepFlow.step.id}-${yIndex}` : stepFlow.step.id;
     const nodes = [
@@ -171,7 +166,6 @@ const getStepNodeAndEdge = ({
           withoutBottomHandle: !nextNodeIds.length,
           stepGraph: hasGraph ? stepFlow.step.serializedStepFlow : undefined,
           mapConfig: stepFlow.step.mapConfig,
-          ...(stepFlow.type === 'waitForEvent' ? { event: stepFlow.event } : {}),
         },
       },
     ];

@@ -13,14 +13,9 @@ const TEST_CONFIG: ClickhouseConfig = {
   //   mastra_traces: {
   //     row: { interval: 600, unit: 'SECOND' },
   //   },
-  //   mastra_evals: {
-  //     columns: {
-  //       result: { interval: 10, unit: 'SECOND' },
-  //     },
-  //   },
   // },
 };
 
-const storage = new ClickhouseStore(TEST_CONFIG);
+const storage = new ClickhouseStore({ ...TEST_CONFIG, id: 'clickhouse-test' });
 
 createTestSuite(storage);

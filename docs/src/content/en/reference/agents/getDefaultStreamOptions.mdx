@@ -1,16 +1,22 @@
 ---
-title: "Reference: Agent.getDefaultStreamOptions() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getDefaultStreamOptions()` method in Mastra agents, which retrieves the default options used for stream calls."
+title: "Reference: Agent.getDefaultStreamOptionsLegacy() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls."
 ---
 
-# Agent.getDefaultStreamOptions()
+# Agent.getDefaultStreamOptionsLegacy()
 
-Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead.
+
+:::
+
+Agents can be configured with default streaming options for memory usage, output format, and iteration steps. The `.getDefaultStreamOptionsLegacy()` method returns these defaults, resolving them if they are functions. These options apply to all `streamLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
 ```typescript copy
-await agent.getDefaultStreamOptions();
+await agent.getDefaultStreamOptionsLegacy();
 ```
 
 ## Parameters
@@ -19,10 +25,10 @@ await agent.getDefaultStreamOptions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -33,8 +39,9 @@ await agent.getDefaultStreamOptions();
   content={[
     {
       name: "defaultOptions",
-      type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
-      description: "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+      type: "AgentStreamOptions | Promise<AgentStreamOptions>",
+      description:
+        "The default vNext streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
     },
   ]}
 />
@@ -42,8 +49,8 @@ await agent.getDefaultStreamOptions();
 ## Extended usage example
 
 ```typescript copy
-await agent.getDefaultStreamOptions({
-  runtimeContext: new RuntimeContext()
+await agent.getDefaultStreamOptionsLegacy({
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -52,16 +59,17 @@ await agent.getDefaultStreamOptions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
-      description: "Runtime context for dependency injection and contextual information.",
+      defaultValue: "new RequestContext()",
+      description:
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
 
 ## Related
 
-- [Streaming with agents](../../docs/streaming/overview.mdx#streaming-with-agents)
-- [Runtime Context](../../docs/server-db/runtime-context.mdx)
+- [Streaming with agents](/docs/streaming/overview#streaming-with-agents)
+- [Request Context](/docs/server-db/request-context)

@@ -1,6 +1,7 @@
 ---
-title: "Mastra Deployer"
+title: "Reference: Deployer | Deployer | Mastra Docs"
 description: Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
+asIndexPage: true
 ---
 
 # Deployer
@@ -97,12 +98,6 @@ The Deployer class inherits the following key methods from the Bundler class:
       type: "(outputDirectory: string) => Promise<void>",
       description:
         "Prepares the output directory by cleaning it and creating necessary subdirectories.",
-    },
-    {
-      name: "writeInstrumentationFile",
-      type: "(outputDirectory: string) => Promise<void>",
-      description:
-        "Writes an instrumentation file to the output directory for telemetry purposes.",
     },
     {
       name: "writePackageJson",

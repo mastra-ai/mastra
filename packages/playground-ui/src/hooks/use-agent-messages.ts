@@ -12,11 +12,11 @@ export const useAgentMessages = ({
   memory: boolean;
 }) => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['memory', 'messages', threadId, agentId, 'runtimeContext'],
-    queryFn: () => client.getThreadMessages(threadId, { agentId, runtimeContext }),
+    queryKey: ['memory', 'messages', threadId, agentId, 'requestContext'],
+    queryFn: () => client.listThreadMessages(threadId, { agentId, requestContext }),
     enabled: memory && Boolean(threadId),
     staleTime: 0,
     gcTime: 0,

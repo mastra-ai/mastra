@@ -14,10 +14,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
     "@composio/core": "^0.1.55",
     "@composio/mastra": "^0.1.56",
     "@mastra/core": "^0.23.1",
@@ -26,7 +25,6 @@
     "@mastra/loggers": "^0.10.18",
     "@mastra/mcp": "^0.14.1",
     "@mastra/memory": "^0.15.9",
-    "@openrouter/ai-sdk-provider": "^0.7.5",
     "hono": "^4.9.7",
     "zod": "^3.25.76"
   },
