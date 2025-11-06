@@ -75,8 +75,8 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
   > = new Map();
   private opts: TurbopufferVectorOptions;
 
-  constructor(opts: TurbopufferVectorOptions) {
-    super();
+  constructor(opts: TurbopufferVectorOptions & { id: string }) {
+    super({ id: opts.id });
     this.filterTranslator = new TurbopufferFilterTranslator();
     this.opts = opts;
     this.client = new Turbopuffer(opts);

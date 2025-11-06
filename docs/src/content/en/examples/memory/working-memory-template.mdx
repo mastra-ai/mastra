@@ -57,6 +57,7 @@ export const workingMemoryTemplateAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+  id: 'mastra-storage',
       url: "file:working-memory-template.db",
     }),
     options: {

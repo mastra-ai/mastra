@@ -54,6 +54,7 @@ Initialize PgVector with your connection string:
 
 ```typescript copy showLineNumbers{4} title="src/index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 ```

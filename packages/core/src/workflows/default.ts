@@ -375,7 +375,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {
     if (!step) {
       return stepResults.input;
-    } else if (step.type === 'step' || step.type === 'waitForEvent') {
+    } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
@@ -606,59 +606,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } catch (e) {
       sleepUntilSpan?.error({ error: e as Error });
     }
-  }
-
-  async executeWaitForEvent({
-    event,
-    emitter,
-    timeout,
-    tracingContext,
-  }: {
-    event: string;
-    emitter: Emitter;
-    timeout?: number;
-    tracingContext?: TracingContext;
-  }): Promise<any> {
-    const waitSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: SpanType.WORKFLOW_WAIT_EVENT,
-      name: `wait: ${event}`,
-      attributes: {
-        eventName: event,
-        timeoutMs: timeout,
-      },
-      tracingPolicy: this.options?.tracingPolicy,
-    });
-
-    const startTime = Date.now();
-    return new Promise((resolve, reject) => {
-      const cb = (eventData: any) => {
-        waitSpan?.end({
-          output: eventData,
-          attributes: {
-            eventReceived: true,
-            waitDurationMs: Date.now() - startTime,
-          },
-        });
-        resolve(eventData);
-      };
-
-      if (timeout) {
-        setTimeout(() => {
-          emitter.off(`user-event-${event}`, cb);
-          const error = new Error('Timeout waiting for event');
-          waitSpan?.error({
-            error,
-            attributes: {
-              eventReceived: false,
-              waitDurationMs: Date.now() - startTime,
-            },
-          });
-          reject(error);
-        }, timeout);
-      }
-
-      emitter.once(`user-event-${event}`, cb);
-    });
   }
 
   async executeStep({
@@ -2252,82 +2199,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           metadata: {},
         },
       });
-    } else if (entry.type === 'waitForEvent') {
-      const startedAt = Date.now();
-      let eventData: any;
-      await emitter.emit('watch', {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: entry.step.id,
-          payload: prevOutput,
-          startedAt,
-          status: 'waiting',
-        },
-      });
-
-      stepResults[entry.step.id] = {
-        status: 'waiting',
-        payload: prevOutput,
-        startedAt,
-      };
-
-      await this.persistStepUpdate({
-        workflowId,
-        runId,
-        resourceId,
-        serializedStepGraph,
-        stepResults,
-        executionContext,
-        workflowStatus: 'waiting',
-        requestContext,
-      });
-
-      try {
-        eventData = await this.executeWaitForEvent({
-          event: entry.event,
-          emitter,
-          timeout: entry.timeout,
-          tracingContext,
-        });
-
-        const { step } = entry;
-        execResults = await this.executeStep({
-          workflowId,
-          runId,
-          resourceId,
-          step,
-          stepResults,
-          executionContext,
-          resume: {
-            resumePayload: eventData,
-            steps: [entry.step.id],
-          },
-          prevOutput,
-          tracingContext,
-          emitter,
-          abortController,
-          requestContext,
-          writableStream,
-          disableScorers,
-          serializedStepGraph,
-        });
-      } catch (error) {
-        execResults = {
-          status: 'failed',
-          error: error as Error,
-        };
-      }
-      const endedAt = Date.now();
-      const stepInfo = {
-        payload: prevOutput,
-        startedAt,
-        endedAt,
-      };
-
-      execResults = { ...execResults, ...stepInfo };
     }
 
-    if (entry.type === 'step' || entry.type === 'waitForEvent' || entry.type === 'loop' || entry.type === 'foreach') {
+    if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
       stepResults[entry.step.id] = execResults;
     }
 
