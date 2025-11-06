@@ -1,5 +1,4 @@
-import { useMemo } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
 import {
   Crumb,
@@ -13,8 +12,7 @@ import {
   WorkflowIcon,
   DocsIcon,
   DividerIcon,
-  Combobox,
-  useWorkflows,
+  WorkflowCombobox,
   Badge,
 } from '@mastra/playground-ui';
 
@@ -27,22 +25,6 @@ export function WorkflowHeader({
   workflowId: string;
   runId?: string;
 }) {
-  const navigate = useNavigate();
-  const { data: workflows = {} } = useWorkflows();
-
-  const workflowOptions = useMemo(() => {
-    return Object.keys(workflows).map(key => ({
-      label: workflows[key]?.name || key,
-      value: key,
-    }));
-  }, [workflows]);
-
-  const handleWorkflowChange = (newWorkflowId: string) => {
-    if (newWorkflowId && newWorkflowId !== workflowId) {
-      navigate(`/workflows/${newWorkflowId}`);
-    }
-  };
-
   return (
     <div className="shrink-0">
       <Header>
@@ -57,15 +39,7 @@ export function WorkflowHeader({
 
         <HeaderGroup>
           <div className="w-[240px]">
-            <Combobox
-              options={workflowOptions}
-              value={workflowId}
-              onValueChange={handleWorkflowChange}
-              placeholder="Select a workflow..."
-              searchPlaceholder="Search workflows..."
-              emptyText="No workflows found."
-              buttonClassName="h-8"
-            />
+            <WorkflowCombobox value={workflowId} />
           </div>
 
           {runId && (

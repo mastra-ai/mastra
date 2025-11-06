@@ -22,18 +22,16 @@ import {
   useAgents,
   useWorkflows,
   HeaderGroup,
-  Combobox,
-  useScorers,
+  ScorerCombobox,
   ErrorDisplay,
 } from '@mastra/playground-ui';
-import { useParams, Link, useSearchParams, useNavigate } from 'react-router';
+import { useParams, Link, useSearchParams } from 'react-router';
 import { GaugeIcon } from 'lucide-react';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
   const [scoresPage, setScoresPage] = useState<number>(0);
@@ -48,7 +46,6 @@ export default function Scorer() {
   const { scorer, isLoading: isScorerLoading, error: scorerError } = useScorer(scorerId!);
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
-  const { data: scorers = {}, error: scorersError } = useScorers();
   const {
     data: scoresData,
     isLoading: isLoadingScores,
@@ -76,13 +73,6 @@ export default function Scorer() {
     ...workflowOptions,
   ];
 
-  const scorerOptions = useMemo(() => {
-    return Object.keys(scorers).map(key => ({
-      label: scorers[key]?.scorer.config.name || key,
-      value: key,
-    }));
-  }, [scorers]);
-
   useEffect(() => {
     if (entityOptions) {
       const entityName = searchParams.get('entity');
@@ -95,7 +85,7 @@ export default function Scorer() {
 
   if (isScorerLoading) return null;
 
-  if (scorerError || agentsError || workflowsError || scorersError) {
+  if (scorerError || agentsError || workflowsError) {
     return (
       <MainContentLayout>
         <Header>
@@ -108,10 +98,7 @@ export default function Scorer() {
             </Crumb>
           </Breadcrumb>
         </Header>
-        <ErrorDisplay
-          title="Error loading scorer"
-          error={scorerError || agentsError || workflowsError || scorersError}
-        />
+        <ErrorDisplay title="Error loading scorer" error={scorerError || agentsError || workflowsError} />
       </MainContentLayout>
     );
   }
@@ -149,12 +136,6 @@ export default function Scorer() {
     },
   ];
 
-  const handleScorerChange = (newScorerId: string) => {
-    if (newScorerId && newScorerId !== scorerId) {
-      navigate(`/scorers/${newScorerId}`);
-    }
-  };
-
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
     option?.value && setSearchParams({ entity: option?.value });
   };
@@ -185,15 +166,7 @@ export default function Scorer() {
 
           <HeaderGroup>
             <div className="w-[240px]">
-              <Combobox
-                options={scorerOptions}
-                value={scorerId}
-                onValueChange={handleScorerChange}
-                placeholder="Select a scorer..."
-                searchPlaceholder="Search scorers..."
-                emptyText="No scorers found."
-                buttonClassName="h-8"
-              />
+              <ScorerCombobox value={scorerId} />
             </div>
           </HeaderGroup>
 

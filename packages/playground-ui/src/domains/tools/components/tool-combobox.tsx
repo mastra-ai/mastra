@@ -1,0 +1,85 @@
+'use client';
+
+import { useMemo } from 'react';
+import { Combobox } from '@/components/ui/combobox';
+import { useTools } from '../hooks/use-all-tools';
+import { useAgents } from '../../agents/hooks/use-agents';
+import { useLinkComponent } from '@/lib/framework';
+
+export interface ToolComboboxProps {
+  value?: string;
+  onValueChange?: (value: string) => void;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  className?: string;
+  disabled?: boolean;
+  buttonClassName?: string;
+  contentClassName?: string;
+}
+
+export function ToolCombobox({
+  value,
+  onValueChange,
+  placeholder = 'Select a tool...',
+  searchPlaceholder = 'Search tools...',
+  emptyText = 'No tools found.',
+  className,
+  disabled = false,
+  buttonClassName = 'h-8',
+  contentClassName,
+}: ToolComboboxProps) {
+  const { data: tools = {}, isLoading: isLoadingTools } = useTools();
+  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
+  const { navigate, paths } = useLinkComponent();
+
+  const toolOptions = useMemo(() => {
+    const allTools = new Map<string, { id: string }>();
+
+    // Get tools from agents
+    Object.values(agents).forEach(agent => {
+      if (agent.tools) {
+        Object.values(agent.tools).forEach(tool => {
+          if (!allTools.has(tool.id)) {
+            allTools.set(tool.id, tool);
+          }
+        });
+      }
+    });
+
+    // Get standalone/discovered tools
+    Object.values(tools).forEach(tool => {
+      if (!allTools.has(tool.id)) {
+        allTools.set(tool.id, tool);
+      }
+    });
+
+    return Array.from(allTools.values()).map(tool => ({
+      label: tool.id,
+      value: tool.id,
+    }));
+  }, [tools, agents]);
+
+  const handleValueChange = (newToolId: string) => {
+    if (onValueChange) {
+      onValueChange(newToolId);
+    } else if (newToolId && newToolId !== value) {
+      navigate(paths.toolLink(newToolId));
+    }
+  };
+
+  return (
+    <Combobox
+      options={toolOptions}
+      value={value}
+      onValueChange={handleValueChange}
+      placeholder={placeholder}
+      searchPlaceholder={searchPlaceholder}
+      emptyText={emptyText}
+      className={className}
+      disabled={disabled || isLoadingTools || isLoadingAgents}
+      buttonClassName={buttonClassName}
+      contentClassName={contentClassName}
+    />
+  );
+}
