@@ -12,10 +12,14 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { MockStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { MastraVector } from '@mastra/core/vector';
 import { MastraVoice, CompositeVoice } from '@mastra/core/voice';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { vi } from 'vitest';
 import { z } from 'zod';
+import { InMemoryTaskStore } from '../../../a2a/store';
+
+vi.mock('@mastra/core/vector');
 
 /**
  * Mock Voice implementation for testing
@@ -176,6 +180,7 @@ export function createTestWorkflow(
   });
 
   workflow.then(step1);
+  workflow.commit(); // Commit step changes to avoid "Uncommitted step flow changes" errors
 
   return workflow;
 }
@@ -246,22 +251,76 @@ export function setupMemoryTests() {
  */
 export function createTaskStore() {
   // Import InMemoryTaskStore dynamically to avoid circular deps
-  const { InMemoryTaskStore } = require('../../../a2a/store');
   return new InMemoryTaskStore();
+}
+
+/**
+ * Creates a test task for A2A routes
+ */
+export function createTestTask(
+  overrides: {
+    taskId?: string;
+    agentId?: string;
+    contextId?: string;
+    state?: string;
+  } = {},
+) {
+  return {
+    id: overrides.taskId || 'test-task-id',
+    contextId: overrides.contextId || 'test-context-id',
+    state: overrides.state || 'completed',
+    artifacts: [],
+    metadata: {},
+    message: {
+      messageId: 'test-message-id',
+      kind: 'message' as const,
+      role: 'agent' as const,
+      parts: [{ kind: 'text' as const, text: 'Test response' }],
+    },
+  };
+}
+
+/**
+ * Pre-populates a taskStore with test tasks
+ */
+export async function populateTaskStore(taskStore: any, tasks: Array<{ agentId: string; task: any }>) {
+  for (const { agentId, task } of tasks) {
+    await taskStore.save({ agentId, data: task });
+  }
 }
 
 /**
  * Complete setup for A2A routes testing
  * Returns a configured agent, task store, and mastra instance
  */
-export function setupA2ATests() {
+export async function setupA2ATests() {
   const agent = createTestAgent();
   mockAgentMethods(agent);
   const taskStore = createTaskStore();
+
+  // Pre-populate taskStore with test task
+  const testTask = createTestTask();
+  await populateTaskStore(taskStore, [{ agentId: 'test-agent', task: testTask }]);
 
   const mastra = createTestMastra({
     agents: { 'test-agent': agent },
   });
 
   return { agent, taskStore, mastra };
+}
+
+/**
+ * Creates a mock vector for testing (following handler test pattern)
+ */
+export function createMockVector() {
+  // @ts-expect-error - Mocking for tests
+  const mockVector: MastraVector = new MastraVector();
+  mockVector.upsert = vi.fn().mockResolvedValue(['id1', 'id2']);
+  mockVector.createIndex = vi.fn().mockResolvedValue(undefined);
+  mockVector.query = vi.fn().mockResolvedValue([{ id: '1', score: 0.9, vector: [1, 2, 3] }]);
+  mockVector.listIndexes = vi.fn().mockResolvedValue(['test-index']);
+  mockVector.describeIndex = vi.fn().mockResolvedValue({ dimension: 3, count: 100, metric: 'cosine' });
+  mockVector.deleteIndex = vi.fn().mockResolvedValue(undefined);
+
+  return mockVector;
 }

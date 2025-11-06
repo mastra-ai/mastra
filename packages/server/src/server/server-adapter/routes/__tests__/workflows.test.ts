@@ -8,7 +8,7 @@ describe('Workflow Routes', () => {
   let mastra: Mastra;
   let testWorkflow: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
 
     // Create workflow with all steps configured
@@ -18,6 +18,12 @@ describe('Workflow Routes', () => {
     mastra = createTestMastra({
       workflows: { 'test-workflow': testWorkflow },
     });
+
+    // Create and start a real workflow run so handlers can retrieve it
+    const run = await testWorkflow.createRun({
+      runId: 'test-run',
+    });
+    await run.start({ inputData: { name: 'test' } });
   });
 
   // Create test suite with auto-generated bodies!
