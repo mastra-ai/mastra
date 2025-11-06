@@ -62,6 +62,16 @@ To migrate, replace all calls to `mcp.getToolsets()` with `mcp.listToolsets()`.
 + const toolsets = await mcp.listToolsets();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mcp-get-toolsets .
+```
+
+:::
+
 ### MCP tool context properties organization
 
 Context properties in MCP tools are now organized under the `context.mcp` namespace. This change provides better organization and clearer API surface for MCP-specific functionality.
