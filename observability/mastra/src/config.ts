@@ -5,7 +5,6 @@
  * including tracing configs, sampling strategies, and registry setup.
  */
 
-import { z } from 'zod';
 import type { RequestContext } from '@mastra/core/di';
 import type {
   ObservabilityInstance,
@@ -13,6 +12,7 @@ import type {
   SpanOutputProcessor,
   ConfigSelector,
 } from '@mastra/core/observability';
+import { z } from 'zod';
 
 // ============================================================================
 // Sampling Strategy Types
@@ -141,9 +141,9 @@ export const observabilityConfigValueSchema = z.object({
 
 /**
  * Zod schema for ObservabilityRegistryConfig
- * Validates that either 'default' OR 'configs' is set, but not both
  * Note: Individual configs are validated separately in the constructor to allow for
- * both plain config objects and pre-instantiated ObservabilityInstance objects
+ * both plain config objects and pre-instantiated ObservabilityInstance objects.
+ * The schema is permissive to handle edge cases gracefully (arrays, null values).
  */
 export const observabilityRegistryConfigSchema = z
   .object({
@@ -151,21 +151,47 @@ export const observabilityRegistryConfigSchema = z
       .object({
         enabled: z.boolean().optional(),
       })
-      .optional(),
-    configs: z.record(z.string(), z.any()).optional(),
+      .optional()
+      .nullable(),
+    configs: z.union([z.record(z.string(), z.any()), z.array(z.any()), z.null()]).optional(),
     configSelector: z.function().optional(),
   })
+  .passthrough() // Allow additional properties
   .refine(
     data => {
-      // Either default or configs can be set, but not both
-      const hasDefault = data.default !== undefined;
-      const hasConfigs = data.configs !== undefined && Object.keys(data.configs).length > 0;
+      // Validate that default (when enabled) and configs are mutually exclusive
+      const isDefaultEnabled = data.default?.enabled === true;
+      // Check if configs has any entries (only if it's actually an object)
+      const hasConfigs =
+        data.configs && typeof data.configs === 'object' && !Array.isArray(data.configs)
+          ? Object.keys(data.configs).length > 0
+          : false;
 
-      // It's ok to have neither, or just one, but not both
-      return !(hasDefault && hasConfigs);
+      // Cannot have both default enabled and any configs
+      return !(isDefaultEnabled && hasConfigs);
     },
     {
       message:
-        'Cannot specify both "default" and "configs". Use either default configuration or custom configs, but not both.',
+        'Cannot specify both "default" (when enabled) and "configs". Use either default observability or custom configs, but not both.',
+    },
+  )
+  .refine(
+    data => {
+      // Validate that configSelector is required when there are multiple configs
+      const configCount =
+        data.configs && typeof data.configs === 'object' && !Array.isArray(data.configs)
+          ? Object.keys(data.configs).length
+          : 0;
+
+      // If there are 2 or more configs, configSelector must be provided
+      if (configCount > 1 && !data.configSelector) {
+        return false;
+      }
+
+      return true;
+    },
+    {
+      message:
+        'A "configSelector" function is required when multiple configs are specified to determine which config to use.',
     },
   );

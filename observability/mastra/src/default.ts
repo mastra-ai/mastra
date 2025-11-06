@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import { MastraBase } from '@mastra/core/base';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
@@ -42,8 +43,16 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     if (!validationResult.success) {
       const errorMessages = validationResult.error.errors
         .map(err => `${err.path.join('.') || 'config'}: ${err.message}`)
-        .join(', ');
-      throw new Error(`Invalid observability configuration: ${errorMessages}`);
+        .join('; ');
+      throw new MastraError({
+        id: 'OBSERVABILITY_INVALID_CONFIG',
+        text: `Invalid observability configuration: ${errorMessages}`,
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        details: {
+          validationErrors: errorMessages,
+        },
+      });
     }
 
     // Validate individual configs if they are plain objects (not instances)
@@ -53,9 +62,18 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
           const configValidation = observabilityConfigValueSchema.safeParse(configValue);
           if (!configValidation.success) {
             const errorMessages = configValidation.error.errors
-              .map(err => `configs.${name}.${err.path.join('.')}: ${err.message}`)
-              .join(', ');
-            throw new Error(`Invalid observability configuration: ${errorMessages}`);
+              .map(err => `${err.path.join('.')}: ${err.message}`)
+              .join('; ');
+            throw new MastraError({
+              id: 'OBSERVABILITY_INVALID_INSTANCE_CONFIG',
+              text: `Invalid configuration for observability instance '${name}': ${errorMessages}`,
+              domain: ErrorDomain.MASTRA_OBSERVABILITY,
+              category: ErrorCategory.USER,
+              details: {
+                instanceName: name,
+                validationErrors: errorMessages,
+              },
+            });
           }
         }
       }
