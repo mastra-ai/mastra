@@ -192,7 +192,11 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       }
 
       if (args?.status) {
-        const escapedStatus = args.status.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+        const escapedStatus = args.status
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "''")
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
         // Note: Using LIKE pattern since LanceDB doesn't support JSON extraction on string columns
         // The pattern ensures we match the workflow status (which appears before "value") and not step status
         conditions.push(`\`snapshot\` LIKE '%"status":"${escapedStatus}","value"%'`);

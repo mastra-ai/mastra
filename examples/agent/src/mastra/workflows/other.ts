@@ -24,13 +24,16 @@ const stepTwo = createStep({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  // suspendSchema: z.object({})s
-  execute: async ({ inputData }) => {
-    // if (!resumeData?.extraNumber) {
-    //   await suspend({});
-    //   return { incrementedValue: 0 };
-    // }
-    const incrementedValue = inputData.doubledValue + 1;
+  suspendSchema: z.object({}),
+  resumeSchema: z.object({
+    extraNumber: z.number(),
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    if (!resumeData?.extraNumber) {
+      await suspend({});
+      return { incrementedValue: 0 };
+    }
+    const incrementedValue = inputData.doubledValue + 1 + resumeData.extraNumber;
     return { incrementedValue };
   },
 });
