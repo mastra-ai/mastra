@@ -265,6 +265,7 @@ export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   component?: string;
   serializedStepFlow?: SerializedStepFlowEntry[];
   mapConfig?: string;
+  canSuspend?: boolean;
 };
 
 export type SerializedStepFlowEntry =
