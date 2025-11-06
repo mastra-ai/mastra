@@ -8,9 +8,21 @@
  * This is derived from the JSON data and provides type-safe access
  */
 export type ProviderModelsMap = {
-  readonly 'moonshotai-cn': readonly ['kimi-k2-0711-preview', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'];
+  readonly 'moonshotai-cn': readonly [
+    'kimi-k2-0711-preview',
+    'kimi-k2-0905-preview',
+    'kimi-k2-thinking',
+    'kimi-k2-thinking-turbo',
+    'kimi-k2-turbo-preview',
+  ];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
-  readonly moonshotai: readonly ['kimi-k2-0711-preview', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'];
+  readonly moonshotai: readonly [
+    'kimi-k2-0711-preview',
+    'kimi-k2-0905-preview',
+    'kimi-k2-thinking',
+    'kimi-k2-thinking-turbo',
+    'kimi-k2-turbo-preview',
+  ];
   readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
   readonly alibaba: readonly [
     'qvq-max',
@@ -625,6 +637,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2',
     'moonshotai/kimi-k2-0905',
     'moonshotai/kimi-k2-0905:exacto',
+    'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2:free',
     'nousresearch/deephermes-3-llama-3-8b-preview',
     'nousresearch/hermes-4-405b',
