@@ -14,6 +14,7 @@ export const mastra = new Mastra({
     level: 'error',
   }),
   storage: new LibSQLStore({
+    id: 'e2e-test-storage',
     url: ':memory:',
   }),
   mcpServers: {

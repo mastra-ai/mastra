@@ -97,7 +97,7 @@ describe('MongoDBVector Integration Tests', () => {
   const emptyIndexName = 'empty-index';
 
   beforeAll(async () => {
-    vectorDB = new MongoDBVector({ uri, dbName });
+    vectorDB = new MongoDBVector({ uri, dbName, id: 'mongodb-test' });
     await vectorDB.connect();
 
     // Wait for Atlas Search to be ready
@@ -622,7 +622,7 @@ describe('MongoDBVector Integration Tests', () => {
 });
 
 // Use the shared test suite with factory pattern
-const vectorDB = new MongoDBVector({ uri, dbName });
+const vectorDB = new MongoDBVector({ uri, dbName, id: 'mongodb-shared-test' });
 
 createVectorTestSuite({
   vector: vectorDB,
