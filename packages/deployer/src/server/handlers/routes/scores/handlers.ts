@@ -65,13 +65,13 @@ export async function listScoresByScorerIdHandler(c: Context) {
   const perPage = parsePerPage(c.req.query('perPage'), 10);
   const entityId = c.req.query('entityId');
   const entityType = c.req.query('entityType');
-  const pagination: StoragePagination = { page, perPage };
 
   try {
     const scores = await getOriginalScoresByScorerIdHandler({
       mastra,
       scorerId,
-      pagination,
+      page,
+      perPage,
       entityId,
       entityType,
     });

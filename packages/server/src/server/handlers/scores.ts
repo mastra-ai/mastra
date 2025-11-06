@@ -136,14 +136,21 @@ export async function listScoresByRunIdHandler({
 export async function listScoresByScorerIdHandler({
   mastra,
   scorerId,
-  pagination,
+  page,
+  perPage,
   entityId,
   entityType,
-}: Context & { scorerId: string; pagination: StoragePagination; entityId?: string; entityType?: string }) {
+}: Context & {
+  scorerId: string;
+  page: StoragePagination['page'];
+  perPage: StoragePagination['perPage'];
+  entityId?: string;
+  entityType?: string;
+}) {
   try {
     const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
       scorerId,
-      pagination,
+      pagination: { page, perPage },
       entityId,
       entityType,
     })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
