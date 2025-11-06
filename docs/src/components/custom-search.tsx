@@ -116,12 +116,12 @@ export const CustomSearch: FC<SearchProps> = ({
   // Flatten sub_results for virtualization
   const flattenedResults = results.length
     ? results.flatMap((result) =>
-      result.sub_results.map((sub) => ({
-        parentUrl: result.url,
-        section: result.section,
-        ...sub,
-      })),
-    )
+        result.sub_results.map((sub) => ({
+          parentUrl: result.url,
+          section: result.section,
+          ...sub,
+        })),
+      )
     : [];
 
   const totalItems = flattenedResults.length;
