@@ -8,15 +8,6 @@ import { GTProvider } from "gt-react";
 import loadTranslations from "@site/src/loadTranslations";
 import React from "react";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
-
 export default function Root({ children }: { children: React.ReactNode }) {
   // We use Docusaurus as the source of truth for i18n locales
   const { siteConfig, i18n } = useDocusaurusContext();
@@ -28,28 +19,26 @@ export default function Root({ children }: { children: React.ReactNode }) {
     "https://us.i.posthog.com";
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <PostHogProvider
-        apiKey={posthogApiKey}
-        options={{
-          api_host: posthogHost,
-        }}
-      >
-        <KapaProvider integrationId={kapaIntegrationId || ""}>
-          {/* Adding GTProvider to the root of the app to ensure all jsx is translated */}
-          <GTProvider
-            locales={locales}
-            // Ensure SSR markup matches client by using Docusaurus locale
-            locale={i18n?.currentLocale}
-            defaultLocale={i18n?.defaultLocale}
-            loadTranslations={loadTranslations}
-          >
-            <Toaster />
-            <CookieConsent />
-            {children}
-          </GTProvider>
-        </KapaProvider>
-      </PostHogProvider>
-    </QueryClientProvider>
+    <PostHogProvider
+      apiKey={posthogApiKey}
+      options={{
+        api_host: posthogHost,
+      }}
+    >
+      <KapaProvider integrationId={kapaIntegrationId || ""}>
+        {/* Adding GTProvider to the root of the app to ensure all jsx is translated */}
+        <GTProvider
+          locales={locales}
+          // Ensure SSR markup matches client by using Docusaurus locale
+          locale={i18n?.currentLocale}
+          defaultLocale={i18n?.defaultLocale}
+          loadTranslations={loadTranslations}
+        >
+          <Toaster />
+          <CookieConsent />
+          {children}
+        </GTProvider>
+      </KapaProvider>
+    </PostHogProvider>
   );
 }
