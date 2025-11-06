@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Combobox } from '@/components/ui/combobox';
 import { useMCPServers } from '../hooks/use-mcp-servers';
 import { useLinkComponent } from '@/lib/framework';
@@ -31,12 +30,10 @@ export function MCPServerCombobox({
   const { data: mcpServers = [], isLoading } = useMCPServers();
   const { navigate, paths } = useLinkComponent();
 
-  const mcpServerOptions = useMemo(() => {
-    return mcpServers.map(server => ({
-      label: server.name,
-      value: server.id,
-    }));
-  }, [mcpServers]);
+  const mcpServerOptions = mcpServers.map(server => ({
+    label: server.name,
+    value: server.id,
+  }));
 
   const handleValueChange = (newServerId: string) => {
     if (onValueChange) {

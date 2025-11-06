@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Combobox } from '@/components/ui/combobox';
 import { useAgents } from '../hooks/use-agents';
 import { useLinkComponent } from '@/lib/framework';
@@ -31,12 +30,10 @@ export function AgentCombobox({
   const { data: agents = {}, isLoading } = useAgents();
   const { navigate, paths } = useLinkComponent();
 
-  const agentOptions = useMemo(() => {
-    return Object.keys(agents).map(key => ({
-      label: agents[key]?.name || key,
-      value: key,
-    }));
-  }, [agents]);
+  const agentOptions = Object.keys(agents).map(key => ({
+    label: agents[key]?.name || key,
+    value: key,
+  }));
 
   const handleValueChange = (newAgentId: string) => {
     if (onValueChange) {

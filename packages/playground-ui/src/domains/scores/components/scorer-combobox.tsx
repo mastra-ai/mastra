@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Combobox } from '@/components/ui/combobox';
 import { useScorers } from '../hooks/use-scorers';
 import { useLinkComponent } from '@/lib/framework';
@@ -31,12 +30,10 @@ export function ScorerCombobox({
   const { data: scorers = {}, isLoading } = useScorers();
   const { navigate, paths } = useLinkComponent();
 
-  const scorerOptions = useMemo(() => {
-    return Object.keys(scorers).map(key => ({
-      label: scorers[key]?.scorer.config.name || key,
-      value: key,
-    }));
-  }, [scorers]);
+  const scorerOptions = Object.keys(scorers).map(key => ({
+    label: scorers[key]?.scorer.config.name || key,
+    value: key,
+  }));
 
   const handleValueChange = (newScorerId: string) => {
     if (onValueChange) {

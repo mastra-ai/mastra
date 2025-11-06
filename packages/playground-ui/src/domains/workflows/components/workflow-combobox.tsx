@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Combobox } from '@/components/ui/combobox';
 import { useWorkflows } from '../hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -31,12 +30,10 @@ export function WorkflowCombobox({
   const { data: workflows = {}, isLoading } = useWorkflows();
   const { navigate, paths } = useLinkComponent();
 
-  const workflowOptions = useMemo(() => {
-    return Object.keys(workflows).map(key => ({
-      label: workflows[key]?.name || key,
-      value: key,
-    }));
-  }, [workflows]);
+  const workflowOptions = Object.keys(workflows).map(key => ({
+    label: workflows[key]?.name || key,
+    value: key,
+  }));
 
   const handleValueChange = (newWorkflowId: string) => {
     if (onValueChange) {

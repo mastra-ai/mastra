@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Combobox } from '@/components/ui/combobox';
 import { useTools } from '../hooks/use-all-tools';
 import { useAgents } from '../../agents/hooks/use-agents';
@@ -33,32 +32,30 @@ export function ToolCombobox({
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { navigate, paths } = useLinkComponent();
 
-  const toolOptions = useMemo(() => {
-    const allTools = new Map<string, { id: string }>();
+  const allTools = new Map<string, { id: string }>();
 
-    // Get tools from agents
-    Object.values(agents).forEach(agent => {
-      if (agent.tools) {
-        Object.values(agent.tools).forEach(tool => {
-          if (!allTools.has(tool.id)) {
-            allTools.set(tool.id, tool);
-          }
-        });
-      }
-    });
+  // Get tools from agents
+  Object.values(agents).forEach(agent => {
+    if (agent.tools) {
+      Object.values(agent.tools).forEach(tool => {
+        if (!allTools.has(tool.id)) {
+          allTools.set(tool.id, tool);
+        }
+      });
+    }
+  });
 
-    // Get standalone/discovered tools
-    Object.values(tools).forEach(tool => {
-      if (!allTools.has(tool.id)) {
-        allTools.set(tool.id, tool);
-      }
-    });
+  // Get standalone/discovered tools
+  Object.values(tools).forEach(tool => {
+    if (!allTools.has(tool.id)) {
+      allTools.set(tool.id, tool);
+    }
+  });
 
-    return Array.from(allTools.values()).map(tool => ({
-      label: tool.id,
-      value: tool.id,
-    }));
-  }, [tools, agents]);
+  const toolOptions = Array.from(allTools.values()).map(tool => ({
+    label: tool.id,
+    value: tool.id,
+  }));
 
   const handleValueChange = (newToolId: string) => {
     if (onValueChange) {
