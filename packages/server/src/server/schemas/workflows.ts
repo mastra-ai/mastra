@@ -1,4 +1,5 @@
 import z from 'zod';
+import { paginationQuerySchema } from './memory';
 
 // Path parameter schemas
 export const workflowIdPathParams = z.object({
@@ -82,11 +83,9 @@ export const workflowRunResponseSchema = workflowRunSchema;
  * Schema for query parameters when listing workflow runs
  * All query params come as strings from URL
  */
-export const listWorkflowRunsQuerySchema = z.object({
+export const listWorkflowRunsQuerySchema = paginationQuerySchema.extend({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
-  perPage: z.coerce.number().optional(),
-  page: z.coerce.number().optional(),
   resourceId: z.string().optional(),
 });
 

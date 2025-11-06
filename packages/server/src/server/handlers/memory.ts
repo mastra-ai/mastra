@@ -334,7 +334,6 @@ export async function listMessagesHandler({
 
     const thread = await memory.getThreadById({ threadId: threadId });
     if (!thread) {
-      console.log('thread not found', thread, threadId);
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 

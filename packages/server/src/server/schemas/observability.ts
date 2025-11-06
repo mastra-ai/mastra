@@ -1,4 +1,5 @@
 import z from 'zod';
+import { paginationQuerySchema } from './memory';
 
 /**
  * Schema for AI span types
@@ -105,7 +106,4 @@ export const listScoresBySpanResponseSchema = z.object({
 });
 
 // Query schema for list scores by span
-export const listScoresBySpanQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z.coerce.number().optional().default(10),
-});
+export const listScoresBySpanQuerySchema = paginationQuerySchema;

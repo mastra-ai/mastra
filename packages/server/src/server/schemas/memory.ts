@@ -31,6 +31,18 @@ const paginationInfoSchema = z.object({
 });
 
 /**
+ * Standard pagination query parameters
+ * Reusable across all paginated endpoints
+ */
+export const paginationQuerySchema = z.object({
+  page: z.coerce.number().optional().default(0),
+  perPage: z
+    .union([z.coerce.number(), z.literal(false)])
+    .optional()
+    .transform(value => value || false),
+});
+
+/**
  * Thread object structure
  */
 const threadSchema = z.object({
@@ -73,14 +85,9 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads
  */
-export const listThreadsQuerySchema = z.object({
+export const listThreadsQuerySchema = paginationQuerySchema.extend({
   agentId: z.string().optional(),
   resourceId: z.string(),
-  page: z.coerce.number().optional().default(0),
-  perPage: z
-    .union([z.coerce.number(), z.literal(false)])
-    .optional()
-    .default(false),
   orderBy: storageOrderBySchema.optional(),
 });
 
@@ -92,17 +99,11 @@ export const getThreadByIdQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads/:threadId/messages
  */
-export const getMessagesQuerySchema = z.object({
+export const getMessagesQuerySchema = paginationQuerySchema.extend({
   agentId: z.string().optional(),
-  page: z.coerce.number().optional().default(0),
   orderBy: storageOrderBySchema.optional(),
   include: z.unknown().optional(),
   filter: z.unknown().optional(),
-  // TODO: make pagination generic
-  perPage: z
-    .union([z.coerce.number(), z.literal(false)])
-    .optional()
-    .default(false),
 });
 
 /**
@@ -211,11 +212,9 @@ export const updateWorkingMemoryBodySchema = z.object({
 /**
  * Query schema for GET /api/memory/messages
  */
-export const listMessagesQuerySchema = z.object({
+export const listMessagesQuerySchema = paginationQuerySchema.extend({
   threadId: z.string(),
   resourceId: z.string().optional(),
-  perPage: z.coerce.number().optional(),
-  page: z.coerce.number().optional(),
   orderBy: storageOrderBySchema.optional(),
   include: z.unknown().optional(),
   filter: z.unknown().optional(),
