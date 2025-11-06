@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { CircleDashed, HourglassIcon, Loader2, PauseIcon, List } from 'lucide-react';
+import { CircleDashed, HourglassIcon, Loader2, PauseIcon, List, Workflow, PlayCircle } from 'lucide-react';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { cn } from '@/lib/utils';
@@ -9,6 +9,7 @@ import { WorkflowNestedGraphContext } from '../context/workflow-nested-graph-con
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
+import { Badge } from '@/ds/components/Badge';
 import { Clock } from './workflow-clock';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 
@@ -20,6 +21,9 @@ export type NestedNode = Node<
     withoutBottomHandle?: boolean;
     stepGraph: SerializedStepFlowEntry[];
     mapConfig?: string;
+    isParallel?: boolean;
+    canSuspend?: boolean;
+    isForEach?: boolean;
   },
   'nested-node'
 >;
@@ -32,14 +36,30 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
   const { steps } = useCurrentRun();
   const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
 
-  const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig } = data;
+  const {
+    label,
+    description,
+    withoutTopHandle,
+    withoutBottomHandle,
+    stepGraph,
+    mapConfig,
+    isParallel,
+    canSuspend,
+    isForEach,
+  } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
 
   const step = steps[fullLabel];
 
-  const isForEachNode = Boolean(mapConfig);
+  const isForEachNode = Boolean(isForEach);
+  const isMapNode = Boolean(mapConfig && !isForEach);
   const forEachIconColor = '#F97316'; // Orange color for forEach nodes
+  const mapIconColor = '#F97316'; // Orange color for map nodes
+  const parallelIconColor = '#3B82F6'; // Blue color for parallel nodes
+  const suspendIconColor = '#EC4899'; // Pink color for suspend/resume nodes
+
+  const hasSpecialBadge = canSuspend || isParallel || isForEachNode || isMapNode;
 
   return (
     <>
@@ -49,7 +69,8 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
         data-workflow-node
         data-workflow-step-status={step?.status}
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
+          'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
+          hasSpecialBadge ? 'pt-0' : 'pt-2',
           step?.status === 'success' && 'bg-accent1Darker',
           step?.status === 'failed' && 'bg-accent2Darker',
           step?.status === 'suspended' && 'bg-accent3Darker',
@@ -57,6 +78,24 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
           step?.status === 'running' && 'bg-accent6Darker',
         )}
       >
+        {hasSpecialBadge && (
+          <div className="px-3 pt-2 pb-1">
+            {canSuspend && (
+              <Badge icon={<PlayCircle className="text-current" style={{ color: suspendIconColor }} />}>
+                SUSPEND/RESUME
+              </Badge>
+            )}
+            {!canSuspend && isParallel && (
+              <Badge icon={<Workflow className="text-current" style={{ color: parallelIconColor }} />}>PARALLEL</Badge>
+            )}
+            {!canSuspend && !isParallel && isForEachNode && (
+              <Badge icon={<List className="text-current" style={{ color: forEachIconColor }} />}>FOREACH</Badge>
+            )}
+            {!canSuspend && !isParallel && !isForEachNode && isMapNode && (
+              <Badge icon={<List className="text-current" style={{ color: mapIconColor }} />}>MAP</Badge>
+            )}
+          </div>
+        )}
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
           <Icon>
             {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
@@ -64,8 +103,7 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
             {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
             {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
             {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-            {!step && isForEachNode && <List className="text-icon2" style={{ color: forEachIconColor }} />}
-            {!step && !isForEachNode && <CircleDashed className="text-icon2" />}
+            {!step && <CircleDashed className="text-icon2" />}
           </Icon>
 
           <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">

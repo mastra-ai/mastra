@@ -166,6 +166,8 @@ const getStepNodeAndEdge = ({
           withoutBottomHandle: !nextNodeIds.length,
           stepGraph: hasGraph ? stepFlow.step.serializedStepFlow : undefined,
           mapConfig: stepFlow.step.mapConfig,
+          canSuspend: stepFlow.step.canSuspend,
+          isForEach: stepFlow.type === 'foreach',
         },
       },
     ];
@@ -296,6 +298,7 @@ const getStepNodeAndEdge = ({
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
           stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
+          canSuspend: _step.canSuspend,
         },
       },
       {
@@ -364,7 +367,15 @@ const getStepNodeAndEdge = ({
         nextStepFlow,
         allPrevNodeIds,
       });
-      nodes.push(..._nodes);
+      // Mark nodes as part of parallel execution
+      const markedNodes = _nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          isParallel: true,
+        },
+      }));
+      nodes.push(...markedNodes);
       edges.push(..._edges);
       nextPrevStepIds.push(..._nextPrevStepIds);
     });
