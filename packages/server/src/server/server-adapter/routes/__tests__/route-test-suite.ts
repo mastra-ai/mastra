@@ -298,17 +298,6 @@ async function buildHandlerParams(
   // Add body - auto-generated from schema
   if (route.bodySchema) {
     params.body = generateValidDataFromSchema(route.bodySchema);
-
-    // WORKAROUND: Vector handlers use 'index' instead of 'body'
-    if (route.path.includes('/vectors/')) {
-      params.index = params.body;
-    }
-
-    // WORKAROUND: Query handlers use 'query' instead of 'body'
-    if (route.path.includes('/query') && route.path.includes('/vectors/')) {
-      params.query = params.body;
-      delete params.index; // query routes don't use index
-    }
   }
 
   return params;
