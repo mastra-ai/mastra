@@ -4,6 +4,7 @@ import { mcpClient } from '../mcp/mcp-client.js';
 
 // Create an agent that uses tools from the MCP server
 export const docsAgent = new Agent({
+  id: 'docs-agent',
   name: 'Kepler docs agent',
   description: 'An expert on the Kepler project functions who provides detailed documentation and usage guidance',
   instructions: `You are a helpful assistant that can use tools provided by an MCP server via HTTP/SSE.

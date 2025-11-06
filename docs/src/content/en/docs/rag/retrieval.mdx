@@ -39,6 +39,7 @@ const { embedding } = await embed({
 
 // Query vector store
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 const results = await pgVector.query({
@@ -241,13 +242,13 @@ const lanceQueryTool = createVectorQueryTool({
 - Quality-gated search results
 - Embedded, file-based vector storage with LanceDB for edge deployment scenarios
 
-You can also override these configurations at runtime using the runtime context:
+You can also override these configurations at runtime using the request context:
 
 ```ts showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("databaseConfig", {
+const requestContext = new RequestContext();
+requestContext.set("databaseConfig", {
   pinecone: {
     namespace: "runtime-namespace",
   },
@@ -256,7 +257,7 @@ runtimeContext.set("databaseConfig", {
 await pineconeQueryTool.execute({
   context: { queryText: "search query" },
   mastra,
-  runtimeContext,
+  requestContext,
 });
 ```
 
@@ -275,6 +276,7 @@ import { openai } from "@ai-sdk/openai";
 import { PGVECTOR_PROMPT } from "@mastra/pg";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -294,6 +296,7 @@ import { openai } from "@ai-sdk/openai";
 import { PINECONE_PROMPT } from "@mastra/pinecone";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -313,6 +316,7 @@ import { openai } from "@ai-sdk/openai";
 import { QDRANT_PROMPT } from "@mastra/qdrant";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -332,6 +336,7 @@ import { openai } from "@ai-sdk/openai";
 import { CHROMA_PROMPT } from "@mastra/chroma";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -351,6 +356,7 @@ import { openai } from "@ai-sdk/openai";
 import { ASTRA_PROMPT } from "@mastra/astra";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -370,6 +376,7 @@ import { openai } from "@ai-sdk/openai";
 import { LIBSQL_PROMPT } from "@mastra/libsql";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -389,6 +396,7 @@ import { openai } from "@ai-sdk/openai";
 import { UPSTASH_PROMPT } from "@mastra/upstash";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -408,6 +416,7 @@ import { openai } from "@ai-sdk/openai";
 import { VECTORIZE_PROMPT } from "@mastra/vectorize";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -427,6 +436,7 @@ import { openai } from "@ai-sdk/openai";
 import { MONGODB_PROMPT } from "@mastra/mongodb";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -446,6 +456,7 @@ import { openai } from "@ai-sdk/openai";
 import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -465,6 +476,7 @@ import { openai } from "@ai-sdk/openai";
 import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
 
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `

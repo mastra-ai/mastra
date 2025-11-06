@@ -12,11 +12,9 @@ import {
   listWorkflowsHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
-  sendWorkflowRunEventHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
   streamVNextWorkflowHandler,
-  watchWorkflowHandler,
   resumeStreamWorkflowHandler,
   observeStreamVNextWorkflowHandler,
   streamLegacyWorkflowHandler,
@@ -185,9 +183,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
               },
             },
@@ -228,9 +226,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -283,9 +281,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
               },
             },
@@ -322,9 +320,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -412,9 +410,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 closeOnSuspend: {
                   type: 'boolean',
@@ -506,9 +504,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 closeOnSuspend: {
                   type: 'boolean',
@@ -631,9 +629,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -690,9 +688,9 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the workflow execution',
+                  description: 'Request Context for the workflow execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -722,34 +720,6 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
     startWorkflowRunHandler,
   );
 
-  router.get(
-    '/:workflowId/watch',
-    describeRoute({
-      description: 'Watch workflow transitions in real-time',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      tags: ['workflows'],
-      responses: {
-        200: {
-          description: 'workflow transitions in real-time',
-        },
-      },
-    }),
-    watchWorkflowHandler,
-  );
-
   router.post(
     '/:workflowId/runs/:runId/cancel',
     describeRoute({
@@ -776,42 +746,6 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     cancelWorkflowRunHandler,
-  );
-
-  router.post(
-    '/:workflowId/runs/:runId/send-event',
-    describeRoute({
-      description: 'Send an event to a workflow run',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { type: 'object', properties: { event: { type: 'string' }, data: { type: 'object' } } },
-          },
-        },
-      },
-      tags: ['workflows'],
-      responses: {
-        200: {
-          description: 'workflow run event sent',
-        },
-      },
-    }),
-    sendWorkflowRunEventHandler,
   );
 
   return router;

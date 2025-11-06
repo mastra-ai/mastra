@@ -1,4 +1,4 @@
-import type { Mastra } from '@mastra/core';
+import type { Mastra } from '@mastra/core/mastra';
 import {
   listToolsHandler as getOriginalToolsHandler,
   getToolByIdHandler as getOriginalToolByIdHandler,
@@ -45,7 +45,7 @@ export function executeToolHandler(tools: Record<string, any>) {
   return async (c: Context) => {
     try {
       const mastra: Mastra = c.get('mastra');
-      const runtimeContext = c.get('runtimeContext');
+      const requestContext = c.get('requestContext');
       const toolId = decodeURIComponent(c.req.param('toolId'));
       const runId = c.req.query('runId');
       const { data } = await c.req.json();
@@ -54,7 +54,7 @@ export function executeToolHandler(tools: Record<string, any>) {
         mastra,
         toolId,
         data,
-        runtimeContext,
+        requestContext,
         runId,
       });
 
@@ -68,7 +68,7 @@ export function executeToolHandler(tools: Record<string, any>) {
 export async function getAgentToolHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const agentId = c.req.param('agentId');
     const toolId = c.req.param('toolId');
 
@@ -76,7 +76,7 @@ export async function getAgentToolHandler(c: Context) {
       mastra,
       agentId,
       toolId,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);
@@ -88,7 +88,7 @@ export async function getAgentToolHandler(c: Context) {
 export async function executeAgentToolHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const runtimeContext = c.get('runtimeContext');
+    const requestContext = c.get('requestContext');
     const agentId = c.req.param('agentId');
     const toolId = c.req.param('toolId');
     const { data } = await c.req.json();
@@ -98,7 +98,7 @@ export async function executeAgentToolHandler(c: Context) {
       agentId,
       toolId,
       data,
-      runtimeContext,
+      requestContext,
     });
 
     return c.json(result);

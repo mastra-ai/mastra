@@ -127,20 +127,20 @@ describe('Tool Resource', () => {
     );
   });
 
-  it('should get all tools with runtimeContext', async () => {
+  it('should get all tools with requestContext', async () => {
     const mockResponse = {
       tool1: { id: 'tool1', description: 'Tool 1' },
       tool2: { id: 'tool2', description: 'Tool 2' },
     };
-    const runtimeContext = { userId: '123', sessionId: 'abc' };
-    const expectedBase64 = btoa(JSON.stringify(runtimeContext));
+    const requestContext = { userId: '123', sessionId: 'abc' };
+    const expectedBase64 = btoa(JSON.stringify(requestContext));
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.listTools(runtimeContext);
+    const result = await client.listTools(requestContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/tools?runtimeContext=${expectedEncodedBase64}`,
+      `${clientOptions.baseUrl}/api/tools?requestContext=${expectedEncodedBase64}`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

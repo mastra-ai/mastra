@@ -1,6 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsClickhouse } from '../operations';
@@ -21,13 +21,13 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -165,21 +165,14 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     };
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const values: Record<string, any> = {};
@@ -210,12 +203,15 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const limitClause = limit !== undefined ? `LIMIT ${limit}` : '';
-      const offsetClause = offset !== undefined ? `OFFSET ${offset}` : '';
+      const usePagination = perPage !== undefined && page !== undefined;
+      const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const offset = usePagination ? page * normalizedPerPage : 0;
+      const limitClause = usePagination ? `LIMIT ${normalizedPerPage}` : '';
+      const offsetClause = usePagination ? `OFFSET ${offset}` : '';
 
       let total = 0;
       // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
+      if (usePagination) {
         const countResult = await this.client.query({
           query: `SELECT COUNT(*) as count FROM ${TABLE_WORKFLOW_SNAPSHOT} ${TABLE_ENGINES[TABLE_WORKFLOW_SNAPSHOT].startsWith('ReplacingMergeTree') ? 'FINAL' : ''} ${whereClause}`,
           query_params: values,
@@ -256,7 +252,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'CLICKHOUSE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
@@ -323,9 +319,5 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

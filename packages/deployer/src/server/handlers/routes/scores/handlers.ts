@@ -1,21 +1,22 @@
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData } from '@mastra/core/evals';
 import type { StoragePagination } from '@mastra/core/storage';
 import {
   listScorersHandler as getOriginalListScorersHandler,
-  getScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
-  getScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
-  getScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
+  listScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
+  listScoresByScorerIdHandler as getOriginalScoresByScorerIdHandler,
+  listScoresByEntityIdHandler as getOriginalScoresByEntityIdHandler,
   saveScoreHandler as getOriginalSaveScoreHandler,
   getScorerHandler as getOriginalScorerHandler,
 } from '@mastra/server/handlers/scores';
 import type { Context } from 'hono';
 import { handleError } from '../../error';
+import { parsePage, parsePerPage } from '../../utils/query-parsers';
 
 export async function listScorersHandler(c: Context) {
   try {
     const scorers = await getOriginalListScorersHandler({
       mastra: c.get('mastra'),
-      runtimeContext: c.get('runtimeContext'),
+      requestContext: c.get('requestContext'),
     });
     return c.json(scorers);
   } catch (error) {
@@ -26,22 +27,22 @@ export async function listScorersHandler(c: Context) {
 export async function getScorerHandler(c: Context) {
   const mastra = c.get('mastra');
   const scorerId = c.req.param('scorerId');
-  const runtimeContext = c.get('runtimeContext');
+  const requestContext = c.get('requestContext');
 
   const scorer = await getOriginalScorerHandler({
     mastra,
     scorerId,
-    runtimeContext,
+    requestContext,
   });
 
   return c.json(scorer);
 }
 
-export async function getScoresByRunIdHandler(c: Context) {
+export async function listScoresByRunIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const runId = c.req.param('runId');
-  const page = parseInt(c.req.query('page') || '0');
-  const perPage = parseInt(c.req.query('perPage') || '10');
+  const page = parsePage(c.req.query('page'));
+  const perPage = parsePerPage(c.req.query('perPage'), 10);
   const pagination: StoragePagination = { page, perPage };
 
   try {
@@ -57,11 +58,11 @@ export async function getScoresByRunIdHandler(c: Context) {
   }
 }
 
-export async function getScoresByScorerIdHandler(c: Context) {
+export async function listScoresByScorerIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const scorerId = c.req.param('scorerId');
-  const page = parseInt(c.req.query('page') || '0');
-  const perPage = parseInt(c.req.query('perPage') || '10');
+  const page = parsePage(c.req.query('page'));
+  const perPage = parsePerPage(c.req.query('perPage'), 10);
   const entityId = c.req.query('entityId');
   const entityType = c.req.query('entityType');
   const pagination: StoragePagination = { page, perPage };
@@ -81,12 +82,12 @@ export async function getScoresByScorerIdHandler(c: Context) {
   }
 }
 
-export async function getScoresByEntityIdHandler(c: Context) {
+export async function listScoresByEntityIdHandler(c: Context) {
   const mastra = c.get('mastra');
   const entityId = c.req.param('entityId');
   const entityType = c.req.param('entityType');
-  const page = parseInt(c.req.query('page') || '0');
-  const perPage = parseInt(c.req.query('perPage') || '10');
+  const page = parsePage(c.req.query('page'));
+  const perPage = parsePerPage(c.req.query('perPage'), 10);
 
   const pagination: StoragePagination = { page, perPage };
 

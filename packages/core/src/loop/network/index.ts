@@ -1,12 +1,12 @@
 import z from 'zod';
 import type { AgentExecutionOptions } from '../../agent';
 import type { MultiPrimitiveExecutionOptions } from '../../agent/agent.types';
-import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '../../agent/index';
+import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
-import type { MastraMessageV2, MessageListInput } from '../../agent/message-list';
-import type { TracingContext } from '../../ai-tracing/types';
+import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import type { RuntimeContext } from '../../runtime-context';
+import type { TracingContext } from '../../observability';
+import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
@@ -14,13 +14,13 @@ import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 
-async function getRoutingAgent({ runtimeContext, agent }: { agent: Agent; runtimeContext: RuntimeContext }) {
-  const instructionsToUse = await agent.getInstructions({ runtimeContext: runtimeContext });
-  const agentsToUse = await agent.listAgents({ runtimeContext: runtimeContext });
-  const workflowsToUse = await agent.listWorkflows({ runtimeContext: runtimeContext });
-  const toolsToUse = await agent.listTools({ runtimeContext: runtimeContext });
-  const model = await agent.getModel({ runtimeContext: runtimeContext });
-  const memoryToUse = await agent.getMemory({ runtimeContext: runtimeContext });
+async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
+  const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
+  const agentsToUse = await agent.listAgents({ requestContext: requestContext });
+  const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
+  const toolsToUse = await agent.listTools({ requestContext: requestContext });
+  const model = await agent.getModel({ requestContext: requestContext });
+  const memoryToUse = await agent.getMemory({ requestContext: requestContext });
 
   const agentList = Object.entries(agentsToUse)
     .map(([name, agent]) => {
@@ -109,7 +109,7 @@ export async function prepareMemoryStep({
   resourceId,
   messages,
   routingAgent,
-  runtimeContext,
+  requestContext,
   generateId,
   tracingContext,
   memoryConfig,
@@ -118,12 +118,12 @@ export async function prepareMemoryStep({
   resourceId: string;
   messages: MessageListInput;
   routingAgent: Agent;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   generateId: () => string;
   tracingContext?: TracingContext;
   memoryConfig?: any;
 }) {
-  const memory = await routingAgent.getMemory({ runtimeContext });
+  const memory = await routingAgent.getMemory({ requestContext });
   let thread = await memory?.getThreadById({ threadId });
   if (!thread) {
     thread = await memory?.createThread({
@@ -152,8 +152,7 @@ export async function prepareMemoryStep({
               threadId: thread?.id,
               resourceId: thread?.resourceId,
             },
-          ] as MastraMessageV2[],
-          format: 'v2',
+          ] as MastraDBMessage[],
         }),
       );
     }
@@ -163,13 +162,12 @@ export async function prepareMemoryStep({
       resourceId: thread?.resourceId,
     });
     messageList.add(messages, 'user');
-    const messagesToSave = messageList.get.all.v2();
+    const messagesToSave = messageList.get.all.db();
 
     if (memory) {
       promises.push(
         memory.saveMessages({
           messages: messagesToSave,
-          format: 'v2',
         }),
       );
     }
@@ -195,7 +193,7 @@ export async function prepareMemoryStep({
         routingAgent
           .genTitle(
             userMessage,
-            runtimeContext,
+            requestContext,
             tracingContext || { currentSpan: undefined },
             titleModel,
             titleInstructions,
@@ -222,14 +220,14 @@ export async function prepareMemoryStep({
 
 export async function createNetworkLoop({
   networkName,
-  runtimeContext,
+  requestContext,
   runId,
   agent,
   generateId,
   routingAgentOptions,
 }: {
   networkName: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   runId: string;
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
@@ -267,11 +265,13 @@ export async function createNetworkLoop({
         completionReason: z.string(),
       });
 
-      const routingAgent = await getRoutingAgent({ runtimeContext, agent });
+      const routingAgent = await getRoutingAgent({ requestContext, agent });
 
       let completionResult;
 
-      let iterationCount = (inputData.iteration ?? -1) + 1;
+      // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
+      // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
+      const iterationCount = (inputData.iteration ?? -1) + 1;
 
       await writer.write({
         type: 'routing-agent-start',
@@ -306,11 +306,11 @@ export async function createNetworkLoop({
                           }
                       `;
 
-        const completionStream = await tryStreamWithJsonFallback(routingAgent, completionPrompt, {
+        const streamOptions = {
           structuredOutput: {
             schema: completionSchema,
           },
-          runtimeContext: runtimeContext,
+          requestContext: requestContext,
           maxSteps: 1,
           memory: {
             thread: initData?.threadId ?? runId,
@@ -318,11 +318,13 @@ export async function createNetworkLoop({
             readOnly: true,
           },
           ...routingAgentOptions,
-        });
+        };
+
+        // Try streaming with structured output
+        let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
 
         let currentText = '';
         let currentTextIdx = 0;
-
         await writer.write({
           type: 'routing-agent-text-start',
           payload: {
@@ -332,6 +334,7 @@ export async function createNetworkLoop({
           runId,
         });
 
+        // Stream and check for errors
         for await (const chunk of completionStream.objectStream) {
           if (chunk?.finalResult) {
             currentText = chunk.finalResult;
@@ -348,6 +351,45 @@ export async function createNetworkLoop({
               runId,
             });
             currentTextIdx = currentText.length;
+          }
+        }
+
+        // If error detected, retry with JSON prompt injection fallback
+        // TODO ujpdate tryStreamWithJsonFallback to not await the result so we can re-use it here
+        if (completionStream.error) {
+          console.warn('Error detected in structured output stream. Attempting fallback with JSON prompt injection.');
+
+          // Reset text tracking for fallback
+          currentText = '';
+          currentTextIdx = 0;
+
+          // Create fallback stream with jsonPromptInjection
+          completionStream = await routingAgent.stream(completionPrompt, {
+            ...streamOptions,
+            structuredOutput: {
+              ...streamOptions.structuredOutput,
+              jsonPromptInjection: true,
+            },
+          });
+
+          // Stream from fallback
+          for await (const chunk of completionStream.objectStream) {
+            if (chunk?.finalResult) {
+              currentText = chunk.finalResult;
+            }
+
+            const currentSlice = currentText.slice(currentTextIdx);
+            if (chunk?.isComplete && currentSlice.length) {
+              await writer.write({
+                type: 'routing-agent-text-delta',
+                payload: {
+                  text: currentSlice,
+                },
+                from: ChunkFrom.NETWORK,
+                runId,
+              });
+              currentTextIdx = currentText.length;
+            }
           }
         }
 
@@ -376,7 +418,7 @@ export async function createNetworkLoop({
             runId,
           });
 
-          const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+          const memory = await agent.getMemory({ requestContext: requestContext });
           await memory?.saveMessages({
             messages: [
               {
@@ -396,8 +438,7 @@ export async function createNetworkLoop({
                 threadId: initData?.threadId || runId,
                 resourceId: initData?.threadResourceId || networkName,
               },
-            ] as MastraMessageV2[],
-            format: 'v2',
+            ] as MastraDBMessage[],
           });
 
           return endPayload;
@@ -449,7 +490,7 @@ export async function createNetworkLoop({
             selectionReason: z.string().describe('The reason you picked the primitive'),
           }),
         },
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
         maxSteps: 1,
         memory: {
           thread: initData?.threadId ?? runId,
@@ -510,7 +551,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      const agentsMap = await agent.listAgents({ runtimeContext });
+      const agentsMap = await agent.listAgents({ requestContext });
 
       const agentId = inputData.primitiveId;
 
@@ -541,9 +582,7 @@ export async function createNetworkLoop({
       });
 
       const result = await agentForStep.stream(inputData.prompt, {
-        // resourceId: inputData.resourceId,
-        // threadId: inputData.threadId,
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
         runId,
       });
 
@@ -556,7 +595,7 @@ export async function createNetworkLoop({
         });
       }
 
-      const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+      const memory = await agent.getMemory({ requestContext: requestContext });
 
       const initData = await getInitData();
       const messages = result.messageList.get.all.v1();
@@ -587,8 +626,7 @@ export async function createNetworkLoop({
             threadId: initData?.threadId || runId,
             resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
@@ -641,7 +679,7 @@ export async function createNetworkLoop({
       iteration: z.number(),
     }),
     execute: async ({ inputData, writer, getInitData }) => {
-      const workflowsMap = await agent.listWorkflows({ runtimeContext: runtimeContext });
+      const workflowsMap = await agent.listWorkflows({ requestContext: requestContext });
       const workflowId = inputData.primitiveId;
       const wf = workflowsMap[workflowId];
 
@@ -678,7 +716,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      const run = await wf.createRunAsync({ runId });
+      const run = await wf.createRun({ runId });
       const toolData = {
         name: wf.name,
         args: inputData,
@@ -692,14 +730,9 @@ export async function createNetworkLoop({
         runId,
       });
 
-      // await emitter.emit('watch-v2', {
-      //     type: 'tool-call-streaming-start',
-      //     ...toolData,
-      // });
-
       const stream = run.streamVNext({
         inputData: input,
-        runtimeContext: runtimeContext,
+        requestContext: requestContext,
       });
 
       // let result: any;
@@ -737,7 +770,7 @@ export async function createNetworkLoop({
         },
       });
 
-      const memory = await agent.getMemory({ runtimeContext: runtimeContext });
+      const memory = await agent.getMemory({ requestContext: requestContext });
       const initData = await getInitData();
       await memory?.saveMessages({
         messages: [
@@ -750,8 +783,7 @@ export async function createNetworkLoop({
             threadId: initData?.threadId || runId,
             resourceId: initData?.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
@@ -801,8 +833,8 @@ export async function createNetworkLoop({
     execute: async ({ inputData, getInitData, writer }) => {
       const initData = await getInitData();
 
-      const agentTools = await agent.listTools({ runtimeContext });
-      const memory = await agent.getMemory({ runtimeContext });
+      const agentTools = await agent.listTools({ requestContext });
+      const memory = await agent.getMemory({ requestContext });
       const memoryTools = await memory?.listTools?.();
       const toolsMap = { ...agentTools, ...memoryTools };
 
@@ -870,11 +902,14 @@ export async function createNetworkLoop({
       });
 
       const finalResult = await tool.execute(
+        inputDataToUse,
         {
-          runtimeContext,
+          requestContext,
           mastra: agent.getMastraInstance(),
-          resourceId: initData.threadResourceId || networkName,
-          threadId: initData.threadId,
+          agent: {
+            resourceId: initData.threadResourceId || networkName,
+            threadId: initData.threadId,
+          },
           runId,
           memory,
           context: inputDataToUse,
@@ -911,8 +946,7 @@ export async function createNetworkLoop({
             threadId: initData.threadId || runId,
             resourceId: initData.threadResourceId || networkName,
           },
-        ] as MastraMessageV2[],
-        format: 'v2',
+        ] as MastraDBMessage[],
       });
 
       const endPayload = {
@@ -1072,7 +1106,7 @@ export async function networkLoop<
   FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
 >({
   networkName,
-  runtimeContext,
+  requestContext,
   runId,
   routingAgent,
   routingAgentOptions,
@@ -1083,7 +1117,7 @@ export async function networkLoop<
   messages,
 }: {
   networkName: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   runId: string;
   routingAgent: Agent;
   routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
@@ -1094,7 +1128,7 @@ export async function networkLoop<
   messages: MessageListInput;
 }) {
   // Validate that memory is available before starting the network
-  const memoryToUse = await routingAgent.getMemory({ runtimeContext });
+  const memoryToUse = await routingAgent.getMemory({ requestContext });
 
   if (!memoryToUse) {
     throw new MastraError({
@@ -1112,7 +1146,7 @@ export async function networkLoop<
 
   const { networkWorkflow } = await createNetworkLoop({
     networkName,
-    runtimeContext,
+    requestContext,
     runId,
     agent: routingAgent,
     routingAgentOptions: routingAgentOptionsWithoutMemory,
@@ -1124,21 +1158,20 @@ export async function networkLoop<
     inputSchema: networkWorkflow.outputSchema,
     outputSchema: networkWorkflow.outputSchema,
     execute: async ({ inputData, writer }) => {
-      if (maxIterations && inputData.iteration >= maxIterations) {
-        await writer?.write({
-          type: 'network-execution-event-finish',
-          payload: {
-            ...inputData,
-            completionReason: `Max iterations reached: ${maxIterations}`,
-          },
-        });
-        return {
-          ...inputData,
-          completionReason: `Max iterations reached: ${maxIterations}`,
-        };
-      }
+      const finalData = {
+        ...inputData,
+        ...(maxIterations && inputData.iteration >= maxIterations
+          ? { completionReason: `Max iterations reached: ${maxIterations}` }
+          : {}),
+      };
+      await writer?.write({
+        type: 'network-execution-event-finish',
+        payload: finalData,
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
 
-      return inputData;
+      return finalData;
     },
   });
 
@@ -1175,12 +1208,12 @@ export async function networkLoop<
     .then(finalStep)
     .commit();
 
-  const run = await mainWorkflow.createRunAsync({
+  const run = await mainWorkflow.createRun({
     runId,
   });
 
   const { thread } = await prepareMemoryStep({
-    runtimeContext: runtimeContext,
+    requestContext: requestContext,
     threadId: threadId || run.runId,
     resourceId: resourceId || networkName,
     messages,
@@ -1200,7 +1233,8 @@ export async function networkLoop<
           task,
           primitiveId: '',
           primitiveType: 'none',
-          iteration: 0,
+          // Start at -1 so first iteration increments to 0 (not 1)
+          iteration: -1,
           threadResourceId: thread?.resourceId,
           threadId: thread?.id,
           isOneOff: false,

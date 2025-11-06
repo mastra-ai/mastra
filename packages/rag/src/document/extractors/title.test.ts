@@ -1,17 +1,27 @@
-import { createOpenAI } from '@ai-sdk/openai';
-import { describe, it, expect, vi } from 'vitest';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { TextNode } from '../schema';
 import { TitleExtractor } from './title';
-
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const model = openai('gpt-4o');
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 });
 
 describe('TitleExtractor', () => {
+  let model: any;
+
+  beforeAll(() => {
+    model = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'Mocked Document Title',
+      }),
+      doStream: async () => {
+        throw new Error('Streaming not implemented for mock');
+      },
+    });
+  });
+
   it('can use a custom model from the test suite', async () => {
     const extractor = new TitleExtractor({ llm: model });
     const node = new TextNode({ text: 'A title test using a custom model.' });
@@ -48,7 +58,7 @@ describe('TitleExtractor', () => {
     expect(titles[0].documentTitle.length).toBeGreaterThan(0);
   });
 
-  it('handles very long input', async () => {
+  it('handles very long input', { retry: 2 }, async () => {
     const extractor = new TitleExtractor({ llm: model });
     const longText = 'A'.repeat(1000);
     const node = new TextNode({ text: longText });

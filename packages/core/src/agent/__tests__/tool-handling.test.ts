@@ -1,8 +1,8 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it } from 'vitest';
 import z from 'zod';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 import { getOpenAIModel, getSingleDummyResponseModel } from './mock-model';
 
@@ -71,6 +71,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name collision.',
         model: testModel,
@@ -90,7 +91,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
         },
       });
       await expect(
-        userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' }),
+        userAgent['convertTools']({ requestContext: new RequestContext(), methodType: 'generate' }),
       ).rejects.toThrow(/same name/i);
     });
 
@@ -151,6 +152,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name sanitization.',
         model: testModel,
@@ -163,7 +165,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' });
+      const tools = await userAgent['convertTools']({ requestContext: new RequestContext(), methodType: 'generate' });
       expect(Object.keys(tools)).toContain('bad___tool_name');
       expect(Object.keys(tools)).not.toContain(badName);
     });
@@ -225,6 +227,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name prefix.',
         model: testModel,
@@ -237,7 +240,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' });
+      const tools = await userAgent['convertTools']({ requestContext: new RequestContext(), methodType: 'generate' });
       expect(Object.keys(tools)).toContain('_1tool');
       expect(Object.keys(tools)).not.toContain(badStart);
     });
@@ -299,6 +302,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
       }
 
       const userAgent = new Agent({
+        id: 'user-agent',
         name: 'User agent',
         instructions: 'Test tool name truncation.',
         model: testModel,
@@ -311,7 +315,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
           },
         },
       });
-      const tools = await userAgent['convertTools']({ runtimeContext: new RuntimeContext(), methodType: 'generate' });
+      const tools = await userAgent['convertTools']({ requestContext: new RequestContext(), methodType: 'generate' });
       expect(Object.keys(tools).some(k => k.length === 63)).toBe(true);
       expect(Object.keys(tools)).not.toContain(longName);
     });
@@ -321,6 +325,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
     it('should expose sub-agents as tools when using generate/stream', async () => {
       // Create a research agent that will be used as a tool
       const researchAgent = new Agent({
+        id: 'research-agent',
         name: 'research-agent',
         instructions: 'You are a research agent. Provide concise, factual information.',
         model: dummyModel,
@@ -328,6 +333,7 @@ function toolhandlingTests(version: 'v1' | 'v2') {
 
       // Create an orchestrator agent that has access to the research agent
       const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
         name: 'orchestrator-agent',
         instructions: 'You can delegate research tasks to specialized agents.',
         model: openaiModel,

@@ -1,5 +1,5 @@
-import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
-import { runExperiment } from '@mastra/core/scores';
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
+import { runEvals } from '@mastra/core/evals';
 import { ycAgent } from '../agents';
 
 const scorer = createAnswerRelevancyScorer({
@@ -10,7 +10,7 @@ const scorer = createAnswerRelevancyScorer({
   },
 });
 
-runExperiment({
+runEvals({
   data: [{ input: 'Can you tell me what recent YC companies are working on AI Frameworks?' }],
   scorers: [scorer],
   target: ycAgent,

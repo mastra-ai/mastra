@@ -29,7 +29,7 @@ const sidebars = {
           label: "Supervisor Agent",
         },
         { type: "doc", id: "agents/image-analysis", label: "Image Analysis" },
-        { type: "doc", id: "agents/runtime-context", label: "Runtime Context" },
+        { type: "doc", id: "agents/request-context", label: "Request Context" },
         {
           type: "doc",
           id: "agents/deploying-mcp-server",
@@ -267,72 +267,7 @@ const sidebars = {
       label: "Evals",
       collapsed: true,
       items: [
-        {
-          type: "doc",
-          id: "evals/answer-relevancy",
-          label: "Answer Relevancy",
-        },
-        { type: "doc", id: "evals/bias", label: "Bias" },
-        { type: "doc", id: "evals/completeness", label: "Completeness" },
-        {
-          type: "doc",
-          id: "evals/content-similarity",
-          label: "Content Similarity",
-        },
-        {
-          type: "doc",
-          id: "evals/context-position",
-          label: "Context Position",
-        },
-        {
-          type: "doc",
-          id: "evals/context-precision",
-          label: "Context Precision",
-        },
-        {
-          type: "doc",
-          id: "evals/context-relevancy",
-          label: "Context Relevancy",
-        },
-        {
-          type: "doc",
-          id: "evals/contextual-recall",
-          label: "Contextual Recall",
-        },
-        { type: "doc", id: "evals/faithfulness", label: "Faithfulness" },
-        { type: "doc", id: "evals/hallucination", label: "Hallucination" },
-        {
-          type: "doc",
-          id: "evals/keyword-coverage",
-          label: "Keyword Coverage",
-        },
-        {
-          type: "doc",
-          id: "evals/prompt-alignment",
-          label: "Prompt Alignment",
-        },
-        { type: "doc", id: "evals/summarization", label: "Summarization" },
-        {
-          type: "doc",
-          id: "evals/textual-difference",
-          label: "Textual Difference",
-        },
-        {
-          type: "doc",
-          id: "evals/tone-consistency",
-          label: "Tone Consistency",
-        },
-        { type: "doc", id: "evals/toxicity", label: "Toxicity" },
-        {
-          type: "doc",
-          id: "evals/custom-llm-judge-eval",
-          label: "LLM as a Judge",
-        },
-        {
-          type: "doc",
-          id: "evals/custom-native-javascript-eval",
-          label: "Native JavaScript",
-        },
+        { type: "doc", id: "evals/running-in-ci", label: "Running in CI" },
       ],
     },
     {
@@ -357,8 +292,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "observability/basic-ai-tracing",
-          label: "Basic AI Tracing",
+          id: "observability/basic-tracing",
+          label: "Basic Tracing",
         },
       ],
     },

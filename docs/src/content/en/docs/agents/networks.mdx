@@ -36,7 +36,8 @@ import { cityWorkflow } from "../workflows/city-workflow";
 import { weatherTool } from "../tools/weather-tool";
 
 export const routingAgent = new Agent({
-  name: "routing-agent",
+  id: "routing-agent",
+  name: "Routing Agent",
   instructions: `
       You are a network of writers and researchers.
       The user will ask you to research a topic.
@@ -56,6 +57,7 @@ export const routingAgent = new Agent({
   },
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -72,7 +74,8 @@ Each agent in a network should include a clear `description` that explains what 
 
 ```typescript title="src/mastra/agents/research-agent.ts" showLineNumbers
 export const researchAgent = new Agent({
-  name: "research-agent",
+  id: "research-agent",
+  name: "Research Agent",
   description: `This agent gathers concise research insights in bullet-point form.
     It's designed to extract key facts without generating full
     responses or narrative content.`,
@@ -82,7 +85,8 @@ export const researchAgent = new Agent({
 
 ```typescript title="src/mastra/agents/writing-agent.ts" showLineNumbers
 export const writingAgent = new Agent({
-  name: "writing-agent",
+  id: "writing-agent",
+  name: "Writing Agent",
   description: `This agent turns researched material into well-structured
     written content. It produces full-paragraph reports with no bullet points,
     suitable for use in articles, summaries, or blog posts.`,
@@ -236,4 +240,4 @@ network-execution-event-step-finish
 
 - [Agent Memory](./agent-memory)
 - [Workflows Overview](../workflows/overview)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)

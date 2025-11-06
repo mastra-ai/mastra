@@ -106,11 +106,6 @@ export const startAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandl
   'Starting agent builder action run',
 );
 
-export const watchAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.watchWorkflowHandler,
-  'Watching agent builder action',
-);
-
 export const streamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.streamWorkflowHandler,
   'Streaming agent builder action',
@@ -164,9 +159,4 @@ export const getAgentBuilderActionRunsHandler = createAgentBuilderWorkflowHandle
 export const cancelAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandler(
   workflows.cancelWorkflowRunHandler,
   'Cancelling agent builder action run',
-);
-
-export const sendAgentBuilderActionRunEventHandler = createAgentBuilderWorkflowHandler(
-  workflows.sendWorkflowRunEventHandler,
-  'Sending agent builder action run event',
 );

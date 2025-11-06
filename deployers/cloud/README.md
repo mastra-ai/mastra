@@ -118,7 +118,6 @@ After deployment, your project will have:
 
 ```
 output/
-├── instrumentation.mjs    # OpenTelemetry setup
 ├── package.json          # With cloud dependencies
 ├── index.mjs            # Main server entry
 ├── mastra.mjs          # Your Mastra configuration

@@ -10,7 +10,7 @@ The `.start()` method starts a workflow run with input data, allowing you to exe
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -30,9 +30,9 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -46,16 +46,16 @@ const result = await run.start({
       type: "TracingContext",
       isOptional: true,
       description:
-        "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
           parameters: [
             {
               name: "currentSpan",
-              type: "AISpan",
+              type: "Span",
               isOptional: true,
               description:
-                "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
             },
           ],
         },
@@ -65,7 +65,7 @@ const result = await run.start({
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for Tracing configuration.",
       properties: [
         {
           parameters: [
@@ -84,7 +84,7 @@ const result = await run.start({
       name: "outputOptions",
       type: "OutputOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for output configuration.",
       properties: [
         {
           parameters: [
@@ -117,7 +117,7 @@ const result = await run.start({
       type: "string",
       isOptional: true,
       description:
-        "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
+        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />
@@ -125,22 +125,22 @@ const result = await run.start({
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
-const runtimeContext = new RuntimeContext();
-runtimeContext.set("variable", false);
+const requestContext = new RequestContext();
+requestContext.set("variable", false);
 
 const result = await run.start({
   inputData: {
     value: "initial data",
   },
-  runtimeContext,
+  requestContext,
 });
 ```
 
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](../workflow-methods/create-run)
+- [Workflow.createRun()](../workflow-methods/create-run)

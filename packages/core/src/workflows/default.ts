@@ -1,15 +1,16 @@
 import { randomUUID } from 'crypto';
-import type { AISpan, TracingContext } from '../ai-tracing';
-import { AISpanType, wrapMastra, selectFields } from '../ai-tracing';
-import type { RuntimeContext } from '../di';
+import type { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
-import type { MastraScorers } from '../scores';
-import { runScorer } from '../scores/hooks';
+import type { MastraScorers } from '../evals';
+import { runScorer } from '../evals/hooks';
+import { SpanType, wrapMastra } from '../observability';
+import type { Span, TracingContext } from '../observability';
 import type { ChunkType } from '../stream/types';
 import { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
+import { selectFields } from '../utils';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -125,33 +126,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
 
     if (lastOutput.status === 'success') {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: lastOutput.output,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: null,
-            error: lastOutput.error,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       const errorSource = error || lastOutput.error;
       const errorInstance = getErrorFromUnknown(errorSource, {
         includeStack: false,
@@ -168,19 +144,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return [];
       });
       base.suspended = suspendedStepIds;
-
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          workflowState: {
-            status: lastOutput.status,
-            steps: stepResults,
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
     }
 
     return base as TOutput;
@@ -215,8 +178,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attempts?: number;
       delay?: number;
     };
-    runtimeContext: RuntimeContext;
-    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
+    requestContext: RequestContext;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     abortController: AbortController;
     writableStream?: WritableStream<ChunkType>;
     format?: 'legacy' | 'vnext' | undefined;
@@ -234,7 +197,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       initialState,
       resume,
       retryConfig,
-      workflowAISpan,
+      workflowSpan,
       disableScorers,
     } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
@@ -251,7 +214,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         category: ErrorCategory.USER,
       });
 
-      workflowAISpan?.error({ error: empty_graph_error });
+      workflowSpan?.error({ error: empty_graph_error });
       throw empty_graph_error;
     }
 
@@ -290,11 +253,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepResults,
           resume,
           tracingContext: {
-            currentSpan: workflowAISpan,
+            currentSpan: workflowSpan,
           },
           abortController: params.abortController,
           emitter: params.emitter,
-          runtimeContext: params.runtimeContext,
+          requestContext: params.requestContext,
           writableStream: params.writableStream,
           disableScorers,
         });
@@ -320,18 +283,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowStatus: result.status,
             result: result.result,
             error: result.error,
-            runtimeContext: params.runtimeContext,
+            requestContext: params.requestContext,
           });
 
           if (result.error) {
-            workflowAISpan?.error({
+            workflowSpan?.error({
               error: result.error,
               attributes: {
                 status: result.status,
               },
             });
           } else {
-            workflowAISpan?.end({
+            workflowSpan?.end({
               output: result.result,
               attributes: {
                 status: result.status,
@@ -367,10 +330,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           workflowStatus: result.status,
           result: result.result,
           error: result.error,
-          runtimeContext: params.runtimeContext,
+          requestContext: params.requestContext,
         });
 
-        workflowAISpan?.error({
+        workflowSpan?.error({
           error,
           attributes: {
             status: result.status,
@@ -393,10 +356,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       workflowStatus: result.status,
       result: result.result,
       error: result.error,
-      runtimeContext: params.runtimeContext,
+      requestContext: params.requestContext,
     });
 
-    workflowAISpan?.end({
+    workflowSpan?.end({
       output: result.result,
       attributes: {
         status: result.status,
@@ -412,7 +375,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {
     if (!step) {
       return stepResults.input;
-    } else if (step.type === 'step' || step.type === 'waitForEvent') {
+    } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
@@ -439,7 +402,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     executionContext,
     writableStream,
     tracingContext,
@@ -465,14 +428,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     executionContext: ExecutionContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext: TracingContext;
   }): Promise<void> {
     let { duration, fn } = entry;
 
     const sleepSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
         durationMs: duration,
@@ -487,13 +450,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runId,
         workflowId,
         mastra: this.mastra!,
-        runtimeContext,
+        requestContext,
         inputData: prevOutput,
         state: executionContext.state,
         setState: (state: any) => {
           executionContext.state = state;
         },
-        runCount: -1,
         retryCount: -1,
         tracingContext: {
           currentSpan: sleepSpan,
@@ -545,7 +507,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     executionContext,
     writableStream,
     tracingContext,
@@ -571,14 +533,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     executionContext: ExecutionContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     tracingContext: TracingContext;
   }): Promise<void> {
     let { date, fn } = entry;
 
     const sleepUntilSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
         untilDate: date,
@@ -594,13 +556,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runId,
         workflowId,
         mastra: this.mastra!,
-        runtimeContext,
+        requestContext,
         inputData: prevOutput,
         state: executionContext.state,
         setState: (state: any) => {
           executionContext.state = state;
         },
-        runCount: -1,
         retryCount: -1,
         tracingContext: {
           currentSpan: sleepUntilSpan,
@@ -647,59 +608,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
   }
 
-  async executeWaitForEvent({
-    event,
-    emitter,
-    timeout,
-    tracingContext,
-  }: {
-    event: string;
-    emitter: Emitter;
-    timeout?: number;
-    tracingContext?: TracingContext;
-  }): Promise<any> {
-    const waitSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_WAIT_EVENT,
-      name: `wait: ${event}`,
-      attributes: {
-        eventName: event,
-        timeoutMs: timeout,
-      },
-      tracingPolicy: this.options?.tracingPolicy,
-    });
-
-    const startTime = Date.now();
-    return new Promise((resolve, reject) => {
-      const cb = (eventData: any) => {
-        waitSpan?.end({
-          output: eventData,
-          attributes: {
-            eventReceived: true,
-            waitDurationMs: Date.now() - startTime,
-          },
-        });
-        resolve(eventData);
-      };
-
-      if (timeout) {
-        setTimeout(() => {
-          emitter.off(`user-event-${event}`, cb);
-          const error = new Error('Timeout waiting for event');
-          waitSpan?.error({
-            error,
-            attributes: {
-              eventReceived: false,
-              waitDurationMs: Date.now() - startTime,
-            },
-          });
-          reject(error);
-        }, timeout);
-      }
-
-      emitter.once(`user-event-${event}`, cb);
-    });
-  }
-
   async executeStep({
     workflowId,
     runId,
@@ -711,7 +619,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevOutput,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     skipEmits = false,
     writableStream,
     disableScorers,
@@ -734,7 +642,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevOutput: any;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     skipEmits?: boolean;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
@@ -761,9 +669,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...(iterationCount ? { metadata: { iterationCount } } : {}),
     };
 
-    const stepAISpan = tracingContext.currentSpan?.createChildSpan({
+    const stepSpan = tracingContext.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
-      type: AISpanType.WORKFLOW_STEP,
+      type: SpanType.WORKFLOW_STEP,
       input: inputData,
       attributes: {
         stepId: step.id,
@@ -773,27 +681,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (!skipEmits) {
       await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: step.id,
-            ...stepInfo,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [step.id]: {
-                ...stepInfo,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-      await emitter.emit('watch-v2', {
         type: 'workflow-step-start',
         payload: {
           id: step.id,
@@ -814,7 +701,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       } as Record<string, StepResult<any, any, any, any>>,
       executionContext,
       workflowStatus: 'running',
-      runtimeContext,
+      requestContext,
     });
 
     const runStep = async (data: any) => {
@@ -852,17 +739,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId,
           resourceId,
           workflowId,
-          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepAISpan }) : undefined,
-          runtimeContext,
+          mastra: this.mastra ? wrapMastra(this.mastra, { currentSpan: stepSpan }) : undefined,
+          requestContext,
           inputData,
           state: executionContext.state,
           setState: (state: any) => {
             executionContext.state = state;
           },
-          runCount: retryCount,
           retryCount,
           resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
-          tracingContext: { currentSpan: stepAISpan },
+          tracingContext: { currentSpan: stepSpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
           suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
@@ -926,9 +812,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             output: result,
             workflowId,
             stepId: step.id,
-            runtimeContext,
+            requestContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan },
+            tracingContext: { currentSpan: stepSpan },
           });
         }
 
@@ -953,7 +839,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           `Error executing step ${step.id}: `,
         );
 
-        stepAISpan?.error({
+        stepSpan?.error({
           error,
           attributes: {
             status: 'failed',
@@ -973,33 +859,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (!skipEmits) {
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: step.id,
-            ...stepInfo,
-            ...execResults,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [step.id]: {
-                ...stepInfo,
-                ...execResults,
-              },
-            },
-
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-
       if (execResults.status === 'suspended') {
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-suspended',
           payload: {
             id: step.id,
@@ -1008,7 +869,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
       } else {
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-result',
           payload: {
             id: step.id,
@@ -1017,7 +878,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
 
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-finish',
           payload: {
             id: step.id,
@@ -1029,7 +890,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (execResults.status != 'failed') {
-      stepAISpan?.end({
+      stepSpan?.end({
         output: execResults.output,
         attributes: {
           status: execResults.status,
@@ -1047,7 +908,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     output,
     workflowId,
     stepId,
-    runtimeContext,
+    requestContext,
     disableScorers,
     tracingContext,
   }: {
@@ -1055,7 +916,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     input: any;
     output: any;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     workflowId: string;
     stepId: string;
     disableScorers?: boolean;
@@ -1065,7 +926,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (typeof scorersToUse === 'function') {
       try {
         scorersToUse = await scorersToUse({
-          runtimeContext: runtimeContext,
+          requestContext: requestContext,
         });
       } catch (error) {
         this.preprocessExecutionError(
@@ -1093,7 +954,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runId: runId,
           input: input,
           output: output,
-          runtimeContext,
+          requestContext,
           entity: {
             id: workflowId,
             stepId: stepId,
@@ -1120,7 +981,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     writableStream,
     disableScorers,
   }: {
@@ -1147,12 +1008,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const parallelSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_PARALLEL,
+      type: SpanType.WORKFLOW_PARALLEL,
       name: `parallel: '${entry.steps.length} branches'`,
       input: this.getStepOutput(stepResults, prevStep),
       attributes: {
@@ -1203,7 +1064,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           emitter,
           abortController,
-          runtimeContext,
+          requestContext,
           writableStream,
           disableScorers,
         });
@@ -1260,7 +1121,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     writableStream,
     disableScorers,
   }: {
@@ -1285,12 +1146,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_CONDITIONAL,
+      type: SpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: '${entry.conditions.length} conditions'`,
       input: prevOutput,
       attributes: {
@@ -1304,7 +1165,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       await Promise.all(
         entry.conditions.map(async (cond, index) => {
           const evalSpan = conditionalSpan?.createChildSpan({
-            type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+            type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
             name: `condition '${index}'`,
             input: prevOutput,
             attributes: {
@@ -1320,13 +1181,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   runId,
                   workflowId,
                   mastra: this.mastra!,
-                  runtimeContext,
+                  requestContext,
                   inputData: prevOutput,
                   state: executionContext.state,
                   setState: (state: any) => {
                     executionContext.state = state;
                   },
-                  runCount: -1,
                   retryCount: -1,
                   tracingContext: {
                     currentSpan: evalSpan,
@@ -1434,7 +1294,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           emitter,
           abortController,
-          runtimeContext,
+          requestContext,
           writableStream,
           disableScorers,
         });
@@ -1491,7 +1351,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     writableStream,
     disableScorers,
     serializedStepGraph,
@@ -1518,7 +1378,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -1526,7 +1386,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const { step, condition } = entry;
 
     const loopSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_LOOP,
+      type: SpanType.WORKFLOW_LOOP,
       name: `loop: '${entry.loopType}'`,
       input: prevOutput,
       attributes: {
@@ -1557,7 +1417,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
         disableScorers,
         serializedStepGraph,
@@ -1580,7 +1440,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       const evalSpan = loopSpan?.createChildSpan({
-        type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+        type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
         name: `condition: '${entry.loopType}'`,
         input: selectFields(result.output, ['stepResult', 'output.text', 'output.object', 'messages']),
         attributes: {
@@ -1595,13 +1455,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowId,
             runId,
             mastra: this.mastra!,
-            runtimeContext,
+            requestContext,
             inputData: result.output,
             state: executionContext.state,
             setState: (state: any) => {
               executionContext.state = state;
             },
-            runCount: -1,
             retryCount: -1,
             tracingContext: {
               currentSpan: evalSpan,
@@ -1664,7 +1523,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     writableStream,
     disableScorers,
     serializedStepGraph,
@@ -1693,7 +1552,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -1712,7 +1571,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
 
     const loopSpan = tracingContext.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_LOOP,
+      type: SpanType.WORKFLOW_LOOP,
       name: `loop: 'foreach'`,
       input: prevOutput,
       attributes: {
@@ -1723,29 +1582,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     });
 
     await emitter.emit('watch', {
-      type: 'watch',
-      payload: {
-        currentStep: {
-          id: step.id,
-          status: 'running',
-          ...stepInfo,
-        },
-        workflowState: {
-          status: 'running',
-          steps: {
-            ...stepResults,
-            [step.id]: {
-              status: 'running',
-              ...stepInfo,
-            },
-          },
-          result: null,
-          error: null,
-        },
-      },
-      eventTimestamp: Date.now(),
-    });
-    await emitter.emit('watch-v2', {
       type: 'workflow-step-start',
       payload: {
         id: step.id,
@@ -1802,7 +1638,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             tracingContext: { currentSpan: loopSpan },
             emitter,
             abortController,
-            runtimeContext,
+            requestContext,
             skipEmits: true,
             writableStream,
             disableScorers,
@@ -1816,35 +1652,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           const { status, error, suspendPayload, suspendedAt, endedAt, output } = result;
           const execResults = { status, error, suspendPayload, suspendedAt, endedAt, output };
 
-          await emitter.emit('watch', {
-            type: 'watch',
-            payload: {
-              currentStep: {
-                id: step.id,
-                ...stepInfo,
-                ...execResults,
-              },
-              workflowState: {
-                status: 'running',
-                steps: {
-                  ...stepResults,
-                  [step.id]: {
-                    ...stepInfo,
-                    ...execResults,
-                  },
-                },
-
-                result: null,
-                error: null,
-              },
-            },
-            eventTimestamp: Date.now(),
-          });
-
           if (execResults.status === 'suspended') {
             foreachIndexObj[i + resultIndex] = execResults;
           } else {
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'workflow-step-result',
               payload: {
                 id: step.id,
@@ -1852,7 +1663,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               },
             });
 
-            await emitter.emit('watch-v2', {
+            await emitter.emit('watch', {
               type: 'workflow-step-finish',
               payload: {
                 id: step.id,
@@ -1879,7 +1690,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       if (Object.keys(foreachIndexObj).length > 0) {
         const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
         const foreachIndex = suspendedIndices[0]!;
-        await emitter.emit('watch-v2', {
+        await emitter.emit('watch', {
           type: 'workflow-step-suspended',
           payload: {
             id: step.id,
@@ -1908,35 +1719,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     await emitter.emit('watch', {
-      type: 'watch',
-      payload: {
-        currentStep: {
-          id: step.id,
-          ...stepInfo,
-          status: 'success',
-          output: results,
-          endedAt: Date.now(),
-        },
-        workflowState: {
-          status: 'running',
-          steps: {
-            ...stepResults,
-            [step.id]: {
-              ...stepInfo,
-              status: 'success',
-              output: results,
-              endedAt: Date.now(),
-            },
-          },
-
-          result: null,
-          error: null,
-        },
-      },
-      eventTimestamp: Date.now(),
-    });
-
-    await emitter.emit('watch-v2', {
       type: 'workflow-step-result',
       payload: {
         id: step.id,
@@ -1946,7 +1728,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    await emitter.emit('watch-v2', {
+    await emitter.emit('watch', {
       type: 'workflow-step-finish',
       payload: {
         id: step.id,
@@ -1977,7 +1759,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowStatus,
     result,
     error,
-    runtimeContext,
+    requestContext,
   }: {
     workflowId: string;
     runId: string;
@@ -1988,7 +1770,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
     result?: Record<string, any>;
     error?: string | Error;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
   }) {
     const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({ stepResults, workflowStatus });
 
@@ -1996,9 +1778,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return;
     }
 
-    const runtimeContextObj: Record<string, any> = {};
-    runtimeContext.forEach((value, key) => {
-      runtimeContextObj[key] = value;
+    const requestContextObj: Record<string, any> = {};
+    requestContext.forEach((value, key) => {
+      requestContextObj[key] = value;
     });
 
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -2017,7 +1799,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resumeLabels: executionContext.resumeLabels,
         result,
         error,
-        runtimeContext: runtimeContextObj,
+        requestContext: requestContextObj,
         // @ts-ignore
         timestamp: Date.now(),
       },
@@ -2037,7 +1819,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext,
     emitter,
     abortController,
-    runtimeContext,
+    requestContext,
     writableStream,
     disableScorers,
   }: {
@@ -2058,7 +1840,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     emitter: Emitter;
     abortController: AbortController;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
   }): Promise<{
@@ -2083,7 +1865,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
         disableScorers,
         serializedStepGraph,
@@ -2112,7 +1894,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
         disableScorers,
       });
@@ -2206,7 +1988,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
         disableScorers,
       });
@@ -2223,7 +2005,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
         disableScorers,
       });
@@ -2240,7 +2022,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
         disableScorers,
         serializedStepGraph,
@@ -2258,7 +2040,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
         disableScorers,
         serializedStepGraph,
@@ -2266,31 +2048,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (entry.type === 'sleep') {
       const startedAt = Date.now();
       await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            status: 'waiting',
-            payload: prevOutput,
-            startedAt,
-          },
-          workflowState: {
-            status: 'waiting',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                status: 'waiting',
-                payload: prevOutput,
-                startedAt,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-      await emitter.emit('watch-v2', {
         type: 'workflow-step-waiting',
         payload: {
           id: entry.id,
@@ -2307,7 +2064,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'waiting',
-        runtimeContext,
+        requestContext,
       });
 
       await this.executeSleep({
@@ -2323,7 +2080,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
       });
 
@@ -2335,7 +2092,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'running',
-        runtimeContext,
+        requestContext,
       });
 
       const endedAt = Date.now();
@@ -2348,27 +2105,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
       await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            ...execResults,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                ...execResults,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-      await emitter.emit('watch-v2', {
         type: 'workflow-step-result',
         payload: {
           id: entry.id,
@@ -2378,7 +2114,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-finish',
         payload: {
           id: entry.id,
@@ -2388,31 +2124,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (entry.type === 'sleepUntil') {
       const startedAt = Date.now();
       await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            status: 'waiting',
-            payload: prevOutput,
-            startedAt,
-          },
-          workflowState: {
-            status: 'waiting',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                status: 'waiting',
-                payload: prevOutput,
-                startedAt,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-      await emitter.emit('watch-v2', {
         type: 'workflow-step-waiting',
         payload: {
           id: entry.id,
@@ -2430,7 +2141,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'waiting',
-        runtimeContext,
+        requestContext,
       });
 
       await this.executeSleepUntil({
@@ -2446,7 +2157,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         tracingContext,
         emitter,
         abortController,
-        runtimeContext,
+        requestContext,
         writableStream,
       });
 
@@ -2458,7 +2169,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         stepResults,
         executionContext,
         workflowStatus: 'running',
-        runtimeContext,
+        requestContext,
       });
 
       const endedAt = Date.now();
@@ -2472,27 +2183,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
 
       await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.id,
-            ...execResults,
-          },
-          workflowState: {
-            status: 'running',
-            steps: {
-              ...stepResults,
-              [entry.id]: {
-                ...execResults,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-      await emitter.emit('watch-v2', {
         type: 'workflow-step-result',
         payload: {
           id: entry.id,
@@ -2502,114 +2192,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
       });
 
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-step-finish',
         payload: {
           id: entry.id,
           metadata: {},
         },
       });
-    } else if (entry.type === 'waitForEvent') {
-      const startedAt = Date.now();
-      let eventData: any;
-      await emitter.emit('watch', {
-        type: 'watch',
-        payload: {
-          currentStep: {
-            id: entry.step.id,
-            status: 'waiting',
-            payload: prevOutput,
-            startedAt,
-          },
-          workflowState: {
-            status: 'waiting',
-            steps: {
-              ...stepResults,
-              [entry.step.id]: {
-                status: 'waiting',
-                payload: prevOutput,
-                startedAt,
-              },
-            },
-            result: null,
-            error: null,
-          },
-        },
-        eventTimestamp: Date.now(),
-      });
-      await emitter.emit('watch-v2', {
-        type: 'workflow-step-waiting',
-        payload: {
-          id: entry.step.id,
-          payload: prevOutput,
-          startedAt,
-          status: 'waiting',
-        },
-      });
-
-      stepResults[entry.step.id] = {
-        status: 'waiting',
-        payload: prevOutput,
-        startedAt,
-      };
-
-      await this.persistStepUpdate({
-        workflowId,
-        runId,
-        resourceId,
-        serializedStepGraph,
-        stepResults,
-        executionContext,
-        workflowStatus: 'waiting',
-        runtimeContext,
-      });
-
-      try {
-        eventData = await this.executeWaitForEvent({
-          event: entry.event,
-          emitter,
-          timeout: entry.timeout,
-          tracingContext,
-        });
-
-        const { step } = entry;
-        execResults = await this.executeStep({
-          workflowId,
-          runId,
-          resourceId,
-          step,
-          stepResults,
-          executionContext,
-          resume: {
-            resumePayload: eventData,
-            steps: [entry.step.id],
-          },
-          prevOutput,
-          tracingContext,
-          emitter,
-          abortController,
-          runtimeContext,
-          writableStream,
-          disableScorers,
-          serializedStepGraph,
-        });
-      } catch (error) {
-        execResults = {
-          status: 'failed',
-          error: error as Error,
-        };
-      }
-      const endedAt = Date.now();
-      const stepInfo = {
-        payload: prevOutput,
-        startedAt,
-        endedAt,
-      };
-
-      execResults = { ...execResults, ...stepInfo };
     }
 
-    if (entry.type === 'step' || entry.type === 'waitForEvent' || entry.type === 'loop' || entry.type === 'foreach') {
+    if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
       stepResults[entry.step.id] = execResults;
     }
 
@@ -2625,11 +2217,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepResults,
       executionContext,
       workflowStatus: execResults.status === 'success' ? 'running' : execResults.status,
-      runtimeContext,
+      requestContext,
     });
 
     if (execResults.status === 'canceled') {
-      await emitter.emit('watch-v2', {
+      await emitter.emit('watch', {
         type: 'workflow-canceled',
         payload: {},
       });

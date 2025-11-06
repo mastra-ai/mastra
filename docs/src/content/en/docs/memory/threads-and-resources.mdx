@@ -15,8 +15,8 @@ The `resource` is especially important for [resource-scoped memory](./working-me
 ```typescript {4} showLineNumbers
 const stream = await agent.stream("message for agent", {
   memory: {
-    thread: "user-123",
-    resource: "test-123",
+    thread: "conversation-123",
+    resource: "user-123",
   },
 });
 ```
@@ -27,7 +27,7 @@ Even with memory configured, agents won’t store or recall information unless b
 
 :::
 
-> Mastra Playground sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
+> Studio sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
 
 ### Thread title generation
 
@@ -68,7 +68,7 @@ export const testAgent = new Agent({
 
 #### Dynamic model selection and instructions
 
-You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `runtimeContext` object, allowing you to adapt title generation based on user-specific values.
+You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `requestContext` object, allowing you to adapt title generation based on user-specific values.
 
 ```typescript {7-16} showLineNumbers
 export const testAgent = new Agent({
@@ -77,14 +77,14 @@ export const testAgent = new Agent({
     options: {
       threads: {
         generateTitle: {
-          model: ({ runtimeContext }) => {
-            const userTier = runtimeContext.get("userTier");
+          model: ({ requestContext }) => {
+            const userTier = requestContext.get("userTier");
             return userTier === "premium"
               ? openai("gpt-4.1")
               : openai("gpt-4.1-nano");
           },
-          instructions: ({ runtimeContext }) => {
-            const language = runtimeContext.get("userLanguage") || "English";
+          instructions: ({ requestContext }) => {
+            const language = requestContext.get("userLanguage") || "English";
             return `Generate a concise, engaging title in ${language} based on the user's first message.`;
           },
         },

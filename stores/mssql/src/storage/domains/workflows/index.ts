@@ -1,7 +1,7 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, normalizePerPage } from '@mastra/core/storage';
+import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
@@ -50,13 +50,13 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();
@@ -87,7 +87,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           waitingPaths: {},
           status: 'pending',
           runId: runId,
-          runtimeContext: {},
+          requestContext: {},
         } as WorkflowRunState;
       } else {
         // Parse existing snapshot
@@ -95,9 +95,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
       }
 
-      // Merge the new step result and runtime context
+      // Merge the new step result and request context
       snapshot.context[stepId] = result;
-      snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
       // Upsert within the same transaction to handle both insert and update
       const upsertReq = new sql.Request(transaction);
@@ -363,21 +363,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
@@ -419,16 +412,19 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         }
       });
 
-      if (limit !== undefined && offset !== undefined) {
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
+      if (usePagination) {
         const countQuery = `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`;
         const countResult = await request.query(countQuery);
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
       let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
-      if (limit !== undefined && offset !== undefined) {
-        query += ` OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-        request.input('limit', limit);
+      if (usePagination) {
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page! * normalizedPerPage;
+        query += ` OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+        request.input('perPage', normalizedPerPage);
         request.input('offset', offset);
       }
       const result = await request.query(query);
@@ -437,7 +433,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'MASTRA_STORAGE_MSSQL_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -447,9 +443,5 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         error,
       );
     }
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

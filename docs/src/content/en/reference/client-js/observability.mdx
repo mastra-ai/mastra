@@ -1,26 +1,26 @@
 ---
 title: "Reference: Observability API | Client SDK | Mastra Docs"
-description: Learn how to retrieve AI traces, monitor application performance, and score traces using the client-js SDK.
+description: Learn how to retrieve traces, monitor application performance, and score traces using the client-js SDK.
 ---
 
 # Observability API
 
-The Observability API provides methods to retrieve AI traces, monitor your application's performance, and score traces for evaluation. This helps you understand how your AI agents and workflows are performing.
+The Observability API provides methods to retrieve traces, monitor your application's performance, and score traces for evaluation. This helps you understand how your AI agents and workflows are performing.
 
-## Getting a Specific AI Trace
+## Getting a Specific Trace
 
-Retrieve a specific AI trace by its ID, including all its spans and details:
+Retrieve a specific trace by its ID, including all its spans and details:
 
 ```typescript
-const trace = await mastraClient.getAITrace("trace-id-123");
+const trace = await mastraClient.getTrace("trace-id-123");
 ```
 
-## Getting AI Traces with Filtering
+## Getting Traces with Filtering
 
-Retrieve a paginated list of AI trace root spans with optional filtering:
+Retrieve a paginated list of trace root spans with optional filtering:
 
 ```typescript
-const traces = await mastraClient.getAITraces({
+const traces = await mastraClient.getTraces({
   pagination: {
     page: 1,
     perPage: 20,
@@ -40,8 +40,8 @@ const traces = await mastraClient.getAITraces({
 console.log(`Found ${traces.spans.length} root spans`);
 console.log(`Total pages: ${traces.pagination.totalPages}`);
 
-// To get the complete trace with all spans, use getAITrace
-const completeTrace = await mastraClient.getAITrace(traces.spans[0].traceId);
+// To get the complete trace with all spans, use getTrace
+const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId);
 ```
 
 ## Scoring Traces
@@ -63,7 +63,7 @@ const result = await mastraClient.score({
 Retrieve scores for a specific span within a trace:
 
 ```typescript
-const scores = await mastraClient.getScoresBySpan({
+const scores = await mastraClient.listScoresBySpan({
   traceId: "trace-123",
   spanId: "span-456",
   page: 1,

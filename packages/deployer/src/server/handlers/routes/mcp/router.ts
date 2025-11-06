@@ -413,7 +413,7 @@ export function mcpRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                requestContext: { type: 'object' },
               },
             },
           },

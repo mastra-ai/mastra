@@ -18,7 +18,7 @@ const YC_DATA = [
   {
     name: 'HumanLayer',
     longDescription:
-      'HumanLayer is an API that enables AI applications to contact humans for help, feedback, and approvals. One customer uses HumanLayer to ship DevOps agents that manage complex and risky workflows like production deployments and database migrations.  We’re building HumanLayer because we know that the future of AI Applications is not gonna be humans sitting at a chat interface, the future is “outer loop” or “headless” agents, and our partners are building AI apps that invert the typical interaction paradigm. Autonomous agents are calling humans, not the other way around. AI Agents are poised to disrupt the $4.6tn global labor market, but in order to make agents reliable today, and train them to be fully autonomous tomorrow, solutions like HumanLayer are an inevitable part of the AI Agent stack. ',
+      'HumanLayer is an API that enables AI applications to contact humans for help, feedback, and approvals. One customer uses HumanLayer to ship DevOps agents that manage complex and risky workflows like production deployments and database migrations.  We\'re building HumanLayer because we know that the future of AI Applications is not gonna be humans sitting at a chat interface, the future is "outer loop" or "headless" agents, and our partners are building AI apps that invert the typical interaction paradigm. Autonomous agents are calling humans, not the other way around. AI Agents are poised to disrupt the $4.6tn global labor market, but in order to make agents reliable today, and train them to be fully autonomous tomorrow, solutions like HumanLayer are an inevitable part of the AI Agent stack. ',
     tags: '',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'F24',
@@ -122,7 +122,7 @@ const YC_DATA = [
   {
     name: 'Foundry',
     longDescription:
-      'Foundry is the world model for your AI agent, empowering companies to build and productionize agents that automate entire workflows—like customer support, recruiting, and sales—and productionize them in minutes/hours, not weeks/months.  With Foundry, teams can quickly create agents that actually work, track performance, and scale their impact across the business. Pranav and I built AI systems at Scale AI for companies like OpenAI. Now, we’re bringing that experience to teams everywhere to make AI agents accessible and practical for every business.',
+      "Foundry is the world model for your AI agent, empowering companies to build and productionize agents that automate entire workflows—like customer support, recruiting, and sales—and productionize them in minutes/hours, not weeks/months.  With Foundry, teams can quickly create agents that actually work, track performance, and scale their impact across the business. Pranav and I built AI systems at Scale AI for companies like OpenAI. Now, we're bringing that experience to teams everywhere to make AI agents accessible and practical for every business.",
     tags: 'Developer Tools, Workflow Automation, No-code, Automation, AI',
     industries: 'B2B, Infrastructure',
     batch: 'F24',
@@ -250,7 +250,7 @@ const YC_DATA = [
   {
     name: 'CollectWise',
     longDescription:
-      "CollectWise automates consumer debt collection with AI. We’re outperforming collection firms by 2X and have successfully serviced over $2 million in debts. Our platform handles the entire late-stage recovery process, allowing creditors to recover debts that couldn’t be resolved through voluntary communications. CollectWise's AI agents automate pre-legal outreach, asset research, litigation, credit reporting, and enforcement actions like garnishments and liens.",
+      "CollectWise automates consumer debt collection with AI. We're outperforming collection firms by 2X and have successfully serviced over $2 million in debts. Our platform handles the entire late-stage recovery process, allowing creditors to recover debts that couldn't be resolved through voluntary communications. CollectWise's AI agents automate pre-legal outreach, asset research, litigation, credit reporting, and enforcement actions like garnishments and liens.",
     tags: '',
     industries: 'Fintech',
     batch: 'F24',
@@ -258,7 +258,7 @@ const YC_DATA = [
   {
     name: 'Origami Agents',
     longDescription:
-      "Every Origami Agent works like a dedicated human sales rep, analyzing websites, press releases, and product pages to bring you the top 1% of your customers every day. Use millions of Origami Agents to make sense of the other 99% of data that's not in structured databases. ‎  Previously, Finn built custom outbound solutions for over 20 startups, while Kenson was the CTO at an enterprise sales startup. We found ourselves building this tool for our customers over and over again, and that it worked 10x better than all other outbound strategies. ‎  There’s enough information on the internet to know exactly who your perfect customers are.",
+      "Every Origami Agent works like a dedicated human sales rep, analyzing websites, press releases, and product pages to bring you the top 1% of your customers every day. Use millions of Origami Agents to make sense of the other 99% of data that's not in structured databases. ‎  Previously, Finn built custom outbound solutions for over 20 startups, while Kenson was the CTO at an enterprise sales startup. We found ourselves building this tool for our customers over and over again, and that it worked 10x better than all other outbound strategies. ‎  There's enough information on the internet to know exactly who your perfect customers are.",
     tags: '',
     industries: 'B2B, Sales',
     batch: 'F24',
@@ -282,7 +282,7 @@ const YC_DATA = [
   {
     name: 'Gecko Security',
     longDescription:
-      'We built Gecko for teams that want to build secure code quickly without wasting time on security tools that don’t deliver results, or relying on one-time human pentests that quickly become outdated. Gecko uses AI to understand how your application should work, simulates relevant attacks to find critical vulnerabilities, and then verifies these vulnerabilities by exploiting them. It also helps you understand the risk of these vulnerabilities and applies a working fix to keep your code secure.',
+      "We built Gecko for teams that want to build secure code quickly without wasting time on security tools that don't deliver results, or relying on one-time human pentests that quickly become outdated. Gecko uses AI to understand how your application should work, simulates relevant attacks to find critical vulnerabilities, and then verifies these vulnerabilities by exploiting them. It also helps you understand the risk of these vulnerabilities and applies a working fix to keep your code secure.",
     tags: 'Artificial Intelligence, SaaS, B2B, Security, Cybersecurity',
     industries: 'B2B, Security',
     batch: 'F24',
@@ -345,7 +345,7 @@ const YC_DATA = [
   {
     name: 'Tiny',
     longDescription:
-      'At Tiny, we’re building a new kind of ERP system for factories where AI agents automate repetitive workflows. Made for the four million factories still primarily relying on Excel. LLMs now unlock their troves of siloed unstructured data. We see a massive opportunity to build a compound startup and, beyond that, tap into network effects to unlock just-in-time manufacturing across entire supply chains.',
+      "At Tiny, we're building a new kind of ERP system for factories where AI agents automate repetitive workflows. Made for the four million factories still primarily relying on Excel. LLMs now unlock their troves of siloed unstructured data. We see a massive opportunity to build a compound startup and, beyond that, tap into network effects to unlock just-in-time manufacturing across entire supply chains.",
     tags: 'SaaS, B2B, Workflow Automation, Manufacturing, Enterprise Software',
     industries: 'B2B',
     batch: 'F24',
@@ -393,7 +393,7 @@ const YC_DATA = [
   {
     name: 'BeerMe',
     longDescription:
-      'BeerMe is a digital wallet for USDC. It’s like Venmo or Cash App, but we use stablecoins to make sending money instant, global, and free. A peer-to-peer electronic cash system is the crypto use-case, but the technology remains inaccessible to mainstream users. Today, after 15 years of innovation, it is finally possible to build a digital wallet that puts crypto into a billion people’s hands, without them even realizing it.',
+      "BeerMe is a digital wallet for USDC. It's like Venmo or Cash App, but we use stablecoins to make sending money instant, global, and free. A peer-to-peer electronic cash system is the crypto use-case, but the technology remains inaccessible to mainstream users. Today, after 15 years of innovation, it is finally possible to build a digital wallet that puts crypto into a billion people's hands, without them even realizing it.",
     tags: 'Crypto / Web3, Payments, Consumer, Messaging, Social Media',
     industries: 'Consumer, Social',
     batch: 'F24',
@@ -401,7 +401,7 @@ const YC_DATA = [
   {
     name: 'HYBRD',
     longDescription:
-      'HYBRD is Strava for modern athletes who do more than just cardio. It brings all your training data together by integrating with top wearables and uses AI to make tracking weightlifting easy. This allows athletes to fully understand their training load, track holistic progress over time, and compete with friends in fresh, exciting ways. Existing products tend to focus on only one type of exercise—either cardio or strength—leaving hybrid athletes juggling disconnected tools. As hybrid athletes themselves the founders found this frustrating and set out to build the unified approach they needed for their training. Three of HYBRD’s founders previously worked at WHOOP, each leading teams across product, growth and analytics. In parallel, Mats was a member of the US national rowing team and Ben, Shoe and Ruiters have all completed Ironman 70.3s. ',
+      "HYBRD is Strava for modern athletes who do more than just cardio. It brings all your training data together by integrating with top wearables and uses AI to make tracking weightlifting easy. This allows athletes to fully understand their training load, track holistic progress over time, and compete with friends in fresh, exciting ways. Existing products tend to focus on only one type of exercise—either cardio or strength—leaving hybrid athletes juggling disconnected tools. As hybrid athletes themselves the founders found this frustrating and set out to build the unified approach they needed for their training. Three of HYBRD's founders previously worked at WHOOP, each leading teams across product, growth and analytics. In parallel, Mats was a member of the US national rowing team and Ben, Shoe and Ruiters have all completed Ironman 70.3s. ",
     tags: 'Consumer, Fitness, Social, Digital Health, AI',
     industries: 'Consumer',
     batch: 'F24',
@@ -449,7 +449,7 @@ const YC_DATA = [
   {
     name: 'Keye',
     longDescription:
-      ' Keye is an AI software that lets private equity firms do due diligence for acquisitions faster and more accurately. Our customers can evaluate 10x more deals and fund better companies which leads directly to better returns/more alpha. -- Our system is the first of its kind to instantly generate complex, comprehensive data packs from raw data in any format, directly from the data room. This enables investors to gain an 80% understanding of a potential deal within moments, empowering them to say No to a deal earlier in the process and focus on high-potential opportunities. Traditionally, creating these detailed data packs—like cohort or retention analyses and customer roll-forwards—takes weeks, during which critical details may be overlooked, potentially costing funds millions in missed insights and poor decisions. -- Keye combines cutting-edge AI with deep private equity expertise to deliver powerful, multi-layered insights that go far beyond the simple summarizers and search functions offered by other tools. Our platform dives deep into both quantitative and qualitative due diligence data, offering high-impact analytics crafted specifically for private equity workflows. This isn’t just automation—it’s a purpose-built solution that uncovers actionable insights, fueling smarter decisions and driving true alpha. ',
+      " Keye is an AI software that lets private equity firms do due diligence for acquisitions faster and more accurately. Our customers can evaluate 10x more deals and fund better companies which leads directly to better returns/more alpha. -- Our system is the first of its kind to instantly generate complex, comprehensive data packs from raw data in any format, directly from the data room. This enables investors to gain an 80% understanding of a potential deal within moments, empowering them to say No to a deal earlier in the process and focus on high-potential opportunities. Traditionally, creating these detailed data packs—like cohort or retention analyses and customer roll-forwards—takes weeks, during which critical details may be overlooked, potentially costing funds millions in missed insights and poor decisions. -- Keye combines cutting-edge AI with deep private equity expertise to deliver powerful, multi-layered insights that go far beyond the simple summarizers and search functions offered by other tools. Our platform dives deep into both quantitative and qualitative due diligence data, offering high-impact analytics crafted specifically for private equity workflows. This isn't just automation—it's a purpose-built solution that uncovers actionable insights, fueling smarter decisions and driving true alpha. ",
     tags: 'Artificial Intelligence, Finance, Investing, Enterprise Software, AI',
     industries: 'Fintech',
     batch: 'F24',
@@ -489,7 +489,7 @@ const YC_DATA = [
   {
     name: 'Protegee',
     longDescription:
-      'We’re excited to launch our first product that allows your AI voice agents to accept payments easily and securely over the phone. We manage compliance, security, and fraud, letting you focus on creating great experiences.   We are setting the stage for the agentic economy, starting with voice payments. Web and agent-to-agent transactions coming soon.',
+      "We're excited to launch our first product that allows your AI voice agents to accept payments easily and securely over the phone. We manage compliance, security, and fraud, letting you focus on creating great experiences.   We are setting the stage for the agentic economy, starting with voice payments. Web and agent-to-agent transactions coming soon.",
     tags: 'Fintech, Payments, Infrastructure, Trust & Safety, AI',
     industries: 'Fintech, Payments',
     batch: 'F24',
@@ -505,7 +505,7 @@ const YC_DATA = [
   {
     name: 'Reticular',
     longDescription:
-      'Reticular helps pharma companies discover drugs with AI models like AlphaFold by making them steerable, just like you can prompt LLMs. Today, limited validation data means companies spend millions on failed experiments trying to steer these models through trial and error. We’re piloting our AI interpretability technology with early-stage biotechs and scaling rapidly. Just a week after our pivot, we identified the first interpretable features ever found in protein models, allowing precise control over biological functions. Nithin and John met competing in Biology Olympiads before spending 4 years as roommates at MIT publishing ML/bio research in NeurIPS and Nature. We believe biological models encode far more information than anyone is currently using - our goal is to unlock this potential.',
+      "Reticular helps pharma companies discover drugs with AI models like AlphaFold by making them steerable, just like you can prompt LLMs. Today, limited validation data means companies spend millions on failed experiments trying to steer these models through trial and error. We're piloting our AI interpretability technology with early-stage biotechs and scaling rapidly. Just a week after our pivot, we identified the first interpretable features ever found in protein models, allowing precise control over biological functions. Nithin and John met competing in Biology Olympiads before spending 4 years as roommates at MIT publishing ML/bio research in NeurIPS and Nature. We believe biological models encode far more information than anyone is currently using - our goal is to unlock this potential.",
     tags: 'AI-powered Drug Discovery, Generative AI, Biotech, Therapeutics',
     industries: 'Healthcare, Drug Discovery and Delivery',
     batch: 'F24',
@@ -593,7 +593,7 @@ const YC_DATA = [
   {
     name: 'Lightscreen AI',
     longDescription:
-      "Lightscreen’s voice + video AI interviewer enables companies to identify and invest in genuinely skilled candidates. It's already being used by high-growth startups and recruiting agencies to screen technical candidates.  We provide companies with a voicebot that can run a full-length technical interview, does smart interruptions, and multi-modal cheating detection. The AI provides the company rubric-based, rich candidate evaluation in minutes and can be fully customized to ask questions and evaluate based on the company's needs. ",
+      "Lightscreen's voice + video AI interviewer enables companies to identify and invest in genuinely skilled candidates. It's already being used by high-growth startups and recruiting agencies to screen technical candidates.  We provide companies with a voicebot that can run a full-length technical interview, does smart interruptions, and multi-modal cheating detection. The AI provides the company rubric-based, rich candidate evaluation in minutes and can be fully customized to ask questions and evaluate based on the company's needs. ",
     tags: 'Artificial Intelligence, SaaS, Recruiting, Talent Acquisition, Conversational AI',
     industries: 'B2B, Recruiting and Talent',
     batch: 'F24',
@@ -633,7 +633,7 @@ const YC_DATA = [
   {
     name: 'Coblocks',
     longDescription:
-      'Coblocks is a thoughtfully-designed data platform that helps teams write queries and automate workflows faster.  We understand the columns, tables, and relationships in your data and use them to help anyone on your team build pipelines with AI, SQL and Python. Think of us like Zapier plus Cursor for data engineering. Here’s how we’re different: • All-in-one: You can get started in 2 minutes – no setup or configuration required. We have one-click integrations, warehousing, transformation, and schedules all built in. • Seamless integrations: Plug in your Postgres database, Stripe transactions, Hubspot leads, or any other data source, without writing code to keep things in sync. • Thoughtful AI: We love Cursor and we love data – we combined the two to help you write accurate queries. We use existing metadata to help you create new datasets, connect sources, fix errors, or edit in place. • Collaborative: Easily share data and discover what others in your org have built as a starting place for your analysis. Wrap common blocks of logic with templates so your team never has to start from zero. • Resilient and Scalable: Our compute engine is lightning-fast for queries and builds. Git and branching are built-in for both code and data, so you can time-travel backwards when things break. You can start with GBs and grow to TBs.',
+      "Coblocks is a thoughtfully-designed data platform that helps teams write queries and automate workflows faster.  We understand the columns, tables, and relationships in your data and use them to help anyone on your team build pipelines with AI, SQL and Python. Think of us like Zapier plus Cursor for data engineering. Here's how we're different: • All-in-one: You can get started in 2 minutes – no setup or configuration required. We have one-click integrations, warehousing, transformation, and schedules all built in. • Seamless integrations: Plug in your Postgres database, Stripe transactions, Hubspot leads, or any other data source, without writing code to keep things in sync. • Thoughtful AI: We love Cursor and we love data – we combined the two to help you write accurate queries. We use existing metadata to help you create new datasets, connect sources, fix errors, or edit in place. • Collaborative: Easily share data and discover what others in your org have built as a starting place for your analysis. Wrap common blocks of logic with templates so your team never has to start from zero. • Resilient and Scalable: Our compute engine is lightning-fast for queries and builds. Git and branching are built-in for both code and data, so you can time-travel backwards when things break. You can start with GBs and grow to TBs.",
     tags: 'Artificial Intelligence, Analytics, Data Science, Big Data, Data Engineering',
     industries: 'B2B, Infrastructure',
     batch: 'F24',
@@ -649,7 +649,7 @@ const YC_DATA = [
   {
     name: 'Encore',
     longDescription:
-      'Encore is your go-to online shopping assistant for finding secondhand treasures. Our conversational search platform makes it easy and fun to browse platforms like Depop, eBay, Grailed, and Poshmark—all in one place. Whether you’re after styling tips, honest reviews, trend ideas, or tracking down that cool piece you saw in a movie or on social media, we’ve got you covered. Shopping should feel like having a personal expert by your side, helping you discover things you’ll truly love. With Encore, browsing becomes easy, fun, and actually rewarding.',
+      "Encore is your go-to online shopping assistant for finding secondhand treasures. Our conversational search platform makes it easy and fun to browse platforms like Depop, eBay, Grailed, and Poshmark—all in one place. Whether you're after styling tips, honest reviews, trend ideas, or tracking down that cool piece you saw in a movie or on social media, we've got you covered. Shopping should feel like having a personal expert by your side, helping you discover things you'll truly love. With Encore, browsing becomes easy, fun, and actually rewarding.",
     tags: 'Artificial Intelligence, Consumer, Retail Tech',
     industries: 'Consumer',
     batch: 'F24',
@@ -696,7 +696,7 @@ const YC_DATA = [
   {
     name: 'Symphony',
     longDescription:
-      'Symphony helps enterprises train their customer-facing employees using interactive AI voice simulations of real-world scenarios. Users can create an infinite number of simulations that allow their teams to practice the job - avoiding costly mistakes with real customers. For example, we’re live with 2 of the top 3 auto insurers in NA, helping train 1000s of newly hired claims adjusters. ',
+      "Symphony helps enterprises train their customer-facing employees using interactive AI voice simulations of real-world scenarios. Users can create an infinite number of simulations that allow their teams to practice the job - avoiding costly mistakes with real customers. For example, we're live with 2 of the top 3 auto insurers in NA, helping train 1000s of newly hired claims adjusters. ",
     tags: 'Artificial Intelligence, SaaS, B2B, HR Tech',
     industries: 'B2B',
     batch: 'F24',
@@ -736,7 +736,7 @@ const YC_DATA = [
   {
     name: 'Andoria',
     longDescription:
-      'Andoria is an AI web agent that generates in-app walkthroughs for software companies. The AI agent learns how your web application works, gathers data about your user (e.g. background & goal), and generates a custom walkthrough whenever a user needs help. When a user gets stuck, Andoria can step in, and show them exactly what to do by performing such actions. Andoria’s goal is to bring each user to “activation” from day 1. The best part: setup is only pasting a script tag into your HTML & Andoria takes it from there.',
+      "Andoria is an AI web agent that generates in-app walkthroughs for software companies. The AI agent learns how your web application works, gathers data about your user (e.g. background & goal), and generates a custom walkthrough whenever a user needs help. When a user gets stuck, Andoria can step in, and show them exactly what to do by performing such actions. Andoria's goal is to bring each user to “activation” from day 1. The best part: setup is only pasting a script tag into your HTML & Andoria takes it from there.",
     tags: 'Artificial Intelligence, Generative AI, B2B, Customer Support, ML',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'F24',
@@ -744,7 +744,7 @@ const YC_DATA = [
   {
     name: 'fixa',
     longDescription:
-      'Fixa is the Sentry for AI voice agents. Companies like 11x and OfOne use us to run simulated tests, analyze production calls, and fix bugs in their voice agents.  We were both voice agent developers at PlayHT – and, in order to find bugs in our agents, we would spend countless hours manually calling them and listening to conversation recordings. So, we’ve decided to build a platform that does this automatically.  Fixa shows developers exactly where and how their agents mess up – enabling them to pinpoint root causes and fix them faster. ',
+      "Fixa is the Sentry for AI voice agents. Companies like 11x and OfOne use us to run simulated tests, analyze production calls, and fix bugs in their voice agents.  We were both voice agent developers at PlayHT – and, in order to find bugs in our agents, we would spend countless hours manually calling them and listening to conversation recordings. So, we've decided to build a platform that does this automatically.  Fixa shows developers exactly where and how their agents mess up – enabling them to pinpoint root causes and fix them faster. ",
     tags: 'AI, AI Assistant',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'F24',
@@ -776,7 +776,7 @@ const YC_DATA = [
   {
     name: 'DreamRP',
     longDescription:
-      'DreamRP lets users chat with character chatbots made by the content owners themselves. For example, users could chat with Jon Snow bot made by George R. R. Martin.  Character chat is the most engaging social category ever - more than YouTube, Instagram, or TikTok. But all the current chatbots are fan-made knock-offs and do not have deals with the actual content owners, whose IP they are stealing.  We’re building the first fully legal character chat platform that shares revenue with the content owners.',
+      "DreamRP lets users chat with character chatbots made by the content owners themselves. For example, users could chat with Jon Snow bot made by George R. R. Martin.  Character chat is the most engaging social category ever - more than YouTube, Instagram, or TikTok. But all the current chatbots are fan-made knock-offs and do not have deals with the actual content owners, whose IP they are stealing.  We're building the first fully legal character chat platform that shares revenue with the content owners.",
     tags: 'Artificial Intelligence, Generative AI, Consumer, Entertainment, AI',
     industries: 'Consumer',
     batch: 'S24',
@@ -792,7 +792,7 @@ const YC_DATA = [
   {
     name: 'Syntra',
     longDescription:
-      'Syntra is the all-in-one solution for private practice doctors. Our operating system includes a personalized EHR that automates administrative tasks for doctors, such as patient intake, scribing, billing, and inventory management.  Practices are switching off of solutions they have used for over a decade, calling Syntra "the only solution that doesn’t need to be managed.”',
+      'Syntra is the all-in-one solution for private practice doctors. Our operating system includes a personalized EHR that automates administrative tasks for doctors, such as patient intake, scribing, billing, and inventory management.  Practices are switching off of solutions they have used for over a decade, calling Syntra "the only solution that doesn\'t need to be managed.”',
     tags: '',
     industries: 'Healthcare, Healthcare IT',
     batch: 'S24',
@@ -816,7 +816,7 @@ const YC_DATA = [
   {
     name: 'Kairo Health',
     longDescription:
-      'Kairo Health builds AI agents that help deliver patient care at a fraction of the cost. The US has a shortage of nurses, care coordinators, and administrators, all of whom spend a significant portion of their days navigating disparate software systems like their EHR and waiting on hold for hours over the phone. Organizations have little incentive to grow these teams, which leads to burnout and inefficiency. Kairo scales this support staff by recording their actions and translating them into instructions for our agents to execute on their own. Organizations can deploy these agents for any care delivery workflow, such as calling patients to check-in on their symptoms, rescheduling a clinician’s panel in case of an emergency, and filling late cancellation slots with other patients.',
+      "Kairo Health builds AI agents that help deliver patient care at a fraction of the cost. The US has a shortage of nurses, care coordinators, and administrators, all of whom spend a significant portion of their days navigating disparate software systems like their EHR and waiting on hold for hours over the phone. Organizations have little incentive to grow these teams, which leads to burnout and inefficiency. Kairo scales this support staff by recording their actions and translating them into instructions for our agents to execute on their own. Organizations can deploy these agents for any care delivery workflow, such as calling patients to check-in on their symptoms, rescheduling a clinician's panel in case of an emergency, and filling late cancellation slots with other patients.",
     tags: 'Digital Health, Healthcare IT, AI',
     industries: 'Healthcare, Healthcare IT',
     batch: 'S24',
@@ -840,7 +840,7 @@ const YC_DATA = [
   {
     name: 'Merlin AI',
     longDescription:
-      "Merlin is an AI-powered ERP for construction companies.  We provide construction companies with a single, AI-powered platform to manage their entire business operations. Our platform unifies project management, materials management, finance, estimating, and CRM—traditionally scattered across multiple systems—into one cohesive solution. For the first time, construction firms can automate and oversee every aspect of their projects in a single, intuitive system. Today, construction companies pay for 8-17 different tools - that we eliminate the need for.  We reduce  - Manual work by 60% - Cut software costs by $10,000 monthly - Complete projects 3x faster.  Why Now? We're witnessing a perfect storm of factors: decades of stagnation in traditional ERP systems, a multi-billion-dollar industry built on misaligned incentives, and the transformative potential of AI. This confluence creates a rare cyclical opportunity for market upheaval. The last major shift in this space occurred in the 1990s with the advent of digital systems, and now, 30 years later, we're on the cusp of another seismic change. Customers are crying out for innovation and as AI reshapes the landscape, early customer signals indicate an eagerness for smarter, more efficient systems. It's a unique window of opportunity that opens perhaps once in a multi-decade chance to redefine an entire industry's operational backbone. Team: KS, a BITS Pilani grad and successful startup co-founder, and Ayantika, an IIT alumni and tech expert, bring extensive coding and product development expertise together bringing about over a decade of technical expertise. Sneha ( that’s me), with over a decade of experience in supply chain management and lean manufacturing within the construction industry, has lived the pain of using ERPs in this industry.",
+      "Merlin is an AI-powered ERP for construction companies.  We provide construction companies with a single, AI-powered platform to manage their entire business operations. Our platform unifies project management, materials management, finance, estimating, and CRM—traditionally scattered across multiple systems—into one cohesive solution. For the first time, construction firms can automate and oversee every aspect of their projects in a single, intuitive system. Today, construction companies pay for 8-17 different tools - that we eliminate the need for.  We reduce  - Manual work by 60% - Cut software costs by $10,000 monthly - Complete projects 3x faster.  Why Now? We're witnessing a perfect storm of factors: decades of stagnation in traditional ERP systems, a multi-billion-dollar industry built on misaligned incentives, and the transformative potential of AI. This confluence creates a rare cyclical opportunity for market upheaval. The last major shift in this space occurred in the 1990s with the advent of digital systems, and now, 30 years later, we're on the cusp of another seismic change. Customers are crying out for innovation and as AI reshapes the landscape, early customer signals indicate an eagerness for smarter, more efficient systems. It's a unique window of opportunity that opens perhaps once in a multi-decade chance to redefine an entire industry's operational backbone. Team: KS, a BITS Pilani grad and successful startup co-founder, and Ayantika, an IIT alumni and tech expert, bring extensive coding and product development expertise together bringing about over a decade of technical expertise. Sneha ( that's me), with over a decade of experience in supply chain management and lean manufacturing within the construction industry, has lived the pain of using ERPs in this industry.",
     tags: 'SaaS, Construction, B2B, Enterprise Software, AI',
     industries: 'B2B',
     batch: 'S24',
@@ -848,7 +848,7 @@ const YC_DATA = [
   {
     name: 'Freestyle',
     longDescription:
-      'Ben and Jacob met in Calculus class in 10th grade, and tried founding a startup in high school — it didn’t go anywhere, but it taught them a ton. During high school, Ben lead the frontend team for the World Health Organization’s COVID-19 App Team. After high school, Jacob went to Apple and Ben went to college. When there was an opening on his team, Jacob had Ben apply, and Ben left UChicago to go work at Apple. They spent about 2 years at Apple as Senior Engineers in the Conversational Engineering Department, before leaving to found Freestyle. Freestyle is directly inspired by what they saw as their failures of the tech they worked with at Apple.',
+      "Ben and Jacob met in Calculus class in 10th grade, and tried founding a startup in high school — it didn't go anywhere, but it taught them a ton. During high school, Ben lead the frontend team for the World Health Organization's COVID-19 App Team. After high school, Jacob went to Apple and Ben went to college. When there was an opening on his team, Jacob had Ben apply, and Ben left UChicago to go work at Apple. They spent about 2 years at Apple as Senior Engineers in the Conversational Engineering Department, before leaving to found Freestyle. Freestyle is directly inspired by what they saw as their failures of the tech they worked with at Apple.",
     tags: 'Developer Tools, Open Source, Web Development, Cloud Computing',
     industries: 'B2B, Infrastructure',
     batch: 'S24',
@@ -896,7 +896,7 @@ const YC_DATA = [
   {
     name: 'Mica AI',
     longDescription:
-      'Mica builds AI Agents that automate B2B sales. Our agents analyze sales calls, generate tailored collateral, and follow up until the deal is closed. The founders met at UC Berkeley, and at our last jobs, we saw that the best sales reps weren’t just great at selling—they were elite content creators. They crafted tailored collateral like decks and highlight videos for each buyer, and their champions used this info to advocate for purchasing their product within their companies.  However, because this takes more than 30 minutes per call, even the best reps could only do tailored follow-ups for a few clients, leaving millions in lost deals. Mica’s agents reduce that time to less than a minute. This lets top performers do A+ work on every deal and helps the rest of the team sell like a top performer. Sales collateral creation and follow-up is a $11b market in the US but this is just our beachhead. We’ll ship a fleet of agents that automate and eventually replace every other facet of the $80b enterprise sales market.   ',
+      "Mica builds AI Agents that automate B2B sales. Our agents analyze sales calls, generate tailored collateral, and follow up until the deal is closed. The founders met at UC Berkeley, and at our last jobs, we saw that the best sales reps weren't just great at selling—they were elite content creators. They crafted tailored collateral like decks and highlight videos for each buyer, and their champions used this info to advocate for purchasing their product within their companies.  However, because this takes more than 30 minutes per call, even the best reps could only do tailored follow-ups for a few clients, leaving millions in lost deals. Mica's agents reduce that time to less than a minute. This lets top performers do A+ work on every deal and helps the rest of the team sell like a top performer. Sales collateral creation and follow-up is a $11b market in the US but this is just our beachhead. We'll ship a fleet of agents that automate and eventually replace every other facet of the $80b enterprise sales market.   ",
     tags: 'Artificial Intelligence, SaaS, Sales, Sales Enablement, AI',
     industries: 'B2B, Sales',
     batch: 'S24',
@@ -920,7 +920,7 @@ const YC_DATA = [
   {
     name: 'Capitol AI',
     longDescription:
-      "As Perplexity or Gemini replaces the Google Search we all use today, it will remove the need to ever visit a website. This is an existential risk to all media brands, which is why Capitol went from zero to $1.68M in revenue during YC: all media companies need to offer THEIR OWN Perplexity-like experience to maintain their direct relationship with customers. The most trusted brand in political news and analysis, Politico, chose us to power their Politico Pro Subscription product. Consumers expect instant personalized answers. Publishers won’t build this on their own. Capitol’s API lights up publishers' websites and apps so their end users can generate personalized search results, cited research reports, and even tweet storms using the publisher’s proprietary data—all within their paywall.  Capitol is the new last mile of content delivery for publishing. This market is $16b in 2023, and will grow to $85.6b in 2030. Gemini and Perplexity are the imperial forces. Capitol is arming the rebels. ",
+      "As Perplexity or Gemini replaces the Google Search we all use today, it will remove the need to ever visit a website. This is an existential risk to all media brands, which is why Capitol went from zero to $1.68M in revenue during YC: all media companies need to offer THEIR OWN Perplexity-like experience to maintain their direct relationship with customers. The most trusted brand in political news and analysis, Politico, chose us to power their Politico Pro Subscription product. Consumers expect instant personalized answers. Publishers won't build this on their own. Capitol's API lights up publishers' websites and apps so their end users can generate personalized search results, cited research reports, and even tweet storms using the publisher's proprietary data—all within their paywall.  Capitol is the new last mile of content delivery for publishing. This market is $16b in 2023, and will grow to $85.6b in 2030. Gemini and Perplexity are the imperial forces. Capitol is arming the rebels. ",
     tags: 'AI-Enhanced Learning, Artificial Intelligence, Workflow Automation, Analytics, Media',
     industries: 'B2B, Productivity',
     batch: 'S24',
@@ -960,7 +960,7 @@ const YC_DATA = [
   {
     name: 'Felafax',
     longDescription:
-      'Felafax is building AI infra for non-NVIDIA GPUs. With our ML experience from Google and Meta, we built a new AI stack that is 2x more cost-efficient and performant without needing Nvidia’s CUDA.',
+      "Felafax is building AI infra for non-NVIDIA GPUs. With our ML experience from Google and Meta, we built a new AI stack that is 2x more cost-efficient and performant without needing Nvidia's CUDA.",
     tags: 'Artificial Intelligence, Infrastructure, AI',
     industries: 'B2B, Infrastructure',
     batch: 'S24',
@@ -968,7 +968,7 @@ const YC_DATA = [
   {
     name: 'Henry',
     longDescription:
-      'Henry is an AI copilot for commercial real estate (CRE) brokers that seamlessly integrates a brokerage’s internal data set with external sources to generate custom presentations and financial modeling for deals. Our mission is to help CRE brokers close more deals faster, earning more while doing less repetitive work. We’re initially focusing on enabling brokers to generate deal decks in seconds—a task that typically consumes 20+ hours a week across multiple departments within a brokerage.',
+      "Henry is an AI copilot for commercial real estate (CRE) brokers that seamlessly integrates a brokerage's internal data set with external sources to generate custom presentations and financial modeling for deals. Our mission is to help CRE brokers close more deals faster, earning more while doing less repetitive work. We're initially focusing on enabling brokers to generate deal decks in seconds—a task that typically consumes 20+ hours a week across multiple departments within a brokerage.",
     tags: 'Generative AI, SaaS, Real Estate, AI, AI Assistant',
     industries: 'Real Estate and Construction',
     batch: 'S24',
@@ -984,7 +984,7 @@ const YC_DATA = [
   {
     name: 'Ficra',
     longDescription:
-      "Ficra enables product teams to ship higher quality releases, faster.  Ficra is the source of truth for every product screen and user flow, giving companies real-time visibility into what their users actually see in their live product. Ficra's AI provides a live, visual map of your users’ journeys: every screen, flow, A/B test, push notification and email.  With Ficra, product teams no longer waste 25% of their time auditing complex user flows to assess product quality and find the blind spots in funnels.",
+      "Ficra enables product teams to ship higher quality releases, faster.  Ficra is the source of truth for every product screen and user flow, giving companies real-time visibility into what their users actually see in their live product. Ficra's AI provides a live, visual map of your users' journeys: every screen, flow, A/B test, push notification and email.  With Ficra, product teams no longer waste 25% of their time auditing complex user flows to assess product quality and find the blind spots in funnels.",
     tags: 'Artificial Intelligence, B2B, Workflow Automation, Productivity, Design Tools',
     industries: 'B2B',
     batch: 'S24',
@@ -1024,7 +1024,7 @@ const YC_DATA = [
   {
     name: 'et al.',
     longDescription:
-      'et al. is a mobile app that aggregates your newsletters, research papers, articles, and more, in one place. Think of it as an LLM-powered feed delivering you useful content in short insights. For example, if you’re building an AI voice agent, you’ll see the latest in speech-to-text models without having to actively search, go through a pile of research papers, or prompt an LLM. We extract key takeaways from long-form content - allowing you to read as little or as much as you like from the original piece of information. With et al., you get to stay on top of breakthroughs in your field, build knowledge, and discover new interests effortlessly.',
+      "et al. is a mobile app that aggregates your newsletters, research papers, articles, and more, in one place. Think of it as an LLM-powered feed delivering you useful content in short insights. For example, if you're building an AI voice agent, you'll see the latest in speech-to-text models without having to actively search, go through a pile of research papers, or prompt an LLM. We extract key takeaways from long-form content - allowing you to read as little or as much as you like from the original piece of information. With et al., you get to stay on top of breakthroughs in your field, build knowledge, and discover new interests effortlessly.",
     tags: 'AI-Enhanced Learning, Consumer, Productivity, AI',
     industries: 'Consumer',
     batch: 'S24',
@@ -1032,7 +1032,7 @@ const YC_DATA = [
   {
     name: 'Keet',
     longDescription:
-      'Keet provides authentication for AI agents. Developers use us to connect their customers accounts and perform actions on their behalf.  Whether it be legacy software or consumer sites, Keet manages your users authenticated sessions and provides stable integrations on any web platform. Now your AI Agent can access healthcare data or send automated messages on LinkedIn via Keet’s API or SDK.',
+      "Keet provides authentication for AI agents. Developers use us to connect their customers accounts and perform actions on their behalf.  Whether it be legacy software or consumer sites, Keet manages your users authenticated sessions and provides stable integrations on any web platform. Now your AI Agent can access healthcare data or send automated messages on LinkedIn via Keet's API or SDK.",
     tags: 'Artificial Intelligence, Developer Tools, B2B',
     industries: 'B2B',
     batch: 'S24',
@@ -1064,7 +1064,7 @@ const YC_DATA = [
   {
     name: 'SureBright',
     longDescription:
-      'SureBright lets e-commerce merchants embed "Apple Care” like product warranties into their checkout flows in less than 10 minutes. Our AI-powered warranty platform generates incremental revenue and boosts customer loyalty at zero cost to the merchant. We earn a margin on each policy sold. Currently, we’re live with 60 merchants generating $22K in monthly revenue. We’ve booked an additional $50K of monthly revenue in signed contracts.  Sanket led engineering at PolicyBazar, an insurance tech company that IPOed and is valued at over $8B. Manish worked at Amazon and has built $100M ARR products, handling over 180B requests per day. Until now, finding the right policy for any product and pricing it at the right price wasn’t possible at scale. We automated this process using LLM and have unlocked a $50B+ opportunity. Each month, over 5 million consumers view SureBright warranty offers.',
+      "SureBright lets e-commerce merchants embed \"Apple Care” like product warranties into their checkout flows in less than 10 minutes. Our AI-powered warranty platform generates incremental revenue and boosts customer loyalty at zero cost to the merchant. We earn a margin on each policy sold. Currently, we're live with 60 merchants generating $22K in monthly revenue. We've booked an additional $50K of monthly revenue in signed contracts.  Sanket led engineering at PolicyBazar, an insurance tech company that IPOed and is valued at over $8B. Manish worked at Amazon and has built $100M ARR products, handling over 180B requests per day. Until now, finding the right policy for any product and pricing it at the right price wasn't possible at scale. We automated this process using LLM and have unlocked a $50B+ opportunity. Each month, over 5 million consumers view SureBright warranty offers.",
     tags: 'Artificial Intelligence, Fintech, E-commerce, Insurance, Retail',
     industries: 'B2B, Retail',
     batch: 'S24',
@@ -1087,7 +1087,7 @@ const YC_DATA = [
   {
     name: 'Bucket Robotics',
     longDescription:
-      "250M lbs of plastic is wasted annually in US manufacturing. Bucket Robotics is making defect detection faster and easier to deploy to prevent that. Our products are designed to be easy to integrate into existing automation and technology stacks, flexible enough to bring retooling costs down, and reliable enough to make you forget that it's a robot. Matt and Steph are leveraging their experience from the self-driving industry, where we've integrated high-performance computing and quality sensing into complex, noise-filled environments. We focus on robust hardware and user-friendly software for a new generation of end-users, ensuring ease of use and rapid deployment. Secure and efficient handling of user data can make customers in the manufacturing space nervous to invest in sensing — our team's extensive experience handling self-driving car data in these regulated environments positions us uniquely to tackle these challenges. Companies like Keyence, National Instruments, and FLIR offer either outdated hardware or prohibitively expensive systems, along with software that hasn’t evolved to meet modern user needs. US manufacturing is undergoing a significant transformation, with construction spending hitting a record annualized pace of over $200 billion. The need for a more reliable supply chain has seen over $700 billion in manufacturing megaprojects across North America since 2021, and this growth requires heavy automation. Bucket Robotics is at the forefront of this shift, offering a scalable, cost-effective solution that enhances automation and positions manufacturers closer to their end customers.",
+      "250M lbs of plastic is wasted annually in US manufacturing. Bucket Robotics is making defect detection faster and easier to deploy to prevent that. Our products are designed to be easy to integrate into existing automation and technology stacks, flexible enough to bring retooling costs down, and reliable enough to make you forget that it's a robot. Matt and Steph are leveraging their experience from the self-driving industry, where we've integrated high-performance computing and quality sensing into complex, noise-filled environments. We focus on robust hardware and user-friendly software for a new generation of end-users, ensuring ease of use and rapid deployment. Secure and efficient handling of user data can make customers in the manufacturing space nervous to invest in sensing — our team's extensive experience handling self-driving car data in these regulated environments positions us uniquely to tackle these challenges. Companies like Keyence, National Instruments, and FLIR offer either outdated hardware or prohibitively expensive systems, along with software that hasn't evolved to meet modern user needs. US manufacturing is undergoing a significant transformation, with construction spending hitting a record annualized pace of over $200 billion. The need for a more reliable supply chain has seen over $700 billion in manufacturing megaprojects across North America since 2021, and this growth requires heavy automation. Bucket Robotics is at the forefront of this shift, offering a scalable, cost-effective solution that enhances automation and positions manufacturers closer to their end customers.",
     tags: '',
     industries: 'Industrials, Manufacturing and Robotics',
     batch: 'S24',
@@ -1095,7 +1095,7 @@ const YC_DATA = [
   {
     name: 'Oway',
     longDescription:
-      'Oway is a rideshare freight platform that uses machine learning to automatically coordinate and sell unused space in trucks to SMBs at a 50% discount for lightning-fast shipping.  Every year, nearly 50% all truck space goes unused annually in the almost $1T US trucking industry. On the other hand, SMBs represent 44% of the US GDP and are historically forced to deal with high freight rates and friction due to their small size compared to enterprise businesses.  With trucking being a hyper-fragmented market (90%+ of US trucking companies are small family businesses), we decided to build an ecosystem that takes all of this inefficiency and turns it into something that could fundamentally transform the livelihoods of businesses and drivers alike. Oway is designed to be simple (you can place an order in 30 seconds) and scale with your business. Our ML rideshare protocol now allows businesses to ship freight affordably and faster than ever before. We also improve the survivability of independent truckers by maximizing their revenue when they’re already on the road - and it’s great for the environment too. 🍃',
+      "Oway is a rideshare freight platform that uses machine learning to automatically coordinate and sell unused space in trucks to SMBs at a 50% discount for lightning-fast shipping.  Every year, nearly 50% all truck space goes unused annually in the almost $1T US trucking industry. On the other hand, SMBs represent 44% of the US GDP and are historically forced to deal with high freight rates and friction due to their small size compared to enterprise businesses.  With trucking being a hyper-fragmented market (90%+ of US trucking companies are small family businesses), we decided to build an ecosystem that takes all of this inefficiency and turns it into something that could fundamentally transform the livelihoods of businesses and drivers alike. Oway is designed to be simple (you can place an order in 30 seconds) and scale with your business. Our ML rideshare protocol now allows businesses to ship freight affordably and faster than ever before. We also improve the survivability of independent truckers by maximizing their revenue when they're already on the road - and it's great for the environment too. 🍃",
     tags: 'Machine Learning, Marketplace, B2B, Ridesharing, Logistics',
     industries: 'B2B, Supply Chain and Logistics',
     batch: 'S24',
@@ -1103,7 +1103,7 @@ const YC_DATA = [
   {
     name: 'Elayne',
     longDescription:
-      'Elayne empowers families to build generational wealth by automating estate planning and settlements on a single, unified platform. As the AI Executor, we manage the entire estate transfer process, facilitating $3 trillion in wealth transfers annually, with a ~3% take rate. Adria experienced this challenge firsthand after her mom passed away, leaving her to settle the estate while balancing her career. The process is currently entirely manual and takes an average of 400 hours over 18 months. Adria eventually burned out and resigned, which is when she realized that bereavement costs businesses $100 billion annually in lost productivity, absenteeism, and attrition. By addressing this problem through businesses, Elayne generates recurring revenue in an industry traditionally reliant on 1x transactions, while maintaining a lasting presence in the end user’s life. We directly alleviate the 43% increase in attrition following the death of a family member, while reducing overall costs for grieving families, democratizing estate support, and saving users hundreds of hours in financial, legal, and administrative tasks per loss.',
+      "Elayne empowers families to build generational wealth by automating estate planning and settlements on a single, unified platform. As the AI Executor, we manage the entire estate transfer process, facilitating $3 trillion in wealth transfers annually, with a ~3% take rate. Adria experienced this challenge firsthand after her mom passed away, leaving her to settle the estate while balancing her career. The process is currently entirely manual and takes an average of 400 hours over 18 months. Adria eventually burned out and resigned, which is when she realized that bereavement costs businesses $100 billion annually in lost productivity, absenteeism, and attrition. By addressing this problem through businesses, Elayne generates recurring revenue in an industry traditionally reliant on 1x transactions, while maintaining a lasting presence in the end user's life. We directly alleviate the 43% increase in attrition following the death of a family member, while reducing overall costs for grieving families, democratizing estate support, and saving users hundreds of hours in financial, legal, and administrative tasks per loss.",
     tags: '',
     industries: 'B2B, Human Resources',
     batch: 'S24',
@@ -1127,7 +1127,7 @@ const YC_DATA = [
   {
     name: 'Mindely',
     longDescription:
-      'Mindely is the first AI interviewer designed for skills assessment interviews.  Hiring for high volume, high turnover roles (e.g., consultants, analysts, sales & customer representatives) is time-consuming, inconsistent, and prone to unconscious bias. Managers spend valuable time on lengthy skill-based interviews instead of focusing on building candidate relationships or on driving company revenue.  Traditional AI interviewers don’t solve these issues – their rigid Q&A formats and one-size-fits-all approach can’t handle complex skill assessments. Mindely changes the game as the first AI interviewer built for in-depth case study, technical and role-play interviews. It:  - Simulates human interaction with real-time dialogue  - Challenges candidates with dynamic, adaptive responses  - Eliminates interviewer bias to create a fair, inclusive hiring process  - Works 24/7 to free up senior staff and widen talent pool  With Mindely, companies can rapidly customize and deploy human interviews at AI scale to test specific on-the-job skills.',
+      "Mindely is the first AI interviewer designed for skills assessment interviews.  Hiring for high volume, high turnover roles (e.g., consultants, analysts, sales & customer representatives) is time-consuming, inconsistent, and prone to unconscious bias. Managers spend valuable time on lengthy skill-based interviews instead of focusing on building candidate relationships or on driving company revenue.  Traditional AI interviewers don't solve these issues – their rigid Q&A formats and one-size-fits-all approach can't handle complex skill assessments. Mindely changes the game as the first AI interviewer built for in-depth case study, technical and role-play interviews. It:  - Simulates human interaction with real-time dialogue  - Challenges candidates with dynamic, adaptive responses  - Eliminates interviewer bias to create a fair, inclusive hiring process  - Works 24/7 to free up senior staff and widen talent pool  With Mindely, companies can rapidly customize and deploy human interviews at AI scale to test specific on-the-job skills.",
     tags: 'Generative AI, SaaS, Recruiting, HR Tech, Talent Acquisition',
     industries: 'B2B',
     batch: 'S24',
@@ -1135,7 +1135,7 @@ const YC_DATA = [
   {
     name: 'TradeFlow',
     longDescription:
-      'TradeFlow is AI-powered settlement for financial securities. During her time in financial services, Taryn saw firsthand how inefficient and costly it is to settle trades. Historically, it’s been difficult to improve this process because it’s heavily reliant on manual emails, disparate systems, and inconsistently structured data. However, the advent of powerful AI technology allows us to unlock greater automation than ever before. TradeFlow empowers back offices to do more with less by offloading these time-intensive tasks to AI.',
+      "TradeFlow is AI-powered settlement for financial securities. During her time in financial services, Taryn saw firsthand how inefficient and costly it is to settle trades. Historically, it's been difficult to improve this process because it's heavily reliant on manual emails, disparate systems, and inconsistently structured data. However, the advent of powerful AI technology allows us to unlock greater automation than ever before. TradeFlow empowers back offices to do more with less by offloading these time-intensive tasks to AI.",
     tags: 'FinOps, Fintech, SaaS, B2B, AI',
     industries: 'Fintech',
     batch: 'S24',
@@ -1175,7 +1175,7 @@ const YC_DATA = [
   {
     name: 'Moreta',
     longDescription:
-      'At Moreta, we simplify payments for international travelers, letting you pay for anything using just your phone. Say goodbye to the hassle of searching for the best cash exchange rates or ATMs on your next trip. With Moreta, paying local merchants is easy, and the best part? Transparent fees. We came up with Moreta while on our own backpacking adventures. Watching locals pay with a simple scan while we fumbled with cards and cash. So, we created a solution. By syncing with local payment networks, Moreta lets you pay like a local—securely and digitally—without needing a bank account in every country. We’re starting in Asia, where QR code digital wallets are taking over and are now the top choice at checkout. As these wallets start to join forces for cross-border payments, Moreta will be the first to bridge the gap for international travelers from card-centric markets to seamlessly tap into these local networks. Moreta will target 67 million travelers arriving in the region each year, who together have $127 billion in everyday expenditure.',
+      "At Moreta, we simplify payments for international travelers, letting you pay for anything using just your phone. Say goodbye to the hassle of searching for the best cash exchange rates or ATMs on your next trip. With Moreta, paying local merchants is easy, and the best part? Transparent fees. We came up with Moreta while on our own backpacking adventures. Watching locals pay with a simple scan while we fumbled with cards and cash. So, we created a solution. By syncing with local payment networks, Moreta lets you pay like a local—securely and digitally—without needing a bank account in every country. We're starting in Asia, where QR code digital wallets are taking over and are now the top choice at checkout. As these wallets start to join forces for cross-border payments, Moreta will be the first to bridge the gap for international travelers from card-centric markets to seamlessly tap into these local networks. Moreta will target 67 million travelers arriving in the region each year, who together have $127 billion in everyday expenditure.",
     tags: 'Fintech, Payments, Consumer, Travel',
     industries: 'Fintech, Payments',
     batch: 'S24',
@@ -1199,7 +1199,7 @@ const YC_DATA = [
   {
     name: 'Sepal AI',
     longDescription:
-      "Sepal AI works with the world’s leading experts for developing advanced capability training data, expert annotations, and bespoke model evaluations.  Our team comes from Turing, Vercel, McKinsey, and Bain. At Turing, we built the LLM training business and products to support $100+M revenue for companies like OpenAI, Google, and Anthropic. We learned that data development for advanced AI use cases is more complex and has unique needs different from traditional label generation  Foundational AI companies and large enterprises that we worked with, like OpenAI, PepsiCo, and Johnson &Johnson, don't have the data they need to train models to produce value for highly technical use cases. Which means they’re not going to unlock the value from AI without a partner. We are working with the most influential companies of our time to develop models and systems that extend human knowledge and capabilities. ",
+      "Sepal AI works with the world's leading experts for developing advanced capability training data, expert annotations, and bespoke model evaluations.  Our team comes from Turing, Vercel, McKinsey, and Bain. At Turing, we built the LLM training business and products to support $100+M revenue for companies like OpenAI, Google, and Anthropic. We learned that data development for advanced AI use cases is more complex and has unique needs different from traditional label generation  Foundational AI companies and large enterprises that we worked with, like OpenAI, PepsiCo, and Johnson &Johnson, don't have the data they need to train models to produce value for highly technical use cases. Which means they're not going to unlock the value from AI without a partner. We are working with the most influential companies of our time to develop models and systems that extend human knowledge and capabilities. ",
     tags: 'Data Labeling, AI',
     industries: 'B2B',
     batch: 'S24',
@@ -1207,7 +1207,7 @@ const YC_DATA = [
   {
     name: 'Assembly HOA',
     longDescription:
-      'We help HOAs manage their communities in a modern and transparent way. HOA boards choose Assembly to replace their existing management company, ensuring excellent service and clear visibility into their HOA’s finances and operations. With Assembly, community priorities are always addressed, and homeowners can easily understand what their HOA is doing and how their monthly dues are being used. Our mission is to create turnkey communities and protect property values through transparent, efficient, and proactive management. By combining top industry expertise with the latest in AI and fintech, we provide real-time financial insights, strategic community planning, and automated operations. Like many homeowners, Shreyas and Allen experienced frustrations with HOAs. Our investigation revealed that most HOA management companies are outdated mom-and-pop operations nearing retirement, resistant to adopting new technology. Furthermore, these companies often prioritize relationships with vendors and banks over the interests of the communities they serve, leading to misaligned incentives. Realizing this, we knew that to achieve our mission of fixing HOAs, Assembly HOA had to be vertically integrated. We are live with over 39 communities in Greater Los Angeles and SF Bay Area. ',
+      "We help HOAs manage their communities in a modern and transparent way. HOA boards choose Assembly to replace their existing management company, ensuring excellent service and clear visibility into their HOA's finances and operations. With Assembly, community priorities are always addressed, and homeowners can easily understand what their HOA is doing and how their monthly dues are being used. Our mission is to create turnkey communities and protect property values through transparent, efficient, and proactive management. By combining top industry expertise with the latest in AI and fintech, we provide real-time financial insights, strategic community planning, and automated operations. Like many homeowners, Shreyas and Allen experienced frustrations with HOAs. Our investigation revealed that most HOA management companies are outdated mom-and-pop operations nearing retirement, resistant to adopting new technology. Furthermore, these companies often prioritize relationships with vendors and banks over the interests of the communities they serve, leading to misaligned incentives. Realizing this, we knew that to achieve our mission of fixing HOAs, Assembly HOA had to be vertically integrated. We are live with over 39 communities in Greater Los Angeles and SF Bay Area. ",
     tags: 'Artificial Intelligence, Fintech, Real Estate, Housing, Proptech',
     industries: 'Real Estate and Construction, Housing and Real Estate',
     batch: 'S24',
@@ -1223,7 +1223,7 @@ const YC_DATA = [
   {
     name: 'omnidock',
     longDescription:
-      'Expanding to other geographies and marketplaces is a massive growth lever for brands and manufacturers, but it’s complex and resource-intensive. Omnidock makes it effortless for merchants to sell on multiple marketplaces by acting as their merchant of record.  Brands simply plug into our operating system, which reads their catalog, assesses marketplace eligibility, and auto-launches their products through our pre-vetted marketplace accounts. We handle all transactions on their behalf, removing the challenges and complexities of multi-marketplace selling',
+      "Expanding to other geographies and marketplaces is a massive growth lever for brands and manufacturers, but it's complex and resource-intensive. Omnidock makes it effortless for merchants to sell on multiple marketplaces by acting as their merchant of record.  Brands simply plug into our operating system, which reads their catalog, assesses marketplace eligibility, and auto-launches their products through our pre-vetted marketplace accounts. We handle all transactions on their behalf, removing the challenges and complexities of multi-marketplace selling",
     tags: 'B2B, E-commerce',
     industries: 'B2B, Operations',
     batch: 'S24',
@@ -1239,7 +1239,7 @@ const YC_DATA = [
   {
     name: 'Kontigo',
     longDescription:
-      "We’re building Kontigo, a USDC Smart Neobank for Latinos in the U.S. and Latin America. We launched our Peer-to-Peer onramp 20 days ago and we’ve already had $540k in deposits, 10k active users and a +300k waitlist.  The founding team has built and scaled fintechs in Latam, and it’s ex-Venmo, Nubank, Rappi, MercadoLibre, Ualá, Platzi, and Yuno.  We’re already backed by DST Global, Soma Capital, Pioneer Fund, Transpose + 10 YC alums. Sending money to Latin America is just as painful as holding it due to the region's fragmentation into 33 countries with 39 different currencies.  On one hand, cross-border payments to Latam are absurdly expensive (up to 20% per transaction). Conversely, over the past decade, currency depreciation across the region has become unsustainable. (some countries surpassing the trillion percent ).  Kontigo solves this with a USDC global wallet & a BTC savings account.  - Like Venmo, but on-USDC. - Like Zelle, but for cross-border payments. No limits. - Like Nubank & Revolut, but without inflationary currencies. Bitcoin-backed. User wallets are connected to an AI-private banker on WhatsApp to execute international USDC transactions. ",
+      "We're building Kontigo, a USDC Smart Neobank for Latinos in the U.S. and Latin America. We launched our Peer-to-Peer onramp 20 days ago and we've already had $540k in deposits, 10k active users and a +300k waitlist.  The founding team has built and scaled fintechs in Latam, and it's ex-Venmo, Nubank, Rappi, MercadoLibre, Ualá, Platzi, and Yuno.  We're already backed by DST Global, Soma Capital, Pioneer Fund, Transpose + 10 YC alums. Sending money to Latin America is just as painful as holding it due to the region's fragmentation into 33 countries with 39 different currencies.  On one hand, cross-border payments to Latam are absurdly expensive (up to 20% per transaction). Conversely, over the past decade, currency depreciation across the region has become unsustainable. (some countries surpassing the trillion percent ).  Kontigo solves this with a USDC global wallet & a BTC savings account.  - Like Venmo, but on-USDC. - Like Zelle, but for cross-border payments. No limits. - Like Nubank & Revolut, but without inflationary currencies. Bitcoin-backed. User wallets are connected to an AI-private banker on WhatsApp to execute international USDC transactions. ",
     tags: '',
     industries: 'Fintech, Banking and Exchange',
     batch: 'S24',
@@ -1445,7 +1445,7 @@ const YC_DATA = [
   {
     name: 'Palmier',
     longDescription:
-      'Code repositories are built for humans to understand and collaborate on code. But soon, they’ll be used primarily by AIs working on our behalf. As this shift happens, the structure and processes around code must evolve. At Palmier, we’re building a new kind of code repository designed for AIs. Every line of code has a history behind it, and we’re making that history accessible for AIs to create more efficient and reliable code, aligned with human intention. Our first product is a platform that helps developers work seamlessly with AI, improving efficiency. We aim to provide an API for any AI to interact with code, giving it the information needed to produce better quality code. Reach out at founders@palmier.io',
+      "Code repositories are built for humans to understand and collaborate on code. But soon, they'll be used primarily by AIs working on our behalf. As this shift happens, the structure and processes around code must evolve. At Palmier, we're building a new kind of code repository designed for AIs. Every line of code has a history behind it, and we're making that history accessible for AIs to create more efficient and reliable code, aligned with human intention. Our first product is a platform that helps developers work seamlessly with AI, improving efficiency. We aim to provide an API for any AI to interact with code, giving it the information needed to produce better quality code. Reach out at founders@palmier.io",
     tags: 'Developer Tools, SaaS, B2B, AI',
     industries: 'B2B, Productivity',
     batch: 'S24',
@@ -1525,7 +1525,7 @@ const YC_DATA = [
   {
     name: 'SchemeFlow',
     longDescription:
-      'SchemeFlow uses AI to automate government approvals for construction projects. Two brothers + high school friend, with great combo of skills: Mayor’s Chief of Staff, Arup construction engineer + AI software engineer. Using LLMs to generate reports in minutes rather than months, and to scrape + parse complex local regulations. Already generated over 10,000 pages of technical reports for over 400 construction projects, from car parks to hotels, housing to office buildings, with 97% time savings. Started in the UK with 10x paid pilots with engineering companies such as Stantec and Royal Haskoning, now pivoted to focus on the US. $9B US opportunity (143k consultants x $64k/yr report-writing work), $23B worldwide. www.schemeflow.com',
+      "SchemeFlow uses AI to automate government approvals for construction projects. Two brothers + high school friend, with great combo of skills: Mayor's Chief of Staff, Arup construction engineer + AI software engineer. Using LLMs to generate reports in minutes rather than months, and to scrape + parse complex local regulations. Already generated over 10,000 pages of technical reports for over 400 construction projects, from car parks to hotels, housing to office buildings, with 97% time savings. Started in the UK with 10x paid pilots with engineering companies such as Stantec and Royal Haskoning, now pivoted to focus on the US. $9B US opportunity (143k consultants x $64k/yr report-writing work), $23B worldwide. www.schemeflow.com",
     tags: 'Documents, Generative AI, GovTech, Construction, Proptech',
     industries: 'Real Estate and Construction',
     batch: 'S24',
@@ -1557,7 +1557,7 @@ const YC_DATA = [
   {
     name: 'Parley',
     longDescription:
-      "Parley automates flat-fee legal work using LLM’s, starting with visa applications for immigration lawyers. Currently, immigration lawyers spend 20+ hours putting together writing-intensive work visas and green cards. We integrate directly into a lawyer's workflow and do all the reading, writing, and compiling — which is 80% of the work required to file a visa application. ",
+      "Parley automates flat-fee legal work using LLM's, starting with visa applications for immigration lawyers. Currently, immigration lawyers spend 20+ hours putting together writing-intensive work visas and green cards. We integrate directly into a lawyer's workflow and do all the reading, writing, and compiling — which is 80% of the work required to file a visa application. ",
     tags: 'Artificial Intelligence, SaaS, Legal, LegalTech, Immigration',
     industries: 'B2B, Legal',
     batch: 'S24',
@@ -1565,7 +1565,7 @@ const YC_DATA = [
   {
     name: 'Intryc',
     longDescription:
-      "Consumer enterprises have millions of customer support tickets annually. They need to constantly evaluate support agents’ performance and compliance. Typically they evaluate less than 5% of those interactions manually which is slow, expensive and not scalable. Intryc's AI can evaluate 100% of all customer interactions, in real time, at half the cost. ",
+      "Consumer enterprises have millions of customer support tickets annually. They need to constantly evaluate support agents' performance and compliance. Typically they evaluate less than 5% of those interactions manually which is slow, expensive and not scalable. Intryc's AI can evaluate 100% of all customer interactions, in real time, at half the cost. ",
     tags: 'Customer Success, Analytics, Customer Support, Operations',
     industries: 'B2B, Operations',
     batch: 'S24',
@@ -1715,7 +1715,7 @@ const YC_DATA = [
   {
     name: 'Seals AI',
     longDescription:
-      'Seals is a suite of AI Employees for Wholesalers & Distributors. Instead of relying on humans to quote, take orders, collect payments, place purchase orders and enter data into ERPs. We build AI Employees that do these manual repetitive tasks for the 700k wholesalers in the US. We’re a team of three Computer Science majors, and Fernando launched and grew AT&T in Mexico to $120M ARR. Previously, we all worked together at our last YC-backed startup, building it to over $6M in revenue. It was there that we placed thousands of purchase orders with wholesalers. We realized that almost every physical product comes from B2B sales in the supply chain. However, it turns out that most of these operations are still done manually through phone and email, involving tasks like quoting, taking orders, collecting payments, entering data into ERPs, and providing support. By automating these tasks with AI agents in a human-like manner, we are creating a massive opportunity to convert $100B of payroll expenses into software spending. ',
+      "Seals is a suite of AI Employees for Wholesalers & Distributors. Instead of relying on humans to quote, take orders, collect payments, place purchase orders and enter data into ERPs. We build AI Employees that do these manual repetitive tasks for the 700k wholesalers in the US. We're a team of three Computer Science majors, and Fernando launched and grew AT&T in Mexico to $120M ARR. Previously, we all worked together at our last YC-backed startup, building it to over $6M in revenue. It was there that we placed thousands of purchase orders with wholesalers. We realized that almost every physical product comes from B2B sales in the supply chain. However, it turns out that most of these operations are still done manually through phone and email, involving tasks like quoting, taking orders, collecting payments, entering data into ERPs, and providing support. By automating these tasks with AI agents in a human-like manner, we are creating a massive opportunity to convert $100B of payroll expenses into software spending. ",
     tags: 'Artificial Intelligence, SaaS, B2B',
     industries: 'B2B',
     batch: 'S24',
@@ -1754,7 +1754,7 @@ const YC_DATA = [
   {
     name: 'Redouble AI',
     longDescription:
-      'Redouble AI is the solution to scale human-in-the-loop for AI workflows in regulated industries. Instead of having to rely on slow and expensive human reviewers, Redouble’s clients save 80% of staff costs and significantly improve the accuracy and quality of their outputs by integrating our tool into their workflows. Addressing an $11BN market, the company is already generating revenue with its first set of clients. The founders are two serial entrepreneurs (who have built successful companies in AI and health-tech respectively) and a data engineering veteran who has written more than 120 enterprise-grade software applications.',
+      "Redouble AI is the solution to scale human-in-the-loop for AI workflows in regulated industries. Instead of having to rely on slow and expensive human reviewers, Redouble's clients save 80% of staff costs and significantly improve the accuracy and quality of their outputs by integrating our tool into their workflows. Addressing an $11BN market, the company is already generating revenue with its first set of clients. The founders are two serial entrepreneurs (who have built successful companies in AI and health-tech respectively) and a data engineering veteran who has written more than 120 enterprise-grade software applications.",
     tags: 'Generative AI, B2B, Enterprise Software, AI',
     industries: 'B2B',
     batch: 'S24',
@@ -1770,7 +1770,7 @@ const YC_DATA = [
   {
     name: 'Unriddle',
     longDescription:
-      "Unriddle is a web app that helps industry and academic researchers read, write and find research papers really quickly. In just one year we've grown to 1.6M users including teams at Stanford University, GSK and Johns Hopkins. We're using language models to help researchers quickly and deeply understand papers, write literature reviews, prepare citations and keep the whole research team on the same page. Analyzing the key themes and gaps in a field usually means going through hundreds of papers, which is both time-consuming and disorganized. Researchers also might struggle to understand a paper's importance when working across different disciplines without the necessary context. Unriddle understands the context behind your research. It synthesizes relevant findings, highlights connections between papers and suggests related studies you might have missed. We’re starting with software to read, write and find papers, but our ultimate goal is to build the researcher of the future: a human-AI hybrid that’s an order of magnitude more effective than any individual researcher.",
+      "Unriddle is a web app that helps industry and academic researchers read, write and find research papers really quickly. In just one year we've grown to 1.6M users including teams at Stanford University, GSK and Johns Hopkins. We're using language models to help researchers quickly and deeply understand papers, write literature reviews, prepare citations and keep the whole research team on the same page. Analyzing the key themes and gaps in a field usually means going through hundreds of papers, which is both time-consuming and disorganized. Researchers also might struggle to understand a paper's importance when working across different disciplines without the necessary context. Unriddle understands the context behind your research. It synthesizes relevant findings, highlights connections between papers and suggests related studies you might have missed. We're starting with software to read, write and find papers, but our ultimate goal is to build the researcher of the future: a human-AI hybrid that's an order of magnitude more effective than any individual researcher.",
     tags: 'Artificial Intelligence, Consumer, B2B',
     industries: 'B2B',
     batch: 'S24',
@@ -1810,7 +1810,7 @@ const YC_DATA = [
   {
     name: '1849 bio',
     longDescription:
-      '1849 bio designs microbes enabling cheap metal extraction allowing miners to unlock value from low quality copper and gold ores. Surprisingly, the mining industry is one of the largest scale users of biotech in the world with biomining processes accounting for ~1% of global copper production. Biomining is ultra-low cost, running around ~$1/ton of ore vs ~$7/ton for conventional processes.  Unfortunately, while biomining is cheap, it can’t be applied to over 80% of copper ores, leaving vast resources without profitable extraction methods. An estimated ~$800B of copper sit today in waste materials and stockpiles with negative unit economics. While a great deal of effort has been spent on optimizing microbial metal extraction processes, very little effort has been spent on optimizing the microbes themselves.  To change that, we’re creating new biotech tools and platforms applied directly to the types of biology most relevant to miners. This enables us to develop new microbes and tackle some of the most difficult problems in biomining, unlocking billions in value from unprofitable resources while being more environmentally friendly than conventional processes. We’re world class microbial engineers. We met while doing our PhDs in synthetic biology, where we spent our time applying and developing the most advanced bioengineering technologies to engineer living cells. ',
+      "1849 bio designs microbes enabling cheap metal extraction allowing miners to unlock value from low quality copper and gold ores. Surprisingly, the mining industry is one of the largest scale users of biotech in the world with biomining processes accounting for ~1% of global copper production. Biomining is ultra-low cost, running around ~$1/ton of ore vs ~$7/ton for conventional processes.  Unfortunately, while biomining is cheap, it can't be applied to over 80% of copper ores, leaving vast resources without profitable extraction methods. An estimated ~$800B of copper sit today in waste materials and stockpiles with negative unit economics. While a great deal of effort has been spent on optimizing microbial metal extraction processes, very little effort has been spent on optimizing the microbes themselves.  To change that, we're creating new biotech tools and platforms applied directly to the types of biology most relevant to miners. This enables us to develop new microbes and tackle some of the most difficult problems in biomining, unlocking billions in value from unprofitable resources while being more environmentally friendly than conventional processes. We're world class microbial engineers. We met while doing our PhDs in synthetic biology, where we spent our time applying and developing the most advanced bioengineering technologies to engineer living cells. ",
     tags: 'Hard Tech, Synthetic Biology, Biotech, Climate, Mining',
     industries: 'Industrials',
     batch: 'S24',
@@ -1834,7 +1834,7 @@ const YC_DATA = [
   {
     name: 'Saturn',
     longDescription:
-      'At Saturn, our mission is to make financial peace of mind more accessible by building the best operating system for wealth managers.  Wealth and Asset Management is one of the world’s highest revenue-generating industries, yet it remains painfully inefficient. The sector relies heavily on disjointed legacy systems, manual human tasks, and a complex web of intermediaries, all of which increase costs.  Saturn is an AI-powered operating system for wealth management built to automate investment research, streamline operations, and ensure compliance. Saturn creates the best version of truth, empowering investment advisors to work more efficiently, navigate complex regulatory landscapes, and deliver personalised, high-value services to their clients. Today, Saturn supports over 200 firms globally that manage more than £35bn in assets under management (AUM) and over 200,000 clients. As the industry grows, it faces massive operational challenges like bad tech, advisor retirements, regulatory pressure, an increased cost base, and transformational opportunities like great intergenerational wealth transfer and changing consumer needs. Saturn aims to be at the forefront of this transformation, driving the future of wealth management.',
+      "At Saturn, our mission is to make financial peace of mind more accessible by building the best operating system for wealth managers.  Wealth and Asset Management is one of the world's highest revenue-generating industries, yet it remains painfully inefficient. The sector relies heavily on disjointed legacy systems, manual human tasks, and a complex web of intermediaries, all of which increase costs.  Saturn is an AI-powered operating system for wealth management built to automate investment research, streamline operations, and ensure compliance. Saturn creates the best version of truth, empowering investment advisors to work more efficiently, navigate complex regulatory landscapes, and deliver personalised, high-value services to their clients. Today, Saturn supports over 200 firms globally that manage more than £35bn in assets under management (AUM) and over 200,000 clients. As the industry grows, it faces massive operational challenges like bad tech, advisor retirements, regulatory pressure, an increased cost base, and transformational opportunities like great intergenerational wealth transfer and changing consumer needs. Saturn aims to be at the forefront of this transformation, driving the future of wealth management.",
     tags: 'Fintech, Generative AI, B2B',
     industries: 'Fintech',
     batch: 'S24',
@@ -1914,7 +1914,7 @@ const YC_DATA = [
   {
     name: 'Kastle',
     longDescription:
-      "Kastle is an AI voice agent for mortgage servicing. We help servicers collect payments, verify new borrowers, and qualify new loan inquiries over the phone.  Rishi and Nitish met at UIUC where they graduated with degrees in systems engineering and computer science.  Rishi was the founding Product Manager for Redfin’s Mortgage Marketplace at 22 and grew the business from $3M to $6M in revenue in 9 months. Nitish patented Verkada’s motion search system and was the youngest tech lead at the company at 23. While building Redfin's Mortgage Marketplace Rishi realized traditional lenders didn't have the infrastructure to service online inquiries and were losing customers. Nitish and Rishi are building Kastle to help traditional financial services companies better interface with their customers. ",
+      "Kastle is an AI voice agent for mortgage servicing. We help servicers collect payments, verify new borrowers, and qualify new loan inquiries over the phone.  Rishi and Nitish met at UIUC where they graduated with degrees in systems engineering and computer science.  Rishi was the founding Product Manager for Redfin's Mortgage Marketplace at 22 and grew the business from $3M to $6M in revenue in 9 months. Nitish patented Verkada's motion search system and was the youngest tech lead at the company at 23. While building Redfin's Mortgage Marketplace Rishi realized traditional lenders didn't have the infrastructure to service online inquiries and were losing customers. Nitish and Rishi are building Kastle to help traditional financial services companies better interface with their customers. ",
     tags: '',
     industries: 'B2B',
     batch: 'S24',
@@ -1922,7 +1922,7 @@ const YC_DATA = [
   {
     name: 'Kopra Bio',
     longDescription:
-      'Kopra Bio makes genetically engineered viruses that teach your immune system to kill cancer using tech we developed at UCSF. We’re making the next Keytruda ($25B/yr cancer drug blockbuster) starting with the most aggressive form of brain cancer, glioblastoma. In the most challenging brain cancer model, we improve survival from 0% with the current FDA approved treatment to 90% with our treatment.',
+      "Kopra Bio makes genetically engineered viruses that teach your immune system to kill cancer using tech we developed at UCSF. We're making the next Keytruda ($25B/yr cancer drug blockbuster) starting with the most aggressive form of brain cancer, glioblastoma. In the most challenging brain cancer model, we improve survival from 0% with the current FDA approved treatment to 90% with our treatment.",
     tags: 'Gene Therapy, Synthetic Biology, Biotech, Therapeutics, Oncology',
     industries: 'Healthcare, Therapeutics',
     batch: 'S24',
@@ -1946,7 +1946,7 @@ const YC_DATA = [
   {
     name: 'Fazeshift',
     longDescription:
-      'Fazeshift is an AI agent for automating Accounts Receivable. What used to take teams of people and hours of manual work can now be fully automated with Fazeshift.  Caitlin and Timmy met while getting their MBA at Harvard. After graduating, they started a B2B marketing software startup, which is where they first experienced the pain of this process. The problem stems from fragmented data across software platforms like QuickBooks, Stripe, NetSuite, DocuSign, HubSpot, and Salesforce. Fazeshift’s infrastructure connects the data across these software platforms and uses LLMs to automate the previously manual workflow.',
+      "Fazeshift is an AI agent for automating Accounts Receivable. What used to take teams of people and hours of manual work can now be fully automated with Fazeshift.  Caitlin and Timmy met while getting their MBA at Harvard. After graduating, they started a B2B marketing software startup, which is where they first experienced the pain of this process. The problem stems from fragmented data across software platforms like QuickBooks, Stripe, NetSuite, DocuSign, HubSpot, and Salesforce. Fazeshift's infrastructure connects the data across these software platforms and uses LLMs to automate the previously manual workflow.",
     tags: 'Fintech, B2B, AI',
     industries: 'B2B, Finance and Accounting',
     batch: 'S24',
@@ -1970,7 +1970,7 @@ const YC_DATA = [
   {
     name: 'Zenbase AI',
     longDescription:
-      "Zenbase helps developers focus on programming by automating prompt engineering and model selection. We’re core contributors of Stanford NLP’s DSPy, the #1 LLM optimization framework used by Meta, Microsoft, Google, among many others. But it's hard to use outside of academia. We're building the production version.",
+      "Zenbase helps developers focus on programming by automating prompt engineering and model selection. We're core contributors of Stanford NLP's DSPy, the #1 LLM optimization framework used by Meta, Microsoft, Google, among many others. But it's hard to use outside of academia. We're building the production version.",
     tags: 'Generative AI, SaaS, Open Source, Infrastructure, AI',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'S24',
@@ -2002,7 +2002,7 @@ const YC_DATA = [
   {
     name: 'Modus',
     longDescription:
-      'Modus helps companies hire and retain only the people they need instead of becoming bloated messes. Modus connects your HRIS, ATS, and analyzes extensive data across your organization so leaders can detect, inspect, and correct their workforce plans - without relying on spreadsheets or complex systems.    Lin experienced these challenges firsthand as a VP BizOps at HashiCorp, scaling from 100 employees to IPO, while Chris and Amar faced similar issues scaling 40+ person teams as a fractional CTO. They’re motivated by the belief that companies should have the least number of employees possible. ',
+      "Modus helps companies hire and retain only the people they need instead of becoming bloated messes. Modus connects your HRIS, ATS, and analyzes extensive data across your organization so leaders can detect, inspect, and correct their workforce plans - without relying on spreadsheets or complex systems.    Lin experienced these challenges firsthand as a VP BizOps at HashiCorp, scaling from 100 employees to IPO, while Chris and Amar faced similar issues scaling 40+ person teams as a fractional CTO. They're motivated by the belief that companies should have the least number of employees possible. ",
     tags: 'Artificial Intelligence, Finance, B2B, HR Tech, Operations',
     industries: 'B2B',
     batch: 'S24',
@@ -2042,7 +2042,7 @@ const YC_DATA = [
   {
     name: 'AutoPallet Robotics',
     longDescription:
-      'We’re building the next generation of warehouse robotics. In the US today, retailers spend approximately $10B per year paying human laborers to pick up and move cardboard boxes in warehouses. Existing solutions for automating this are expensive and difficult to install, which is why manual operation is still so prevalent. Our solution is different. We make swarms of small mobile robots that install into existing warehouses to provide a low-cost and robust automation solution for case picking and mixed-SKU palletization. Our novel technology allows these robots to be installed and operate at significantly lower cost than existing solutions while being both flexible and robust.',
+      "We're building the next generation of warehouse robotics. In the US today, retailers spend approximately $10B per year paying human laborers to pick up and move cardboard boxes in warehouses. Existing solutions for automating this are expensive and difficult to install, which is why manual operation is still so prevalent. Our solution is different. We make swarms of small mobile robots that install into existing warehouses to provide a low-cost and robust automation solution for case picking and mixed-SKU palletization. Our novel technology allows these robots to be installed and operate at significantly lower cost than existing solutions while being both flexible and robust.",
     tags: 'Hard Tech, Machine Learning, Warehouse Management Tech, Swarm Robotics, Automation',
     industries: 'Industrials, Manufacturing and Robotics',
     batch: 'S24',
@@ -2066,7 +2066,7 @@ const YC_DATA = [
   {
     name: 'AminoAnalytica',
     longDescription:
-      "Biotechs use proteins found in nature, such as enzymes in bacteria or peptides in lizards, in a wide range of applications from chemical manufacturing to therapeutics. However, these naturally occurring proteins aren't optimized for industry. At AminoAnalytica, we specialize in AI-powered protein optimization. Using our proprietary computational tools, we can improve the properties of a target protein sequence, from the stability of therapeutic peptides to the activity of industrial enzymes. When we optimize a protein, it’s not just a theoretical suggestion—we work with labs to ensure that it’s functional, stable, and ready to change the world.",
+      "Biotechs use proteins found in nature, such as enzymes in bacteria or peptides in lizards, in a wide range of applications from chemical manufacturing to therapeutics. However, these naturally occurring proteins aren't optimized for industry. At AminoAnalytica, we specialize in AI-powered protein optimization. Using our proprietary computational tools, we can improve the properties of a target protein sequence, from the stability of therapeutic peptides to the activity of industrial enzymes. When we optimize a protein, it's not just a theoretical suggestion—we work with labs to ensure that it's functional, stable, and ready to change the world.",
     tags: 'Synthetic Biology, Biotech, Manufacturing, Climate, Industrial',
     industries: 'Healthcare, Industrial Bio',
     batch: 'S24',
@@ -2074,7 +2074,7 @@ const YC_DATA = [
   {
     name: 'Gauge',
     longDescription:
-      "Gauge is solving the monolith/microservices dilemma. We’re helping enterprises break large codebases into small pieces. We first met as roommates in college, and in the decade since we've both worked exclusively at startups, including multiple founding engineering roles. We ran into this problem time and time again as our startups began to scale. We're now working with a wide range of companies, including a number of multi-billion $ enterprises. Our open source tooling also has ~1k stars on GitHub, over 400k downloads, and is in use by Nvidia. In the short term, Gauge is building tools to modularize the monolith. Long term, Gauge is building a way to deploy a single codebase as a set of independent services, giving you the scalability of microservices alongside the simplicity of monolithic development. ",
+      "Gauge is solving the monolith/microservices dilemma. We're helping enterprises break large codebases into small pieces. We first met as roommates in college, and in the decade since we've both worked exclusively at startups, including multiple founding engineering roles. We ran into this problem time and time again as our startups began to scale. We're now working with a wide range of companies, including a number of multi-billion $ enterprises. Our open source tooling also has ~1k stars on GitHub, over 400k downloads, and is in use by Nvidia. In the short term, Gauge is building tools to modularize the monolith. Long term, Gauge is building a way to deploy a single codebase as a set of independent services, giving you the scalability of microservices alongside the simplicity of monolithic development. ",
     tags: 'Developer Tools, SaaS, B2B, Open Source, Web Development',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'S24',
@@ -2082,7 +2082,7 @@ const YC_DATA = [
   {
     name: 'Weave Robotics',
     longDescription:
-      "Making the world’s first personal robot that's built for the home.  Our robot, Isaac, will autonomously tidy up endless messes, fold laundry, and care for your home while you’re away, and we’re shipping our first 30 in fall of 2025.",
+      "Making the world's first personal robot that's built for the home.  Our robot, Isaac, will autonomously tidy up endless messes, fold laundry, and care for your home while you're away, and we're shipping our first 30 in fall of 2025.",
     tags: '',
     industries: 'Industrials, Manufacturing and Robotics',
     batch: 'S24',
@@ -2090,7 +2090,7 @@ const YC_DATA = [
   {
     name: 'Tandem',
     longDescription:
-      'The pandemic reduced office use nationwide by 50%, and tenants have been left to deal with highly inflexible, long term lease agreements that don’t fit today’s office use patterns. The traditional brokerage model works great for big spaces and long terms. But when you want to talk smaller units, short term lengths, shared and common areas, you’re out of luck.  Tandem is an AI-enabled office leasing platform. We’re using technology to unlock flexible, month-to-month agreements in quality, ready-to-go spaces.   Our AI co-pilot enables a white-glove-quality B2B office search experience, with a fraction of the human labor typically required. Today we’re serving two primary markets — NY & SF, with hundreds of active Hosts in each.  We’ve helped match more than 100 companies and have seen double-digit month-over-month growth.',
+      "The pandemic reduced office use nationwide by 50%, and tenants have been left to deal with highly inflexible, long term lease agreements that don't fit today's office use patterns. The traditional brokerage model works great for big spaces and long terms. But when you want to talk smaller units, short term lengths, shared and common areas, you're out of luck.  Tandem is an AI-enabled office leasing platform. We're using technology to unlock flexible, month-to-month agreements in quality, ready-to-go spaces.   Our AI co-pilot enables a white-glove-quality B2B office search experience, with a fraction of the human labor typically required. Today we're serving two primary markets — NY & SF, with hundreds of active Hosts in each.  We've helped match more than 100 companies and have seen double-digit month-over-month growth.",
     tags: 'Marketplace, Real Estate, B2B',
     industries: 'B2B, Office Management',
     batch: 'S24',
@@ -2098,7 +2098,7 @@ const YC_DATA = [
   {
     name: 'AnswerGrid',
     longDescription:
-      'AnswerGrid is an AI-powered enterprise search platform purpose-built for consultants to leverage their firm’s institutional knowledge.',
+      "AnswerGrid is an AI-powered enterprise search platform purpose-built for consultants to leverage their firm's institutional knowledge.",
     tags: 'Artificial Intelligence, Generative AI, Productivity',
     industries: 'B2B, Productivity',
     batch: 'S24',
@@ -2113,7 +2113,7 @@ const YC_DATA = [
   {
     name: 'camfer',
     longDescription:
-      'We’re building the first AI mechanical engineer that collaborates with humans to do design tasks end-to-end. Human engineers can talk to camfer to build, test, and iterate 3D designs natively on CAD platforms.',
+      "We're building the first AI mechanical engineer that collaborates with humans to do design tasks end-to-end. Human engineers can talk to camfer to build, test, and iterate 3D designs natively on CAD platforms.",
     tags: 'Generative AI, Hardware, Productivity, Manufacturing, AI',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'S24',
@@ -2192,7 +2192,7 @@ const YC_DATA = [
   {
     name: 'Elevate',
     longDescription:
-      'We use AI to streamline data integrations for mergers & acquisitions (M&A), with a focus on private equity (PE)-backed roll-ups. We take messy data (e.g., customer, financial, operational) that sits across disparate systems in different formats and use LLMs to unify, clean, and enrich it. Our approach expedites speed to value capture post-acquisition without distracting management teams or requiring expensive data engineering resources.  Our experience is at the intersection of finance x tech. With an increasingly competitive M&A marketplace driven by $0.5T+ of dry powder, clean, usable data is a massive competitive advantage throughout the investment cycle – in diligence, to make informed investment decisions; in value creation, to execute the strategic plan quickly and confidently; and in exit, where better data leads to better outcomes.  We’re on a mission to make AI useful for any company with messy data. ',
+      "We use AI to streamline data integrations for mergers & acquisitions (M&A), with a focus on private equity (PE)-backed roll-ups. We take messy data (e.g., customer, financial, operational) that sits across disparate systems in different formats and use LLMs to unify, clean, and enrich it. Our approach expedites speed to value capture post-acquisition without distracting management teams or requiring expensive data engineering resources.  Our experience is at the intersection of finance x tech. With an increasingly competitive M&A marketplace driven by $0.5T+ of dry powder, clean, usable data is a massive competitive advantage throughout the investment cycle – in diligence, to make informed investment decisions; in value creation, to execute the strategic plan quickly and confidently; and in exit, where better data leads to better outcomes.  We're on a mission to make AI useful for any company with messy data. ",
     tags: 'AIOps, Artificial Intelligence, Finance, B2B, Automation',
     industries: 'B2B',
     batch: 'S24',
@@ -2200,7 +2200,7 @@ const YC_DATA = [
   {
     name: 'Offstream',
     longDescription:
-      'Offstream is Vanta for carbon compliance.  Today, every new infrastructure project, from data centers to biomass power plants has a complicated mess of local, state, federal, and private sector standards that they must understand and comply with to make their projects profitable. Offstream solves this by using LLMs to parse regulations, generate technical reports for customers, and manage 100,000+ operational data points on project’s lifecycles. We cut the time customers spend on compliance by 90% and at 1/5th of the cost of alternatives.',
+      "Offstream is Vanta for carbon compliance.  Today, every new infrastructure project, from data centers to biomass power plants has a complicated mess of local, state, federal, and private sector standards that they must understand and comply with to make their projects profitable. Offstream solves this by using LLMs to parse regulations, generate technical reports for customers, and manage 100,000+ operational data points on project's lifecycles. We cut the time customers spend on compliance by 90% and at 1/5th of the cost of alternatives.",
     tags: '',
     industries: 'B2B',
     batch: 'S24',
@@ -2208,7 +2208,7 @@ const YC_DATA = [
   {
     name: 'Storia AI',
     longDescription:
-      "With AI increasingly automating away code generation, software engineers will spend more time reading, judging, and architecting code rather than writing it. Storia is building an open-source copilot that knows a company's codebase and its context. We are starting with Sage, a Perplexity-like agent for helping developers understand, judge, and generate software. Given an existing codebase, developers can ask Sage questions such as: 1) Given my project’s SLA and latency constraints, what is the appropriate underlying vector database to use? How would I incorporate it into my existing codebase? 2) Why should I pick Redis over Milvus as my underlying vector store? 3) Does this codebase in our organization still work and what steps are required for a complex integration with another library? Sage’s answers are directly supported by documentation and external references like GitHub, Stack Overflow, technical design documents, and project management software, preventing hallucinations. Today, Sage has up-to-date knowledge about open-source repositories (indexed daily). Tomorrow it will have a deep understanding of every line of code on the Internet. For teams, Sage will know about your private codebase too. No group has yet solved how to build an AI system that comprehends a codebase and its context and can empower every developer to architect better code, faster. This requires new research advances because vanilla RAG and out-of-the-box LLMs aren’t going to cut it.  We have 20+ years of software engineering and AI research experience. Julia worked on precursors of Gemini using contextual neural techniques before they were called “RAG” (and applied it to products like Google Keyboard and Pixel phones). Mihail built the earliest LLMs at Amazon Alexa and launched the first contextual deep learning conversational AI system in production at Alexa. ",
+      "With AI increasingly automating away code generation, software engineers will spend more time reading, judging, and architecting code rather than writing it. Storia is building an open-source copilot that knows a company's codebase and its context. We are starting with Sage, a Perplexity-like agent for helping developers understand, judge, and generate software. Given an existing codebase, developers can ask Sage questions such as: 1) Given my project's SLA and latency constraints, what is the appropriate underlying vector database to use? How would I incorporate it into my existing codebase? 2) Why should I pick Redis over Milvus as my underlying vector store? 3) Does this codebase in our organization still work and what steps are required for a complex integration with another library? Sage's answers are directly supported by documentation and external references like GitHub, Stack Overflow, technical design documents, and project management software, preventing hallucinations. Today, Sage has up-to-date knowledge about open-source repositories (indexed daily). Tomorrow it will have a deep understanding of every line of code on the Internet. For teams, Sage will know about your private codebase too. No group has yet solved how to build an AI system that comprehends a codebase and its context and can empower every developer to architect better code, faster. This requires new research advances because vanilla RAG and out-of-the-box LLMs aren't going to cut it.  We have 20+ years of software engineering and AI research experience. Julia worked on precursors of Gemini using contextual neural techniques before they were called “RAG” (and applied it to products like Google Keyboard and Pixel phones). Mihail built the earliest LLMs at Amazon Alexa and launched the first contextual deep learning conversational AI system in production at Alexa. ",
     tags: 'Artificial Intelligence, Developer Tools, Machine Learning, SaaS',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'S24',
@@ -2247,7 +2247,7 @@ const YC_DATA = [
   {
     name: 'Rewbi',
     longDescription:
-      'Rewbi uses AI to optimize grid-connected battery storage. We generate revenue by charging when electricity is cheap and discharging when electricity is expensive. We rent battery storage for a fixed fee per month, and we earn 2x that fee in monthly revenue by dispatching the battery optimally. Today, power companies use human traders to manually track grid conditions and update the battery’s dispatch schedule. However batteries can adjust their power output 100x faster than traditional power generation (e.g. hydro, coal, nuclear, gas), with the ability to go from full-speed charging to to full speed discharging in under a minute. Electricity prices change every 5 minutes, often by 300% or more. Our AI better tracks 100s of live inputs, and it makes decisions faster than a human operator (with lower overhead!), improving revenue 2x.',
+      "Rewbi uses AI to optimize grid-connected battery storage. We generate revenue by charging when electricity is cheap and discharging when electricity is expensive. We rent battery storage for a fixed fee per month, and we earn 2x that fee in monthly revenue by dispatching the battery optimally. Today, power companies use human traders to manually track grid conditions and update the battery's dispatch schedule. However batteries can adjust their power output 100x faster than traditional power generation (e.g. hydro, coal, nuclear, gas), with the ability to go from full-speed charging to to full speed discharging in under a minute. Electricity prices change every 5 minutes, often by 300% or more. Our AI better tracks 100s of live inputs, and it makes decisions faster than a human operator (with lower overhead!), improving revenue 2x.",
     tags: '',
     industries: 'Industrials, Energy',
     batch: 'S24',
@@ -2342,7 +2342,7 @@ const YC_DATA = [
   {
     name: 'FirstWork',
     longDescription:
-      'Firstwork is a next-generation HR platform designed specifically for companies with dynamic workforce needs. Our mission is to streamline and automate key HR processes to help businesses operate more efficiently and effectively. What We Do (for now): (1) Smart Onboarding 📋: Our platform simplifies the onboarding process by automating the collection and verification of credentials, such as right-to-work documents, insurance forms and driver’s licenses. This reduces administrative burden and accelerates the time-to-productivity for new hires. (2) AI-Assisted Activation 🤖: Leveraging AI, we enhance communication and messaging for new hires, ensuring they receive timely and relevant information. This helps in better engagement and faster integration into their roles. (3) Perpetual Compliance ✅: Our system uses AI and OCR technology to continuously monitor and ensure compliance with various regulatory requirements. This includes tracking expirations of critical documents, updating records, and generating compliance reports, thus reducing the risk of penalties and legal issues. ',
+      "Firstwork is a next-generation HR platform designed specifically for companies with dynamic workforce needs. Our mission is to streamline and automate key HR processes to help businesses operate more efficiently and effectively. What We Do (for now): (1) Smart Onboarding 📋: Our platform simplifies the onboarding process by automating the collection and verification of credentials, such as right-to-work documents, insurance forms and driver's licenses. This reduces administrative burden and accelerates the time-to-productivity for new hires. (2) AI-Assisted Activation 🤖: Leveraging AI, we enhance communication and messaging for new hires, ensuring they receive timely and relevant information. This helps in better engagement and faster integration into their roles. (3) Perpetual Compliance ✅: Our system uses AI and OCR technology to continuously monitor and ensure compliance with various regulatory requirements. This includes tracking expirations of critical documents, updating records, and generating compliance reports, thus reducing the risk of penalties and legal issues. ",
     tags: 'SaaS, Human Resources, Workflow Automation, Compliance, AI',
     industries: 'B2B, Human Resources',
     batch: 'S24',
@@ -2366,7 +2366,7 @@ const YC_DATA = [
   {
     name: 'Maitai',
     longDescription:
-      'Maitai makes building reliable AI applications easy. We autocorrect faulty model output in real-time and automatically fine-tune models that learn from their mistakes. This means our customers get more reliable results immediately, and over time, they gain custom models built specifically for their application that only get better and faster. You wouldn’t hire an employee who doesn’t learn from their mistakes—so why use a model that doesn’t? Maitai is here to deliver the next generation of reliable AI inference.',
+      "Maitai makes building reliable AI applications easy. We autocorrect faulty model output in real-time and automatically fine-tune models that learn from their mistakes. This means our customers get more reliable results immediately, and over time, they gain custom models built specifically for their application that only get better and faster. You wouldn't hire an employee who doesn't learn from their mistakes—so why use a model that doesn't? Maitai is here to deliver the next generation of reliable AI inference.",
     tags: 'Artificial Intelligence, Developer Tools, SaaS, B2B',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'S24',
@@ -2374,7 +2374,7 @@ const YC_DATA = [
   {
     name: 'Corgi',
     longDescription:
-      'Corgi is building the first full stack AI insurance carrier. Insurance is 12% of US GDP. We’re taking it all.',
+      "Corgi is building the first full stack AI insurance carrier. Insurance is 12% of US GDP. We're taking it all.",
     tags: 'Fintech, Insurance, AI',
     industries: 'Fintech, Insurance',
     batch: 'S24',
@@ -2430,7 +2430,7 @@ const YC_DATA = [
   {
     name: 'Flyflow',
     longDescription:
-      '"I don’t know how I would have found these leads myself."  - YC Founder Flyflow enables companies to find prospective customers using AI workflows instead of drowning in tables. Try out our product at app.flyflow.ai. How are we different? (1) Higher quality leads: get to a list that’s so relevant, you’ll want to spend time getting introduced to people there, instead of sending another 1,000 cold emails (2) Incredibly easy to set up: get up and running with a list of prospects in hand  in under 10 minutes (3) Integrate the best of different sales tools all in one place: no need to switch between different tabs for web research, filtering by company size, and finding prospect LinkedIns',
+      "\"I don't know how I would have found these leads myself.\"  - YC Founder Flyflow enables companies to find prospective customers using AI workflows instead of drowning in tables. Try out our product at app.flyflow.ai. How are we different? (1) Higher quality leads: get to a list that's so relevant, you'll want to spend time getting introduced to people there, instead of sending another 1,000 cold emails (2) Incredibly easy to set up: get up and running with a list of prospects in hand  in under 10 minutes (3) Integrate the best of different sales tools all in one place: no need to switch between different tabs for web research, filtering by company size, and finding prospect LinkedIns",
     tags: '',
     industries: 'B2B, Sales',
     batch: 'S24',
@@ -2574,7 +2574,7 @@ const YC_DATA = [
   {
     name: 'Glasskube',
     longDescription:
-      'Managing enterprise software deployments shouldn’t feel like a balancing act. At Glasskube, we make deploying, managing, and updating software in on-premises, VPC, and air-gapped environments easier than ever. Our Mission: We empower software vendors to deliver exceptional customer experiences with less complexity. Whether you’re onboarding new clients, rolling out updates, or troubleshooting issues, our Software Distribution Platform streamlines every step. The founders have been best friends for over 15 years, lived together in college, and even had a startup together. Philip was the CTO of a European Kubernetes-based company that was acquired in 2022.',
+      "Managing enterprise software deployments shouldn't feel like a balancing act. At Glasskube, we make deploying, managing, and updating software in on-premises, VPC, and air-gapped environments easier than ever. Our Mission: We empower software vendors to deliver exceptional customer experiences with less complexity. Whether you're onboarding new clients, rolling out updates, or troubleshooting issues, our Software Distribution Platform streamlines every step. The founders have been best friends for over 15 years, lived together in college, and even had a startup together. Philip was the CTO of a European Kubernetes-based company that was acquired in 2022.",
     tags: 'Developer Tools, B2B, Open Source, Kubernetes, DevOps',
     industries: 'B2B, Infrastructure',
     batch: 'S24',
@@ -2590,7 +2590,7 @@ const YC_DATA = [
   {
     name: 'Cheers',
     longDescription:
-      'Cheers is building the super-app for in-person work. Our NFC-enabled badges turn every field service interaction into a frictionless moment—easily capturing reviews, payments, and insights. Backed by YC and industry experts, we’ve proven demand and are now scaling beyond reviews to transform how millions of field employees connect with their customers.',
+      "Cheers is building the super-app for in-person work. Our NFC-enabled badges turn every field service interaction into a frictionless moment—easily capturing reviews, payments, and insights. Backed by YC and industry experts, we've proven demand and are now scaling beyond reviews to transform how millions of field employees connect with their customers.",
     tags: 'Artificial Intelligence, Analytics, Feedback, Reviews',
     industries: 'B2B',
     batch: 'S24',
@@ -2614,7 +2614,7 @@ const YC_DATA = [
   {
     name: 'Superunit',
     longDescription:
-      'Superunit is building an AI powered ERP for companies manufacturing or selling physical goods.  We’ve released our first module - AI accounting and supply chain management - to 7 customers in the last 6 weeks. We’ve booked $8.3k in MRR and just signed a pilot with a $200M apparel company.  We offer automated bookkeeping, supply chain management, inventory costs, and contribution margin analysis.  Our system seamlessly integrates with Quickbooks and ERPs, eliminating manual data entry and minimizing errors. Users can interact with Superunit via Slack or email, avoiding the need to learn new software. (https://www.loom.com/share/1425f6802d774e1aa00a8ac4b64782ff) ',
+      "Superunit is building an AI powered ERP for companies manufacturing or selling physical goods.  We've released our first module - AI accounting and supply chain management - to 7 customers in the last 6 weeks. We've booked $8.3k in MRR and just signed a pilot with a $200M apparel company.  We offer automated bookkeeping, supply chain management, inventory costs, and contribution margin analysis.  Our system seamlessly integrates with Quickbooks and ERPs, eliminating manual data entry and minimizing errors. Users can interact with Superunit via Slack or email, avoiding the need to learn new software. (https://www.loom.com/share/1425f6802d774e1aa00a8ac4b64782ff) ",
     tags: 'Fintech, Machine Learning, SaaS, B2B, AI',
     industries: 'B2B, Operations',
     batch: 'S24',
@@ -2622,7 +2622,7 @@ const YC_DATA = [
   {
     name: 'Undermind',
     longDescription:
-      "At Undermind, we're building a search engine that can handle extremely complex questions. It’s geared at experts, like research scientists and doctors, who need to find very specific resources to solve high-stakes problems.  We’ve rebuilt search from the ground up to address this. Our new approach employs high-quality LLMs to adaptively explore a database, mimicking how a human researcher carefully discovers information. This approach dramatically outperforms (by 10-50x) traditional keyword search and other modern AI-based retrieval methods. Our first target users are the 50 million researchers searching for scientific literature on PubMed and Google Scholar every month. We’ve have users paying us $200-$500 per seat per year, from fields like medicine, ML, biotech, finance, and more.",
+      "At Undermind, we're building a search engine that can handle extremely complex questions. It's geared at experts, like research scientists and doctors, who need to find very specific resources to solve high-stakes problems.  We've rebuilt search from the ground up to address this. Our new approach employs high-quality LLMs to adaptively explore a database, mimicking how a human researcher carefully discovers information. This approach dramatically outperforms (by 10-50x) traditional keyword search and other modern AI-based retrieval methods. Our first target users are the 50 million researchers searching for scientific literature on PubMed and Google Scholar every month. We've have users paying us $200-$500 per seat per year, from fields like medicine, ML, biotech, finance, and more.",
     tags: 'Artificial Intelligence, Machine Learning, Biotech, Search',
     industries: 'B2B',
     batch: 'S24',
@@ -2654,7 +2654,7 @@ const YC_DATA = [
   {
     name: 'Miru',
     longDescription:
-      'Miru provides developers with the infrastructure to easily deploy updates over-the-air to fleets of robots and IoT devices by simply pushing new changes to GitHub. We’re on a mission to accelerate the automation of the physical world by enabling developers to move atoms with bits. Our vision is simple—robots everywhere, doing everything.',
+      "Miru provides developers with the infrastructure to easily deploy updates over-the-air to fleets of robots and IoT devices by simply pushing new changes to GitHub. We're on a mission to accelerate the automation of the physical world by enabling developers to move atoms with bits. Our vision is simple—robots everywhere, doing everything.",
     tags: 'AIOps, Developer Tools, Robotics, IoT',
     industries: 'B2B, Infrastructure',
     batch: 'S24',
@@ -2662,7 +2662,7 @@ const YC_DATA = [
   {
     name: 'CardLift',
     longDescription:
-      "💸 CardLift builds co-branded browser extensions to help credit card issuers maximize their share of wallet (and in turn, per user revenue). 💸 💼 Built by the serial extension founder behind TravelArrow (the world's largest travel browser extension, 300k users, 1.5M+ ARR) and OctoShop (acquired by NYSE:IBTA), CardLift is backed by YCombinator. How it works - We build banks and credit card issuers browser extensions to help them capture a larger share of wallet among their cardholders by - 🏃 Migrating Existing Spend - When a credit card program onboards a new user, we make it dead simple for these users to switch their card-on-file at all of their top online merchants to their new card with one click. - Our AI-powered browser extension not only automatically detects where our partners' users spend the most (Netflix, Amazon, T-mobile, Progressive), but also lets them switch out their primary payment instantly. Users press a button in their browser and their card-on-file everywhere instantly switches to their shiny new card (our partner's card!). 😌 Making Checkout Seamless - Our fast checkout technology embeds “One Tap Checkout ” on the checkout page at over 50,000 e-commerce sites - making our partners' cards the easiest way for users to complete any transaction on their browser.  - They can even customize the copy to tell the user why to use your card for that specific purchase. For example Chase could prompt their users to use their Sapphire Preferred card on Avis BECAUSE it offers car rental insurance. 🤑 Making Our Partners' Cards More Rewarding - We partner with over 1000 of the country’s top merchants to offer additional affiliate-based cash back that our partners can tack on to their existing cash back. User can now earn double or even triple the cash back on Sephora when they user our partners' “One Tap Checkout” button instead of their other cards.",
+      "💸 CardLift builds co-branded browser extensions to help credit card issuers maximize their share of wallet (and in turn, per user revenue). 💸 💼 Built by the serial extension founder behind TravelArrow (the world's largest travel browser extension, 300k users, 1.5M+ ARR) and OctoShop (acquired by NYSE:IBTA), CardLift is backed by YCombinator. How it works - We build banks and credit card issuers browser extensions to help them capture a larger share of wallet among their cardholders by - 🏃 Migrating Existing Spend - When a credit card program onboards a new user, we make it dead simple for these users to switch their card-on-file at all of their top online merchants to their new card with one click. - Our AI-powered browser extension not only automatically detects where our partners' users spend the most (Netflix, Amazon, T-mobile, Progressive), but also lets them switch out their primary payment instantly. Users press a button in their browser and their card-on-file everywhere instantly switches to their shiny new card (our partner's card!). 😌 Making Checkout Seamless - Our fast checkout technology embeds “One Tap Checkout ” on the checkout page at over 50,000 e-commerce sites - making our partners' cards the easiest way for users to complete any transaction on their browser.  - They can even customize the copy to tell the user why to use your card for that specific purchase. For example Chase could prompt their users to use their Sapphire Preferred card on Avis BECAUSE it offers car rental insurance. 🤑 Making Our Partners' Cards More Rewarding - We partner with over 1000 of the country's top merchants to offer additional affiliate-based cash back that our partners can tack on to their existing cash back. User can now earn double or even triple the cash back on Sephora when they user our partners' “One Tap Checkout” button instead of their other cards.",
     tags: '',
     industries: 'Fintech',
     batch: 'S24',
@@ -2678,7 +2678,7 @@ const YC_DATA = [
   {
     name: 'Ultra',
     longDescription:
-      "Ultra builds AI-powered robots that automate the dull, repetitive labor still done by people in American warehouses. We’re starting with e-commerce order packaging in fulfillment centers — where a worker puts items in a box, seals it, and labels it. Traditional automation isn't working for warehouses because it's costly, rigid, and often underutilized. Ultra’s robots are different: they’re easy to deploy, adaptable, and powered by AI that’s trained through examples.",
+      "Ultra builds AI-powered robots that automate the dull, repetitive labor still done by people in American warehouses. We're starting with e-commerce order packaging in fulfillment centers — where a worker puts items in a box, seals it, and labels it. Traditional automation isn't working for warehouses because it's costly, rigid, and often underutilized. Ultra's robots are different: they're easy to deploy, adaptable, and powered by AI that's trained through examples.",
     tags: 'Hard Tech, Robotics, Logistics, AI',
     industries: 'Industrials, Manufacturing and Robotics',
     batch: 'S24',
@@ -2702,7 +2702,7 @@ const YC_DATA = [
   {
     name: 'Evolvere BioSciences',
     longDescription:
-      '🦠🤖 We use our computational models to make next-generation antibiotics that outcompete bacterial evolution and precisely target pathogenic bacteria, without harming good microbes or human cells.  ☠️ Current antibiotics stop working because bacteria evolve resistance to them. This makes drug-resistant bacteria a looming global health crisis - already killing more people than malaria and AIDS and it is getting exponentially worse 📈.  🧬 Our approach leverages co-evolutionary protein-protein interaction datasets combined with AI to forecast bacterial mutations and create ‘future-proof’ antibiotics, addressing antibiotic resistance before it develops. This changes the game for how frequently society will need to make new antibiotics and how long our new antibiotics will be able to treat patients 👩‍⚕️. We are a team of biochemists and evolutionary biologists who met at the University of Oxford. ',
+      "🦠🤖 We use our computational models to make next-generation antibiotics that outcompete bacterial evolution and precisely target pathogenic bacteria, without harming good microbes or human cells.  ☠️ Current antibiotics stop working because bacteria evolve resistance to them. This makes drug-resistant bacteria a looming global health crisis - already killing more people than malaria and AIDS and it is getting exponentially worse 📈.  🧬 Our approach leverages co-evolutionary protein-protein interaction datasets combined with AI to forecast bacterial mutations and create 'future-proof' antibiotics, addressing antibiotic resistance before it develops. This changes the game for how frequently society will need to make new antibiotics and how long our new antibiotics will be able to treat patients 👩‍⚕️. We are a team of biochemists and evolutionary biologists who met at the University of Oxford. ",
     tags: 'AI-powered Drug Discovery, Artificial Intelligence, Biotech, Therapeutics, Biotechnology',
     industries: 'Healthcare, Therapeutics',
     batch: 'S24',
@@ -2741,7 +2741,7 @@ const YC_DATA = [
   {
     name: 'Fuse',
     longDescription:
-      'AI-powered analysis of healthcare contracts and payments to help providers detect underpayments, compare their negotiated rates, and identify opportunities to boost revenue from insurers.  If you know senior finance execs in health systems, partners in healthcare PE, or mid to large sized healthcare practice owners, please do connect us. We won’t waste their time: +1 628 468 3232.',
+      "AI-powered analysis of healthcare contracts and payments to help providers detect underpayments, compare their negotiated rates, and identify opportunities to boost revenue from insurers.  If you know senior finance execs in health systems, partners in healthcare PE, or mid to large sized healthcare practice owners, please do connect us. We won't waste their time: +1 628 468 3232.",
     tags: 'Artificial Intelligence, Fintech, Payments, B2B, Healthcare',
     industries: 'Healthcare',
     batch: 'S24',
@@ -2890,7 +2890,7 @@ const YC_DATA = [
   {
     name: 'CrowdVolt',
     longDescription:
-      'CrowdVolt is a two-sided, bid-ask style live event marketplace similar to StockX. We’ve created the only secondary ticket exchange that supports fully automated order fulfillment. Contact us at founders@crowdvolt.com',
+      "CrowdVolt is a two-sided, bid-ask style live event marketplace similar to StockX. We've created the only secondary ticket exchange that supports fully automated order fulfillment. Contact us at founders@crowdvolt.com",
     tags: 'Marketplace, Entertainment, Social Network, Music, Ticketing',
     industries: 'Consumer',
     batch: 'W24',
@@ -2938,7 +2938,7 @@ const YC_DATA = [
   {
     name: 'renderlet',
     longDescription:
-      'renderlet is a framework that makes it easy to develop interactive applications. Building applications with high-performance graphics is very hard – existing tools are cumbersome and aren’t truly platform agnostic, leading to frequent rework.  With renderlet, developers can write high-level code to describe 2D and 3D graphics without having to use low-level, platform-specific APIs. renderlet automatically compiles graphics code to WebAssembly and embeds a portable rendering engine inside any app, enabling graphics to safely and automatically render on any platform’s GPU. Our runtime is open-source: https://github.com/renderlet/wander',
+      "renderlet is a framework that makes it easy to develop interactive applications. Building applications with high-performance graphics is very hard – existing tools are cumbersome and aren't truly platform agnostic, leading to frequent rework.  With renderlet, developers can write high-level code to describe 2D and 3D graphics without having to use low-level, platform-specific APIs. renderlet automatically compiles graphics code to WebAssembly and embeds a portable rendering engine inside any app, enabling graphics to safely and automatically render on any platform's GPU. Our runtime is open-source: https://github.com/renderlet/wander",
     tags: 'Developer Tools, Design Tools, Data Visualization',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'W24',
@@ -3010,7 +3010,7 @@ const YC_DATA = [
   {
     name: 'Healia',
     longDescription:
-      "Healia is reinventing health insurance for dual income families. Our product enables companies to pay for the out of pocket costs of any employee that enrolls in their spouse's health insurance plan. This saves customers $10k per enrollee while providing an incredible employee perk: 100% coverage of a family's health costs. We’re now up to 50+ customers coast-to-coast with over 40k employees using our product!",
+      "Healia is reinventing health insurance for dual income families. Our product enables companies to pay for the out of pocket costs of any employee that enrolls in their spouse's health insurance plan. This saves customers $10k per enrollee while providing an incredible employee perk: 100% coverage of a family's health costs. We're now up to 50+ customers coast-to-coast with over 40k employees using our product!",
     tags: '',
     industries: 'Fintech, Insurance',
     batch: 'W24',
@@ -3074,7 +3074,7 @@ const YC_DATA = [
   {
     name: 'Senso',
     longDescription:
-      "Senso is building an AI-powered knowledge base for customer support, starting in the Credit Union space.  Our product reduces contact time by over 10x by enabling support teams to make decisions about customer requests in seconds.  Bringing service automation to the financial services industry is a $6B opportunity, and we’re building for all regulated industries where Senso's founders have spent over a decade building enterprise software.  ",
+      "Senso is building an AI-powered knowledge base for customer support, starting in the Credit Union space.  Our product reduces contact time by over 10x by enabling support teams to make decisions about customer requests in seconds.  Bringing service automation to the financial services industry is a $6B opportunity, and we're building for all regulated industries where Senso's founders have spent over a decade building enterprise software.  ",
     tags: 'Artificial Intelligence, Generative AI, SaaS, Enterprise Software, Conversational AI',
     industries: 'B2B, Analytics',
     batch: 'W24',
@@ -3106,7 +3106,7 @@ const YC_DATA = [
   {
     name: 'GoldenBasis',
     longDescription:
-      'GoldenBasis makes modern back-office software for brokerages like Schwab or Fidelity, and we’re starting with asset transfers. Every year, $1.1 trillion in assets are transferred between brokerages using decades-old software. Brokerages hire thousands of people to compensate but still lose revenue from abandoned transfers. We solve this problem by automating back-office workflows with AI.',
+      "GoldenBasis makes modern back-office software for brokerages like Schwab or Fidelity, and we're starting with asset transfers. Every year, $1.1 trillion in assets are transferred between brokerages using decades-old software. Brokerages hire thousands of people to compensate but still lose revenue from abandoned transfers. We solve this problem by automating back-office workflows with AI.",
     tags: 'Fintech, API, Enterprise Software, Infrastructure, Operations',
     industries: 'Fintech, Banking and Exchange',
     batch: 'W24',
@@ -3138,7 +3138,7 @@ const YC_DATA = [
   {
     name: 'Lumona',
     longDescription:
-      'Lumona is an AI-enabled search engine featuring perspectives from social media to help you understand your search results. When you’re looking to buy a new phone, instead of Googling iPhone 16 reviews and opening multiple reddit threads, blog reviews, and YouTube videos to know if you want to buy it, you can search once on Lumona to get all of that info on one page.',
+      "Lumona is an AI-enabled search engine featuring perspectives from social media to help you understand your search results. When you're looking to buy a new phone, instead of Googling iPhone 16 reviews and opening multiple reddit threads, blog reviews, and YouTube videos to know if you want to buy it, you can search once on Lumona to get all of that info on one page.",
     tags: 'Generative AI, Consumer, Search, AI',
     industries: 'Consumer',
     batch: 'W24',
@@ -3153,7 +3153,7 @@ const YC_DATA = [
   {
     name: 'Marblism',
     longDescription:
-      "Everyone dreads the first few lines of code: choosing frameworks, designing UI/UX, setting up your project, integrating front-end with back-end… That's why we created Marblism: just describe your app, and voila!  Here’s how the magic work: 1. Describe the product you want to build: it works well for SaaS, marketplaces, social apps and AI apps 2. We generate the database and the back-end 3. We generate the front-end 4. You clone the github repos and you’re ready to go The 90% heavy lifting work is done for you. You focus on adding your 10% unique touch. You can launch your idea in days not months. ",
+      "Everyone dreads the first few lines of code: choosing frameworks, designing UI/UX, setting up your project, integrating front-end with back-end… That's why we created Marblism: just describe your app, and voila!  Here's how the magic work: 1. Describe the product you want to build: it works well for SaaS, marketplaces, social apps and AI apps 2. We generate the database and the back-end 3. We generate the front-end 4. You clone the github repos and you're ready to go The 90% heavy lifting work is done for you. You focus on adding your 10% unique touch. You can launch your idea in days not months. ",
     tags: 'Artificial Intelligence, Developer Tools, Generative AI, AI Assistant',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'W24',
@@ -3177,7 +3177,7 @@ const YC_DATA = [
   {
     name: 'Miden',
     longDescription:
-      'Miden is building a modern infrastructure that facilitates the launch of card programs and various financial products for businesses in Sub-Sahran Africa. Just by reducing integration time, card fraud, improving stability, and being customer focused we quickly rose to top 5 in TPV among card issuing Fintechs in Sub-Saharan Africa within 8 months of launch. We’re going to build the first comprehensive fintech and banking software stack for Africa, based on modern technology. We’re starting with a card issuer-processor.',
+      "Miden is building a modern infrastructure that facilitates the launch of card programs and various financial products for businesses in Sub-Sahran Africa. Just by reducing integration time, card fraud, improving stability, and being customer focused we quickly rose to top 5 in TPV among card issuing Fintechs in Sub-Saharan Africa within 8 months of launch. We're going to build the first comprehensive fintech and banking software stack for Africa, based on modern technology. We're starting with a card issuer-processor.",
     tags: 'Fintech, Payments, B2B, APIs',
     industries: 'Fintech',
     batch: 'W24',
@@ -3239,7 +3239,7 @@ const YC_DATA = [
   {
     name: 'Ocular AI',
     longDescription:
-      'Ocular AI is the data annotation engine for Generative AI, Computer Vision, and Enterprise AI models. We help you transform unstructured, multi-modal data into golden datasets to power generative AI, frontier models, and computer vision.    Ocular Foundry is the most intuitive, data-centric, and fastest platform that lets you label, annotate, version, and deploy your data for training models. It also orchestrates your annotation jobs, improving collaboration with members and annotators.    With Ocular Bolt, shift from humans in the loop to experts in the loop to supercharge your data labeling and annotation projects. Our global expert workforce ensures fast, accurate results—no matter the scale or complexity of your data.   Companies spend huge amounts on training data, but Foundry and Bolt are AI-native tools that lower costs, reduce manual effort, and accelerate high-quality data collection. We’re replacing outdated, clunky, and expensive data software!',
+      "Ocular AI is the data annotation engine for Generative AI, Computer Vision, and Enterprise AI models. We help you transform unstructured, multi-modal data into golden datasets to power generative AI, frontier models, and computer vision.    Ocular Foundry is the most intuitive, data-centric, and fastest platform that lets you label, annotate, version, and deploy your data for training models. It also orchestrates your annotation jobs, improving collaboration with members and annotators.    With Ocular Bolt, shift from humans in the loop to experts in the loop to supercharge your data labeling and annotation projects. Our global expert workforce ensures fast, accurate results—no matter the scale or complexity of your data.   Companies spend huge amounts on training data, but Foundry and Bolt are AI-native tools that lower costs, reduce manual effort, and accelerate high-quality data collection. We're replacing outdated, clunky, and expensive data software!",
     tags: 'Developer Tools, Machine Learning, Computer Vision, Data Engineering, AI',
     industries: 'B2B',
     batch: 'W24',
@@ -3612,7 +3612,7 @@ const YC_DATA = [
   {
     name: 'Andy AI',
     longDescription:
-      'Andy is AI software that completes documentation for nurses doing home visits. Our software saves $8B a year; Tiantian was previously a PM at Google’s healthcare business and Max was a staff engineer on the health team at Apple.  Andy benefits nurses and the agencies that employ them. Agencies that use Andy see up to 45% more detailed charts, 2x greater nurse productivity, and timely submission (no more billing delays!) With Andy, clinicians get their evenings back.  Home health is the fastest growing segment of healthcare, doubling to $251B by 2031. Combined with recent nursing shortages and burnout, we’re seeing not just urgency, but excitement and joy, around adopting AI for home health. ',
+      "Andy is AI software that completes documentation for nurses doing home visits. Our software saves $8B a year; Tiantian was previously a PM at Google's healthcare business and Max was a staff engineer on the health team at Apple.  Andy benefits nurses and the agencies that employ them. Agencies that use Andy see up to 45% more detailed charts, 2x greater nurse productivity, and timely submission (no more billing delays!) With Andy, clinicians get their evenings back.  Home health is the fastest growing segment of healthcare, doubling to $251B by 2031. Combined with recent nursing shortages and burnout, we're seeing not just urgency, but excitement and joy, around adopting AI for home health. ",
     tags: 'Artificial Intelligence, SaaS, Health Tech, B2B, Healthcare',
     industries: 'Healthcare, Healthcare IT',
     batch: 'W24',
@@ -3628,7 +3628,7 @@ const YC_DATA = [
   {
     name: 'Shiboleth',
     longDescription:
-      'Shiboleth automates consumer lending compliance for financial institutions using AI. Banks like Cross River Bank use us to save months of manual work by automating audits and drafting reports for the governments.  LLMs allow whole categories of manual compliance processes to be automated in ways that weren’t possible until recently. We are excited to automate back-office operations and enhance consumer protection in one of the most litigious industries.',
+      "Shiboleth automates consumer lending compliance for financial institutions using AI. Banks like Cross River Bank use us to save months of manual work by automating audits and drafting reports for the governments.  LLMs allow whole categories of manual compliance processes to be automated in ways that weren't possible until recently. We are excited to automate back-office operations and enhance consumer protection in one of the most litigious industries.",
     tags: 'Fintech, Generative AI, B2B, Compliance, Lending',
     industries: 'B2B, Security',
     batch: 'W24',
@@ -3636,7 +3636,7 @@ const YC_DATA = [
   {
     name: 'Aftercare',
     longDescription:
-      'Aftercare helps you run surveys with AI-powered follow-up questions to dig into responses for deeper insights—it’s like having a skilled interviewer for every survey. ',
+      "Aftercare helps you run surveys with AI-powered follow-up questions to dig into responses for deeper insights—it's like having a skilled interviewer for every survey. ",
     tags: 'SaaS, Productivity, Feedback, Data Visualization',
     industries: 'B2B',
     batch: 'W24',
@@ -3659,7 +3659,7 @@ const YC_DATA = [
   {
     name: 'HostAI',
     longDescription:
-      'We’re on a mission to streamline business communication for housing and hospitality. Our integrated AI platform helps property management and hospitality operations automate business workflows so teams can instead focus on the most human elements of their service.',
+      "We're on a mission to streamline business communication for housing and hospitality. Our integrated AI platform helps property management and hospitality operations automate business workflows so teams can instead focus on the most human elements of their service.",
     tags: '',
     industries: 'B2B',
     batch: 'W24',
@@ -3675,7 +3675,7 @@ const YC_DATA = [
   {
     name: 'Tensorfuse',
     longDescription:
-      'Tensorfuse makes it easy to deploy and auto-scale AI models on your own infra using the CLI. It’s like using Modal/Replicate/Together with your cloud credits. Tensorfuse automatically scales in response to the amount of traffic your app receives. Fast cold boots with our optimized container system. Describe container images and hardware specifications in simple Python. No YAML. Behind the scenes, we manage custom k8s clusters which run the Tensorfuse Runtime.',
+      "Tensorfuse makes it easy to deploy and auto-scale AI models on your own infra using the CLI. It's like using Modal/Replicate/Together with your cloud credits. Tensorfuse automatically scales in response to the amount of traffic your app receives. Fast cold boots with our optimized container system. Describe container images and hardware specifications in simple Python. No YAML. Behind the scenes, we manage custom k8s clusters which run the Tensorfuse Runtime.",
     tags: '',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'W24',
@@ -3683,7 +3683,7 @@ const YC_DATA = [
   {
     name: 'Toma',
     longDescription:
-      'At Toma, we aim to become the Microsoft/OpenAI of the Automotive industry by supplying a fully integrated AI + software suite to tens of thousands of profitable automotive dealers in America, and then worldwide. Step 1 is to provide the world’s best voice AI solution for the automotive industry, serving departments from service to sales to finance to information technology. Toma’s voice agents do thousands of AI calls every day and generate millions of dollars worth of revenue for auto dealerships. The automotive industry is a sleeping giant contributing trillions of dollars to the GDP. The industry and its processes are ready for disruption. Toma is bringing AI to all operations in the industry while working hand-in-hand with some of the biggest names such as the Car Dealership Guy, and public companies like Lithia Motors and Cox Automotive. Toma is backed best investors in Silicon Valley and the Automotive industry.',
+      "At Toma, we aim to become the Microsoft/OpenAI of the Automotive industry by supplying a fully integrated AI + software suite to tens of thousands of profitable automotive dealers in America, and then worldwide. Step 1 is to provide the world's best voice AI solution for the automotive industry, serving departments from service to sales to finance to information technology. Toma's voice agents do thousands of AI calls every day and generate millions of dollars worth of revenue for auto dealerships. The automotive industry is a sleeping giant contributing trillions of dollars to the GDP. The industry and its processes are ready for disruption. Toma is bringing AI to all operations in the industry while working hand-in-hand with some of the biggest names such as the Car Dealership Guy, and public companies like Lithia Motors and Cox Automotive. Toma is backed best investors in Silicon Valley and the Automotive industry.",
     tags: 'Artificial Intelligence, SaaS, Operations, Automotive',
     industries: 'B2B, Operations',
     batch: 'W24',
@@ -3737,7 +3737,7 @@ const YC_DATA = [
   {
     name: 'Astro Mechanica',
     longDescription:
-      'Astro Mechanica has invented a new kind of jet engine – the Electric Adaptive Engine. Unlike any existing engine, it’s efficient at every speed. Because it’s efficient at every speed, it enables us to build a new jet aircraft with unique capabilities. It can launch payloads to orbit for 3x cheaper or fly 3x faster than regular passenger aircraft.',
+      "Astro Mechanica has invented a new kind of jet engine – the Electric Adaptive Engine. Unlike any existing engine, it's efficient at every speed. Because it's efficient at every speed, it enables us to build a new jet aircraft with unique capabilities. It can launch payloads to orbit for 3x cheaper or fly 3x faster than regular passenger aircraft.",
     tags: 'Commercial Space Launch, Airplanes, Aerospace',
     industries: 'Industrials, Aviation and Space',
     batch: 'W24',
@@ -3761,7 +3761,7 @@ const YC_DATA = [
   {
     name: 'Metofico',
     longDescription:
-      'Metofico provides a no-code data analysis tool tailored for the life sciences. Our platform enables life scientists to analyse complex/massive datasets and extract necessary insights without needing advanced programming skills. This accessibility helps both researchers new to data science and experts save months of work. Metofico aims to be the leading centralized platform for data analysis in life science research, covering a wide range of applications from brain activity analysis (like photometry and EEG) to AI-powered detection and tracking of research animals. Our vision is to accelerate research processes and enhance the quality of research outputs across the board. By streamlining complex data analysis and making it more accessible, we’re committed to driving forward scientific discoveries and innovation. ',
+      "Metofico provides a no-code data analysis tool tailored for the life sciences. Our platform enables life scientists to analyse complex/massive datasets and extract necessary insights without needing advanced programming skills. This accessibility helps both researchers new to data science and experts save months of work. Metofico aims to be the leading centralized platform for data analysis in life science research, covering a wide range of applications from brain activity analysis (like photometry and EEG) to AI-powered detection and tracking of research animals. Our vision is to accelerate research processes and enhance the quality of research outputs across the board. By streamlining complex data analysis and making it more accessible, we're committed to driving forward scientific discoveries and innovation. ",
     tags: 'SaaS, Data Science, No-code, Data Visualization',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'W24',
@@ -3872,7 +3872,7 @@ const YC_DATA = [
   {
     name: 'Aether Energy',
     longDescription:
-      'Aether is an AI-powered end-to-end platform for rooftop solar and roofing installers in the US and Western European markets.  Some of our innovations: - In-house computer vision and fine-tuned AI models built for solar - Rapid and accurate photovoltaic site design, 10x faster - Co-pilot for rooftop solar to streamline & automate various tasks for solar installers.  Why it’s needed: Today, rooftop solar is still complex, expensive, and inaccurate. More than half of the cost of a rooftop solar project comes from soft costs. We started Aether with the sole aim of reducing solar soft costs.  Our vision: Aether will be a big player in the young and emerging Solar software vertical, which has a projected 20B Global TAM up for grabs by 2025.',
+      "Aether is an AI-powered end-to-end platform for rooftop solar and roofing installers in the US and Western European markets.  Some of our innovations: - In-house computer vision and fine-tuned AI models built for solar - Rapid and accurate photovoltaic site design, 10x faster - Co-pilot for rooftop solar to streamline & automate various tasks for solar installers.  Why it's needed: Today, rooftop solar is still complex, expensive, and inaccurate. More than half of the cost of a rooftop solar project comes from soft costs. We started Aether with the sole aim of reducing solar soft costs.  Our vision: Aether will be a big player in the young and emerging Solar software vertical, which has a projected 20B Global TAM up for grabs by 2025.",
     tags: 'Artificial Intelligence, SaaS, Solar Power, Climate, Renewable Energy',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'W24',
@@ -3888,7 +3888,7 @@ const YC_DATA = [
   {
     name: 'Ragas',
     longDescription:
-      'The fragmented and proprietary evaluation tools today are leading to significant inefficiencies and confusion among developers. The world needs a standard everyone can rely on and that is why we are building Ragas as the open-source standard.  We have 4k stars on GitHub, 1.3k members in our discord community, and over 80+ external contributors. We also have partnerships with key AI companies like Langchain, Llamaindex, Arize, Weaviate and more to help create a standard. We already process 5 million evaluations monthly for engineers from companies like AWS, Microsoft, Databricks, and Moody’s and it is growing at 70% month over month. We are building LLM application testing and evaluation infrastructure for Enterprises. ',
+      "The fragmented and proprietary evaluation tools today are leading to significant inefficiencies and confusion among developers. The world needs a standard everyone can rely on and that is why we are building Ragas as the open-source standard.  We have 4k stars on GitHub, 1.3k members in our discord community, and over 80+ external contributors. We also have partnerships with key AI companies like Langchain, Llamaindex, Arize, Weaviate and more to help create a standard. We already process 5 million evaluations monthly for engineers from companies like AWS, Microsoft, Databricks, and Moody's and it is growing at 70% month over month. We are building LLM application testing and evaluation infrastructure for Enterprises. ",
     tags: 'Artificial Intelligence, Developer Tools, Open Source',
     industries: 'B2B, Infrastructure',
     batch: 'W24',
@@ -3928,7 +3928,7 @@ const YC_DATA = [
   {
     name: 'Markprompt',
     longDescription:
-      'Close customer support tickets faster with AI. We’re building AI infrastructure to power customer support at scale. With Markprompt, companies can automate customer support, scale without increasing headcount, and deliver exceptional user experiences.   Scaling customer support with headcount is expensive, with human resources accounting for 90%+ of customer support expenses. On top of that, customer support agents often burn out leading to turnover and reduced quality. As companies grow, so does their expert knowledge, which is hard to access at scale and makes keeping employees up-to-date nearly impossible. Markprompt addresses the root of the information access problem by indexing all available knowledge within a company, setting the foundation for a robust system of record to feed the AI. Built from the ground up with an API-first approach, Markprompt provides SDKs (such as React hooks and components) and no-code tools to enable integrations at all touchpoints in the customer journey.',
+      "Close customer support tickets faster with AI. We're building AI infrastructure to power customer support at scale. With Markprompt, companies can automate customer support, scale without increasing headcount, and deliver exceptional user experiences.   Scaling customer support with headcount is expensive, with human resources accounting for 90%+ of customer support expenses. On top of that, customer support agents often burn out leading to turnover and reduced quality. As companies grow, so does their expert knowledge, which is hard to access at scale and makes keeping employees up-to-date nearly impossible. Markprompt addresses the root of the information access problem by indexing all available knowledge within a company, setting the foundation for a robust system of record to feed the AI. Built from the ground up with an API-first approach, Markprompt provides SDKs (such as React hooks and components) and no-code tools to enable integrations at all touchpoints in the customer journey.",
     tags: 'Artificial Intelligence, Developer Tools, Customer Support, Infrastructure, AI Assistant',
     industries: 'B2B, Infrastructure',
     batch: 'W24',
@@ -3960,7 +3960,7 @@ const YC_DATA = [
   {
     name: 'Intercept',
     longDescription:
-      'Intercept lets CPG brands challenge incorrect charges from retail chains. It ingests all of a brand’s fees across their retailer portals and emails, flags the fees that can be disputed, and automates away the mundane tasks involved in fee disputes. What previously took a team of people is now manageable by a single person.',
+      "Intercept lets CPG brands challenge incorrect charges from retail chains. It ingests all of a brand's fees across their retailer portals and emails, flags the fees that can be disputed, and automates away the mundane tasks involved in fee disputes. What previously took a team of people is now manageable by a single person.",
     tags: '',
     industries: 'B2B, Retail',
     batch: 'W24',
@@ -3992,7 +3992,7 @@ const YC_DATA = [
   {
     name: 'Double',
     longDescription:
-      'Double lets anyone design and invest in their own stock index that’s advised, managed and tax optimized by Double.  ',
+      "Double lets anyone design and invest in their own stock index that's advised, managed and tax optimized by Double.  ",
     tags: 'Fintech, Finance, Investing, Consumer Finance, Stocks',
     industries: 'Fintech, Asset Management',
     batch: 'W24',
@@ -4016,7 +4016,7 @@ const YC_DATA = [
   {
     name: 'OmniAI',
     longDescription:
-      "Omni turns documents, slide decks, websites and more into the data you need. You'll never need to copy + paste data into spreadsheets again. - Connect to a database or document store. We support Snowflake, Postgres, Google Drive, S3 and more. - Transform your data - Define type safe schemas to run against your unstructured data. We’ll run those models against your data, and keep your warehouse in sync as new rows/fields are added/deleted. - Query with SQL - All the transformed data stays in your warehouse. Surface this data in your product, or analyze with your existing BI tools.",
+      "Omni turns documents, slide decks, websites and more into the data you need. You'll never need to copy + paste data into spreadsheets again. - Connect to a database or document store. We support Snowflake, Postgres, Google Drive, S3 and more. - Transform your data - Define type safe schemas to run against your unstructured data. We'll run those models against your data, and keep your warehouse in sync as new rows/fields are added/deleted. - Query with SQL - All the transformed data stays in your warehouse. Surface this data in your product, or analyze with your existing BI tools.",
     tags: 'Documents, Artificial Intelligence, Finance, Automation',
     industries: 'B2B, Operations',
     batch: 'W24',
@@ -4118,7 +4118,7 @@ const YC_DATA = [
   {
     name: 'PartnerHQ',
     longDescription:
-      'PartnerHQ is building the next generation LinkedIn. We are creating the world’s most valuable and accurate professional network graph by capturing and indexing vast quantities of relationship signals.  Individuals use PartnerHQ to grow and monetize their networks. B2B companies use PartnerHQ to buy warm intros and drive high-value sales.  PartnerHQ was created during Y Combinator’s W24 cohort and launched in February of 2024. Since launch we have signed on hundreds of paying companies, domestic and international. 97% of all users have come inbound or word-of-mouth. ',
+      "PartnerHQ is building the next generation LinkedIn. We are creating the world's most valuable and accurate professional network graph by capturing and indexing vast quantities of relationship signals.  Individuals use PartnerHQ to grow and monetize their networks. B2B companies use PartnerHQ to buy warm intros and drive high-value sales.  PartnerHQ was created during Y Combinator's W24 cohort and launched in February of 2024. Since launch we have signed on hundreds of paying companies, domestic and international. 97% of all users have come inbound or word-of-mouth. ",
     tags: '',
     industries: 'B2B, Sales',
     batch: 'W24',
@@ -4149,7 +4149,7 @@ const YC_DATA = [
   {
     name: 'Yoneda Labs',
     longDescription:
-      'Yoneda Labs provides software to help chemists optimise reactions. When chemists make a drug or a material, we help them figure out the best reaction parameters such as temperature, concentration and catalyst. When Jan was working at chemical labs, he experienced the struggle of spending weeks guessing reaction conditions. We then started experimenting with ML to speed up the process. Now, as a team of three friends from the University of Cambridge, we’ve spent the last month combining our domain expertise in Computer Science, Machine Learning and Chemistry to develop state of the art models for reaction optimisation. Although ML is becoming well established in other fields, current chemical models generalise poorly and require lots of programming experience. We make our models easily accessible to chemists in the lab. Finding the right conditions quickly allows pharmaceutical companies to test more drugs, and finding better optima makes manufacturing process cheaper and more environmentally friendly.',
+      "Yoneda Labs provides software to help chemists optimise reactions. When chemists make a drug or a material, we help them figure out the best reaction parameters such as temperature, concentration and catalyst. When Jan was working at chemical labs, he experienced the struggle of spending weeks guessing reaction conditions. We then started experimenting with ML to speed up the process. Now, as a team of three friends from the University of Cambridge, we've spent the last month combining our domain expertise in Computer Science, Machine Learning and Chemistry to develop state of the art models for reaction optimisation. Although ML is becoming well established in other fields, current chemical models generalise poorly and require lots of programming experience. We make our models easily accessible to chemists in the lab. Finding the right conditions quickly allows pharmaceutical companies to test more drugs, and finding better optima makes manufacturing process cheaper and more environmentally friendly.",
     tags: '',
     industries: 'B2B',
     batch: 'W24',
@@ -4196,7 +4196,7 @@ const YC_DATA = [
   {
     name: 'Greenboard',
     longDescription:
-      "Greenboard is building a singular, AI-powered platform to handle management of the entirety of financial firms’ compliance programs, and eventually all back office processes. Today, financial institutions use Greenboard to detect risk using AI and to rip out and replace the bad legacy back office tooling they have wanted to get rid of for years.   Greenboard's mission is to enable financial institutions to operate their back office teams at a higher standard, with half of the headcount. We’re starting with compliance",
+      "Greenboard is building a singular, AI-powered platform to handle management of the entirety of financial firms' compliance programs, and eventually all back office processes. Today, financial institutions use Greenboard to detect risk using AI and to rip out and replace the bad legacy back office tooling they have wanted to get rid of for years.   Greenboard's mission is to enable financial institutions to operate their back office teams at a higher standard, with half of the headcount. We're starting with compliance",
     tags: '',
     industries: 'Fintech',
     batch: 'W24',
@@ -4252,7 +4252,7 @@ const YC_DATA = [
   {
     name: 'Arini',
     longDescription:
-      'Arini is the AI receptionist for dentists that answers phone calls, and schedules appointments. Most dental appointments are scheduled over the phone by overworked receptionists who put patients on hold and miss a third of incoming calls. This costs clinics a 15% loss in revenue. Private equity investment fueled large dental groups to acquire thousands of clinics in the past few years. We are selling to these groups, since their clinics have a standardized tech stack. They’re also growing really fast - in just two years they will make up 40% of the US dental market. Dental is just the beginning.',
+      "Arini is the AI receptionist for dentists that answers phone calls, and schedules appointments. Most dental appointments are scheduled over the phone by overworked receptionists who put patients on hold and miss a third of incoming calls. This costs clinics a 15% loss in revenue. Private equity investment fueled large dental groups to acquire thousands of clinics in the past few years. We are selling to these groups, since their clinics have a standardized tech stack. They're also growing really fast - in just two years they will make up 40% of the US dental market. Dental is just the beginning.",
     tags: 'Artificial Intelligence, Health Tech, Dental, Call Center, AI',
     industries: 'Healthcare, Healthcare IT',
     batch: 'W24',
@@ -4388,7 +4388,7 @@ const YC_DATA = [
   {
     name: 'Argon AI, Inc.',
     longDescription:
-      'Argon AI is a platform where biopharma and life sciences professionals can execute complex and data driven workflows using natural language. We help professionals get thorough answers to questions about clinical trials, existing treatments, healthcare landscape, and the competitive market in minutes rather than months.  Prior to starting Argon, Samy was responsible for Flatiron Health’s (Roche) first data analytics project which eventually led to the start of the Flatiron Services business unit. There, he saw first-hand the heavily manual process that biopharma companies struggle through to get the insights they need to drive forward their drug development programs. He also helped close over $6M+ in ARR and is an expert in enterprise pharma sales. Cyrus previously led engineering teams and built 0 to 1 across pre-seed and unicorn startups, managed mission-critical trade generation systems at Bridgewater, and held AI advisory roles at various startups. Cyrus has a duel degree in EE and CS from USC. Breakthroughs in AI present an opportunity to reinvent biopharma and life science workflows to reduce the time and cost of bringing treatments to patients where delays in bringing a drug to market can cost a pharma company $3M / day.',
+      "Argon AI is a platform where biopharma and life sciences professionals can execute complex and data driven workflows using natural language. We help professionals get thorough answers to questions about clinical trials, existing treatments, healthcare landscape, and the competitive market in minutes rather than months.  Prior to starting Argon, Samy was responsible for Flatiron Health's (Roche) first data analytics project which eventually led to the start of the Flatiron Services business unit. There, he saw first-hand the heavily manual process that biopharma companies struggle through to get the insights they need to drive forward their drug development programs. He also helped close over $6M+ in ARR and is an expert in enterprise pharma sales. Cyrus previously led engineering teams and built 0 to 1 across pre-seed and unicorn startups, managed mission-critical trade generation systems at Bridgewater, and held AI advisory roles at various startups. Cyrus has a duel degree in EE and CS from USC. Breakthroughs in AI present an opportunity to reinvent biopharma and life science workflows to reduce the time and cost of bringing treatments to patients where delays in bringing a drug to market can cost a pharma company $3M / day.",
     tags: '',
     industries: 'Healthcare',
     batch: 'W24',
@@ -4450,7 +4450,7 @@ const YC_DATA = [
   {
     name: 'Adagy Robotics',
     longDescription:
-      'Adagy is a remote intervention service that rescues robots when they fail. For example, when a tractor robot gets lost in a field, instead of calling the farmer for help, it can now call Adagy, whose operators will take control of the robot and remotely drive it back to safety.  We’re starting with trained human operators assisted by generative AI, and as we collect more data, our model will learn to handle more of the edge cases.  We want to see a world with more robots, so we’re addressing the biggest problem in robot deployment: reliability. ',
+      "Adagy is a remote intervention service that rescues robots when they fail. For example, when a tractor robot gets lost in a field, instead of calling the farmer for help, it can now call Adagy, whose operators will take control of the robot and remotely drive it back to safety.  We're starting with trained human operators assisted by generative AI, and as we collect more data, our model will learn to handle more of the edge cases.  We want to see a world with more robots, so we're addressing the biggest problem in robot deployment: reliability. ",
     tags: '',
     industries: 'Industrials, Manufacturing and Robotics',
     batch: 'W24',
@@ -4497,7 +4497,7 @@ const YC_DATA = [
   {
     name: 'Precip',
     longDescription:
-      'Precip uses AI to make hyperlocal weather observations. We’re started with the most important dimension of weather: rain. For example, one of our customers uses Precip daily to make sure their heavy trucks won’t get stuck in muddy fields. Our highly rated mobile app is the best way to see rain and snow totals anywhere.  ',
+      "Precip uses AI to make hyperlocal weather observations. We're started with the most important dimension of weather: rain. For example, one of our customers uses Precip daily to make sure their heavy trucks won't get stuck in muddy fields. Our highly rated mobile app is the best way to see rain and snow totals anywhere.  ",
     tags: 'Consumer, Climate, API, Agriculture, AI',
     industries: 'B2B',
     batch: 'W24',
@@ -4537,7 +4537,7 @@ const YC_DATA = [
   {
     name: 'ion design',
     longDescription:
-      "ion design is re-imagining how front end works. For early stage companies, ion allows you to describe a UI in text & get react code that’s tailor-made to your business. ion understands your design system and codebase to generate designs that are beautiful and code that’s easy to work with. Once you've scaled and hired a designer, ion offers a pipeline that automatically converts Figma designs into clean React code that's tailor-fitted to your codebase. We re-use your existing components and variables from your codebase in our generations and can automatically generate PRs and merge conflicts from Figma. ",
+      "ion design is re-imagining how front end works. For early stage companies, ion allows you to describe a UI in text & get react code that's tailor-made to your business. ion understands your design system and codebase to generate designs that are beautiful and code that's easy to work with. Once you've scaled and hired a designer, ion offers a pipeline that automatically converts Figma designs into clean React code that's tailor-fitted to your codebase. We re-use your existing components and variables from your codebase in our generations and can automatically generate PRs and merge conflicts from Figma. ",
     tags: 'Artificial Intelligence, Developer Tools, Design Tools, Web Development',
     industries: 'B2B, Engineering, Product and Design',
     batch: 'W24',
@@ -4584,7 +4584,7 @@ const YC_DATA = [
   {
     name: 'ego',
     longDescription:
-      "We’re building the first generative ai-powered simulation engine, where non-technical creators can generate realistic characters powered by LLMs, 3D worlds, and interaction code/scripts with just prompts. The future of user-generated simulations, games, and interactive media will be powered by our engine. We used our engine to build TownWorld - a 3D interactive Twitch live stream of the Stanford generative agents paper (https://www.twitch.tv/townworld). To the best of our knowledge, it's the first ever AI 3D simulation of a small town in real time YC Launch - https://www.ycombinator.com/launches/KeD-ego-an-ai-native-3d-simulation-engine-getting-us-closer-to-the-matrix-one-pixel-at-a-time Demo video: https://docsend.com/view/mzf6i7kiwkkgg669 AI 3D TownWorld video: https://docsend.com/view/ig6t2shuz26z7wha",
+      "We're building the first generative ai-powered simulation engine, where non-technical creators can generate realistic characters powered by LLMs, 3D worlds, and interaction code/scripts with just prompts. The future of user-generated simulations, games, and interactive media will be powered by our engine. We used our engine to build TownWorld - a 3D interactive Twitch live stream of the Stanford generative agents paper (https://www.twitch.tv/townworld). To the best of our knowledge, it's the first ever AI 3D simulation of a small town in real time YC Launch - https://www.ycombinator.com/launches/KeD-ego-an-ai-native-3d-simulation-engine-getting-us-closer-to-the-matrix-one-pixel-at-a-time Demo video: https://docsend.com/view/mzf6i7kiwkkgg669 AI 3D TownWorld video: https://docsend.com/view/ig6t2shuz26z7wha",
     tags: 'Artificial Intelligence, Generative AI, Consumer, Gaming, AI',
     industries: 'Consumer',
     batch: 'W24',
@@ -4608,7 +4608,7 @@ const YC_DATA = [
   {
     name: 'RadMate AI',
     longDescription:
-      'We’re building the AI copilot for radiologists, powered by a foundational model for medical imaging. RadMate AI will read radiology images and generate full reports for radiologists to review and submit. Mohamed and Adam are technical co-founders who met while studying Computer Science at Cornell University. Before starting RadMate AI to solve the problems his dad faced as a radiologist, Adam worked at Palantir on the initial launch of Palantir’s Al Platform. Mohamed has experience at AWS, where his goal was to help enterprises innovate on the cloud, and PathAl, where he worked on their image viewer platform to improve the workflow of pathologists. ',
+      "We're building the AI copilot for radiologists, powered by a foundational model for medical imaging. RadMate AI will read radiology images and generate full reports for radiologists to review and submit. Mohamed and Adam are technical co-founders who met while studying Computer Science at Cornell University. Before starting RadMate AI to solve the problems his dad faced as a radiologist, Adam worked at Palantir on the initial launch of Palantir's Al Platform. Mohamed has experience at AWS, where his goal was to help enterprises innovate on the cloud, and PathAl, where he worked on their image viewer platform to improve the workflow of pathologists. ",
     tags: 'Artificial Intelligence, SaaS, Digital Health, Enterprise Software, AI Assistant',
     industries: 'Healthcare',
     batch: 'W24',
@@ -4640,7 +4640,7 @@ const YC_DATA = [
   {
     name: 'Navier AI',
     longDescription:
-      "Navier AI is making CFD 1000x faster with their ML-based solver. Physics simulations, such as Computational Fluid Dynamics (CFD), are essential across many industries ranging from the design and analysis of aircraft, to weather prediction, to the development of medical devices. Today’s simulation tools use explicit numerical solvers for physical equations, such as the Naiver-Stokes equations. These solvers are complex to setup and can take ages to produce results. Navier AI is building 1000x faster simulations using physics-ML solvers. Navier AI's fast CFD platform will enable engineers to quickly explore design spaces and perform analysis-in-the-loop design optimization. They are lowering the barrier to entry for aerospace and mechanical engineers to create high performance designs.",
+      "Navier AI is making CFD 1000x faster with their ML-based solver. Physics simulations, such as Computational Fluid Dynamics (CFD), are essential across many industries ranging from the design and analysis of aircraft, to weather prediction, to the development of medical devices. Today's simulation tools use explicit numerical solvers for physical equations, such as the Naiver-Stokes equations. These solvers are complex to setup and can take ages to produce results. Navier AI is building 1000x faster simulations using physics-ML solvers. Navier AI's fast CFD platform will enable engineers to quickly explore design spaces and perform analysis-in-the-loop design optimization. They are lowering the barrier to entry for aerospace and mechanical engineers to create high performance designs.",
     tags: '',
     industries: 'Industrials, Aviation and Space',
     batch: 'W24',
@@ -4704,7 +4704,7 @@ const YC_DATA = [
   {
     name: 'Yenmo',
     longDescription:
-      'Yenmo offers a better way to access cash for India’s 65 million investors who either resort to personal loans at over 18% interest or have to liquidate their investments when in need of money. With Yenmo, they can pledge their investments digitally and instantly get a loan at a fixed 10.5% interest rate. Our Insight - In India, over 30% of personal loan borrowers have active investments and are paying double the interest rate they qualify for with us.',
+      "Yenmo offers a better way to access cash for India's 65 million investors who either resort to personal loans at over 18% interest or have to liquidate their investments when in need of money. With Yenmo, they can pledge their investments digitally and instantly get a loan at a fixed 10.5% interest rate. Our Insight - In India, over 30% of personal loan borrowers have active investments and are paying double the interest rate they qualify for with us.",
     tags: 'Fintech, Lending, Consumer Finance',
     industries: 'Fintech, Credit and Lending',
     batch: 'W24',

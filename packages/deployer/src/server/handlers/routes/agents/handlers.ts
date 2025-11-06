@@ -1,7 +1,8 @@
-import type { Mastra, ProviderConfig } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import { getProviderConfig, PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { ProviderConfig } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import {
@@ -25,7 +26,6 @@ import type { Context } from 'hono';
 
 import { stream } from 'hono/streaming';
 import { handleError } from '../../error';
-import { AllowedProviderKeys } from '../../utils';
 
 export const sharedBodyOptions: any = {
   messages: {
@@ -98,7 +98,7 @@ export const vNextBodyOptions: any = {
 export async function listAgentsHandler(c: Context) {
   const serializedAgents = await getOriginalListAgentsHandler({
     mastra: c.get('mastra'),
-    runtimeContext: c.get('runtimeContext'),
+    requestContext: c.get('requestContext'),
   });
 
   return c.json(serializedAgents);
@@ -137,13 +137,13 @@ export async function getProvidersHandler(c: Context) {
 export async function getAgentByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const isPlayground = c.req.header('x-mastra-dev-playground') === 'true';
 
   const result = await getOriginalAgentByIdHandler({
     mastra,
     agentId,
-    runtimeContext,
+    requestContext,
     isPlayground,
   });
 
@@ -154,13 +154,13 @@ export async function generateLegacyHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateLegacyHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -175,13 +175,13 @@ export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -196,13 +196,13 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateLegacyHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -216,7 +216,7 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
   const mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -225,7 +225,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
     streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -277,7 +277,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
 export async function approveToolCallHandler(c: Context): Promise<Response | undefined> {
   const mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -285,7 +285,7 @@ export async function approveToolCallHandler(c: Context): Promise<Response | und
   try {
     streamResponse = await getOriginalApproveToolCallHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       agentId,
       body,
       abortSignal: c.req.raw.signal,
@@ -345,7 +345,7 @@ export async function approveToolCallHandler(c: Context): Promise<Response | und
 export async function declineToolCallHandler(c: Context): Promise<Response | undefined> {
   const mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -353,7 +353,7 @@ export async function declineToolCallHandler(c: Context): Promise<Response | und
   try {
     streamResponse = await getOriginalDeclineToolCallHandler({
       mastra,
-      runtimeContext,
+      requestContext,
       agentId,
       body,
       abortSignal: c.req.raw.signal,
@@ -413,7 +413,7 @@ export async function declineToolCallHandler(c: Context): Promise<Response | und
 export async function streamNetworkHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
-  const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const requestContext: RequestContext = c.get('requestContext');
   const body = await c.req.json();
   const logger = mastra.getLogger();
 
@@ -421,7 +421,7 @@ export async function streamNetworkHandler(c: Context) {
   const agent = await getOriginalGetAgentFromSystem({ mastra, agentId });
 
   // Check if agent has memory configured before starting the stream
-  const memory = await agent.getMemory({ runtimeContext });
+  const memory = await agent.getMemory({ requestContext });
 
   if (!memory) {
     return handleError(
@@ -443,7 +443,7 @@ export async function streamNetworkHandler(c: Context) {
     streamResponse = await getOriginalStreamNetworkHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       // abortSignal: c.req.raw.signal,
     });
@@ -503,13 +503,13 @@ export async function streamUIMessageHandler(c: Context): Promise<Response | und
   try {
     const mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
-    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const requestContext: RequestContext = c.get('requestContext');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamUIMessageHandler({
       mastra,
       agentId,
-      runtimeContext,
+      requestContext,
       body,
       abortSignal: c.req.raw.signal,
     });
@@ -595,31 +595,6 @@ export async function deprecatedStreamVNextHandler(c: Context) {
     },
     410, // 410 Gone status code for deprecated endpoints
   );
-}
-
-export async function getModelProvidersHandler(c: Context) {
-  const isPlayground = c.get('playground') === true;
-  if (!isPlayground) {
-    return c.json({ error: 'This API is only available in the playground environment' }, 403);
-  }
-  const envVars = process.env;
-  const providers = Object.entries(AllowedProviderKeys);
-  const envKeys = Object.keys(envVars);
-  const availableProviders = providers.filter(([_, value]) => envKeys.includes(value) && !!envVars[value]);
-
-  const providerInfo = availableProviders.map(([key, envVar]) => {
-    const providerConfig = getProviderConfig(key);
-    return {
-      id: key,
-      name: key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, ' '),
-      envVar,
-      hasApiKey: !!envVars[envVar],
-      docUrl: providerConfig?.docUrl || null,
-      models: providerConfig?.models || [],
-    };
-  });
-
-  return c.json(providerInfo);
 }
 
 export async function updateAgentModelInModelListHandler(c: Context) {

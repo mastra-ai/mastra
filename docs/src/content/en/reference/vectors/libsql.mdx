@@ -21,6 +21,7 @@ import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
 const store = new LibSQLVector({
+  id: 'libsql-vector',
   connectionUrl: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,

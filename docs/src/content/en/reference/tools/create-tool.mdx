@@ -22,9 +22,8 @@ export const tool = createTool({
   outputSchema: z.object({
     output: z.string(),
   }),
-  execute: async ({ context }) => {
-    const { input } = context;
-    const reversed = input.split("").reverse().join("");
+  execute: async (inputData) => {
+    const reversed = inputData.input.split("").reverse().join("");
 
     return {
       output: reversed,
@@ -68,47 +67,65 @@ export const tool = createTool({
       name: "execute",
       type: "function",
       description:
-        "The function that contains the tool's logic. It receives an object with `context` (the parsed input based on `inputSchema`), `runtimeContext`, `tracingContext`, and an object containing `abortSignal`.",
+        "The function that contains the tool's logic. It receives two parameters: the validated input data (first parameter) and an optional execution context object (second parameter) containing `requestContext`, `tracingContext`, `abortSignal`, and other execution metadata.",
       isOptional: false,
       properties: [
         {
           parameters: [
             {
-              name: "context",
+              name: "input",
               type: "z.infer<TInput>",
-              description: "The parsed input based on inputSchema",
+              description: "The validated input data based on inputSchema",
             },
           ],
         },
         {
           parameters: [
             {
-              name: "runtimeContext",
-              type: "RuntimeContext",
+              name: "context",
+              type: "ToolExecutionContext",
               isOptional: true,
-              description:
-                "Runtime context for accessing shared state and dependencies",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "tracingContext",
-              type: "TracingContext",
-              isOptional: true,
-              description:
-                "AI tracing context for creating child spans and adding metadata. Automatically injected when the tool is called within a traced operation.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "abortSignal",
-              type: "AbortSignal",
-              isOptional: true,
-              description: "Signal for aborting the tool execution",
+              description: "Optional execution context containing metadata",
+              properties: [
+                {
+                  name: "requestContext",
+                  type: "RequestContext",
+                  isOptional: true,
+                  description:
+                    "Request Context for accessing shared state and dependencies",
+                },
+                {
+                  name: "tracingContext",
+                  type: "TracingContext",
+                  isOptional: true,
+                  description:
+                    "Tracing context for creating child spans and adding metadata",
+                },
+                {
+                  name: "abortSignal",
+                  type: "AbortSignal",
+                  isOptional: true,
+                  description: "Signal for aborting the tool execution",
+                },
+                {
+                  name: "agent",
+                  type: "AgentToolExecutionContext",
+                  isOptional: true,
+                  description: "Agent-specific context (messages, suspend, resumeData, etc.)",
+                },
+                {
+                  name: "workflow",
+                  type: "WorkflowToolExecutionContext",
+                  isOptional: true,
+                  description: "Workflow-specific context (state, setState, suspend, etc.)",
+                },
+                {
+                  name: "mcp",
+                  type: "MCPToolExecutionContext",
+                  isOptional: true,
+                  description: "MCP-specific context (elicitation, etc.)",
+                },
+              ],
             },
           ],
         },
@@ -136,5 +153,5 @@ The `createTool()` function returns a `Tool` object.
 
 - [Tools Overview](/docs/tools-mcp/overview)
 - [Using Tools with Agents](/docs/agents/using-tools)
-- [Tool Runtime Context](/docs/tools-mcp/overview#using-runtimecontext)
+- [Tool Request Context](/docs/tools-mcp/overview#using-requestcontext)
 - [Advanced Tool Usage](/docs/tools-mcp/advanced-usage)

@@ -7,4 +7,8 @@ export { networkRoute } from './network-route';
 export type { NetworkRouteOptions } from './network-route';
 export type { NetworkDataPart } from './transformers';
 export type { AgentDataPart } from './transformers';
+
+export { toAISdkV5Stream as toAISdkStream } from './convert-streams';
+
+// Deprecated exports
 export { toAISdkFormat } from './to-ai-sdk-format';

@@ -1,4 +1,5 @@
 import type { StepResult, WorkflowRunState } from '../../../workflows';
+import { normalizePerPage } from '../../base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../constants';
 import type { StorageWorkflowRun, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import type { StoreOperations } from '../operations';
@@ -21,13 +22,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId,
     stepId,
     result,
-    runtimeContext,
+    requestContext,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
+    requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     this.logger.debug(`MockStore: updateWorkflowResults called for ${workflowName} ${runId} ${stepId}`, result);
     const run = this.collection.get(`${workflowName}-${runId}`);
@@ -64,7 +65,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     }
 
     snapshot.context[stepId] = result;
-    snapshot.runtimeContext = { ...snapshot.runtimeContext, ...runtimeContext };
+    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
     this.collection.set(`${workflowName}-${runId}`, {
       ...run,
@@ -174,21 +175,18 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return d ? JSON.parse(JSON.stringify(d.snapshot)) : null;
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    if (page !== undefined && page < 0) {
+      throw new Error('page must be >= 0');
+    }
+
     let runs = Array.from(this.collection.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
@@ -211,9 +209,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     // Apply pagination
-    if (limit !== undefined && offset !== undefined) {
+    if (perPage !== undefined && page !== undefined) {
+      // Use MAX_SAFE_INTEGER as default to maintain "no pagination" behavior when undefined
+      const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+      const offset = page * normalizedPerPage;
       const start = offset;
-      const end = start + limit;
+      const end = start + normalizedPerPage;
       runs = runs.slice(start, end);
     }
 
@@ -255,9 +256,5 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
 
     return parsedRun as WorkflowRun;
-  }
-
-  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
-    return this.getWorkflowRuns(args);
   }
 }

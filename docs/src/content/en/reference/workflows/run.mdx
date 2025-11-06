@@ -10,7 +10,7 @@ The `Run` class represents a workflow execution instance, providing methods to s
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: { value: "initial data" },
@@ -49,12 +49,6 @@ if (result.status === "suspended") {
       name: "streamVNext",
       type: "(options?: StreamOptions) => MastraWorkflowStream",
       description: "Enables real-time streaming with enhanced features",
-      required: true,
-    },
-    {
-      name: "watch",
-      type: "(callback: WatchCallback, type?: WatchType) => UnwatchFunction",
-      description: "Monitors workflow execution with callback-based events",
       required: true,
     },
     {
@@ -97,5 +91,4 @@ A workflow run's `status` indicates its current execution state. The possible va
 
 - [Run.start()](./run-methods/start)
 - [Run.resume()](./run-methods/resume)
-- [Run.watch()](./run-methods/watch)
 - [Run.cancel()](./run-methods/cancel)

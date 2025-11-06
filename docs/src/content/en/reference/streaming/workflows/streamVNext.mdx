@@ -14,7 +14,7 @@ The `.streamVNext()` method enables real-time streaming of responses from a work
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -34,9 +34,9 @@ const stream = run.streamVNext({
       isOptional: true,
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
-      description: "Runtime context data to use during workflow execution",
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context data to use during workflow execution",
       isOptional: true,
     },
     {
@@ -44,16 +44,16 @@ const stream = run.streamVNext({
       type: "TracingContext",
       isOptional: true,
       description:
-        "AI tracing context for creating child spans and adding metadata.",
+        "Tracing context for creating child spans and adding metadata.",
       properties: [
         {
           parameters: [
             {
               name: "currentSpan",
-              type: "AISpan",
+              type: "Span",
               isOptional: true,
               description:
-                "Current AI span for creating child spans and adding metadata.",
+                "Current span for creating child spans and adding metadata.",
             },
           ],
         },
@@ -63,7 +63,7 @@ const stream = run.streamVNext({
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for Tracing configuration.",
       properties: [
         {
           parameters: [
@@ -117,7 +117,7 @@ const stream = run.streamVNext({
       type: "string",
       isOptional: true,
       description:
-        "The trace ID associated with this execution when AI tracing is enabled.",
+        "The trace ID associated with this execution when Tracing is enabled.",
     },
   ]}
 />
@@ -125,7 +125,7 @@ const stream = run.streamVNext({
 ## Extended usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -149,5 +149,5 @@ The stream emits various event types during workflow execution. Each event has a
 ## Related
 
 - [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflow.createRun()](/reference/workflows/workflow-methods/create-run)
 - [Run.resumeStreamVNext()](./resumeStreamVNext)

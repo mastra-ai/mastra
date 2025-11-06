@@ -6,20 +6,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export const useAgents = () => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['agents', JSON.stringify(runtimeContext)],
-    queryFn: () => client.listAgents(runtimeContext),
-  });
-};
-
-export const useModelProviders = () => {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: ['model-providers'],
-    queryFn: () => client.getModelProviders(),
+    queryKey: ['agents', JSON.stringify(requestContext)],
+    queryFn: () => client.listAgents(requestContext),
   });
 };
 

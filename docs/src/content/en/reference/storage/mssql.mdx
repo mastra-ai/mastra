@@ -19,6 +19,7 @@ npm install @mastra/mssql@latest
 import { MSSQLStore } from "@mastra/mssql";
 
 const storage = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString: process.env.DATABASE_URL,
 });
 ```
@@ -31,7 +32,7 @@ const storage = new MSSQLStore({
       name: "connectionString",
       type: "string",
       description:
-        "MSSQL connection string (e.g., mssql://user:pass@host:1433/dbname)",
+        "MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)",
       isOptional: false,
     },
     {
@@ -53,17 +54,20 @@ import { MSSQLStore } from "@mastra/mssql";
 
 // Using a connection string only
 const store1 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
+  id: 'mssql-storage-1',
+  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new MSSQLStore({
-  connectionString: "mssql://user:password@localhost:1433/mydb",
+  id: 'mssql-storage-2',
+  connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
   schemaName: "custom_schema", // optional
 });
 
 // Using individual connection parameters
 const store4 = new MSSQLStore({
+  id: 'mssql-storage-3',
   server: "localhost",
   port: 1433,
   database: "mydb",
@@ -73,6 +77,7 @@ const store4 = new MSSQLStore({
 
 // Individual parameters with schemaName
 const store5 = new MSSQLStore({
+  id: 'mssql-storage-4',
   server: "localhost",
   port: 1433,
   database: "mydb",

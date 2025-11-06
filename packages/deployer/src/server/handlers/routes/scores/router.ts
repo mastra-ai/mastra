@@ -5,9 +5,9 @@ import type { BodyLimitOptions } from '../../../types';
 import {
   listScorersHandler,
   getScorerHandler,
-  getScoresByRunIdHandler,
-  getScoresByScorerIdHandler,
-  getScoresByEntityIdHandler,
+  listScoresByRunIdHandler,
+  listScoresByScorerIdHandler,
+  listScoresByEntityIdHandler,
   saveScoreHandler,
 } from './handlers';
 
@@ -76,7 +76,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getScoresByRunIdHandler,
+    listScoresByRunIdHandler,
   );
 
   router.get(
@@ -112,7 +112,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getScoresByScorerIdHandler,
+    listScoresByScorerIdHandler,
   );
 
   router.get(
@@ -156,7 +156,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getScoresByEntityIdHandler,
+    listScoresByEntityIdHandler,
   );
 
   router.post(
@@ -183,7 +183,7 @@ export function scoresRouter(bodyLimitOptions: BodyLimitOptions) {
                 entity: { type: 'object' },
                 metadata: { type: 'object' },
                 additionalLLMContext: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                requestContext: { type: 'object' },
                 resourceId: { type: 'string' },
                 threadId: { type: 'string' },
                 traceId: { type: 'string' },

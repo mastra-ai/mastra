@@ -22,12 +22,13 @@ npm install @mastra/core @mastra/memory @mastra/libsql
 Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
 
 ```typescript {6-8} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -40,6 +41,7 @@ import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory(),
 });
@@ -69,7 +71,7 @@ To persist and recall information between conversations, memory requires a stora
 
 Supported options include [LibSQL](/docs/memory/storage/memory-with-libsql), [MongoDB](/examples/memory/memory-with-mongodb), [Postgres](/docs/memory/storage/memory-with-pg), and [Upstash](/docs/memory/storage/memory-with-upstash)
 
-We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with the playground.
+We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with Studio.
 
 ## Dedicated storage
 
@@ -85,10 +87,12 @@ import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const testAgent = new Agent({
+  id: "test-agent",
   // ...
   memory: new Memory({
     // ...
     storage: new LibSQLStore({
+      id: 'test-agent-storage',
       url: "file:agent-memory.db",
     }),
     // ...
@@ -102,7 +106,7 @@ If tracing is enabled in your Mastra deployment and memory is configured either 
 
 This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
 
-For more details on enabling and configuring tracing, see [AI Tracing](../observability/ai-tracing/overview).
+For more details on enabling and configuring tracing, see [Tracing](../observability/tracing/overview).
 
 ## Local development with LibSQL
 

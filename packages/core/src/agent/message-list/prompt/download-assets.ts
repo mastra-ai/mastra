@@ -1,6 +1,6 @@
 import { isUrlSupported } from '@ai-sdk/provider-utils-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import { fetchWithRetry } from '../../../utils';
+import { fetchWithRetry } from '../../../utils/fetchWithRetry';
 import type { AIV5Type } from '../types';
 
 export const downloadFromUrl = async ({ url, downloadRetries }: { url: URL; downloadRetries: number }) => {
@@ -87,7 +87,13 @@ export async function downloadAssetsFromMessages({
   const downloadedFiles = await pMap(
     filesToDownload,
     async fileItem => {
-      return downloadFromUrl({ url: fileItem.url, downloadRetries });
+      if (!fileItem.isUrlSupportedByModel) {
+        return null;
+      }
+      return {
+        url: fileItem.url.toString(),
+        ...(await downloadFromUrl({ url: fileItem.url, downloadRetries })),
+      };
     },
     {
       concurrency: downloadConcurrency,
@@ -99,11 +105,12 @@ export async function downloadAssetsFromMessages({
       (
         downloadedFile,
       ): downloadedFile is {
+        url: string;
         mediaType: string | undefined;
         data: Uint8Array<ArrayBuffer>;
       } => downloadedFile?.data != null,
     )
-    .map(({ data, mediaType }, index) => [filesToDownload?.[index]?.url.toString(), { data, mediaType }]);
+    .map(({ url, data, mediaType }) => [url, { data, mediaType }]);
 
   return Object.fromEntries(downloadFileList);
 }

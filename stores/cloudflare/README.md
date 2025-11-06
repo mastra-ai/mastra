@@ -39,12 +39,13 @@ const store = new CloudflareStore({
 
 // Save a thread
 await store.saveThread({
-  id: 'thread-123',
-  resourceId: 'resource-456',
-  title: 'My Thread',
-  metadata: { key: 'value' },
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
 });
 
 // Add messages
@@ -61,7 +62,7 @@ await store.saveMessages({
 });
 
 // Query messages
-const messages = await store.getMessages({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
@@ -94,25 +95,47 @@ const messages = await store.getMessages({ threadId: 'thread-123' });
 
 ### Thread Operations
 
-- `saveThread(thread)`: Create or update a thread
+- `saveThread({ thread })`: Create or update a thread
 - `getThreadById({ threadId })`: Get a thread by ID
-- `getThreadsByResourceId({ resourceId })`: Fetch all threads associated with a resource.
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
 - `updateThread({ id, title, metadata })`: Update thread title and metadata
 - `deleteThread({ threadId })`: Delete a thread and its messages
 
 ### Message Operations
 
 - `saveMessages({ messages })`: Save multiple messages
-- `getMessages({ threadId, selectBy? })`: Get messages for a thread with optional filtering (last N, includes, etc)
+- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
+- `listMessagesById({ messageIds })`: Get specific messages by their IDs
+- `updateMessages({ messages })`: Update existing messages
+
+### Resource Operations
+
+- `getResourceById({ resourceId })`: Get a resource by ID
+- `saveResource({ resource })`: Create or save a resource
+- `updateResource({ resourceId, workingMemory })`: Update resource working memory
 
 ### Workflow Operations
 
-- `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state for a given workflow/run.
-- `loadWorkflowSnapshot({ workflowName, runId })`: Load ed workflow state.
+- `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state
+- `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
+- `listWorkflowRuns({ workflowName, pagination })`: List workflow runs with pagination
+- `getWorkflowRunById({ workflowName, runId })`: Get a specific workflow run
+- `updateWorkflowState({ workflowName, runId, state })`: Update workflow state
+- `updateWorkflowResults({ workflowName, runId, results })`: Update workflow results
 
-### Trace Operations
+### Evaluation/Scoring Operations
 
-- `getTraces({ name?, scope?, page, perPage, attributes? })`: Query trace records with optional filters and pagination.
+- `getScoreById({ id })`: Get a score by ID
+- `saveScore(score)`: Save an evaluation score
+- `listScoresByScorerId({ scorerId, pagination })`: List scores by scorer with pagination
+- `listScoresByRunId({ runId, pagination })`: List scores by run with pagination
+- `listScoresByEntityId({ entityId, entityType, pagination })`: List scores by entity with pagination
+- `listScoresBySpan({ traceId, spanId, pagination })`: List scores by span with pagination
+
+### Operations Not Currently Supported
+
+- `deleteMessages(messageIds)`: Message deletion is not currently supported
+- AI Observability (traces/spans): Not currently supported
 
 ### Utility
 

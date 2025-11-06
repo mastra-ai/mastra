@@ -13,7 +13,6 @@ import {
   resumeAsyncAgentBuilderActionHandler,
   resumeStreamAgentBuilderActionHandler,
   startAgentBuilderActionRunHandler,
-  watchAgentBuilderActionHandler,
   startAsyncAgentBuilderActionHandler,
   streamAgentBuilderActionHandler,
   streamLegacyAgentBuilderActionHandler,
@@ -22,7 +21,6 @@ import {
   observeStreamAgentBuilderActionHandler,
   observeStreamVNextAgentBuilderActionHandler,
   cancelAgentBuilderActionRunHandler,
-  sendAgentBuilderActionRunEventHandler,
 } from './handlers';
 
 export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
@@ -187,9 +185,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -242,9 +240,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -296,9 +294,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -347,9 +345,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -437,9 +435,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -558,9 +556,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 closeOnSuspend: {
                   type: 'boolean',
@@ -652,9 +650,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -711,9 +709,9 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: {
+                requestContext: {
                   type: 'object',
-                  description: 'Runtime context for the agent builder action execution',
+                  description: 'Request Context for the agent builder action execution',
                 },
                 tracingOptions: {
                   type: 'object',
@@ -743,40 +741,6 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
     startAgentBuilderActionRunHandler,
   );
 
-  router.get(
-    '/:actionId/watch',
-    describeRoute({
-      description: 'Watch agent builder action transitions in real-time',
-      parameters: [
-        {
-          name: 'actionId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'eventType',
-          in: 'query',
-          required: false,
-          schema: { type: 'string', enum: ['watch', 'watch-v2'] },
-        },
-      ],
-      tags: ['agent-builder'],
-      responses: {
-        200: {
-          description: 'agent builder action transitions in real-time',
-        },
-      },
-    }),
-    watchAgentBuilderActionHandler,
-  );
-
   router.post(
     '/:actionId/runs/:runId/cancel',
     describeRoute({
@@ -803,42 +767,6 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     cancelAgentBuilderActionRunHandler,
-  );
-
-  router.post(
-    '/:actionId/runs/:runId/send-event',
-    describeRoute({
-      description: 'Send an event to an agent builder action run',
-      parameters: [
-        {
-          name: 'actionId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: { type: 'object', properties: { event: { type: 'string' }, data: { type: 'object' } } },
-          },
-        },
-      },
-      tags: ['agent-builder'],
-      responses: {
-        200: {
-          description: 'agent builder action run event sent',
-        },
-      },
-    }),
-    sendAgentBuilderActionRunEventHandler,
   );
 
   return router;

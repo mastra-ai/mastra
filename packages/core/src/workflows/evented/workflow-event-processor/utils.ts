@@ -1,5 +1,5 @@
-import type { Workflow } from '../..';
-import type { Mastra, Step, StepFlowEntry } from '../../..';
+import type { Step, StepFlowEntry, Workflow } from '../..';
+import type { Mastra } from '../../../mastra';
 import { EventedWorkflow } from '../workflow';
 import type { ParentWorkflow } from '.';
 
@@ -43,7 +43,7 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
     return parentStep.step;
   }
 
-  if (!(parentStep?.type === 'step' || parentStep?.type === 'loop' || parentStep?.type === 'waitForEvent')) {
+  if (!(parentStep?.type === 'step' || parentStep?.type === 'loop')) {
     return null;
   }
 
@@ -55,5 +55,5 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
 }
 
 export function isExecutableStep(step: StepFlowEntry<any>) {
-  return step.type === 'step' || step.type === 'loop' || step.type === 'waitForEvent' || step.type === 'foreach';
+  return step.type === 'step' || step.type === 'loop' || step.type === 'foreach';
 }

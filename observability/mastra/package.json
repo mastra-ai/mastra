@@ -1,7 +1,7 @@
 {
   "name": "@mastra/observability",
   "version": "0.0.2",
-  "description": "Core observability package for Mastra - includes AI tracing and scoring features",
+  "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,8 +30,9 @@
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {},
   "devDependencies": {
+    "ai": "^4.3.19",
+    "ai-v5": "npm:ai@5.0.76",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
@@ -42,8 +43,11 @@
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
   },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {
@@ -53,5 +57,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

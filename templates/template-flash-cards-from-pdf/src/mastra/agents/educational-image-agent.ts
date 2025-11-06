@@ -7,11 +7,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'educational-image-agent-storage',
     url: 'file:../mastra.db',
   }),
 });
 
 export const educationalImageAgent = new Agent({
+  id: 'educational-image-agent',
   name: 'Educational Image Creator',
   description:
     'An AI agent specialized in generating visual learning aids and educational images for flash cards using DALL-E 3',

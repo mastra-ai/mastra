@@ -1,16 +1,22 @@
 ---
-title: "Reference: Agent.getDefaultGenerateOptions() | Agents | Mastra Docs"
-description: "Documentation for the `Agent.getDefaultGenerateOptions()` method in Mastra agents, which retrieves the default options used for generate calls."
+title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls."
 ---
 
-# Agent.getDefaultGenerateOptions()
+# Agent.getDefaultGenerateOptionsLegacy()
 
-Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptions()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generate()`calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+:::warning
+
+**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.getDefaultOptions()`](./getDefaultOptions) method instead.
+
+:::
+
+Agents can be configured with default generation options for controlling model behavior, output formatting and tool and workflow calls. The `.getDefaultGenerateOptionsLegacy()` method retrieves these defaults, resolving them if they are functions. These options apply to all `generateLegacy()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
 
 ## Usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions();
+await agent.getDefaultGenerateOptionsLegacy();
 ```
 
 ## Parameters
@@ -19,10 +25,10 @@ await agent.getDefaultGenerateOptions();
   content={[
     {
       name: "options",
-      type: "{ runtimeContext?: RuntimeContext }",
+      type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing runtime context.",
+      description: "Optional configuration object containing request context.",
     },
   ]}
 />
@@ -43,8 +49,8 @@ await agent.getDefaultGenerateOptions();
 ## Extended usage example
 
 ```typescript copy
-await agent.getDefaultGenerateOptions({
-  runtimeContext: new RuntimeContext(),
+await agent.getDefaultGenerateOptionsLegacy({
+  requestContext: new RequestContext(),
 });
 ```
 
@@ -53,12 +59,12 @@ await agent.getDefaultGenerateOptions({
 <PropertiesTable
   content={[
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
-      defaultValue: "new RuntimeContext()",
+      defaultValue: "new RequestContext()",
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -66,4 +72,4 @@ await agent.getDefaultGenerateOptions({
 ## Related
 
 - [Agent generation](/docs/agents/overview#generating-responses)
-- [Runtime Context](/docs/server-db/runtime-context)
+- [Request Context](/docs/server-db/request-context)

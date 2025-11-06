@@ -32,12 +32,14 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent",
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
       url: "file:libsql-agent.db",
     }),
     options: {
@@ -67,15 +69,18 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent",
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
       url: "file:libsql-agent.db",
     }),
     vector: new LibSQLVector({
+      id: 'libsql-agent-vector',
       connectionUrl: "file:libsql-agent.db",
     }),
     embedder: fastembed,

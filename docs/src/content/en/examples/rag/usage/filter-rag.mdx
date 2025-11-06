@@ -121,6 +121,7 @@ The agent requires both the vector query tool and a system prompt containing:
 
 ```typescript copy showLineNumbers{43} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   model: openai("gpt-4o-mini"),
   instructions: `
@@ -163,6 +164,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{69} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
