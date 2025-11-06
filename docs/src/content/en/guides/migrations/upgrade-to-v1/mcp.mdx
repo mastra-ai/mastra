@@ -20,6 +20,16 @@ To migrate, replace all calls to `mastra.getMCPServers()` with `mastra.listMCPSe
 + const servers = await mastra.listMCPServers();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mcp-get-mcp-servers .
+```
+
+:::
+
 ### `getTools` to `listTools`
 
 The `mcp.getTools()` method has been renamed to `mcp.listTools()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.

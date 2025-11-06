@@ -75,11 +75,6 @@ const sidebars = {
               label: "Client SDK",
             },
             {
-              id: "migrations/upgrade-to-v1/tracing",
-              type: "doc",
-              label: "Tracing",
-            },
-            {
               id: "migrations/upgrade-to-v1/evals",
               type: "doc",
               label: "Evals",
