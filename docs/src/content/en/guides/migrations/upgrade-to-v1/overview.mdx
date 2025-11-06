@@ -31,6 +31,7 @@ Mastra v1 requires Node.js 22.13.0 or higher. Update your development and produc
 - **[Storage](/guides/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
 - **[Vectors](/guides/migrations/upgrade-to-v1/vectors)** - Vector store methods renamed to list pattern.
 - **[MCP](/guides/migrations/upgrade-to-v1/mcp)** - Tool context reorganized and deprecated client classes removed.
+- **[Tracing](/guides/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
 - **[Evals & Scorers](/guides/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
 - **[CLI](/guides/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
 - **[Client SDKs](/guides/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
@@ -45,6 +46,8 @@ Work through this checklist in order, starting with high-impact changes that aff
 - Update `createTool` tool signatures to `(inputData, context)` format - [Tools](/guides/migrations/upgrade-to-v1/tools)
 - Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/guides/migrations/upgrade-to-v1/mastra)
 - Update pagination from `offset/limit` to `page/perPage` - [Storage](/guides/migrations/upgrade-to-v1/storage)
+- Install `@mastra/observability` and wrap configuration with `new Observability()` - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
+- Migrate from `telemetry:` to `observability:` configuration (if upgrading from 0.x OTEL) - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
 
 ### Medium Impact Changes
 
@@ -55,6 +58,7 @@ Work through this checklist in order, starting with high-impact changes that aff
 - Update vector store calls to use named arguments - [Storage](/guides/migrations/upgrade-to-v1/storage)
 - Remove `format` parameter from agent methods - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
 - Update voice methods to use `agent.voice` namespace - [Agent Class](/guides/migrations/upgrade-to-v1/agent)
+- Rename configuration property `processors` to `spanOutputProcessors` (if using custom processors) - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
 
 ### Low Impact Changes
 
@@ -64,3 +68,4 @@ Work through this checklist in order, starting with high-impact changes that aff
 - Remove deprecated CLI flags - [CLI](/guides/migrations/upgrade-to-v1/cli)
 - Update client SDK types from `Get*` to `List*` - [Client SDKs](/guides/migrations/upgrade-to-v1/client)
 - Replace `runCount` with `retryCount` - [Workflows](/guides/migrations/upgrade-to-v1/workflows)
+- Update custom exporter method `exportEvent` to `exportTracingEvent` (if using custom exporters) - [Tracing](/guides/migrations/upgrade-to-v1/tracing)
