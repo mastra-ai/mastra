@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -17,15 +18,20 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  // Get current version from URL or default to beta
-  const getCurrentVersion = () => {
-    if (typeof window === "undefined") return "beta";
-    const path = window.location.pathname;
-    if (path.includes("/docs/v1")) return "stable";
-    return "beta";
-  };
+  // Initialize to beta to match SSR output and prevent hydration mismatch
+  const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
+    "beta",
+  );
 
-  const currentVersion = getCurrentVersion();
+  // Compute actual version on client after hydration
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes("/docs/v1")) {
+      setCurrentVersion("stable");
+    } else {
+      setCurrentVersion("beta");
+    }
+  }, []);
 
   const onChange = (nextVersion: string) => {
     if (typeof window === "undefined") return;
