@@ -34,16 +34,19 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const snapshot = {
-    context: {
-      input: runExecutionResult?.payload,
-      ...runExecutionResult?.steps,
-    } as any,
-    status: runExecutionResult?.status,
-    result: runExecutionResult?.result,
-    error: runExecutionResult?.error,
-    runId,
-  } as WorkflowRunState;
+  const snapshot =
+    runExecutionResult && runId
+      ? ({
+          context: {
+            input: runExecutionResult?.payload,
+            ...runExecutionResult?.steps,
+          } as any,
+          status: runExecutionResult?.status,
+          result: runExecutionResult?.result,
+          error: runExecutionResult?.error,
+          runId,
+        } as WorkflowRunState)
+      : undefined;
 
   return (
     <WorkflowRunProvider snapshot={snapshot}>
