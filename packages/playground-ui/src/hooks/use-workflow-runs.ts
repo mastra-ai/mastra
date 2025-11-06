@@ -12,3 +12,14 @@ export const useWorkflowRuns = (workflowId: string, { enabled = true }: { enable
     staleTime: 0,
   });
 };
+
+export const useWorkflowRunExecutionResult = (workflowId: string, runId: string) => {
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['workflow-run-execution-result', workflowId, runId],
+    queryFn: () => client.getWorkflow(workflowId).runExecutionResult(runId),
+    enabled: Boolean(workflowId && runId),
+    gcTime: 0,
+    staleTime: 0,
+  });
+};
