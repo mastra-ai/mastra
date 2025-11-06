@@ -35,6 +35,7 @@
   "dependencies": {
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:*",
+    "@mastra/cloud-storage": "workspace:*",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2",
     "pino": "^9.7.0",

@@ -407,6 +407,9 @@ importers:
 
   deployers/cloud:
     dependencies:
+      '@mastra/cloud-storage':
+        specifier: workspace:*
+        version: link:../../stores/mastra-cloud
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
