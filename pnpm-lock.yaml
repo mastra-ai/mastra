@@ -2467,7 +2467,7 @@ importers:
         specifier: ^3.10.0
         version: 3.10.0(react-hook-form@7.65.0(react@19.2.0))
       '@lezer/highlight':
-        specifier: ^1.2.1
+        specifier: ^1.2.3
         version: 1.2.3
       '@lukeed/uuid':
         specifier: ^2.0.1
