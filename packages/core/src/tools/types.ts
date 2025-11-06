@@ -35,7 +35,7 @@ export interface AgentToolExecutionContext<
   messages: any[];
   suspend: (suspendPayload: InferZodLikeSchema<TSuspendSchema>) => Promise<any>;
 
-  // Optional - memory identifiers (memory itself is accessed via mastra.memory)
+  // Optional - memory identifiers
   threadId?: string;
   resourceId?: string;
 
