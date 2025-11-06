@@ -380,6 +380,7 @@ import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   // ..
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -407,6 +408,7 @@ export const memoryAgent = new Agent({
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: ":memory:",
     }),
   }),
@@ -923,6 +925,7 @@ export const routingAgent = new Agent({
   },
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -3216,7 +3219,7 @@ npm run build
 Run the application:
 
 ```bash copy
-node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+node --env-file=".env" .mastra/output/index.mjs
 ```
 
 :::note
@@ -3293,6 +3296,7 @@ Lambda functions have limitations with file system storage. Configure your Mastr
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: ":memory:", // in-memory storage
 });
 ```
@@ -3305,6 +3309,7 @@ For persistent memory across Lambda invocations, use external storage providers 
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: "libsql://your-database.turso.io", // External Turso database
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
@@ -3339,7 +3344,7 @@ ENV READINESS_CHECK_PATH="/api"
 
 EXPOSE 8080
 
-CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
+CMD ["node", ".mastra/output/index.mjs"]
 ```
 
 ## Building and Deploying
@@ -3913,7 +3918,7 @@ npm run build
 Run the application
 
 ```bash copy
-node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+node --env-file=".env" .mastra/output/index.mjs
 ```
 
 :::note
@@ -3986,6 +3991,7 @@ Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     // [!code --]
     // stores telemetry, scorer results, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
     url: ":memory:", // [!code --]
@@ -4000,6 +4006,7 @@ export const weatherAgent = new Agent({
   memory: new Memory({
     // [!code --]
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       // [!code --]
       url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
     }), // [!code --]
@@ -4241,7 +4248,7 @@ The build process follows these steps:
 1. **Locates entry file**: Finds `index.ts` or `index.js` in your specified directory (default: `src/mastra/`).
 2. **Creates build directory**: Generates a `.mastra/` directory containing:
    - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
-   - **`output`**: Contains the production-ready application bundle with `index.mjs`, `instrumentation.mjs`, and project-specific files.
+   - **`output`**: Contains the production-ready application bundle with `index.mjs` and project-specific files.
 3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
 4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
 5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.
@@ -4266,14 +4273,6 @@ Start the HTTP server:
 
 ```bash copy
 node .mastra/output/index.mjs
-```
-
-## Enable Telemetry
-
-To enable telemetry and observability, load the instrumentation file:
-
-```bash copy
-node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs
 ```
 
 
@@ -4403,6 +4402,7 @@ Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     // [!code --]
     // stores telemetry, scorer results, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
     url: ":memory:", // [!code --]
@@ -4417,6 +4417,7 @@ export const weatherAgent = new Agent({
   memory: new Memory({
     // [!code --]
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       // [!code --]
       url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
     }), // [!code --]
@@ -9812,7 +9813,7 @@ import YouTube from "@site/src/components/YouTube-player";
 # About Mastra
 [EN] Source: https://mastra.ai/en/docs
 
-From the team behind Gatsby, Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 
 It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
 
@@ -10505,6 +10506,7 @@ import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -10568,6 +10570,7 @@ export const testAgent = new Agent({
   memory: new Memory({
     // ...
     storage: new LibSQLStore({
+      id: 'test-agent-storage',
       url: "file:agent-memory.db",
     }),
     // ...
@@ -10678,10 +10681,12 @@ const agent = new Agent({
   memory: new Memory({
     // this is the default storage db if omitted
     storage: new LibSQLStore({
+      id: 'agent-storage',
       url: "file:./local.db",
     }),
     // this is the default vector db if omitted
     vector: new LibSQLVector({
+      id: 'agent-vector',
       connectionUrl: "file:./local.db",
     }),
   }),
@@ -10775,9 +10780,11 @@ import { PgStore, PgVector } from "@mastra/pg";
 const agent = new Agent({
   memory: new Memory({
     storage: new PgStore({
+      id: 'agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),
     vector: new PgVector({
+      id: 'agent-vector',
       connectionString: process.env.DATABASE_URL,
     }),
     options: {
@@ -10861,13 +10868,14 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
-  id: "libsql-agent", 
+  id: "libsql-agent",
   name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
       url: "file:libsql-agent.db",
     }),
     options: {
@@ -10904,9 +10912,11 @@ export const libsqlAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
       url: "file:libsql-agent.db",
     }),
     vector: new LibSQLVector({
+      id: 'libsql-agent-vector',
       connectionUrl: "file:libsql-agent.db",
     }),
     embedder: fastembed,
@@ -11014,6 +11024,7 @@ export const pgAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     options: {
@@ -11050,9 +11061,11 @@ export const pgAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     vector: new PgVector({
+      id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL!,
     }),
     embedder: fastembed,
@@ -11162,6 +11175,7 @@ export const upstashAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new UpstashStore({
+      id: 'upstash-agent-storage',
       url: process.env.UPSTASH_REDIS_REST_URL!,
       token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     }),
@@ -11199,10 +11213,12 @@ export const upstashAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new UpstashStore({
+      id: 'upstash-agent-storage',
       url: process.env.UPSTASH_REDIS_REST_URL!,
       token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     }),
     vector: new UpstashVector({
+      id: 'upstash-agent-vector',
       url: process.env.UPSTASH_VECTOR_REST_URL!,
       token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
     }),
@@ -11784,6 +11800,7 @@ export const mastra = new Mastra({
   // ... other config
   logger: new PinoLogger(),
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
   observability: new Observability({ // Enables Tracing
@@ -12219,6 +12236,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Required for trace persistence
   }),
   observability: new Observability({
@@ -12242,6 +12260,7 @@ import { Observability } from "@mastra/observability";
 import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
   observability: new Observability({
@@ -12846,6 +12865,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   }),
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
 });
@@ -12885,6 +12905,7 @@ export const mastra = new Mastra({
     },
   }),
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
 });
@@ -13610,6 +13631,7 @@ export const mastra = new Mastra({
     default: { enabled: true }, // Automatically includes SensitiveDataFilter
   }),
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
 });
@@ -14147,6 +14169,7 @@ const { embeddings } = await embedMany({
 
 // 4. Store in vector database
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 await pgVector.upsert({
@@ -14222,6 +14245,7 @@ const { embedding } = await embed({
 
 // Query vector store
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 const results = await pgVector.query({
@@ -14803,6 +14827,7 @@ For detailed setup instructions and best practices, see the [official MongoDB At
 import { PgVector } from "@mastra/pg";
 
 const store = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 
@@ -14831,6 +14856,7 @@ For detailed setup instructions and best practices, see the [official pgvector r
 import { PineconeVector } from "@mastra/pinecone";
 
 const store = new PineconeVector({
+  id: 'pinecone-vector',
   apiKey: process.env.PINECONE_API_KEY,
 });
 await store.createIndex({
@@ -14852,6 +14878,7 @@ await store.upsert({
 import { QdrantVector } from "@mastra/qdrant";
 
 const store = new QdrantVector({
+  id: 'qdrant-vector',
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
 });
@@ -14880,6 +14907,7 @@ import { ChromaVector } from "@mastra/chroma";
 
 // Running on Chroma Cloud
 const store = new ChromaVector({
+  id: 'chroma-vector',
   apiKey: process.env.CHROMA_API_KEY,
   tenant: process.env.CHROMA_TENANT,
   database: process.env.CHROMA_DATABASE,
@@ -14930,6 +14958,7 @@ await store.upsert({
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
+  id: 'libsql-vector',
   connectionUrl: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
@@ -14955,6 +14984,7 @@ import { UpstashVector } from "@mastra/upstash";
 
 // In upstash they refer to the store as an index
 const store = new UpstashVector({
+  id: 'upstash-vector',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });
@@ -16154,6 +16184,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
 });
@@ -17547,7 +17578,7 @@ import { testWorkflow } from "../workflows/test-workflow";
 import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
-  id: "test-mcp-server",
+  id: "test-mcp-server",  // Required: unique identifier for the server
   name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
@@ -17575,8 +17606,14 @@ import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
   // ...
-  mcpServers: { testMcpServer },
+  mcpServers: {
+    testMcpServer,  // Registry key: 'testMcpServer'
+  },
 });
+
+// Both retrieval methods work:
+mastra.getMCPServer('testMcpServer');          // By registry key
+mastra.getMCPServerById('test-mcp-server');    // By intrinsic ID
 ```
 
 ## Static and dynamic tools
@@ -19914,6 +19951,7 @@ Return only the person's name, nothing else.`,
   model: openai("gpt-4o"),
   memory: new Memory({
     vector: new LibSQLVector({
+      id: 'workflow-vector',
       connectionUrl: "file:../mastra.db",
     }),
     embedder: openai.embedding("text-embedding-3-small"),
@@ -21082,6 +21120,7 @@ import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -21098,6 +21137,7 @@ import { UpstashStore } from "@mastra/upstash";
 export const mastra = new Mastra({
   // ...
   storage: new UpstashStore({
+  id: 'upstash-storage',
     url: "<upstash-redis-rest-url>",
     token: "<upstash-redis-rest-token>",
   }),
@@ -21115,6 +21155,7 @@ import { PostgresStore } from "@mastra/pg";
 export const mastra = new Mastra({
   // ...
   storage: new PostgresStore({
+    id: 'mastra-storage',
     connectionString: "<database-url>",
   }),
 });
@@ -21552,6 +21593,7 @@ import { weatherTool } from "../tools";
 
 export const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'agent-storage',
     url: `file:./mastra.db`,
   }),
   options: {
@@ -21978,7 +22020,8 @@ pnpm add @mastra/mcp @mastra/core tsup
     import { weatherTool } from "./tools";
 
     const server = new MCPServer({
-      name: "my-mcp-server",
+      id: "my-mcp-server",
+      name: "My MCP Server",
       version: "1.0.0",
       tools: { weatherTool },
     });
@@ -22294,7 +22337,7 @@ export const supportAgent = new Agent({
     switch (userTier) {
       case "enterprise":
         return new Memory({
-          storage: new LibSQLStore({ url: "file:enterprise.db" }),
+          storage: new LibSQLStore({ id: 'enterprise-storage', url: "file:enterprise.db" }),
           options: {
             semanticRecall: { topK: 15, messageRange: 8 },
             workingMemory: { enabled: true },
@@ -22302,7 +22345,7 @@ export const supportAgent = new Agent({
         });
       case "pro":
         return new Memory({
-          storage: new LibSQLStore({ url: "file:pro.db" }),
+          storage: new LibSQLStore({ id: 'pro-storage', url: "file:pro.db" }),
           options: {
             semanticRecall: { topK: 8, messageRange: 4 },
             workingMemory: { enabled: true },
@@ -22311,7 +22354,7 @@ export const supportAgent = new Agent({
       case "free":
       default:
         return new Memory({
-          storage: new LibSQLStore({ url: "file:free.db" }),
+          storage: new LibSQLStore({ id: 'free-storage', url: "file:free.db" }),
           options: {
             semanticRecall: { topK: 3, messageRange: 2 },
             workingMemory: { enabled: false },
@@ -22908,6 +22951,7 @@ export const chatAgent = new Agent({
   model: anthropic("claude-4-sonnet-20250514"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'agent-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -22946,6 +22990,7 @@ export const textMessageAgent = new Agent({
   model: anthropic("claude-4-sonnet-20250514"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'agent-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -23096,6 +23141,7 @@ export const mastra = new Mastra({
   workflows: { chatWorkflow },
   agents: { textMessageAgent, chatAgent },
   storage: new LibSQLStore({
+    id: 'agent-storage',
     url: ":memory:",
   }),
   logger: new PinoLogger({
@@ -23937,6 +23983,7 @@ export const workingMemorySchemaAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: "file:working-memory-schema.db",
     }),
     options: {
@@ -24134,6 +24181,7 @@ export const workingMemoryTemplateAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: "file:working-memory-template.db",
     }),
     options: {
@@ -25927,6 +25975,7 @@ Initialize PgVector with your connection string:
 
 ```typescript copy showLineNumbers{4} title="src/index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 ```
@@ -26001,6 +26050,7 @@ const { embeddings } = await embedMany({
 });
 
 const pinecone = new PineconeVector({
+  id: 'pinecone-vector',
   apiKey: "your-api-key",
 });
 
@@ -26131,6 +26181,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{29} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -26312,6 +26363,7 @@ const { embeddings } = await embedMany({
 });
 
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -26525,6 +26577,7 @@ const { embeddings } = await embedMany({
 });
 
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -26571,6 +26624,7 @@ const { embeddings } = await embedMany({
 });
 
 const pinecone = new PineconeVector({
+  id: 'pinecone-vector',
   apiKey: process.env.PINECONE_API_KEY!,
 });
 
@@ -26618,6 +26672,7 @@ const { embeddings } = await embedMany({
 });
 
 const qdrant = new QdrantVector({
+  id: 'qdrant-vector',
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
 });
@@ -26656,10 +26711,13 @@ const { embeddings } = await embedMany({
 });
 
 // Running Chroma locally
-const store = new ChromaVector();
+const store = new ChromaVector({
+  id: 'chroma-vector',
+});
 
 // Running on Chroma Cloud
 const store = new ChromaVector({
+  id: 'chroma-vector',
   apiKey: process.env.CHROMA_API_KEY,
   tenant: process.env.CHROMA_TENANT,
   database: process.env.CHROMA_DATABASE,
@@ -26748,6 +26806,7 @@ const { embeddings } = await embedMany({
 });
 
 const libsql = new LibSQLVector({
+  id: 'libsql-vector',
   connectionUrl: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
@@ -26795,6 +26854,7 @@ const { embeddings } = await embedMany({
 });
 
 const upstash = new UpstashVector({
+  id: 'upstash-vector',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });
@@ -27084,6 +27144,7 @@ Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{23} title="src/index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -27238,6 +27299,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{41} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -27450,6 +27512,7 @@ Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{36} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -27799,6 +27862,7 @@ Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{169} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -28526,6 +28590,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{69} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -28694,6 +28759,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{36} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -30887,6 +30953,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
@@ -30950,7 +31017,8 @@ In `src/mastra/mcp/server.ts`, define the MCP server instance:
 import { MCPServer } from "@mastra/mcp";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   tools: {},
 });
@@ -30966,6 +31034,7 @@ import { notes } from "./mcp/server";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
@@ -31046,7 +31115,8 @@ import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   tools: {},
   resources: resourceHandlers,
@@ -31107,7 +31177,8 @@ import { resourceHandlers } from "./resources";
 import { writeNoteTool } from "../tools/write-note";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   resources: resourceHandlers,
   tools: {
@@ -31249,7 +31320,8 @@ import { writeNoteTool } from "../tools/write-note";
 import { promptHandlers } from "./prompts";
 
 export const notes = new MCPServer({
-  name: "notes",
+  id: "notes",
+  name: "Notes Server",
   version: "0.1.0",
   resources: resourceHandlers,
   prompts: promptHandlers,
@@ -31409,6 +31481,7 @@ import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 
 const libSqlVector = new LibSQLVector({
+  id: 'research-vectors',
   connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
@@ -31439,6 +31512,7 @@ import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
 
 const libSqlVector = new LibSQLVector({
+  id: 'research-vectors',
   connectionUrl: "file:/Users/your-name/guides/research-assistant/vector.db",
 });
 
@@ -32388,6 +32462,16 @@ To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`
 + const agents = mastra.listAgents();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-get-agents .
+```
+
+:::
+
 ### `RuntimeContext` to `RequestContext`
 
 The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.
@@ -32432,6 +32516,16 @@ To migrate, replace property access with the corresponding getter methods.
 + const instructions = agent.getInstructions();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-property-access .
+```
+
+:::
+
 ### Voice methods moved to `agent.voice` namespace
 
 Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.
@@ -32446,6 +32540,16 @@ To migrate, update voice method calls to use the `agent.voice` namespace.
 + await agent.voice.listen();
 + const speakers = agent.voice.getSpeakers();
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-voice .
+```
+
+:::
 
 ### `agent.fetchMemory()` to `(await agent.getMemory()).recall()`
 
@@ -32464,7 +32568,7 @@ To migrate, replace `fetchMemory()` calls with the new API.
 
 Agent processor methods have been renamed from `get*` to `list*` pattern for consistency with the broader API. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, update processor method names and the parameter from `runtimeContext` to `requestContext`.
+To migrate, update processor method names.
 
 ```diff
 - const inputProcessors = await agent.getInputProcessors(runtimeContext);
@@ -32472,6 +32576,16 @@ To migrate, update processor method names and the parameter from `runtimeContext
 + const inputProcessors = await agent.listInputProcessors(requestContext);
 + const outputProcessors = await agent.listOutputProcessors(requestContext);
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-processor-methods .
+```
+
+:::
 
 ### Default options method renames for AI SDK versions
 
@@ -32535,6 +32649,16 @@ To migrate, use the standard `generate()` and `stream()` methods.
 + const stream = await agent.stream('Hello');
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/agent-generate-stream-v-next .
+```
+
+:::
+
 ### `format` parameter from `stream()` and `generate()`
 
 The `format` parameter has been removed from `agent.stream()` and `agent.generate()` methods. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package. This change improves tree-shaking by moving AI SDK-specific code to a dedicated package.
@@ -32579,18 +32703,6 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
 - const agent = new Agent<AgentId, Tools, Metrics>({
 + const agent = new Agent<AgentId, Tools>({
     // ...
-  });
-```
-
-### `experimental_generateMessageId` option
-
-The `experimental_generateMessageId` option has been removed from agent generate/stream methods. Message IDs are now automatically generated internally.
-
-To migrate, remove the `experimental_generateMessageId` option. Message ID generation is handled automatically by the Memory layer.
-
-```diff
-  agent.generate('Hello', {
--   experimental_generateMessageId: () => 'custom-id',
   });
 ```
 
@@ -32658,48 +32770,6 @@ Client SDK changes align with server-side API updates including renamed utilitie
 
 ## Changed
 
-### `RuntimeContext` utilities to `RequestContext`
-
-Client SDK utility functions have been renamed from `RuntimeContext` to `RequestContext`. This change aligns with the global rename for clarity about request-specific context.
-
-To migrate, update utility function imports and calls.
-
-```diff
-- import {
--   parseClientRuntimeContext,
--   base64RuntimeContext,
--   runtimeContextQueryString,
-- } from '@mastra/client-js';
-+ import {
-+   parseClientRequestContext,
-+   base64RequestContext,
-+   requestContextQueryString,
-+ } from '@mastra/client-js';
-
-- const context = parseClientRuntimeContext(data);
-- const encoded = base64RuntimeContext(context);
-- const qs = runtimeContextQueryString(context);
-+ const context = parseClientRequestContext(data);
-+ const encoded = base64RequestContext(context);
-+ const qs = requestContextQueryString(context);
-```
-
-### Pagination parameters from `offset/limit` to `page/perPage`
-
-All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
-
-To migrate, update pagination parameters in all client SDK method calls.
-
-```diff
-  client.memory.listMessages({
-    threadId: 'thread-123',
--   offset: 0,
--   limit: 20,
-+   page: 0,
-+   perPage: 20,
-  });
-```
-
 ### Client SDK types from `Get*` to `List*`
 
 Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.
@@ -32719,6 +32789,22 @@ To migrate, update type imports to use the new naming pattern.
 + } from '@mastra/client-js';
 ```
 
+### Pagination parameters from `offset/limit` to `page/perPage`
+
+All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
+
+To migrate, update pagination parameters in all client SDK method calls. Example:
+
+```diff
+  client.memory.listMessages({
+    threadId: 'thread-123',
+-   offset: 0,
+-   limit: 20,
++   page: 0,
++   perPage: 20,
+  });
+```
+
 ### `getMemoryThread` parameter structure
 
 The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
@@ -32726,8 +32812,8 @@ The `getMemoryThread` method parameter structure has been updated. This change p
 To migrate, update the method call with the new parameter structure. Check the updated API documentation for the specific changes.
 
 ```diff
-- const thread = await client.memory.getMemoryThread({ threadId, agentId });
-+ const thread = await client.memory.getMemoryThread({ threadId });
+- const thread = await client.memory.getMemoryThread(threadId, agentId);
++ const thread = await client.memory.getMemoryThread({ threadId, agentId });
 ```
 
 ## Removed
@@ -32850,6 +32936,16 @@ To migrate, replace all calls to `getScorers()` with `listScorers()`.
 - const scorers = mastra.getScorers();
 + const scorers = mastra.listScorers();
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/evals-get-scorers .
+```
+
+:::
 
 ### `runExperiment` to `runEvals`
 
@@ -33087,27 +33183,6 @@ npx @mastra/codemod v1/mastra-core-imports .
 
 :::
 
-### Direct property access to getter methods
-
-Direct property access on the Mastra instance is deprecated. Methods like `mastra.logger`, `mastra.storage`, `mastra.agents`, etc. now show deprecation warnings and will be removed in a future version. This change provides better encapsulation and allows for dynamic configuration based on request context.
-
-To migrate, replace direct property access with the corresponding getter methods.
-
-```diff
-- const logger = mastra.logger;
-- const storage = mastra.storage;
-- const agents = mastra.agents;
-- const tts = mastra.tts;
-- const vectors = mastra.vectors;
-- const memory = mastra.memory;
-+ const logger = mastra.getLogger();
-+ const storage = mastra.getStorage();
-+ const agents = mastra.listAgents();
-+ const tts = mastra.getTTS();
-+ const vectors = mastra.getVectors();
-+ const memory = mastra.getMemory();
-```
-
 ### `experimental_auth` to `auth`
 
 The experimental auth configuration has been promoted to stable. This change reflects that the auth API is now stable and production-ready.
@@ -33121,6 +33196,93 @@ To migrate, rename the `experimental_auth` key to `auth` in your Mastra configur
       provider: workos,
     },
   });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/experimental-auth .
+```
+
+:::
+
+### Required `id` parameter for all mastra primitives
+
+All storage, vector stores, agents, workflows, mcpServers, processors, scorers, tools now require an `id` parameter during initialization. This enables the standardized Mastra API and prevents ID conflicts.
+
+All these primitives also now have a `get`, `list`, and `add` functions.
+
+To migrate, add an `id` parameter to all storage and vector store instantiations. When using the same storage/vector class multiple times, ensure each instance has a unique ID.
+
+```diff
+- const storage = new LibSQLStore({
+-   url: ':memory:',
+- });
++ const storage = new LibSQLStore({
++   id: 'my-app-storage',
++   url: ':memory:',
++ });
+
+- const vector = new PgVector({
+-   connectionString: process.env.DATABASE_URL,
+- });
++ const vector = new PgVector({
++   id: 'my-app-vector',
++   connectionString: process.env.DATABASE_URL,
++ });
+```
+
+When using separate instances for different purposes, use descriptive unique IDs:
+
+```diff
+  const agentMemory = new Memory({
+    storage: new LibSQLStore({
+-     url: 'file:./agent.db',
++     id: 'weather-agent-memory-storage',
++     url: 'file:./agent.db',
+    }),
+  });
+
+  const mastra = new Mastra({
+    storage: new LibSQLStore({
++     id: 'mastra-storage',
+      url: ':memory:',
+    }),
+  });
+```
+
+### Primitive plural APIs changes from `get<primitives>` to `list<primitive>`
+
+```diff
+- const mcpServers = mastra.getMCPServers();
++ const mcpServers = mastra.listMCPServers();
+```
+
+### Each primtive has a `getById` and a `get` function
+
+```typescript
+mastra.getMCPServer('myServer');          // Works (registry key)
+mastra.getMCPServerById('my-mcp-server'); // Works (intrinsic ID)
+```
+
+### Tool registration now uses intrinsic IDs
+
+When tools are auto-registered from agents or MCP servers to the Mastra instance, they now use the tool's intrinsic `id` instead of the configuration object key. This prevents collisions when multiple agents/MCP servers have tools with the same configuration key.
+
+To migrate, update any code that references tools by their configuration keys to use the tool's intrinsic ID instead.
+
+```diff
+  const agent = new Agent({
+    id: 'agent1',
+    tools: {
+      searchTool: weatherSearchTool,
+    },
+  });
+
+- mastra.getTool('searchTool');
++ mastra.getTool(weatherSearchTool.id);
 ```
 
 ## Removed
@@ -33182,6 +33344,16 @@ To migrate, replace all calls to `mastra.getMCPServers()` with `mastra.listMCPSe
 + const servers = await mastra.listMCPServers();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mcp-get-mcp-servers .
+```
+
+:::
+
 ### `getTools` to `listTools`
 
 The `mcp.getTools()` method has been renamed to `mcp.listTools()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
@@ -33193,6 +33365,16 @@ To migrate, replace all calls to `mcp.getTools()` with `mcp.listTools()`.
 + const tools = await mcp.listTools();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mcp-get-tools .
+```
+
+:::
+
 ### `getToolsets` to `listToolsets`
 
 The `mcp.getToolsets()` method has been renamed to `mcp.listToolsets()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
@@ -33203,6 +33385,16 @@ To migrate, replace all calls to `mcp.getToolsets()` with `mcp.listToolsets()`.
 - const toolsets = await mcp.getToolsets();
 + const toolsets = await mcp.listToolsets();
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/mcp-get-toolsets .
+```
+
+:::
 
 ### MCP tool context properties organization
 
@@ -33328,7 +33520,7 @@ To migrate, move `generateTitle` from the `threads` config to the top level of o
 
 ### Semantic recall default settings optimization
 
-The default settings for semantic recall have been optimized based on RAG research. The `topK` increased from 2 to 4, and `messageRange` changed from `{before: 2, after: 2}` to `{before: 1, after: 1}`. These changes provide better accuracy while only slightly increasing message count.
+The default settings for semantic recall have been optimized based on RAG research. The `topK` increased from 2 to 4, and `messageRange` changed from `{ before: 2, after: 2 }` to `{ before: 1, after: 1 }`. These changes provide better accuracy while only slightly increasing message count.
 
 To migrate, if you were relying on the previous defaults, explicitly set these values.
 
@@ -33534,6 +33726,18 @@ Mastra v1 requires Node.js 22.13.0 or higher. Update your development and produc
 
 Work through this checklist in order, starting with high-impact changes that affect most applications.
 
+:::info[Codemod]
+
+We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod) for you. Throughout the migration guide you'll find instructions on how to use them for specific changes.
+
+If you want, you can run all v1 codemods at once:
+
+```sh
+npx @mastra/codemod v1
+```
+
+:::
+
 ### High Impact Changes
 
 - Update `createTool` tool signatures to `(inputData, context)` format - [Tools](/guides/migrations/upgrade-to-v1/tools)
@@ -33619,13 +33823,13 @@ To migrate, update processor message type imports and usage.
 
 ### Deprecated input processor exports
 
-Deprecated input-processor exports have been removed from `@mastra/core`. This change consolidates processor types under the unified `Processor` interface.
+Deprecated input-processor exports which include the built-in processors have been removed from `@mastra/core/agent/input-processors/processors`. Use `@mastra/core/processors` instead. This change consolidates processor types under the unified `Processor` interface.
 
-To migrate, use the new `Processor` interface.
+If you have used `InputProcessor`, replace it with `Processor` which implements a `processInput` function.
 
 ```diff
-- import { InputProcessor } from '@mastra/core/processors'; // old exports
-+ import type { Processor, InputProcessor } from '@mastra/core/processors';
+- import { InputProcessor, ModerationProcessor } from '@mastra/core/agent/input-processors/processors';
++ import { Processor, ModerationProcessor } from '@mastra/core/processors';
 ```
 
 
@@ -34173,7 +34377,7 @@ To migrate, wrap your configuration object with `new Observability()`.
 
 ```diff
 + import { Observability } from '@mastra/observability';
-+
+
   export const mastra = new Mastra({
 -   observability: {
 +   observability: new Observability({
@@ -34191,7 +34395,7 @@ To migrate, rename the property in your configuration objects.
 
 ```diff
 + import { SensitiveDataFilter } from '@mastra/observability';
-+
+
   export const mastra = new Mastra({
     observability: new Observability({
       configs: {
@@ -34234,6 +34438,46 @@ To migrate, follow the "From OTEL-based Telemetry" section above. For detailed c
 The automatic detection of instrumentation files in `/mastra` (with `.ts`, `.js`, or `.mjs` extensions) has been removed. Custom instrumentation is no longer supported through separate files.
 
 To migrate, use the built-in exporter system or implement custom exporters using the `ObservabilityExporter` interface. See the [exporters documentation](/docs/observability/tracing/overview#exporters) for details.
+
+### `instrumentation.mjs` files
+
+If you were using `instrumentation.mjs` files to initialize OpenTelemetry instrumentation (common in deployment setups like AWS Lambda), these are no longer needed. The new observability system is configured directly in your Mastra instance.
+
+**Before (0.x):**
+
+You needed an instrumentation file:
+```javascript
+// instrumentation.mjs
+import { NodeSDK } from '@opentelemetry/sdk-node';
+// ... OTEL setup
+```
+
+And had to import it when starting your process:
+```bash
+node --import=./.mastra/output/instrumentation.mjs --env-file=".env" .mastra/output/index.mjs
+```
+
+**After (v1):**
+
+Simply remove the `instrumentation.mjs` file and configure observability in your Mastra instance:
+
+```typescript
+// src/mastra/index.ts
+import { Observability } from '@mastra/observability';
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    default: { enabled: true },
+  }),
+});
+```
+
+Start your process normally without the `--import` flag:
+```bash
+node --env-file=".env" .mastra/output/index.mjs
+```
+
+No separate instrumentation files or special startup flags required.
 
 ## Provider Migration Reference
 
@@ -34301,47 +34545,6 @@ Voice packages have been renamed from speech to voice with updated class names a
 
 ## Changed
 
-### Class names from `*TTS` to `*Voice`
-
-TTS class names have been renamed to Voice classes. `MurfTTS`, `SpeechifyTTS`, and `PlayAITTS` are now `MurfVoice`, `SpeechifyVoice`, and `PlayAIVoice` respectively. This change aligns class names with the package rename.
-
-To migrate, update class names in your code.
-
-```diff
-- import { MurfTTS } from '@mastra/voice-murf';
-- import { SpeechifyTTS } from '@mastra/voice-speechify';
-- import { PlayAITTS } from '@mastra/voice-playai';
-+ import { MurfVoice } from '@mastra/voice-murf';
-+ import { SpeechifyVoice } from '@mastra/voice-speechify';
-+ import { PlayAIVoice } from '@mastra/voice-playai';
-
-- const tts = new MurfTTS({ apiKey: '...' });
-+ const voice = new MurfVoice({ apiKey: '...' });
-```
-
-### `generate` and `stream` methods to `speak`
-
-The `generate()` and `stream()` methods have been combined into a single `speak()` method. This change simplifies the voice API by consolidating speech generation methods.
-
-To migrate, replace `generate()` and `stream()` calls with `speak()`.
-
-```diff
-- await tts.generate('Hello');
-- await tts.stream('Hello');
-+ await voice.speak('Hello');
-```
-
-### `voices` method to `getSpeakers`
-
-The `voices()` method has been renamed to `getSpeakers()`. This change provides clearer naming that better describes the method's purpose.
-
-To migrate, rename method calls from `voices` to `getSpeakers`.
-
-```diff
-- const voices = await tts.voices();
-+ const speakers = await voice.getSpeakers();
-```
-
 ### Voice configuration property names
 
 Voice configuration properties have been renamed for consistency. `speakProvider` is now `output`, `listenProvider` is now `input`, and `realtimeProvider` is now `realtime`. This change provides more intuitive property names.
@@ -34361,19 +34564,15 @@ To migrate, update configuration property names when configuring agents with voi
   });
 ```
 
-## Removed
+:::tip[Codemod]
 
-### TTS exports from `@mastra/core`
+You can use Mastra's codemod CLI to update your code automatically:
 
-TTS exports have been removed from `@mastra/core`. All TTS functionality is now in dedicated voice packages. This change improves tree-shaking by removing voice-specific code from the core package.
-
-To migrate, import voice functionality from dedicated voice packages instead of `@mastra/core`.
-
-```diff
-- import { TTS } from '@mastra/core/tts';
-+ import { MurfVoice } from '@mastra/voice-murf';
-+ // or other voice packages as needed
+```shell
+npx @mastra/codemod v1/voice-property-names .
 ```
+
+:::
 
 
 ---
@@ -34398,6 +34597,16 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 - const workflows = mastra.getWorkflows();
 + const workflows = mastra.listWorkflows();
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod v1/workflows-get-workflows .
+```
+
+:::
 
 ### `RuntimeContext` to `RequestContext` in step context
 
@@ -35843,7 +36052,7 @@ const agent = new Agent({
   model: groq('gemma2-9b-it')
 })
 ```
-You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/scorers/overview).
+You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/evals/overview).
 
 ---
 title: "AIHubMix"
@@ -53359,12 +53568,30 @@ description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, wh
 # Mastra.getMCPServer()
 [EN] Source: https://mastra.ai/en/reference/core/getMCPServer
 
-The `.getMCPServer()` method is used to retrieve a specific MCP server instance by its logical ID and optional version. If a version is provided, it attempts to find the server with that exact logical ID and version. If no version is provided, it returns the server with the specified logical ID that has the most recent releaseDate.
+The `.getMCPServer()` method retrieves an MCP server instance by its registry key (the key used when registering the server in the `mcpServers` configuration). For retrieving by the server's intrinsic `id` property, use `.getMCPServerById()` instead.
 
 ## Usage example
 
 ```typescript copy
-mastra.getMCPServer("1.2.0");
+// Register an MCP server with a registry key
+const myServer = new MCPServer({
+  id: 'my-mcp-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    customKey: myServer,  // 'customKey' is the registry key
+  },
+});
+
+// Retrieve by registry key
+const server = mastra.getMCPServer('customKey');
+
+// Alternatively, retrieve by intrinsic ID
+const serverById = mastra.getMCPServerById('my-mcp-server');
 ```
 
 ## Parameters
@@ -53372,17 +53599,10 @@ mastra.getMCPServer("1.2.0");
 <PropertiesTable
   content={[
     {
-      name: "serverId",
+      name: "registryKey",
       type: "string",
       description:
-        "The logical ID of the MCP server to retrieve. Should match the `id` property of the MCPServer instance.",
-    },
-    {
-      name: "version",
-      type: "string",
-      description:
-        "Optional specific version of the MCP server to retrieve. If not provided, returns the server with the most recent releaseDate.",
-      optional: true,
+        "The registry key used when registering the MCP server in the mcpServers configuration object. This is the key in the key-value pair, not the server's intrinsic id property.",
     },
   ]}
 />
@@ -53395,51 +53615,101 @@ mastra.getMCPServer("1.2.0");
       name: "server",
       type: "MCPServerBase | undefined",
       description:
-        "The MCP server instance with the specified ID and version, or undefined if not found or if the specific version is not found.",
+        "The MCP server instance with the specified registry key, or undefined if not found.",
     },
   ]}
 />
 
-## Related
+## Related Methods
+
+- [Mastra.getMCPServerById()](/reference/core/getMCPServerById) - Retrieve an MCP server by its intrinsic `id` property
+- [Mastra.listMCPServers()](/reference/core/listMCPServers) - List all registered MCP servers
+
+## See Also
 
 - [MCP overview](/docs/tools-mcp/mcp-overview)
 - [MCP server reference](/reference/tools/mcp-server)
 
 
 ---
-title: "Reference: Mastra.listMCPServers() | Core | Mastra Docs"
-description: "Documentation for the `Mastra.listMCPServers()` method in Mastra, which retrieves all registered MCP server instances."
+title: "Reference: Mastra.getMCPServerById() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.getMCPServerById()` method in Mastra, which retrieves a specific MCP server instance by its intrinsic id property."
 ---
 
-# Mastra.listMCPServers()
-[EN] Source: https://mastra.ai/en/reference/core/listMCPServers
+# Mastra.getMCPServerById()
+[EN] Source: https://mastra.ai/en/reference/core/getMCPServerById
 
-The `.listMCPServers()` method is used to retrieve all MCP server instances that have been registered in the Mastra instance.
+The `.getMCPServerById()` method retrieves an MCP server instance by its intrinsic `id` property. For retrieving by registry key (the key used in configuration), use `.getMCPServer()` instead.
 
 ## Usage example
 
 ```typescript copy
-mastra.listMCPServers();
+// Register an MCP server with a registry key
+const myServer = new MCPServer({
+  id: 'my-mcp-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    customKey: myServer,  // 'customKey' is the registry key
+  },
+});
+
+// Retrieve by intrinsic ID
+const server = mastra.getMCPServerById('my-mcp-server');
+
+// Alternatively, retrieve by registry key
+const serverByKey = mastra.getMCPServer('customKey');
 ```
 
 ## Parameters
 
-This method does not accept any parameters.
+<PropertiesTable
+  content={[
+    {
+      name: "serverId",
+      type: "string",
+      description:
+        "The intrinsic id property of the MCP server (set when the server was instantiated).",
+    },
+    {
+      name: "version",
+      type: "string",
+      description:
+        "Optional. If provided, returns the server only if its version matches.",
+      isOptional: true,
+    },
+  ]}
+/>
 
 ## Returns
 
 <PropertiesTable
   content={[
     {
-      name: "servers",
-      type: "Record<string, MCPServerBase> | undefined",
+      name: "server",
+      type: "MCPServerBase | undefined",
       description:
-        "A record of all registered MCP server instances, where keys are server IDs and values are MCPServerBase instances, or undefined if no servers are registered.",
+        "The MCP server instance with the specified id (and version, if provided), or undefined if not found.",
     },
   ]}
 />
 
-## Related
+## Notes
+
+- The server's `id` is slugified during construction, so `'myMcpServer'` becomes `'my-mcp-server'`
+- If multiple servers have the same `id` but different versions, you must provide the `version` parameter to disambiguate
+- If no `version` is provided and multiple versions exist, the method returns the first match
+
+## Related Methods
+
+- [Mastra.getMCPServer()](/reference/core/getMCPServer) - Retrieve an MCP server by its registry key
+- [Mastra.listMCPServers()](/reference/core/listMCPServers) - List all registered MCP servers
+
+## See Also
 
 - [MCP overview](/docs/tools-mcp/mcp-overview)
 - [MCP server reference](/reference/tools/mcp-server)
@@ -53774,45 +54044,6 @@ mastra.getVector("testVectorStore");
 
 
 ---
-title: "Reference: Mastra.getVectors() | Core | Mastra Docs"
-description: "Documentation for the `Mastra.getVectors()` method in Mastra, which retrieves all configured vector stores."
----
-
-# Mastra.getVectors()
-[EN] Source: https://mastra.ai/en/reference/core/getVectors
-
-The `.getVectors()` method is used to retrieve all vector stores that have been configured in the Mastra instance.
-
-## Usage example
-
-```typescript copy
-mastra.getVectors();
-```
-
-## Parameters
-
-This method does not accept any parameters.
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "vectors",
-      type: "TVectors",
-      description:
-        "A record of all configured vector stores, where keys are vector store names and values are vector store instances.",
-    },
-  ]}
-/>
-
-## Related
-
-- [Vector stores overview](/docs/rag/vector-databases)
-- [RAG overview](/docs/rag/overview)
-
-
----
 title: "Reference: Mastra.getWorkflow() | Core | Mastra Docs"
 description: "Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID."
 ---
@@ -54094,6 +54325,74 @@ mastra.listLogsByRunId({ runId: "123", transportId: "456" });
 
 
 ---
+title: "Reference: Mastra.listMCPServers() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.listMCPServers()` method in Mastra, which retrieves all registered MCP server instances."
+---
+
+# Mastra.listMCPServers()
+[EN] Source: https://mastra.ai/en/reference/core/listMCPServers
+
+The `.listMCPServers()` method is used to retrieve all MCP server instances that have been registered in the Mastra instance. The returned record uses registry keys (the keys from the `mcpServers` configuration) as keys.
+
+## Usage example
+
+```typescript copy
+// Register MCP servers
+const server1 = new MCPServer({
+  id: 'server-one',
+  name: 'Server One',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+const server2 = new MCPServer({
+  id: 'server-two',
+  name: 'Server Two',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    firstServer: server1,   // Registry key: 'firstServer'
+    secondServer: server2,  // Registry key: 'secondServer'
+  },
+});
+
+// List all registered servers
+const servers = mastra.listMCPServers();
+// Returns: { firstServer: MCPServerBase, secondServer: MCPServerBase }
+```
+
+## Parameters
+
+This method does not accept any parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "servers",
+      type: "Record<string, MCPServerBase> | undefined",
+      description:
+        "A record of all registered MCP server instances, where keys are the registry keys (from mcpServers configuration) and values are MCPServerBase instances, or undefined if no servers are registered.",
+    },
+  ]}
+/>
+
+## Related Methods
+
+- [Mastra.getMCPServer()](/reference/core/getMCPServer) - Retrieve an MCP server by its registry key
+- [Mastra.getMCPServerById()](/reference/core/getMCPServerById) - Retrieve an MCP server by its intrinsic `id` property
+
+## See Also
+
+- [MCP overview](/docs/tools-mcp/mcp-overview)
+- [MCP server reference](/reference/tools/mcp-server)
+
+
+---
 title: "Reference: listScorers() | Core | Mastra Docs"
 description: "Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
 ---
@@ -54137,6 +54436,45 @@ This method takes no parameters.
 - [getScorer()](../../reference/core/getScorer) - Get a specific scorer by key
 - [getScorerById()](../../reference/core/getScorerById) - Get a scorer by its id property
 - [Scorers Overview](../../docs/evals/overview) - Learn about creating and using scorers
+
+
+---
+title: "Reference: Mastra.listVectors() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.listVectors()` method in Mastra, which retrieves all configured vector stores."
+---
+
+# Mastra.listVectors()
+[EN] Source: https://mastra.ai/en/reference/core/listVectors
+
+The `.listVectors()` method is used to retrieve all vector stores that have been configured in the Mastra instance.
+
+## Usage example
+
+```typescript copy
+mastra.listVectors();
+```
+
+## Parameters
+
+This method does not accept any parameters.
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "vectors",
+      type: "TVectors",
+      description:
+        "A record of all configured vector stores, where keys are vector store names and values are vector store instances.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Vector stores overview](/docs/rag/vector-databases)
+- [RAG overview](/docs/rag/overview)
 
 
 ---
@@ -54215,6 +54553,7 @@ export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
   logger: new PinoLogger({
@@ -54310,7 +54649,7 @@ export const mastra = new Mastra({
       type: "Record<string, MCPServerBase>",
       isOptional: true,
       description:
-        "An object where keys are unique server identifiers and values are instances of MCPServer or classes extending MCPServerBase. This allows Mastra to be aware of and potentially manage these MCP servers.",
+        "An object where keys are registry keys (used for getMCPServer()) and values are instances of MCPServer or classes extending MCPServerBase. Each MCPServer must have an id property. Servers can be retrieved by registry key using getMCPServer() or by their intrinsic id using getMCPServerById().",
     },
     {
       name: "bundler",
@@ -54400,6 +54739,7 @@ The `.setStorage()` method is used to set the storage instance for the Mastra in
 ```typescript copy
 mastra.setStorage(
   new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 );
@@ -54665,12 +55005,6 @@ The Deployer class inherits the following key methods from the Bundler class:
       type: "(outputDirectory: string) => Promise<void>",
       description:
         "Prepares the output directory by cleaning it and creating necessary subdirectories.",
-    },
-    {
-      name: "writeInstrumentationFile",
-      type: "(outputDirectory: string) => Promise<void>",
-      description:
-        "Writes an instrumentation file to the output directory for telemetry purposes.",
     },
     {
       name: "writePackageJson",
@@ -62149,9 +62483,11 @@ export const agent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'test-agent-storage',
       url: "file:./working-memory.db",
     }),
     vector: new LibSQLVector({
+      id: 'test-agent-vector',
       connectionUrl: "file:./vector-memory.db",
     }),
     options: {
@@ -62186,9 +62522,11 @@ export const agent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PgStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),
     vector: new PgVector({
+      id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL,
     }),
     embedder: openai.embedding("text-embedding-3-small"),
@@ -68538,7 +68876,10 @@ Mastra provides a unified metadata filtering syntax across all vector stores, ba
 ```typescript
 import { PgVector } from "@mastra/pg";
 
-const store = new PgVector({ connectionString });
+const store = new PgVector({
+  id: 'pg-vector',
+  connectionString
+});
 
 const results = await store.query({
   indexName: "my_index",
@@ -69833,11 +70174,13 @@ import { LibSQLStore } from "@mastra/libsql";
 
 // File database (development)
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
 // Persistent database (production)
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: process.env.DATABASE_URL,
 });
 ```
@@ -70057,6 +70400,7 @@ npm install @mastra/mssql@latest
 import { MSSQLStore } from "@mastra/mssql";
 
 const storage = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString: process.env.DATABASE_URL,
 });
 ```
@@ -70091,17 +70435,20 @@ import { MSSQLStore } from "@mastra/mssql";
 
 // Using a connection string only
 const store1 = new MSSQLStore({
+  id: 'mssql-storage-1',
   connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new MSSQLStore({
+  id: 'mssql-storage-2',
   connectionString: "Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true",
   schemaName: "custom_schema", // optional
 });
 
 // Using individual connection parameters
 const store4 = new MSSQLStore({
+  id: 'mssql-storage-3',
   server: "localhost",
   port: 1433,
   database: "mydb",
@@ -70111,6 +70458,7 @@ const store4 = new MSSQLStore({
 
 // Individual parameters with schemaName
 const store5 = new MSSQLStore({
+  id: 'mssql-storage-4',
   server: "localhost",
   port: 1433,
   database: "mydb",
@@ -70173,6 +70521,7 @@ npm install @mastra/pg@latest
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 });
 ```
@@ -70207,17 +70556,20 @@ import { PostgresStore } from "@mastra/pg";
 
 // Using a connection string only
 const store1 = new PostgresStore({
+  id: 'pg-storage-1',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new PostgresStore({
+  id: 'pg-storage-2',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
   schemaName: "custom_schema", // optional
 });
 
 // Using individual connection parameters
 const store4 = new PostgresStore({
+  id: 'pg-storage-3',
   host: "localhost",
   port: 5432,
   database: "mydb",
@@ -70227,6 +70579,7 @@ const store4 = new PostgresStore({
 
 // Individual parameters with schemaName
 const store5 = new PostgresStore({
+  id: 'pg-storage-4',
   host: "localhost",
   port: 5432,
   database: "mydb",
@@ -70435,6 +70788,7 @@ When using custom schemas, indexes are created with schema prefixes:
 
 ```typescript copy
 const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
   schemaName: "custom_schema",
 });
@@ -70489,6 +70843,7 @@ npm install @mastra/upstash@latest
 import { UpstashStore } from "@mastra/upstash";
 
 const storage = new UpstashStore({
+  id: 'upstash-storage',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });
@@ -76283,6 +76638,7 @@ const weatherTool = createTool({
 });
 
 const server = new MCPServer({
+  id: "my-custom-server",
   name: "My Custom Server",
   version: "1.0.0",
   tools: { weatherTool },
@@ -76299,6 +76655,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: false,
+      description:
+        "Unique identifier for the server. This ID is preserved when the server is registered with Mastra and can be used to retrieve the server via getMCPServerById().",
+    },
     {
       name: "name",
       type: "string",
@@ -76332,13 +76695,6 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       isOptional: true,
       description:
         "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
-    },
-    {
-      name: "id",
-      type: "string",
-      isOptional: true,
-      description:
-        "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
     },
     {
       name: "description",
@@ -76445,7 +76801,10 @@ Here's how you would start the server using stdio:
 
 ```typescript
 const server = new MCPServer({
-  // example configuration above
+  id: "my-server",
+  name: "My Server",
+  version: "1.0.0",
+  tools: { /* ... */ },
 });
 await server.startStdio();
 ```
@@ -76652,7 +77011,8 @@ import { MCPServer } from "@mastra/mcp";
 import { toReqRes, toFetchResponse } from "fetch-to-node";
 
 const server = new MCPServer({
-  name: "my-serverless-mcp",
+  id: "my-serverless-mcp",
+  name: "My Serverless MCP",
   version: "1.0.0",
   tools: { /* your tools */ },
 });
@@ -76988,6 +77348,7 @@ const myResourceHandlers: MCPServerResources = {
 };
 
 const serverWithResources = new MCPServer({
+  id: "resourceful-server",
   name: "Resourceful Server",
   version: "1.0.0",
   tools: {
@@ -77120,6 +77481,7 @@ const myPromptHandlers: MCPServerPrompts = {
 };
 
 const serverWithPrompts = new MCPServer({
+  id: "promptful-server",
   name: "Promptful Server",
   version: "1.0.0",
   tools: {
@@ -77214,6 +77576,7 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 const server = new MCPServer({
+  id: "interactive-server",
   name: "Interactive Server",
   version: "1.0.0",
   tools: {
@@ -77996,6 +78359,7 @@ import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -79546,6 +79910,7 @@ import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
 const store = new LibSQLVector({
+  id: 'libsql-vector',
   connectionUrl: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,
@@ -80488,6 +80853,7 @@ It provides robust vector similarity search capabilities within your existing Po
 import { PgVector } from "@mastra/pg";
 
 const vectorStore = new PgVector({
+  id: 'pg-vector',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 ```
@@ -80496,6 +80862,7 @@ const vectorStore = new PgVector({
 
 ```ts
 const vectorStore = new PgVector({
+  id: 'pg-vector',
   host: "localhost",
   port: 5432,
   database: "mydb",
@@ -80508,6 +80875,7 @@ const vectorStore = new PgVector({
 
 ```ts
 const vectorStore = new PgVector({
+  id: 'pg-vector',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
   schemaName: "custom_schema",
   max: 30,
@@ -82456,6 +82824,7 @@ Upstash Vector supports hybrid search that combines semantic search (dense vecto
 import { UpstashVector } from "@mastra/upstash";
 
 const vectorStore = new UpstashVector({
+  id: 'upstash-vector',
   url: process.env.UPSTASH_VECTOR_URL,
   token: process.env.UPSTASH_VECTOR_TOKEN,
 });

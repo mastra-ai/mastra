@@ -48,6 +48,7 @@ describe.skip('Workflow Builder Integration Tests', () => {
       },
       logger: false,
       storage: new LibSQLStore({
+        id: 'mastra-storage',
         url: 'file:mastra.db',
       }),
     });
