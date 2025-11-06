@@ -7,7 +7,8 @@ import { Txt } from '@/ds/components/Txt';
 import { useExecuteAgentTool } from '../hooks/use-execute-agent-tool';
 import { useAgent } from '../hooks/use-agent';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
-import { ErrorDisplay } from '@/components/ui/error-display';
+import { toast } from '@/lib/toast';
+import { useEffect } from 'react';
 
 export interface AgentToolPanelProps {
   toolId: string;
@@ -21,6 +22,13 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
 
   const { mutateAsync: executeTool, isPending: isExecutingTool, data: result } = useExecuteAgentTool();
   const { requestContext: playgroundRequestContext } = usePlaygroundStore();
+
+  useEffect(() => {
+    if (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load agent';
+      toast.error(`Error loading agent: ${errorMessage}`);
+    }
+  }, [error]);
 
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
@@ -37,11 +45,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
     ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
     : z.object({});
 
-  if (isAgentLoading) return null;
-
-  if (error) {
-    return <ErrorDisplay title="Error loading agent" error={error} />;
-  }
+  if (isAgentLoading || error) return null;
 
   if (!tool)
     return (

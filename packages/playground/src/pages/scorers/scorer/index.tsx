@@ -23,7 +23,7 @@ import {
   useWorkflows,
   HeaderGroup,
   ScorerCombobox,
-  ErrorDisplay,
+  toast,
 } from '@mastra/playground-ui';
 import { useParams, Link, useSearchParams } from 'react-router';
 import { GaugeIcon } from 'lucide-react';
@@ -83,25 +83,28 @@ export default function Scorer() {
     }
   }, [searchParams, selectedEntityOption, entityOptions]);
 
-  if (isScorerLoading) return null;
+  useEffect(() => {
+    if (scorerError) {
+      const errorMessage = scorerError instanceof Error ? scorerError.message : 'Failed to load scorer';
+      toast.error(`Error loading scorer: ${errorMessage}`);
+    }
+  }, [scorerError]);
 
-  if (scorerError || agentsError || workflowsError) {
-    return (
-      <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to={`/scorers`} isCurrent>
-              <Icon>
-                <GaugeIcon />
-              </Icon>
-              Scorers
-            </Crumb>
-          </Breadcrumb>
-        </Header>
-        <ErrorDisplay title="Error loading scorer" error={scorerError || agentsError || workflowsError} />
-      </MainContentLayout>
-    );
-  }
+  useEffect(() => {
+    if (agentsError) {
+      const errorMessage = agentsError instanceof Error ? agentsError.message : 'Failed to load agents';
+      toast.error(`Error loading agents: ${errorMessage}`);
+    }
+  }, [agentsError]);
+
+  useEffect(() => {
+    if (workflowsError) {
+      const errorMessage = workflowsError instanceof Error ? workflowsError.message : 'Failed to load workflows';
+      toast.error(`Error loading workflows: ${errorMessage}`);
+    }
+  }, [workflowsError]);
+
+  if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 
   const scorerAgents =
     scorer?.agentIds.map(agentId => {

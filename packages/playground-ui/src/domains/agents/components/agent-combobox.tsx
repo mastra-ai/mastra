@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import { toast } from '@/lib/toast';
 import { Combobox } from '@/components/ui/combobox';
 import { useAgents } from '../hooks/use-agents';
 import { useLinkComponent } from '@/lib/framework';
@@ -27,8 +29,15 @@ export function AgentCombobox({
   buttonClassName = 'h-8',
   contentClassName,
 }: AgentComboboxProps) {
-  const { data: agents = {}, isLoading } = useAgents();
+  const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();
+
+  useEffect(() => {
+    if (isError) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load agents';
+      toast.error(`Error loading agents: ${errorMessage}`);
+    }
+  }, [isError, error]);
 
   const agentOptions = Object.keys(agents).map(key => ({
     label: agents[key]?.name || key,
@@ -48,11 +57,11 @@ export function AgentCombobox({
       options={agentOptions}
       value={value}
       onValueChange={handleValueChange}
-      placeholder={placeholder}
+      placeholder={isLoading ? 'Loading agents...' : placeholder}
       searchPlaceholder={searchPlaceholder}
       emptyText={emptyText}
       className={className}
-      disabled={disabled || isLoading}
+      disabled={disabled || isLoading || isError}
       buttonClassName={buttonClassName}
       contentClassName={contentClassName}
     />

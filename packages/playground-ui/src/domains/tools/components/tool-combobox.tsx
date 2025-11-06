@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import { toast } from '@/lib/toast';
 import { Combobox } from '@/components/ui/combobox';
 import { useTools } from '../hooks/use-all-tools';
 import { useAgents } from '../../agents/hooks/use-agents';
@@ -28,9 +30,23 @@ export function ToolCombobox({
   buttonClassName = 'h-8',
   contentClassName,
 }: ToolComboboxProps) {
-  const { data: tools = {}, isLoading: isLoadingTools } = useTools();
-  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
+  const { data: tools = {}, isLoading: isLoadingTools, isError: isErrorTools, error: errorTools } = useTools();
+  const { data: agents = {}, isLoading: isLoadingAgents, isError: isErrorAgents, error: errorAgents } = useAgents();
   const { navigate, paths } = useLinkComponent();
+
+  useEffect(() => {
+    if (isErrorTools) {
+      const errorMessage = errorTools instanceof Error ? errorTools.message : 'Failed to load tools';
+      toast.error(`Error loading tools: ${errorMessage}`);
+    }
+  }, [isErrorTools, errorTools]);
+
+  useEffect(() => {
+    if (isErrorAgents) {
+      const errorMessage = errorAgents instanceof Error ? errorAgents.message : 'Failed to load agents';
+      toast.error(`Error loading agents: ${errorMessage}`);
+    }
+  }, [isErrorAgents, errorAgents]);
 
   const allTools = new Map<string, { id: string }>();
 
@@ -70,11 +86,11 @@ export function ToolCombobox({
       options={toolOptions}
       value={value}
       onValueChange={handleValueChange}
-      placeholder={placeholder}
+      placeholder={isLoadingTools || isLoadingAgents ? 'Loading tools...' : placeholder}
       searchPlaceholder={searchPlaceholder}
       emptyText={emptyText}
       className={className}
-      disabled={disabled || isLoadingTools || isLoadingAgents}
+      disabled={disabled || isLoadingTools || isLoadingAgents || isErrorTools || isErrorAgents}
       buttonClassName={buttonClassName}
       contentClassName={contentClassName}
     />

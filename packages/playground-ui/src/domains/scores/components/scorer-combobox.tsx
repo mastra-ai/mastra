@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+import { toast } from '@/lib/toast';
 import { Combobox } from '@/components/ui/combobox';
 import { useScorers } from '../hooks/use-scorers';
 import { useLinkComponent } from '@/lib/framework';
@@ -27,8 +29,15 @@ export function ScorerCombobox({
   buttonClassName = 'h-8',
   contentClassName,
 }: ScorerComboboxProps) {
-  const { data: scorers = {}, isLoading } = useScorers();
+  const { data: scorers = {}, isLoading, isError, error } = useScorers();
   const { navigate, paths } = useLinkComponent();
+
+  useEffect(() => {
+    if (isError) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load scorers';
+      toast.error(`Error loading scorers: ${errorMessage}`);
+    }
+  }, [isError, error]);
 
   const scorerOptions = Object.keys(scorers).map(key => ({
     label: scorers[key]?.scorer.config.name || key,
@@ -48,11 +57,11 @@ export function ScorerCombobox({
       options={scorerOptions}
       value={value}
       onValueChange={handleValueChange}
-      placeholder={placeholder}
+      placeholder={isLoading ? 'Loading scorers...' : placeholder}
       searchPlaceholder={searchPlaceholder}
       emptyText={emptyText}
       className={className}
-      disabled={disabled || isLoading}
+      disabled={disabled || isLoading || isError}
       buttonClassName={buttonClassName}
       contentClassName={contentClassName}
     />

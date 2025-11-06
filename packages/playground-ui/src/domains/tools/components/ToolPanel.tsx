@@ -8,8 +8,8 @@ import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useMemo } from 'react';
-import { ErrorDisplay } from '@/components/ui/error-display';
+import { useMemo, useEffect } from 'react';
+import { toast } from '@/lib/toast';
 
 export interface ToolPanelProps {
   toolId: string;
@@ -39,6 +39,13 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteTool();
   const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
+  useEffect(() => {
+    if (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load tool';
+      toast.error(`Error loading tool: ${errorMessage}`);
+    }
+  }, [error]);
+
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
 
@@ -53,11 +60,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     ? resolveSerializedZodOutput(jsonSchemaToZod(parse(tool?.inputSchema)))
     : z.object({});
 
-  if (isLoading) return null;
-
-  if (error) {
-    return <ErrorDisplay title="Error loading tool" error={error} />;
-  }
+  if (isLoading || error) return null;
 
   if (!tool)
     return (
