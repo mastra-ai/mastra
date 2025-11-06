@@ -89,7 +89,7 @@ import { testWorkflow } from "../workflows/test-workflow";
 import { testTool } from "../tools/test-tool";
 
 export const testMcpServer = new MCPServer({
-  id: "test-mcp-server",
+  id: "test-mcp-server",  // Required: unique identifier for the server
   name: "Test MCP Server",
   version: "1.0.0",
   agents: { testAgent },
@@ -117,8 +117,14 @@ import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
   // ...
-  mcpServers: { testMcpServer },
+  mcpServers: {
+    testMcpServer,  // Registry key: 'testMcpServer'
+  },
 });
+
+// Both retrieval methods work:
+mastra.getMCPServer('testMcpServer');          // By registry key
+mastra.getMCPServerById('test-mcp-server');    // By intrinsic ID
 ```
 
 ## Static and dynamic tools

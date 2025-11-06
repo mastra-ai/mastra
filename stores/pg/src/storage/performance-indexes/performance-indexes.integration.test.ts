@@ -9,7 +9,7 @@ describe('PostgresStore Performance Indexes Integration', () => {
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
 
   beforeAll(async () => {
-    store = new PostgresStore({ connectionString });
+    store = new PostgresStore({ id: 'integration-test-store', connectionString });
     await store.init();
 
     performanceTest = new PostgresPerformanceTest({
