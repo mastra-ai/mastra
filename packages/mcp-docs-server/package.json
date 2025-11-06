@@ -44,7 +44,7 @@
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.5",
+    "@hono/node-server": "^1.19.6",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/jsdom": "^21.1.7",
