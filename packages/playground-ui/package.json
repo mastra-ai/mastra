@@ -61,7 +61,7 @@
     "@dagrejs/dagre": "^1.1.5",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
-    "@lezer/highlight": "^1.2.1",
+    "@lezer/highlight": "^1.2.3",
     "@lukeed/uuid": "^2.0.1",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
