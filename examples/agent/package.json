@@ -17,6 +17,7 @@
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
     "@mastra/voice-openai": "latest",
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@^5.0.15",
@@ -35,6 +36,7 @@
       "@mastra/client-js": "link:../../client-sdks/client-js",
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/observability": "link:../../observability/mastra",
       "@mastra/evals": "link:../../packages/evals",
       "mastra": "link:../../packages/cli"
     }

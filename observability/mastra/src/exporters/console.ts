@@ -1,5 +1,5 @@
-import { AITracingEventType } from '@mastra/core/observability';
-import type { AITracingEvent } from '@mastra/core/observability';
+import { TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent } from '@mastra/core/observability';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
 
@@ -10,7 +10,7 @@ export class ConsoleExporter extends BaseExporter {
     super(config);
   }
 
-  protected async _exportEvent(event: AITracingEvent): Promise<void> {
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     const span = event.exportedSpan;
 
     // Helper to safely stringify attributes (filtering already done by processor)
@@ -31,7 +31,7 @@ export class ConsoleExporter extends BaseExporter {
     };
 
     switch (event.type) {
-      case AITracingEventType.SPAN_STARTED:
+      case TracingEventType.SPAN_STARTED:
         this.logger.info(`🚀 SPAN_STARTED`);
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);
@@ -44,7 +44,7 @@ export class ConsoleExporter extends BaseExporter {
         this.logger.info('─'.repeat(80));
         break;
 
-      case AITracingEventType.SPAN_ENDED:
+      case TracingEventType.SPAN_ENDED:
         const duration = formatDuration(span.startTime, span.endTime);
         this.logger.info(`✅ SPAN_ENDED`);
         this.logger.info(`   Type: ${span.type}`);
@@ -65,7 +65,7 @@ export class ConsoleExporter extends BaseExporter {
         this.logger.info('─'.repeat(80));
         break;
 
-      case AITracingEventType.SPAN_UPDATED:
+      case TracingEventType.SPAN_UPDATED:
         this.logger.info(`📝 SPAN_UPDATED`);
         this.logger.info(`   Type: ${span.type}`);
         this.logger.info(`   Name: ${span.name}`);

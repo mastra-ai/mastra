@@ -13,7 +13,6 @@ import {
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
@@ -202,14 +201,6 @@ export class CloudflareStore extends MastraStorage {
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
-  }
-
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
   }
 
   async updateWorkflowResults({

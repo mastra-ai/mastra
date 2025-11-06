@@ -5,7 +5,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   WorkflowRuns,
   WorkflowRun,
@@ -131,13 +130,6 @@ export class UpstashStore extends MastraStorage {
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
-  }
-
-  /**
-   * @deprecated use listMessages instead
-   */
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

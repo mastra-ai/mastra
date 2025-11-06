@@ -267,7 +267,17 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(contents).toContain('Message 4');
     });
 
-    it('should sort messages by createdAt', async () => {
+    it('should sort messages by createdAt ASC by default', async () => {
+      const result = await storage.listMessages({
+        threadId: thread.id,
+      });
+
+      const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
+      const sortedTimestamps = [...timestamps].sort((a, b) => a - b);
+      expect(timestamps).toEqual(sortedTimestamps);
+    });
+
+    it('should sort messages by createdAt ASC when explicitly specified', async () => {
       const result = await storage.listMessages({
         threadId: thread.id,
         orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -275,6 +285,17 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
       const sortedTimestamps = [...timestamps].sort((a, b) => a - b);
+      expect(timestamps).toEqual(sortedTimestamps);
+    });
+
+    it('should sort messages by createdAt DESC when specified', async () => {
+      const result = await storage.listMessages({
+        threadId: thread.id,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+
+      const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
+      const sortedTimestamps = [...timestamps].sort((a, b) => b - a);
       expect(timestamps).toEqual(sortedTimestamps);
     });
 

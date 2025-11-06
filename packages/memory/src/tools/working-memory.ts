@@ -41,7 +41,17 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');
       }
 
-      if (resourceId && resourceId !== resourceId) {
+      let thread = await memory.getThreadById({ threadId });
+
+      if (!thread) {
+        thread = await memory.createThread({
+          threadId,
+          resourceId,
+          memoryConfig,
+        });
+      }
+
+      if (thread.resourceId && thread.resourceId !== resourceId) {
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
@@ -90,7 +100,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
 
       // Memory can be accessed via context.mastra.memory (when agent is part of Mastra instance)
       // or context.memory (when agent is standalone with memory passed directly)
-      const memory = context?.mastra?.memory;
+      const memory = context?.mastra?.memory || (context as any)?.memory;
 
       if (!threadId || !memory || !resourceId) {
         throw new Error('Thread ID, Memory instance, and resourceId are required for working memory updates');

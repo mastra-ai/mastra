@@ -1,13 +1,17 @@
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
-import type { AITracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
+import type { TracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
+<<<<<<< HEAD
   pagination?: AITracesPaginatedArg['pagination'];
   filters?: AITracesPaginatedArg['filters'];
+=======
+  body?: TracesPaginatedArg;
+>>>>>>> 7e03d7558365972407cd33e787461c5498f8ad19
 }
 
 interface ScoreTracesContext extends Context {
@@ -22,10 +26,10 @@ interface ScoreTracesContext extends Context {
 }
 
 /**
- * Get a complete AI trace by trace ID
+ * Get a complete trace by trace ID
  * Returns all spans in the trace with their parent-child relationships
  */
-export async function getAITraceHandler({ mastra, traceId }: ObservabilityContext & { traceId: string }) {
+export async function getTraceHandler({ mastra, traceId }: ObservabilityContext & { traceId: string }) {
   try {
     if (!traceId) {
       throw new HTTPException(400, { message: 'Trace ID is required' });
@@ -36,7 +40,7 @@ export async function getAITraceHandler({ mastra, traceId }: ObservabilityContex
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
-    const trace = await storage.getAITrace(traceId);
+    const trace = await storage.getTrace(traceId);
 
     if (!trace) {
       throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
@@ -44,12 +48,12 @@ export async function getAITraceHandler({ mastra, traceId }: ObservabilityContex
 
     return trace;
   } catch (error) {
-    handleError(error, 'Error getting AI trace');
+    handleError(error, 'Error getting trace');
   }
 }
 
 /**
- * Get paginated AI traces with filtering and pagination
+ * Get paginated traces with filtering and pagination
  * Returns only root spans (parent spans) for pagination, not child spans
  */
 export async function getAITracesPaginatedHandler({ mastra, pagination, filters }: ObservabilityContext) {
@@ -84,7 +88,7 @@ export async function getAITracesPaginatedHandler({ mastra, pagination, filters 
       filters,
     });
   } catch (error) {
-    handleError(error, 'Error getting AI traces paginated');
+    handleError(error, 'Error getting traces paginated');
   }
 }
 
