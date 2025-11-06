@@ -347,22 +347,22 @@ span[class*="categoryLinkLabel"] {
   position: relative;
 }
 
- h2:has(code) {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
+h2:has(code) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
 
-  h1 code,
-  h2 code,
-  h3 code,
-  h4 code,
-  h5 code,
-  h6 code {
-    font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
-    border-radius: 10px;
-  }
+h1 code,
+h2 code,
+h3 code,
+h4 code,
+h5 code,
+h6 code {
+  font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
+  border-radius: 10px;
+}
 
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
@@ -464,8 +464,6 @@ span[class*="categoryLinkLabel"] {
       border-bottom-color: var(--border);
     }
   }
-
- 
 
   iframe,
   img,
