@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -8,7 +9,9 @@ import {
 
 /*
 This component is used to display a version selector in the navbar.
-It allows users to switch between different documentation versions (stable and beta).
+It allows users to switch between different documentation versions:
+- Stable = 0.x (default /docs)
+- Beta = v1/main (/docs/v1)
 */
 export default function VersionControl({
   className,
@@ -17,15 +20,21 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  // Get current version from URL or default to beta
-  const getCurrentVersion = () => {
-    if (typeof window === "undefined") return "beta";
-    const path = window.location.pathname;
-    if (path.includes("/docs/v1")) return "stable";
-    return "beta";
-  };
+  // Initialize to stable to match SSR output and prevent hydration mismatch
+  // Stable = 0.x (default /docs), Beta = v1 (/docs/v1)
+  const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
+    "stable",
+  );
 
-  const currentVersion = getCurrentVersion();
+  // Compute actual version on client after hydration
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes("/docs/v1")) {
+      setCurrentVersion("beta");
+    } else {
+      setCurrentVersion("stable");
+    }
+  }, []);
 
   const onChange = (nextVersion: string) => {
     if (typeof window === "undefined") return;
@@ -33,11 +42,11 @@ export default function VersionControl({
     const currentPath = window.location.pathname;
     let newPath: string;
 
-    if (nextVersion === "stable") {
-      // Switch to stable version (/docs/v1)
+    if (nextVersion === "beta") {
+      // Switch to beta version (v1 = /docs/v1)
       newPath = "/docs/v1";
     } else {
-      // Switch to beta version (root /docs)
+      // Switch to stable version (0.x = root /docs)
       if (currentPath.includes("/docs/v1")) {
         // Replace /docs/v1 with /docs
         newPath = currentPath.replace(/^\/docs\/v1.*/, "/docs");
