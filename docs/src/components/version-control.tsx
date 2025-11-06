@@ -8,7 +8,7 @@ import {
 
 /*
 This component is used to display a version selector in the navbar.
-It allows users to switch between different documentation versions (0.x and V1).
+It allows users to switch between different documentation versions (stable and beta).
 */
 export default function VersionControl({
   className,
@@ -17,12 +17,12 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  // Get current version from URL or default to 0.x
+  // Get current version from URL or default to beta
   const getCurrentVersion = () => {
-    if (typeof window === "undefined") return "0.x";
+    if (typeof window === "undefined") return "beta";
     const path = window.location.pathname;
-    if (path.includes("/docs/v1")) return "v1";
-    return "0.x";
+    if (path.includes("/docs/v1")) return "stable";
+    return "beta";
   };
 
   const currentVersion = getCurrentVersion();
@@ -33,11 +33,11 @@ export default function VersionControl({
     const currentPath = window.location.pathname;
     let newPath: string;
 
-    if (nextVersion === "v1") {
-      // Switch to V1 version (/docs/v1)
+    if (nextVersion === "stable") {
+      // Switch to stable version (/docs/v1)
       newPath = "/docs/v1";
     } else {
-      // Switch to 0.x version (root /docs)
+      // Switch to beta version (root /docs)
       if (currentPath.includes("/docs/v1")) {
         // Replace /docs/v1 with /docs
         newPath = currentPath.replace(/^\/docs\/v1.*/, "/docs");
@@ -57,12 +57,12 @@ export default function VersionControl({
         className={className}
       >
         <SelectValue>
-          {currentVersion === "0.x" ? "0.x" : "V1"}
+          {currentVersion === "beta" ? "Beta" : "Stable"}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="0.x">0.x</SelectItem>
-        <SelectItem value="v1">V1</SelectItem>
+        <SelectItem value="stable">Stable</SelectItem>
+        <SelectItem value="beta">Beta</SelectItem>
       </SelectContent>
     </Select>
   );
