@@ -26,21 +26,53 @@ const storageOrderBySchema = z.object({
 const paginationInfoSchema = z.object({
   total: z.number(),
   page: z.number(),
-  perPage: z.union([z.number(), z.literal(false)]),
+  perPage: z.number(),
   hasMore: z.boolean(),
 });
 
 /**
- * Standard pagination query parameters
- * Reusable across all paginated endpoints
+ * Factory function for page/perPage pagination
+ * @param defaultPerPage - Default value for perPage (can be number or undefined for no default)
  */
-export const paginationQuerySchema = z.object({
-  page: z.coerce.number().optional().default(0),
-  perPage: z
-    .union([z.coerce.number(), z.literal(false)])
-    .optional()
-    .transform(value => value || false),
-});
+export const createPagePaginationSchema = (defaultPerPage?: number) => {
+  const baseSchema = {
+    page: z.coerce.number().optional().default(0),
+  };
+
+  if (defaultPerPage !== undefined) {
+    return z.object({
+      ...baseSchema,
+      perPage: z.coerce.number().optional().default(defaultPerPage),
+    });
+  } else {
+    return z.object({
+      ...baseSchema,
+      perPage: z.coerce.number().optional(),
+    });
+  }
+};
+
+/**
+ * Factory function for offset/limit pagination
+ * @param defaultLimit - Default value for limit (can be number or undefined for no default)
+ */
+export const createOffsetPaginationSchema = (defaultLimit?: number) => {
+  const baseSchema = {
+    offset: z.coerce.number().optional().default(0),
+  };
+
+  if (defaultLimit !== undefined) {
+    return z.object({
+      ...baseSchema,
+      limit: z.coerce.number().optional().default(defaultLimit),
+    });
+  } else {
+    return z.object({
+      ...baseSchema,
+      limit: z.coerce.number().optional(),
+    });
+  }
+};
 
 /**
  * Thread object structure
@@ -85,7 +117,7 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads
  */
-export const listThreadsQuerySchema = paginationQuerySchema.extend({
+export const listThreadsQuerySchema = createOffsetPaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
@@ -99,7 +131,7 @@ export const getThreadByIdQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads/:threadId/messages
  */
-export const getMessagesQuerySchema = paginationQuerySchema.extend({
+export const getMessagesQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
   include: z.unknown().optional(),
@@ -212,7 +244,7 @@ export const updateWorkingMemoryBodySchema = z.object({
 /**
  * Query schema for GET /api/memory/messages
  */
-export const listMessagesQuerySchema = paginationQuerySchema.extend({
+export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   threadId: z.string(),
   resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
@@ -234,7 +266,7 @@ export const searchMemoryQuerySchema = z.object({
   searchQuery: z.string(),
   resourceId: z.string(),
   threadId: z.string().optional(),
-  limit: z.coerce.number().optional(),
+  limit: z.coerce.number().optional().default(20),
   memoryConfig: z.record(z.string(), z.unknown()).optional(),
 });
 

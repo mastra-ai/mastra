@@ -1,5 +1,5 @@
 import z from 'zod';
-import { paginationQuerySchema } from './memory';
+import { createPagePaginationSchema } from './memory';
 
 /**
  * Schema for sampling configuration
@@ -50,14 +50,14 @@ export const entityPathParams = z.object({
 });
 
 // Query parameter schemas
-export const listScoresByRunIdQuerySchema = paginationQuerySchema;
+export const listScoresByRunIdQuerySchema = createPagePaginationSchema(10);
 
-export const listScoresByScorerIdQuerySchema = paginationQuerySchema.extend({
+export const listScoresByScorerIdQuerySchema = createPagePaginationSchema(10).extend({
   entityId: z.string().optional(),
   entityType: z.string().optional(),
 });
 
-export const listScoresByEntityIdQuerySchema = paginationQuerySchema;
+export const listScoresByEntityIdQuerySchema = createPagePaginationSchema(10);
 
 // Body schema for saving scores
 export const saveScoreBodySchema = z.object({
@@ -68,7 +68,7 @@ export const saveScoreBodySchema = z.object({
 const paginationInfoSchema = z.object({
   total: z.number(),
   page: z.number(),
-  perPage: z.union([z.number(), z.literal(false)]),
+  perPage: z.number(),
   hasMore: z.boolean(),
 });
 

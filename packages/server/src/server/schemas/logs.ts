@@ -1,5 +1,5 @@
 import z from 'zod';
-import { paginationQuerySchema } from './memory';
+import { createPagePaginationSchema } from './memory';
 
 // Path parameter schemas
 export const transportIdPathParams = z.object({
@@ -12,7 +12,7 @@ export const transportRunIdPathParams = z.object({
 });
 
 // Query parameter schemas
-export const listLogsQuerySchema = paginationQuerySchema.extend({
+export const listLogsQuerySchema = createPagePaginationSchema().extend({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
@@ -24,7 +24,7 @@ export const listLogsResponseSchema = z.object({
   logs: z.array(z.unknown()), // BaseLogMessage - complex type
   total: z.number(),
   page: z.number(),
-  perPage: z.union([z.number(), z.literal(false)]),
+  perPage: z.number(),
   hasMore: z.boolean(),
 });
 

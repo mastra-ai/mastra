@@ -1,5 +1,5 @@
 import z from 'zod';
-import { paginationQuerySchema } from './memory';
+import { createPagePaginationSchema } from './memory';
 
 /**
  * Schema for AI span types
@@ -31,7 +31,7 @@ export const aiSpanTypeSchema = z.enum([
 export const paginationInfoSchema = z.object({
   total: z.number(),
   page: z.number(),
-  perPage: z.union([z.number(), z.literal(false)]),
+  perPage: z.number(),
   hasMore: z.boolean(),
 });
 
@@ -106,4 +106,4 @@ export const listScoresBySpanResponseSchema = z.object({
 });
 
 // Query schema for list scores by span
-export const listScoresBySpanQuerySchema = paginationQuerySchema;
+export const listScoresBySpanQuerySchema = createPagePaginationSchema(10);
