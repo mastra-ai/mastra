@@ -29,7 +29,8 @@ pnpm add @mastra/mcp @mastra/core tsup
     import { weatherTool } from "./tools";
 
     const server = new MCPServer({
-      name: "my-mcp-server",
+      id: "my-mcp-server",
+      name: "My MCP Server",
       version: "1.0.0",
       tools: { weatherTool },
     });

@@ -35,6 +35,7 @@ describe('Agent Memory Tests', () => {
         agent,
       },
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
     });
@@ -47,6 +48,7 @@ describe('Agent Memory Tests', () => {
   it('should inherit storage from Mastra instance when workingMemory is enabled', async () => {
     const mastra = new Mastra({
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       agents: {
@@ -98,6 +100,7 @@ describe('Agent Memory Tests', () => {
   it('should work with resource-scoped working memory when storage supports it', async () => {
     const mastra = new Mastra({
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       agents: {
@@ -146,10 +149,12 @@ describe('Agent Memory Tests', () => {
 
   it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
     const storage = new LibSQLStore({
+      id: 'inline-storage',
       url: dbFile,
     });
     const vector = new LibSQLVector({
       connectionUrl: dbFile,
+      id: 'test-vector',
     });
 
     const mastra = new Mastra({
@@ -245,10 +250,12 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
       },
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile,
+        id: 'test-vector',
       }),
       embedder: fastembed,
     });
@@ -460,8 +467,8 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile }),
+      storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentWithTitle = new Agent({
@@ -489,8 +496,8 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile }),
+      storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentNoTitle = new Agent({

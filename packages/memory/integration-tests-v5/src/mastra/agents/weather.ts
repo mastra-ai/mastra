@@ -19,9 +19,11 @@ export const memory = new Memory({
     semanticRecall: true,
   },
   storage: new LibSQLStore({
+    id: 'weather-memory-storage',
     url: `file:${dbPath}`, // relative path from bundled .mastra/output dir
   }),
   vector: new LibSQLVector({
+    id: 'weather-memory-vector',
     connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
   }),
   embedder: openai.embedding('text-embedding-3-small'),
@@ -47,9 +49,11 @@ export const weatherAgent = new Agent({
 const memoryWithProcessor = new Memory({
   embedder: openai.embedding('text-embedding-3-small'),
   storage: new LibSQLStore({
+    id: 'processor-memory-storage',
     url: 'file:mastra.db',
   }),
   vector: new LibSQLVector({
+    id: 'processor-memory-vector',
     connectionUrl: 'file:mastra.db',
   }),
   options: {

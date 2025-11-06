@@ -14,6 +14,7 @@ pnpm add @mastra/turbopuffer
 import { TurbopufferVector } from '@mastra/turbopuffer';
 
 const vectorStore = new TurbopufferVector({
+  id: 'my-turbopuffer-vector',
   apiKey: 'your-api-key',
   baseUrl: 'https://gcp-us-central1.turbopuffer.com',
 });

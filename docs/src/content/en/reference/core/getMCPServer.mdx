@@ -5,12 +5,30 @@ description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, wh
 
 # Mastra.getMCPServer()
 
-The `.getMCPServer()` method is used to retrieve a specific MCP server instance by its logical ID and optional version. If a version is provided, it attempts to find the server with that exact logical ID and version. If no version is provided, it returns the server with the specified logical ID that has the most recent releaseDate.
+The `.getMCPServer()` method retrieves an MCP server instance by its registry key (the key used when registering the server in the `mcpServers` configuration). For retrieving by the server's intrinsic `id` property, use `.getMCPServerById()` instead.
 
 ## Usage example
 
 ```typescript copy
-mastra.getMCPServer("1.2.0");
+// Register an MCP server with a registry key
+const myServer = new MCPServer({
+  id: 'my-mcp-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    customKey: myServer,  // 'customKey' is the registry key
+  },
+});
+
+// Retrieve by registry key
+const server = mastra.getMCPServer('customKey');
+
+// Alternatively, retrieve by intrinsic ID
+const serverById = mastra.getMCPServerById('my-mcp-server');
 ```
 
 ## Parameters
@@ -18,17 +36,10 @@ mastra.getMCPServer("1.2.0");
 <PropertiesTable
   content={[
     {
-      name: "serverId",
+      name: "registryKey",
       type: "string",
       description:
-        "The logical ID of the MCP server to retrieve. Should match the `id` property of the MCPServer instance.",
-    },
-    {
-      name: "version",
-      type: "string",
-      description:
-        "Optional specific version of the MCP server to retrieve. If not provided, returns the server with the most recent releaseDate.",
-      optional: true,
+        "The registry key used when registering the MCP server in the mcpServers configuration object. This is the key in the key-value pair, not the server's intrinsic id property.",
     },
   ]}
 />
@@ -41,12 +52,17 @@ mastra.getMCPServer("1.2.0");
       name: "server",
       type: "MCPServerBase | undefined",
       description:
-        "The MCP server instance with the specified ID and version, or undefined if not found or if the specific version is not found.",
+        "The MCP server instance with the specified registry key, or undefined if not found.",
     },
   ]}
 />
 
-## Related
+## Related Methods
+
+- [Mastra.getMCPServerById()](/reference/core/getMCPServerById) - Retrieve an MCP server by its intrinsic `id` property
+- [Mastra.listMCPServers()](/reference/core/listMCPServers) - List all registered MCP servers
+
+## See Also
 
 - [MCP overview](/docs/tools-mcp/mcp-overview)
 - [MCP server reference](/reference/tools/mcp-server)

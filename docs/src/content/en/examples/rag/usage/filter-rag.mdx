@@ -164,6 +164,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{69} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 

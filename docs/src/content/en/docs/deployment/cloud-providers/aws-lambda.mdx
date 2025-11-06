@@ -44,6 +44,7 @@ Lambda functions have limitations with file system storage. Configure your Mastr
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: ":memory:", // in-memory storage
 });
 ```
@@ -56,6 +57,7 @@ For persistent memory across Lambda invocations, use external storage providers 
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: "libsql://your-database.turso.io", // External Turso database
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
@@ -90,7 +92,7 @@ ENV READINESS_CHECK_PATH="/api"
 
 EXPOSE 8080
 
-CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
+CMD ["node", ".mastra/output/index.mjs"]
 ```
 
 ## Building and Deploying

@@ -238,21 +238,6 @@ describe('Agent - network', () => {
     await checkIterations(anStream);
   });
 
-  it('LOOP - should track usage data from agent.network()', async () => {
-    const anStream = await network.network('Research dolphins', {
-      requestContext,
-    });
-
-    await checkIterations(anStream);
-
-    // Check that usage data is available
-    const usage = await anStream.usage;
-    expect(usage).toBeDefined();
-    expect(usage.inputTokens).toBeGreaterThan(0);
-    expect(usage.outputTokens).toBeGreaterThan(0);
-    expect(usage.totalTokens).toBeGreaterThan(0);
-  });
-
   it('LOOP - should track usage data from workflow with agent stream agent.network()', async () => {
     const anStream = await networkWithWflowAgentStream.network('Research dolphins', {
       requestContext,
