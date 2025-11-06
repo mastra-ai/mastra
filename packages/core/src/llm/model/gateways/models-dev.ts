@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createAzure } from '@ai-sdk/azure-v5';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
 import { createMistral } from '@ai-sdk/mistral-v5';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
@@ -131,6 +132,27 @@ export class ModelsDevGateway extends MastraModelGateway {
       }
     }
 
+    // Manually inject Azure provider since it's not in models.dev API
+    providerConfigs['azure'] = {
+      url: undefined, // SDK manages URL construction from resource name
+      apiKeyEnvVar: 'AZURE_API_KEY',
+      apiKeyHeader: 'api-key',
+      name: 'Azure OpenAI',
+      models: [
+        'gpt-4',
+        'gpt-4-32k',
+        'gpt-4o',
+        'gpt-4o-mini',
+        'gpt-4.1',
+        'gpt-4.1-mini',
+        'o1',
+        'o1-mini',
+        'o1-preview',
+      ].sort(),
+      docUrl: 'https://learn.microsoft.com/azure/ai-services/openai/',
+      gateway: 'models.dev',
+    };
+
     // Store for later use in buildUrl and buildHeaders
     this.providerConfigs = providerConfigs;
 
@@ -162,6 +184,19 @@ export class ModelsDevGateway extends MastraModelGateway {
 
     if (!config) {
       throw new Error(`Could not find config for provider ${provider} with model id ${modelId}`);
+    }
+
+    // Azure-specific validation with better error messages
+    if (provider === 'azure') {
+      const apiKey = process.env.AZURE_API_KEY;
+      if (!apiKey) {
+        throw new Error(
+          'AZURE_API_KEY environment variable is required for Azure OpenAI. ' +
+            'Also required: AZURE_RESOURCE_NAME. ' +
+            'Optional: OPENAI_API_VERSION (defaults to 2024-10-21)',
+        );
+      }
+      return Promise.resolve(apiKey);
     }
 
     const apiKey = typeof config.apiKeyEnvVar === `string` ? process.env[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
@@ -202,6 +237,29 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createXai({
           apiKey,
         })(modelId);
+
+      case 'azure': {
+        // Azure requires resource name to construct endpoint URL
+        const resourceName = process.env.AZURE_RESOURCE_NAME;
+        if (!resourceName) {
+          throw new Error(
+            'AZURE_RESOURCE_NAME environment variable is required for Azure OpenAI. ' +
+              'Set it to your Azure resource name (e.g., "my-resource" for my-resource.openai.azure.com)',
+          );
+        }
+
+        // API version defaults to recommended stable version from issue
+        const apiVersion = process.env.OPENAI_API_VERSION || '2024-10-21';
+
+        const azure = createAzure({
+          resourceName,
+          apiKey,
+          apiVersion,
+        });
+
+        return azure(modelId, { apiVersion });
+      }
+
       default:
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
         return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(

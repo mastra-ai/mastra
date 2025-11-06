@@ -104,7 +104,7 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/azure",
-          label: "Azure",
+          label: "Azure OpenAI",
         },
         {
           type: "doc",

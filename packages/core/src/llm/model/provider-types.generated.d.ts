@@ -473,6 +473,17 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct',
     'openai/gpt-oss-120b',
   ];
+  readonly azure: readonly [
+    'gpt-4',
+    'gpt-4-32k',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'o1',
+    'o1-mini',
+    'o1-preview',
+  ];
   readonly baseten: readonly [
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',

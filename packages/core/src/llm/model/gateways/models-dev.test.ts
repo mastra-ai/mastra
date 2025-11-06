@@ -282,4 +282,185 @@ describe('ModelsDevGateway', () => {
       expect(providers.perplexity).toBeDefined();
     });
   });
+
+  describe('Azure OpenAI Integration', () => {
+    describe('fetchProviders', () => {
+      it('should include Azure provider even when not in models.dev API', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            openai: {
+              id: 'openai',
+              name: 'OpenAI',
+              models: { 'gpt-4': {} },
+              env: ['OPENAI_API_KEY'],
+              api: 'https://api.openai.com/v1',
+            },
+          }),
+        });
+
+        const providers = await gateway.fetchProviders();
+
+        expect(providers.azure).toBeDefined();
+        expect(providers.azure.name).toBe('Azure OpenAI');
+        expect(providers.azure.apiKeyEnvVar).toBe('AZURE_API_KEY');
+        expect(providers.azure.models).toContain('gpt-4.1-mini');
+        expect(providers.azure.url).toBeUndefined();
+      });
+    });
+
+    describe('buildUrl', () => {
+      beforeEach(async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({}),
+        });
+        await gateway.fetchProviders();
+      });
+
+      it('should return undefined for Azure (SDK manages URL)', () => {
+        const url = gateway.buildUrl('azure/gpt-4.1-mini');
+        expect(url).toBeUndefined();
+      });
+    });
+
+    describe('getApiKey', () => {
+      beforeEach(async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({}),
+        });
+        await gateway.fetchProviders();
+      });
+
+      it('should throw comprehensive error when AZURE_API_KEY is missing', async () => {
+        const originalEnv = process.env.AZURE_API_KEY;
+        delete process.env.AZURE_API_KEY;
+
+        try {
+          await gateway.getApiKey('azure/gpt-4.1-mini');
+          throw new Error('Expected getApiKey to throw an error');
+        } catch (error: any) {
+          expect(error.message).toContain('AZURE_API_KEY environment variable is required');
+          expect(error.message).toContain('AZURE_RESOURCE_NAME');
+          expect(error.message).toContain('OPENAI_API_VERSION');
+        }
+
+        if (originalEnv) process.env.AZURE_API_KEY = originalEnv;
+      });
+
+      it('should return API key when AZURE_API_KEY is set', async () => {
+        process.env.AZURE_API_KEY = 'test-azure-key';
+
+        const apiKey = await gateway.getApiKey('azure/gpt-4.1-mini');
+        expect(apiKey).toBe('test-azure-key');
+
+        delete process.env.AZURE_API_KEY;
+      });
+    });
+
+    describe('resolveLanguageModel', () => {
+      beforeEach(async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({}),
+        });
+        await gateway.fetchProviders();
+      });
+
+      it('should throw error when AZURE_RESOURCE_NAME is missing', async () => {
+        const originalEnv = process.env.AZURE_RESOURCE_NAME;
+        delete process.env.AZURE_RESOURCE_NAME;
+
+        await expect(
+          gateway.resolveLanguageModel({
+            modelId: 'gpt-4.1-mini',
+            providerId: 'azure',
+            apiKey: 'test-key',
+          }),
+        ).rejects.toThrow('AZURE_RESOURCE_NAME environment variable is required');
+
+        if (originalEnv) process.env.AZURE_RESOURCE_NAME = originalEnv;
+      });
+
+      it('should use default API version when OPENAI_API_VERSION not set', async () => {
+        const originalResourceName = process.env.AZURE_RESOURCE_NAME;
+        const originalApiVersion = process.env.OPENAI_API_VERSION;
+
+        process.env.AZURE_RESOURCE_NAME = 'test-resource';
+        delete process.env.OPENAI_API_VERSION;
+
+        const model = await gateway.resolveLanguageModel({
+          modelId: 'gpt-4.1-mini',
+          providerId: 'azure',
+          apiKey: 'test-key',
+        });
+
+        expect(model).toBeDefined();
+
+        if (originalResourceName) {
+          process.env.AZURE_RESOURCE_NAME = originalResourceName;
+        } else {
+          delete process.env.AZURE_RESOURCE_NAME;
+        }
+        if (originalApiVersion) {
+          process.env.OPENAI_API_VERSION = originalApiVersion;
+        }
+      });
+
+      it('should respect custom OPENAI_API_VERSION', async () => {
+        const originalResourceName = process.env.AZURE_RESOURCE_NAME;
+        const originalApiVersion = process.env.OPENAI_API_VERSION;
+
+        process.env.AZURE_RESOURCE_NAME = 'test-resource';
+        process.env.OPENAI_API_VERSION = '2025-04-01-preview';
+
+        const model = await gateway.resolveLanguageModel({
+          modelId: 'gpt-4.1-mini',
+          providerId: 'azure',
+          apiKey: 'test-key',
+        });
+
+        expect(model).toBeDefined();
+
+        if (originalResourceName) {
+          process.env.AZURE_RESOURCE_NAME = originalResourceName;
+        } else {
+          delete process.env.AZURE_RESOURCE_NAME;
+        }
+        if (originalApiVersion) {
+          process.env.OPENAI_API_VERSION = originalApiVersion;
+        } else {
+          delete process.env.OPENAI_API_VERSION;
+        }
+      });
+    });
+
+    describe('integration with existing providers', () => {
+      it('should not affect OpenAI provider resolution', async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            openai: {
+              id: 'openai',
+              name: 'OpenAI',
+              models: { 'gpt-4': {} },
+              env: ['OPENAI_API_KEY'],
+              api: 'https://api.openai.com/v1',
+            },
+          }),
+        });
+
+        await gateway.fetchProviders();
+
+        const model = await gateway.resolveLanguageModel({
+          modelId: 'gpt-4',
+          providerId: 'openai',
+          apiKey: 'sk-test',
+        });
+
+        expect(model).toBeDefined();
+      });
+    });
+  });
 });
