@@ -2,9 +2,15 @@ import { describe, it, expect } from 'vitest';
 import type { ServerRoute } from '../index';
 import type { Mastra } from '@mastra/core';
 import { z } from 'zod';
-import { validateRouteMetadata, expectValidSchema, expectInvalidSchema, createMockRequestContext } from './utils';
 import { InMemoryTaskStore } from '../../../a2a/store';
-import { createTestTask, populateTaskStore } from './test-setup-helpers';
+import {
+  createMockRequestContext,
+  createTestTask,
+  expectInvalidSchema,
+  expectValidSchema,
+  populateTaskStore,
+  validateRouteMetadata,
+} from './test-helpers';
 
 /**
  * Generate valid test data from a Zod schema

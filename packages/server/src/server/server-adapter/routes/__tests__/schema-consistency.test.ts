@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SERVER_ROUTES } from '../index';
-import { extractPathParams } from './utils';
+import { extractPathParams } from './test-helpers';
 
 describe('Schema Consistency Across All Routes', () => {
   describe('OpenAPI Specification', () => {

@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { TOOLS_ROUTES } from '../tools';
 import { createRouteTestSuite } from './route-test-suite';
-import { createTestTool, createTestMastra } from './test-setup-helpers';
+import { createTestTool, createTestMastra } from './test-helpers';
 
 describe('Tools Routes', () => {
   let mastra: Mastra;

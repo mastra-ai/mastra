@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { MEMORY_ROUTES } from '../memory';
 import { createRouteTestSuite } from './route-test-suite';
-import { createMockMemory, createTestMastra, createTestAgent, mockAgentMethods } from './test-setup-helpers';
+import { createMockMemory, createTestMastra, createTestAgent, mockAgentMethods } from './test-helpers';
 
 describe('Memory Routes', () => {
   let mastra: Mastra;

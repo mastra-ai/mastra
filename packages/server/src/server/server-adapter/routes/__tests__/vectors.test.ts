@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { VECTORS_ROUTES } from '../vectors';
 import { createRouteTestSuite } from './route-test-suite';
-import { createTestMastra, createMockVector } from './test-setup-helpers';
+import { createTestMastra, createMockVector } from './test-helpers';
 
 describe('Vectors Routes', () => {
   let mastra: Mastra;

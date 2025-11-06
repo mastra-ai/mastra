@@ -2,19 +2,17 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { OBSERVABILITY_ROUTES } from '../observability';
 import { createRouteTestSuite } from './route-test-suite';
-import { createTestMastra } from './test-setup-helpers';
+import { setupObservabilityTests } from './test-helpers';
 
 describe('Observability Routes', () => {
   let mastra: Mastra;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-
-    // Create Mastra instance
-    mastra = createTestMastra();
+    const setup = await setupObservabilityTests();
+    mastra = setup.mastra;
   });
 
-  // Create test suite with auto-generated bodies!
   createRouteTestSuite({
     routes: OBSERVABILITY_ROUTES,
     getMastra: () => mastra,

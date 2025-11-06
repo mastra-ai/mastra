@@ -3,7 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { A2A_ROUTES } from '../a2a';
 import { createRouteTestSuite } from './route-test-suite';
-import { createTestAgent, mockAgentMethods, createTestMastra } from './test-setup-helpers';
+import { createTestAgent, mockAgentMethods, createTestMastra } from './test-helpers';
 
 describe('A2A Routes', () => {
   let mastra: Mastra;
