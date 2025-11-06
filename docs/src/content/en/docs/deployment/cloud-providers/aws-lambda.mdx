@@ -90,7 +90,7 @@ ENV READINESS_CHECK_PATH="/api"
 
 EXPOSE 8080
 
-CMD ["node", "--import=./.mastra/output/instrumentation.mjs", ".mastra/output/index.mjs"]
+CMD ["node", ".mastra/output/index.mjs"]
 ```
 
 ## Building and Deploying
