@@ -49,8 +49,9 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
   } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
+  const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
 
-  const step = steps[fullLabel];
+  const step = steps[stepKey];
 
   const { isSleepNode, isForEachNode, isMapNode, hasSpecialBadge } = getNodeBadgeInfo({
     duration,
