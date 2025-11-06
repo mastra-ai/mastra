@@ -26,7 +26,6 @@ export default function VersionControl({
     "stable",
   );
 
-  // Compute actual version on client after hydration
   useEffect(() => {
     const path = window.location.pathname;
     if (path.includes("/docs/v1")) {
@@ -43,14 +42,12 @@ export default function VersionControl({
     let newPath: string;
 
     if (nextVersion === "beta") {
-      // Switch to beta, preserve nested path
       if (currentPath.startsWith("/docs/")) {
         newPath = currentPath.replace(/^\/docs/, "/docs/v1");
       } else {
         newPath = "/docs/v1";
       }
     } else {
-      // Switch to stable, preserve nested path
       if (currentPath.includes("/docs/v1")) {
         newPath = currentPath.replace(/^\/docs\/v1/, "/docs");
       } else {
