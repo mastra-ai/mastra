@@ -4,8 +4,3 @@
             - link "Agents":
                 - /url: /agents
                 - img
-        - separator:
-            - img
-        - listitem:
-            - link "Weather Agent":
-                - /url: /agents/weatherAgent

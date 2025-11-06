@@ -50,6 +50,7 @@ const results = await vectorStore.query({
 import { LibSQLStore } from '@mastra/libsql';
 
 const store = new LibSQLStore({
+  id: 'libsql-storage',
   url: 'file:./my-db.db',
 });
 

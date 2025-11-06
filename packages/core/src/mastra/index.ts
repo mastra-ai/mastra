@@ -53,7 +53,7 @@ import { createOnScorerHook } from './hooks';
  *       model: 'openai/gpt-5'
  *     })
  *   },
- *   storage: new LibSQLStore({ url: ':memory:' }),
+ *   storage: new LibSQLStore({ id: 'mastra-storage', url: ':memory:' }),
  *   logger: new PinoLogger({ name: 'MyApp' })
  * });
  * ```
@@ -210,7 +210,7 @@ export interface Config<
  *     })
  *   },
  *   workflows: { dataWorkflow },
- *   storage: new LibSQLStore({ url: ':memory:' }),
+ *   storage: new LibSQLStore({ id: 'mastra-storage', url: ':memory:' }),
  *   logger: new PinoLogger({ name: 'MyApp' })
  * });
  * ```
@@ -653,19 +653,9 @@ export class Mastra<
     const agentKey = key || agent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      const error = new MastraError({
-        id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Agent with key ${agentKey} already exists`,
-        details: {
-          status: 409,
-          agentKey: agentKey,
-          existingAgents: Object.keys(agents).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      const logger = this.getLogger();
+      logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
+      return;
     }
 
     // Initialize the agent
@@ -836,19 +826,9 @@ export class Mastra<
     const vectorKey = key || vector.id;
     const vectors = this.#vectors as Record<string, MastraVector>;
     if (vectors[vectorKey]) {
-      const error = new MastraError({
-        id: 'MASTRA_ADD_VECTOR_DUPLICATE_KEY',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Vector store with key ${vectorKey} already exists`,
-        details: {
-          status: 409,
-          vectorKey: vectorKey,
-          existingVectors: Object.keys(vectors).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      const logger = this.getLogger();
+      logger.debug(`Vector with key ${vectorKey} already exists. Skipping addition.`);
+      return;
     }
 
     // Initialize the vector with the logger
@@ -1085,19 +1065,9 @@ export class Mastra<
     const scorerKey = key || scorer.id;
     const scorers = this.#scorers as Record<string, MastraScorer<any, any, any, any>>;
     if (scorers[scorerKey]) {
-      const error = new MastraError({
-        id: 'MASTRA_ADD_SCORER_DUPLICATE_KEY',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Scorer with key ${scorerKey} already exists`,
-        details: {
-          status: 409,
-          scorerKey: scorerKey,
-          existingScorers: Object.keys(scorers).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      const logger = this.getLogger();
+      logger.debug(`Scorer with key ${scorerKey} already exists. Skipping addition.`);
+      return;
     }
 
     scorers[scorerKey] = scorer;
@@ -1335,19 +1305,9 @@ export class Mastra<
     const toolKey = key || tool.id;
     const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
     if (tools[toolKey]) {
-      const error = new MastraError({
-        id: 'MASTRA_ADD_TOOL_DUPLICATE_KEY',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Tool with key ${toolKey} already exists`,
-        details: {
-          status: 409,
-          toolKey: toolKey,
-          existingTools: Object.keys(tools).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      const logger = this.getLogger();
+      logger.debug(`Tool with key ${toolKey} already exists. Skipping addition.`);
+      return;
     }
 
     tools[toolKey] = tool;
@@ -1491,19 +1451,9 @@ export class Mastra<
     const processorKey = key || processor.id;
     const processors = this.#processors as Record<string, Processor>;
     if (processors[processorKey]) {
-      const error = new MastraError({
-        id: 'MASTRA_ADD_PROCESSOR_DUPLICATE_KEY',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Processor with key ${processorKey} already exists`,
-        details: {
-          status: 409,
-          processorKey: processorKey,
-          existingProcessors: Object.keys(processors).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      const logger = this.getLogger();
+      logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
+      return;
     }
 
     processors[processorKey] = processor;
@@ -1568,19 +1518,9 @@ export class Mastra<
     const workflowKey = key || workflow.id;
     const workflows = this.#workflows as Record<string, Workflow<any, any, any, any, any, any>>;
     if (workflows[workflowKey]) {
-      const error = new MastraError({
-        id: 'MASTRA_ADD_WORKFLOW_DUPLICATE_KEY',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `Workflow with key ${workflowKey} already exists`,
-        details: {
-          status: 409,
-          workflowKey: workflowKey,
-          existingWorkflows: Object.keys(workflows).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      const logger = this.getLogger();
+      logger.debug(`Workflow with key ${workflowKey} already exists. Skipping addition.`);
+      return;
     }
 
     // Initialize the workflow with Mastra and primitives
@@ -1706,7 +1646,7 @@ export class Mastra<
    * @example
    * ```typescript
    * const mastra = new Mastra({
-   *   storage: new LibSQLStore({ url: 'file:./data.db' })
+   *   storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./data.db' })
    * });
    *
    * // Use the storage in agent memory
@@ -1941,19 +1881,9 @@ export class Mastra<
     const serverKey = key ?? resolvedId;
     const servers = this.#mcpServers as Record<string, MCPServerBase>;
     if (servers[serverKey]) {
-      const error = new MastraError({
-        id: 'MASTRA_ADD_MCP_SERVER_DUPLICATE_KEY',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: `MCP server with key ${serverKey} already exists`,
-        details: {
-          status: 409,
-          mcpServerKey: serverKey,
-          existingServers: Object.keys(servers).join(', '),
-        },
-      });
-      this.#logger?.trackException(error);
-      throw error;
+      const logger = this.getLogger();
+      logger.debug(`MCP server with key ${serverKey} already exists. Skipping addition.`);
+      return;
     }
 
     // Initialize the server

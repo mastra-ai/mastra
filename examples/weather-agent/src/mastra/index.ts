@@ -7,6 +7,7 @@ import { weatherWorkflow, weatherWorkflow2 } from './workflows/new-workflow';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'weather-agent-storage',
     url: 'file:./mastra.db',
   }),
   agents: { weatherAgent, weatherReporterAgent },
