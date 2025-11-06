@@ -65,7 +65,7 @@ export const OBSERVABILITY_ROUTES: ServerRoute[] = [
     method: 'GET',
     responseType: 'json',
     handler: listScoresBySpan as unknown as ServerRouteHandler,
-    path: '/api/observability/traces/:traceId/spans/:spanId/scores',
+    path: '/api/observability/traces/:traceId/:spanId/scores',
     pathParamSchema: traceSpanPathParams,
     queryParamSchema: listScoresBySpanQuerySchema,
     responseSchema: listScoresBySpanResponseSchema,

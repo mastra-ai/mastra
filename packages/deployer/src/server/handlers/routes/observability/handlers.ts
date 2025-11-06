@@ -104,14 +104,14 @@ export async function listScoresBySpan(c: Context) {
   const spanId = c.req.param('spanId');
   const page = parseInt(c.req.query('page') || '0');
   const perPage = parseInt(c.req.query('perPage') || '10');
-  const pagination: StoragePagination = { page, perPage };
 
   try {
     const scores = await getOriginalScoresBySpanHandler({
       mastra,
       traceId,
       spanId,
-      pagination,
+      page,
+      perPage,
     });
 
     return c.json(scores);

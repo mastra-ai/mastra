@@ -143,8 +143,14 @@ export async function listScoresBySpan({
   mastra,
   traceId,
   spanId,
-  pagination,
-}: Context & { traceId: string; spanId: string; pagination: StoragePagination }) {
+  page,
+  perPage,
+}: Context & {
+  traceId: string;
+  spanId: string;
+  page: StoragePagination['page'];
+  perPage: StoragePagination['perPage'];
+}) {
   try {
     const storage = mastra.getStorage();
     if (!storage) {
@@ -155,7 +161,7 @@ export async function listScoresBySpan({
       throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
     }
 
-    return await storage.listScoresBySpan({ traceId, spanId, pagination });
+    return await storage.listScoresBySpan({ traceId, spanId, pagination: { page, perPage } });
   } catch (error) {
     return handleError(error, 'Error getting scores by span');
   }
