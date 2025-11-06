@@ -28,6 +28,7 @@ import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   // ...
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -91,6 +92,7 @@ export const testAgent = new Agent({
   memory: new Memory({
     // ...
     storage: new LibSQLStore({
+      id: 'test-agent-storage',
       url: "file:agent-memory.db",
     }),
     // ...
@@ -104,7 +106,7 @@ If tracing is enabled in your Mastra deployment and memory is configured either 
 
 This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
 
-For more details on enabling and configuring tracing, see [AI Tracing](../observability/ai-tracing/overview).
+For more details on enabling and configuring tracing, see [Tracing](../observability/tracing/overview).
 
 ## Local development with LibSQL
 

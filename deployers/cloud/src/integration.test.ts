@@ -83,7 +83,6 @@ describe('CloudDeployer Integration Tests', () => {
       expect(packageJson.name).toBe('server');
       expect(packageJson.type).toBe('module');
       expect(packageJson.main).toBe('index.mjs');
-      expect(packageJson.scripts.start).toContain('node --import=./instrumentation.mjs');
     });
 
     it('should handle scoped packages correctly in package.json', async () => {
@@ -151,7 +150,6 @@ describe('CloudDeployer Integration Tests', () => {
       const nonExistentDir = join(tempDir, 'non-existent');
 
       // These operations should create directories as needed
-      await expect(deployer.writeInstrumentationFile(nonExistentDir)).resolves.not.toThrow();
       await expect(deployer.writePackageJson(nonExistentDir, new Map())).resolves.not.toThrow();
     });
 

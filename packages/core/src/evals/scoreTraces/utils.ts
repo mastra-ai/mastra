@@ -1,8 +1,6 @@
-import type { ToolInvocation } from '@internal/ai-sdk-v4/tool';
-import type { UIMessageWithMetadata } from '../../agent';
-import { convertMessages } from '../../agent/message-list/utils/convert-messages';
+import type { MastraDBMessage } from '../../agent';
 import { SpanType } from '../../observability';
-import type { SpanRecord, AITraceRecord } from '../../storage';
+import type { SpanRecord, TraceRecord } from '../../storage';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../types';
 
 // // Span tree structure for efficient lookups
@@ -11,9 +9,6 @@ interface SpanTree {
   childrenMap: Map<string, SpanRecord[]>;
   rootSpans: SpanRecord[];
 }
-
-// Spans don't have ids, so we need to omit it from the UIMessageWithMetadata type
-type TransformedUIMessage = Omit<UIMessageWithMetadata, 'id'>;
 
 /**
  * Build a hierarchical span tree with efficient lookup maps
@@ -59,88 +54,69 @@ function getChildrenOfType<T extends SpanRecord>(spanTree: SpanTree, parentSpanI
 }
 
 /**
- * Convert AI SDK v5 message content to v4 format
+ * Normalize message content to string format
+ * For arrays with multiple text parts, returns only the last text part (AI SDK convention)
  */
 function normalizeMessageContent(content: string | Array<{ type: string; text: string }>): string {
   if (typeof content === 'string') {
     return content;
   }
 
-  const tempMessage = {
-    id: 'temp',
-    role: 'user' as const,
-    parts: content.map(part => ({ type: part.type as 'text', text: part.text })),
-  };
-
-  const converted = convertMessages(tempMessage).to('AIV4.UI');
-  return converted[0]?.content || '';
+  // Extract text parts and return only the last one (AI SDK convention)
+  const textParts = content.filter(part => part.type === 'text');
+  return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
 }
 
 /**
- * Convert v5 message to v4 UIMessage format using convertMessages
- * Ensures full consistency with AI SDK UIMessage behavior
+ * Create MastraDBMessage directly from span message data
  */
-function convertToUIMessage(
+function createMastraDBMessage(
   message: { role: string; content: string | Array<{ type: string; text: string }> },
   createdAt: Date,
-): UIMessageWithMetadata {
-  // Create proper message input for convertMessages
-  let messageInput;
-  if (typeof message.content === 'string') {
-    messageInput = {
-      id: 'temp',
-      role: message.role as 'user' | 'assistant' | 'system',
-      content: message.content,
-    };
-  } else {
-    messageInput = {
-      id: 'temp',
-      role: message.role as 'user' | 'assistant' | 'system',
-      parts: message.content.map(part => ({ type: part.type as 'text', text: part.text })),
-    };
-  }
-
-  const converted = convertMessages(messageInput).to('AIV4.UI');
-  const result = converted[0];
-
-  if (!result) {
-    throw new Error('Failed to convert message');
-  }
+  id: string = '',
+): MastraDBMessage {
+  const contentText = normalizeMessageContent(message.content);
+  const role = message.role as 'user' | 'assistant' | 'system';
 
   return {
-    ...result,
-    id: '', // Spans don't have message IDs
-    createdAt: new Date(createdAt), // Use span timestamp
+    id,
+    role,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: contentText }],
+      content: contentText,
+    },
+    createdAt: new Date(createdAt),
   };
 }
 
 /**
  * Extract input messages from agent run span
  */
-function extractInputMessages(agentSpan: SpanRecord): TransformedUIMessage[] {
+function extractInputMessages(agentSpan: SpanRecord): MastraDBMessage[] {
   const input = agentSpan.input;
 
   // Handle different input formats
   if (typeof input === 'string') {
     return [
-      {
-        role: 'user',
-        content: input,
-        createdAt: new Date(agentSpan.startedAt),
-        parts: [{ type: 'text', text: input }],
-        experimental_attachments: [],
-      },
+      createMastraDBMessage(
+        {
+          role: 'user',
+          content: input,
+        },
+        agentSpan.startedAt,
+      ),
     ];
   }
 
   if (Array.isArray(input)) {
-    return input.map(msg => convertToUIMessage(msg, agentSpan.startedAt));
+    return input.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
   }
 
   // @ts-ignore
   if (input && typeof input === 'object' && Array.isArray(input.messages)) {
     // @ts-ignore
-    return input.messages.map(msg => convertToUIMessage(msg, agentSpan.startedAt));
+    return input.messages.map((msg: any) => createMastraDBMessage(msg, agentSpan.startedAt));
   }
   return [];
 }
@@ -161,12 +137,12 @@ function extractSystemMessages(llmSpan: SpanRecord): Array<{ role: 'system'; con
  * Extract conversation history (remembered messages) from LLM span
  * Excludes system messages and the current input message
  */
-function extractRememberedMessages(llmSpan: SpanRecord, currentInputContent: string): TransformedUIMessage[] {
+function extractRememberedMessages(llmSpan: SpanRecord, currentInputContent: string): MastraDBMessage[] {
   const messages = (llmSpan.input?.messages || [])
     .filter((msg: any) => msg.role !== 'system')
     .filter((msg: any) => normalizeMessageContent(msg.content) !== currentInputContent);
 
-  return messages.map((msg: any) => convertToUIMessage(msg, llmSpan.startedAt));
+  return messages.map((msg: any) => createMastraDBMessage(msg, llmSpan.startedAt));
 }
 
 /**
@@ -176,39 +152,18 @@ function reconstructToolInvocations(spanTree: SpanTree, parentSpanId: string) {
   const toolSpans = getChildrenOfType<SpanRecord>(spanTree, parentSpanId, SpanType.TOOL_CALL);
 
   return toolSpans.map(toolSpan => ({
-    state: 'result' as const,
-    toolName: toolSpan.attributes?.toolId,
+    toolCallId: toolSpan.spanId,
+    toolName: toolSpan.attributes?.toolId || '',
     args: toolSpan.input || {},
     result: toolSpan.output || {},
+    state: 'result' as const,
   }));
-}
-
-/**
- * Create message parts array including tool invocations and text
- */
-function createMessageParts(toolInvocations: SpanRecord[], textContent: string) {
-  const parts: { type: 'tool-invocation' | 'text'; toolInvocation?: SpanRecord; text?: string }[] = [];
-  for (const toolInvocation of toolInvocations) {
-    parts.push({
-      type: 'tool-invocation',
-      toolInvocation,
-    });
-  }
-
-  if (textContent.trim()) {
-    parts.push({
-      type: 'text',
-      text: textContent,
-    });
-  }
-
-  return parts;
 }
 
 /**
  * Validate trace structure and throw descriptive errors
  */
-export function validateTrace(trace: AITraceRecord): void {
+export function validateTrace(trace: TraceRecord): void {
   if (!trace) {
     throw new Error('Trace is null or undefined');
   }
@@ -246,7 +201,7 @@ function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: SpanRecord): Span
 /**
  * Extract common trace validation and span tree building logic
  */
-function prepareTraceForTransformation(trace: AITraceRecord) {
+function prepareTraceForTransformation(trace: TraceRecord) {
   validateTrace(trace);
   const spanTree = buildSpanTree(trace.spans);
 
@@ -260,7 +215,7 @@ function prepareTraceForTransformation(trace: AITraceRecord) {
   return { spanTree, rootAgentSpan };
 }
 
-export function transformTraceToScorerInputAndOutput(trace: AITraceRecord): {
+export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
   input: ScorerRunInputForAgent;
   output: ScorerRunOutputForAgent;
 } {
@@ -276,13 +231,12 @@ export function transformTraceToScorerInputAndOutput(trace: AITraceRecord): {
   const systemMessages = extractSystemMessages(primaryLLMSpan);
 
   // Extract remembered messages from LLM span (excluding current input)
-  const currentInputContent = inputMessages[0]?.content || '';
+  const currentInputContent = inputMessages[0]?.content.content || '';
   const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
 
   const input = {
-    // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
-    inputMessages: inputMessages as UIMessageWithMetadata[],
-    rememberedMessages: rememberedMessages as UIMessageWithMetadata[],
+    inputMessages,
+    rememberedMessages,
     systemMessages,
     taggedSystemMessages: {}, // Todo: Support tagged system messages
   };
@@ -291,19 +245,38 @@ export function transformTraceToScorerInputAndOutput(trace: AITraceRecord): {
   const toolInvocations = reconstructToolInvocations(spanTree, rootAgentSpan.spanId);
   const responseText = rootAgentSpan.output.text || '';
 
-  const responseMessage: TransformedUIMessage = {
+  // Build parts array: tool invocations first, then text
+  const parts: Array<{ type: 'tool-invocation'; toolInvocation: any } | { type: 'text'; text: string }> = [];
+
+  // Add tool invocation parts
+  for (const toolInvocation of toolInvocations) {
+    parts.push({
+      type: 'tool-invocation',
+      toolInvocation,
+    });
+  }
+
+  // Add text part if present
+  if (responseText.trim()) {
+    parts.push({
+      type: 'text',
+      text: responseText,
+    });
+  }
+
+  const responseMessage: MastraDBMessage = {
+    id: '',
     role: 'assistant',
-    content: responseText,
+    content: {
+      format: 2,
+      parts: parts as any, // Type assertion needed due to providerMetadata optional field
+      content: responseText,
+      toolInvocations, // Always include, even if empty array
+    },
     createdAt: new Date(rootAgentSpan.endedAt || rootAgentSpan.startedAt),
-    // @ts-ignore
-    parts: createMessageParts(toolInvocations, responseText),
-    experimental_attachments: [],
-    // Tool invocations are being deprecated however we need to support it for now
-    toolInvocations: toolInvocations as unknown as ToolInvocation[],
   };
 
-  // We do not keep track of the tool call ids in traces, so we need to cast to UIMessageWithMetadata
-  const output = [responseMessage as UIMessageWithMetadata];
+  const output: MastraDBMessage[] = [responseMessage];
 
   return {
     input,

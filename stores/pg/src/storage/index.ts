@@ -13,8 +13,8 @@ import type {
   StoragePagination,
   StorageDomains,
   SpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
+  TraceRecord,
+  TracesPaginatedArg,
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -42,10 +42,11 @@ export class PostgresStore extends MastraStorage {
     // Validation: connectionString or host/database/user/password must not be empty
     try {
       validateConfig('PostgresStore', config);
-      super({ name: 'PostgresStore' });
+      super({ id: config.id, name: 'PostgresStore' });
       this.schema = config.schemaName || 'public';
       if (isConnectionStringConfig(config)) {
         this.#config = {
+          id: config.id,
           connectionString: config.connectionString,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
@@ -55,11 +56,13 @@ export class PostgresStore extends MastraStorage {
         // Cloud SQL connector config
         this.#config = {
           ...config,
+          id: config.id,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
         };
       } else if (isHostConfig(config)) {
         this.#config = {
+          id: config.id,
           host: config.host,
           port: config.port,
           database: config.database,
@@ -400,7 +403,7 @@ export class PostgresStore extends MastraStorage {
     return this.stores.observability.updateSpan({ spanId, traceId, updates });
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -409,10 +412,10 @@ export class PostgresStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.getAITrace(traceId);
+    return this.stores.observability.getTrace(traceId);
   }
 
-  async getAITracesPaginated(args: AITracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -421,7 +424,7 @@ export class PostgresStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.getAITracesPaginated(args);
+    return this.stores.observability.getTracesPaginated(args);
   }
 
   async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
@@ -454,7 +457,7 @@ export class PostgresStore extends MastraStorage {
     return this.stores.observability.batchUpdateSpans(args);
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -463,7 +466,7 @@ export class PostgresStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchDeleteAITraces(args);
+    return this.stores.observability.batchDeleteTraces(args);
   }
 
   /**

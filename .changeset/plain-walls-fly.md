@@ -1,5 +1,5 @@
 ---
-'@mastra/google-cloud-pubsub': major
+'@mastra/google-cloud-pubsub': minor
 '@mastra/playground-ui': major
 '@mastra/client-js': major
 '@mastra/deployer': major

@@ -9,48 +9,6 @@ Client SDK changes align with server-side API updates including renamed utilitie
 
 ## Changed
 
-### `RuntimeContext` utilities to `RequestContext`
-
-Client SDK utility functions have been renamed from `RuntimeContext` to `RequestContext`. This change aligns with the global rename for clarity about request-specific context.
-
-To migrate, update utility function imports and calls.
-
-```diff
-- import {
--   parseClientRuntimeContext,
--   base64RuntimeContext,
--   runtimeContextQueryString,
-- } from '@mastra/client-js';
-+ import {
-+   parseClientRequestContext,
-+   base64RequestContext,
-+   requestContextQueryString,
-+ } from '@mastra/client-js';
-
-- const context = parseClientRuntimeContext(data);
-- const encoded = base64RuntimeContext(context);
-- const qs = runtimeContextQueryString(context);
-+ const context = parseClientRequestContext(data);
-+ const encoded = base64RequestContext(context);
-+ const qs = requestContextQueryString(context);
-```
-
-### Pagination parameters from `offset/limit` to `page/perPage`
-
-All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
-
-To migrate, update pagination parameters in all client SDK method calls.
-
-```diff
-  client.memory.listMessages({
-    threadId: 'thread-123',
--   offset: 0,
--   limit: 20,
-+   page: 0,
-+   perPage: 20,
-  });
-```
-
 ### Client SDK types from `Get*` to `List*`
 
 Client SDK types have been renamed from `Get*` to `List*` pattern. This change aligns type names with the method naming convention.
@@ -70,6 +28,22 @@ To migrate, update type imports to use the new naming pattern.
 + } from '@mastra/client-js';
 ```
 
+### Pagination parameters from `offset/limit` to `page/perPage`
+
+All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
+
+To migrate, update pagination parameters in all client SDK method calls. Example:
+
+```diff
+  client.memory.listMessages({
+    threadId: 'thread-123',
+-   offset: 0,
+-   limit: 20,
++   page: 0,
++   perPage: 20,
+  });
+```
+
 ### `getMemoryThread` parameter structure
 
 The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
@@ -77,8 +51,8 @@ The `getMemoryThread` method parameter structure has been updated. This change p
 To migrate, update the method call with the new parameter structure. Check the updated API documentation for the specific changes.
 
 ```diff
-- const thread = await client.memory.getMemoryThread({ threadId, agentId });
-+ const thread = await client.memory.getMemoryThread({ threadId });
+- const thread = await client.memory.getMemoryThread(threadId, agentId);
++ const thread = await client.memory.getMemoryThread({ threadId, agentId });
 ```
 
 ## Removed

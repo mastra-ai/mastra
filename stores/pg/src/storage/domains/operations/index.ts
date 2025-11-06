@@ -6,7 +6,7 @@ import {
   TABLE_MESSAGES,
   TABLE_TRACES,
   TABLE_SCORERS,
-  TABLE_AI_SPANS,
+  TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
@@ -289,7 +289,7 @@ export class StoreOperationsPG extends StoreOperations {
       });
 
       // Set up timestamp triggers for Spans table
-      if (tableName === TABLE_AI_SPANS) {
+      if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
       }
     } catch (error) {
@@ -746,22 +746,22 @@ export class StoreOperationsPG extends StoreOperations {
       // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['name'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       },
     ];
