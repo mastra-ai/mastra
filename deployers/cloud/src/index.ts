@@ -15,12 +15,6 @@ export class CloudDeployer extends Deployer {
   }
 
   async deploy(_outputDirectory: string): Promise<void> {}
-  async writeInstrumentationFile(outputDirectory: string) {
-    const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-
-    await copy(join(__dirname, '../templates', 'instrumentation-template.js'), instrumentationFile);
-  }
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
     const versions = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as
       | Record<string, string>
