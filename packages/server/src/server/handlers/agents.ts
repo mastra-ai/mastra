@@ -313,12 +313,13 @@ export async function listAgentsHandler({
       }),
     );
 
-    const serializedAgents = serializedAgentsMap.reduce<
-      Record<string, Omit<(typeof serializedAgentsMap)[number], 'id'>>
-    >((acc, { id, ...rest }) => {
-      acc[id] = rest;
-      return acc;
-    }, {});
+    const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      (acc, { id, ...rest }) => {
+        acc[id] = { id, ...rest };
+        return acc;
+      },
+      {},
+    );
 
     return serializedAgents;
   } catch (error) {
