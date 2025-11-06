@@ -48,6 +48,8 @@ program
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
   .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
   .option('-m, --mcp <mcp>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option('--git-init', 'Initialize a git repository')
+  .option('--no-git-init', 'Do not initialize a git repository')
   .option(
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
@@ -59,6 +61,7 @@ program
 
     if (args.default) {
       await create({
+        projectName,
         components: ['agents', 'tools', 'workflows', 'scorers'],
         llmProvider: 'openai',
         addExample: true,
@@ -67,6 +70,7 @@ program
         mcpServer: args.mcp,
         directory: 'src/',
         template: args.template,
+        gitInit: args.gitInit,
         analytics,
       });
       return;
@@ -83,6 +87,7 @@ program
       directory: args.dir,
       mcpServer: args.mcp,
       template: args.template,
+      gitInit: args.gitInit,
       analytics,
     });
   });
