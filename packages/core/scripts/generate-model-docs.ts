@@ -854,8 +854,7 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
 
   const hasNetlify = gatewaysList.includes('netlify');
   const logoImport = hasNetlify
-    ? '\
-import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";'
+    ? '\nimport { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";'
     : '';
 
   return `---
