@@ -127,7 +127,7 @@
     "@mastra/client-js": "workspace:^",
     "@mastra/core": "workspace:*",
     "@mastra/react": "workspace:*",
-    "@storybook/addon-docs": "^9.1.10",
+    "@storybook/addon-docs": "^9.1.16",
     "@storybook/react-vite": "^9.1.10",
     "@tanstack/react-query": "^5.81.5",
     "@types/node": "^20.19.0",
