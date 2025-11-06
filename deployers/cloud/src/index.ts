@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'path';
 import { Deployer } from '@mastra/deployer';
-import { copy, readJSON } from 'fs-extra/esm';
+import { readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
