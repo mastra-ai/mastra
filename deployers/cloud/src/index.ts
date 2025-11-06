@@ -67,7 +67,7 @@ import { mastra } from '#mastra';
 import { MultiLogger } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { createCloudStorage } from '@mastra/cloud-storage';
 import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
@@ -114,14 +114,8 @@ if (mastra?.storage) {
 if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
   const { MastraStorage } = await import('@mastra/core/storage');
   logger.info('Using Mastra Cloud Storage: ' + process.env.MASTRA_STORAGE_URL)
-  const storage = new LibSQLStore({
-    id: 'mastra-cloud-storage-libsql',
+  const { storage, vector } = createCloudStorage({
     url: process.env.MASTRA_STORAGE_URL,
-    authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
-  })
-  const vector = new LibSQLVector({
-    id: 'mastra-cloud-storage-libsql-vector',
-    connectionUrl: process.env.MASTRA_STORAGE_URL,
     authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
   })
 
