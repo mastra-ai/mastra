@@ -7,12 +7,6 @@ import {
   SelectValue,
 } from "@site/src/components/ui/select";
 
-/*
-This component is used to display a version selector in the navbar.
-It allows users to switch between different documentation versions:
-- Stable = 0.x (default /docs)
-- Beta = v1/main (/docs/v1)
-*/
 export default function VersionControl({
   className,
   size = "default",
@@ -20,15 +14,15 @@ export default function VersionControl({
   className?: string;
   size?: "sm" | "default";
 }) {
-  // Initialize to stable to match SSR output and prevent hydration mismatch
-  // Stable = 0.x (default /docs), Beta = v1 (/docs/v1)
   const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
     "stable",
   );
 
+  const versionedPaths = ["docs", "models", "examples", "guides", "reference"];
+
   useEffect(() => {
     const path = window.location.pathname;
-    if (path.includes("/docs/v1")) {
+    if (path.includes("/v1")) {
       setCurrentVersion("beta");
     } else {
       setCurrentVersion("stable");
@@ -42,14 +36,26 @@ export default function VersionControl({
     let newPath: string;
 
     if (nextVersion === "beta") {
-      if (currentPath.startsWith("/docs/")) {
-        newPath = currentPath.replace(/^\/docs/, "/docs/v1");
+      const matchedPath = versionedPaths.find((p) =>
+        currentPath.startsWith(`/${p}/`),
+      );
+      if (matchedPath) {
+        newPath = currentPath.replace(
+          new RegExp(`^/${matchedPath}`),
+          `/${matchedPath}/v1`,
+        );
       } else {
         newPath = "/docs/v1";
       }
     } else {
-      if (currentPath.includes("/docs/v1")) {
-        newPath = currentPath.replace(/^\/docs\/v1/, "/docs");
+      const matchedPath = versionedPaths.find((p) =>
+        currentPath.startsWith(`/${p}/v1`),
+      );
+      if (matchedPath) {
+        newPath = currentPath.replace(
+          new RegExp(`^/${matchedPath}/v1`),
+          `/${matchedPath}`,
+        );
       } else {
         newPath = "/docs";
       }
