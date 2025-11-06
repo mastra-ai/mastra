@@ -85,6 +85,11 @@ const sidebars = {
               label: "Memory",
             },
             {
+              id: "migrations/upgrade-to-v1/processors",
+              type: "doc",
+              label: "Processors",
+            },
+            {
               id: "migrations/upgrade-to-v1/workflows",
               type: "doc",
               label: "Workflows",
