@@ -7,6 +7,7 @@ import { testRoute } from './api/route/test';
 import { PostgresStore } from '@mastra/pg';
 
 const storage = new PostgresStore({
+  id: 'e2e-postgres-storage',
   connectionString: 'test-connection-string',
 });
 

@@ -25,6 +25,7 @@ npm install @mastra/upstash@latest
 import { UpstashStore } from "@mastra/upstash";
 
 const storage = new UpstashStore({
+  id: 'upstash-storage',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });

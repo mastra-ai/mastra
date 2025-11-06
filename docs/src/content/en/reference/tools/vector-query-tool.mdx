@@ -581,6 +581,7 @@ import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
