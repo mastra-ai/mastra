@@ -16,7 +16,6 @@ The cloud deployer test suite consists of **67 tests** across **5 test files**, 
 
 - **Constructor**: Ensures the CloudDeployer instance is created properly with the correct inheritance chain
 - **Deploy Method**: Validates the deploy method exists (currently a no-op implementation)
-- **Instrumentation File Creation**: Tests that the instrumentation template is correctly copied to the output directory
 - **Package.json Generation**: Verifies cloud-specific dependencies (`@mastra/loggers`, `@mastra/libsql`, `@mastra/cloud`) are automatically added
 - **Bundle Method**: Tests the bundling process, including:
   - Correct working directory changes

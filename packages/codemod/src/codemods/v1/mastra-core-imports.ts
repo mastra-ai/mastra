@@ -40,15 +40,15 @@ const EXPORT_TO_SUBPATH: Record<string, string> = {
   CompositeVoice: '@mastra/core/voice',
 
   // Scorers/Evals
-  runExperiment: '@mastra/core/scores',
+  runEvals: '@mastra/core/scores',
   createScorer: '@mastra/core/scores',
 
   // Server
   registerApiRoute: '@mastra/core/server',
 
-  // AI Tracing
-  DefaultExporter: '@mastra/core/ai-tracing',
-  CloudExporter: '@mastra/core/ai-tracing',
+  // Tracing
+  DefaultExporter: '@mastra/observability',
+  CloudExporter: '@mastra/observability',
 
   // Streaming
   ChunkType: '@mastra/core/stream',

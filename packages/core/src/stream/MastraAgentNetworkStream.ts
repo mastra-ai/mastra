@@ -54,69 +54,74 @@ export class MastraAgentNetworkStream extends ReadableStream<ChunkType> {
 
     super({
       start: async controller => {
-        const writer = new WritableStream<ChunkType>({
-          write: chunk => {
-            if (
-              (chunk.type === 'step-output' &&
-                chunk.payload?.output?.from === 'AGENT' &&
-                chunk.payload?.output?.type === 'finish') ||
-              (chunk.type === 'step-output' &&
-                chunk.payload?.output?.from === 'WORKFLOW' &&
-                chunk.payload?.output?.type === 'finish')
-            ) {
-              const output = chunk.payload?.output;
-              if (output && 'payload' in output && output.payload) {
-                const finishPayload = output.payload;
-                if ('usage' in finishPayload && finishPayload.usage) {
-                  updateUsageCount(finishPayload.usage);
-                } else if ('output' in finishPayload && finishPayload.output) {
-                  const outputPayload = finishPayload.output;
-                  if ('usage' in outputPayload && outputPayload.usage) {
-                    updateUsageCount(outputPayload.usage);
+        try {
+          const writer = new WritableStream<ChunkType>({
+            write: chunk => {
+              if (
+                (chunk.type === 'step-output' &&
+                  chunk.payload?.output?.from === 'AGENT' &&
+                  chunk.payload?.output?.type === 'finish') ||
+                (chunk.type === 'step-output' &&
+                  chunk.payload?.output?.from === 'WORKFLOW' &&
+                  chunk.payload?.output?.type === 'finish')
+              ) {
+                const output = chunk.payload?.output;
+                if (output && 'payload' in output && output.payload) {
+                  const finishPayload = output.payload;
+                  if ('usage' in finishPayload && finishPayload.usage) {
+                    updateUsageCount(finishPayload.usage);
+                  } else if ('output' in finishPayload && finishPayload.output) {
+                    const outputPayload = finishPayload.output;
+                    if ('usage' in outputPayload && outputPayload.usage) {
+                      updateUsageCount(outputPayload.usage);
+                    }
                   }
                 }
               }
+
+              controller.enqueue(chunk);
+            },
+          });
+
+          const stream: ReadableStream<ChunkType> = await createStream(writer);
+
+          const getInnerChunk = (chunk: ChunkType) => {
+            if (chunk.type === 'workflow-step-output') {
+              return getInnerChunk(chunk.payload.output as any);
             }
+            return chunk;
+          };
 
-            controller.enqueue(chunk);
-          },
-        });
-
-        const stream: ReadableStream<ChunkType> = await createStream(writer);
-
-        const getInnerChunk = (chunk: ChunkType) => {
-          if (chunk.type === 'workflow-step-output') {
-            return getInnerChunk(chunk.payload.output as any);
-          }
-          return chunk;
-        };
-
-        for await (const chunk of stream) {
-          if (chunk.type === 'workflow-step-output') {
-            const innerChunk = getInnerChunk(chunk);
-            if (
-              innerChunk.type === 'routing-agent-end' ||
-              innerChunk.type === 'agent-execution-end' ||
-              innerChunk.type === 'workflow-execution-end'
-            ) {
-              if (innerChunk.payload?.usage) {
-                updateUsageCount(innerChunk.payload.usage);
+          for await (const chunk of stream) {
+            if (chunk.type === 'workflow-step-output') {
+              const innerChunk = getInnerChunk(chunk);
+              if (
+                innerChunk.type === 'routing-agent-end' ||
+                innerChunk.type === 'agent-execution-end' ||
+                innerChunk.type === 'workflow-execution-end'
+              ) {
+                if (innerChunk.payload?.usage) {
+                  updateUsageCount(innerChunk.payload.usage);
+                }
+              }
+              if (innerChunk.type === 'network-execution-event-finish') {
+                const finishPayload = {
+                  ...innerChunk.payload,
+                  usage: this.#usageCount,
+                };
+                controller.enqueue({ ...innerChunk, payload: finishPayload });
+              } else {
+                controller.enqueue(innerChunk);
               }
             }
-            if (innerChunk.type === 'network-execution-event-finish') {
-              const finishPayload = {
-                ...innerChunk.payload,
-                usage: this.#usageCount,
-              };
-              controller.enqueue({ ...innerChunk, payload: finishPayload });
-            } else {
-              controller.enqueue(innerChunk);
-            }
           }
-        }
 
-        controller.close();
-        deferredPromise.resolve();
+          controller.close();
+          deferredPromise.resolve();
+        } catch (error) {
+          controller.error(error);
+          deferredPromise.reject(error);
+        }
       },
     });
 

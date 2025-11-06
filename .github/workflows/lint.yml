@@ -99,10 +99,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v5
         with:
-          node-version: 20.19.5
+          node-version: 22.13.0
           package-manager-cache: false
 
       - name: Install dependencies
@@ -127,10 +127,10 @@ jobs:
           # with the correct commits
           fetch-depth: 0
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.19.5
+          node-version: 22.13.0
           package-manager-cache: false
 
       - name: Install dependencies
@@ -171,10 +171,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v5
         with:
-          node-version: 20.19.5
+          node-version: 22.13.0
           package-manager-cache: false
 
       - name: Run package.json validator

@@ -1,14 +1,14 @@
 ---
-'@mastra/voice-google-gemini-live': major
-'@mastra/google-cloud-pubsub': major
-'@mastra/voice-openai-realtime': major
+'@mastra/voice-google-gemini-live': minor
+'@mastra/google-cloud-pubsub': minor
+'@mastra/voice-openai-realtime': minor
 '@mastra/mcp-docs-server': major
 '@mastra/agent-builder': major
 '@mastra/playground-ui': major
 '@mastra/client-js': major
 '@mastra/cloudflare-d1': major
 '@mastra/ai-sdk': major
-'@mastra/react': major
+'@mastra/react': minor
 '@mastra/deployer': major
 '@mastra/clickhouse': major
 '@mastra/cloudflare': major

@@ -1,5 +1,4 @@
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { copy } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -106,19 +105,6 @@ describe('CloudDeployer', () => {
   describe('deploy', () => {
     it('should be implemented but do nothing', async () => {
       await expect(deployer.deploy('/output')).resolves.toBeUndefined();
-    });
-  });
-
-  describe('writeInstrumentationFile', () => {
-    it('should copy instrumentation template to output directory', async () => {
-      const outputDirectory = '/test/output';
-      await deployer.writeInstrumentationFile(outputDirectory);
-
-      const __dirname = dirname(fileURLToPath(import.meta.url));
-      expect(copy).toHaveBeenCalledWith(
-        join(__dirname, '../templates', 'instrumentation-template.js'),
-        join(outputDirectory, 'instrumentation.mjs'),
-      );
     });
   });
 
@@ -307,14 +293,6 @@ describe('CloudDeployer', () => {
       // @ts-ignore - accessing protected method for testing
       await expect(deployer.installDependencies(outputDirectory)).rejects.toThrow('Install failed');
     });
-
-    it('should handle copy error in writeInstrumentationFile', async () => {
-      const outputDirectory = '/test/output';
-
-      vi.mocked(copy).mockRejectedValue(new Error('Copy failed'));
-
-      await expect(deployer.writeInstrumentationFile(outputDirectory)).rejects.toThrow('Copy failed');
-    });
   });
 
   describe('integration scenarios', () => {
@@ -331,9 +309,6 @@ describe('CloudDeployer', () => {
 
       // Write package.json
       await deployer.writePackageJson(outputDirectory, dependencies);
-
-      // Write instrumentation
-      await deployer.writeInstrumentationFile(outputDirectory);
 
       // Verify calls
       expect(getMastraEntryFile).toHaveBeenCalled();

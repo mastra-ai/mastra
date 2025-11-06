@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import { MastraBase } from '@mastra/core/base';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
@@ -8,7 +9,7 @@ import type {
   ObservabilityEntrypoint,
   ObservabilityInstance,
 } from '@mastra/core/observability';
-import { SamplingStrategyType } from './config';
+import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
 import { CloudExporter, DefaultExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
@@ -37,12 +38,45 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       config = {};
     }
 
-    // Check for naming conflict if default is enabled
-    if (config.default?.enabled && config.configs?.['default']) {
-      throw new Error(
-        "Cannot use 'default' as a custom config name when default tracing is enabled. " +
-          'Please rename your custom config to avoid conflicts.',
-      );
+    // Validate config with Zod
+    const validationResult = observabilityRegistryConfigSchema.safeParse(config);
+    if (!validationResult.success) {
+      const errorMessages = validationResult.error.errors
+        .map(err => `${err.path.join('.') || 'config'}: ${err.message}`)
+        .join('; ');
+      throw new MastraError({
+        id: 'OBSERVABILITY_INVALID_CONFIG',
+        text: `Invalid observability configuration: ${errorMessages}`,
+        domain: ErrorDomain.MASTRA_OBSERVABILITY,
+        category: ErrorCategory.USER,
+        details: {
+          validationErrors: errorMessages,
+        },
+      });
+    }
+
+    // Validate individual configs if they are plain objects (not instances)
+    if (config.configs) {
+      for (const [name, configValue] of Object.entries(config.configs)) {
+        if (!isInstance(configValue)) {
+          const configValidation = observabilityConfigValueSchema.safeParse(configValue);
+          if (!configValidation.success) {
+            const errorMessages = configValidation.error.errors
+              .map(err => `${err.path.join('.')}: ${err.message}`)
+              .join('; ');
+            throw new MastraError({
+              id: 'OBSERVABILITY_INVALID_INSTANCE_CONFIG',
+              text: `Invalid configuration for observability instance '${name}': ${errorMessages}`,
+              domain: ErrorDomain.MASTRA_OBSERVABILITY,
+              category: ErrorCategory.USER,
+              details: {
+                instanceName: name,
+                validationErrors: errorMessages,
+              },
+            });
+          }
+        }
+      }
     }
 
     // Setup default config if enabled
