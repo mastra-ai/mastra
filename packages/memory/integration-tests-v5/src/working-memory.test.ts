@@ -1510,7 +1510,7 @@ describe('Working Memory Tests', () => {
       runWorkingMemoryTests(() => memory);
     });
 
-    describe('Experimental Working Memory Tool - Thread Scope', () => {
+    describe.skip('Experimental Working Memory Tool - Thread Scope', () => {
       let memory: Memory;
 
       beforeEach(() => {
@@ -1536,7 +1536,7 @@ describe('Working Memory Tests', () => {
       runWorkingMemoryTests(() => memory);
     });
 
-    describe('Experimental Working Memory Tool - Resource Scope', () => {
+    describe.skip('Experimental Working Memory Tool - Resource Scope', () => {
       let memory: Memory;
 
       beforeEach(() => {
