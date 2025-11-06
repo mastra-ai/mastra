@@ -1,3 +1,4 @@
+import z from 'zod';
 import {
   getAgentBuilderActionsHandler,
   getAgentBuilderActionByIdHandler,
@@ -15,7 +16,6 @@ import {
   resumeAgentBuilderActionHandler,
   resumeStreamAgentBuilderActionHandler,
   cancelAgentBuilderActionRunHandler,
-  sendAgentBuilderActionRunEventHandler,
 } from '../../handlers/agent-builder';
 import {
   actionIdPathParams,
@@ -24,7 +24,6 @@ import {
   streamWorkflowBodySchema,
   resumeStreamBodySchema,
   startAsyncWorkflowBodySchema,
-  sendWorkflowRunEventBodySchema,
   workflowExecutionResultSchema,
   workflowControlResponseSchema,
   workflowRunResponseSchema,
@@ -32,7 +31,6 @@ import {
   workflowInfoSchema,
   listWorkflowsResponseSchema,
 } from '../../schemas/agent-builder';
-import z from 'zod';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
@@ -211,17 +209,6 @@ export const AGENT_BUILDER_ROUTES: ServerRoute[] = [
     responseSchema: workflowControlResponseSchema,
     summary: 'Cancel action run',
     description: 'Cancels an in-progress action execution',
-    tags: ['Agent Builder'],
-  }),
-  createRoute({
-    method: 'POST',
-    responseType: 'json',
-    handler: sendAgentBuilderActionRunEventHandler as unknown as ServerRouteHandler,
-    path: '/api/agent-builder/actions/:actionId/runs/:runId/events',
-    pathParamSchema: actionRunPathParams,
-    bodySchema: sendWorkflowRunEventBodySchema,
-    summary: 'Send action event',
-    description: 'Sends a custom event to a running action execution',
     tags: ['Agent Builder'],
   }),
 ];

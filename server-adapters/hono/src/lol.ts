@@ -411,11 +411,6 @@ const mastra = new Mastra({
     travelAgentWorkflow,
   },
   storage,
-  observability: {
-    default: {
-      enabled: true,
-    },
-  },
 });
 
 const app = new Hono();

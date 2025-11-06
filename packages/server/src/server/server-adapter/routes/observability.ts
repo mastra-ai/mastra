@@ -1,9 +1,9 @@
 import z from 'zod';
 import {
   getAITracesPaginatedHandler,
-  getAITraceHandler,
   scoreTracesHandler,
   listScoresBySpan,
+  getTraceHandler,
 } from '../../handlers/observability';
 import {
   getAITracesPaginatedResponseSchema,
@@ -42,7 +42,7 @@ export const OBSERVABILITY_ROUTES: ServerRoute[] = [
   createRoute({
     method: 'GET',
     responseType: 'json',
-    handler: getAITraceHandler as unknown as ServerRouteHandler,
+    handler: getTraceHandler as unknown as ServerRouteHandler,
     path: '/api/observability/traces/:traceId',
     pathParamSchema: traceIdPathParams,
     responseSchema: getAITraceResponseSchema,

@@ -1,7 +1,6 @@
 import {
   getMemoryConfigHandler,
   getMemoryStatusHandler,
-  getMessagesHandler,
   getThreadByIdHandler,
   getWorkingMemoryHandler,
   listThreadsHandler,
@@ -94,7 +93,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
   createRoute({
     method: 'GET',
     responseType: 'json',
-    handler: getMessagesHandler as unknown as ServerRouteHandler,
+    handler: listMessagesHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId/messages',
     pathParamSchema: threadIdPathParams,
     queryParamSchema: getMessagesQuerySchema,

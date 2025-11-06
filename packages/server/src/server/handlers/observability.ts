@@ -79,7 +79,7 @@ export async function getAITracesPaginatedHandler({ mastra, pagination, filters 
       }
     }
 
-    return storage.getAITracesPaginated({
+    return storage.getTracesPaginated({
       pagination,
       filters,
     });
