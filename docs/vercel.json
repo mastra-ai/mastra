@@ -1122,11 +1122,6 @@
     },
     {
       "source": "/docs/evals",
-      "destination": "/docs/scorers/overview",
-      "permanent": true
-    },
-    {
-      "source": "/docs/evals/overview",
       "destination": "/docs/evals/overview",
       "permanent": true
     },

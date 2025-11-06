@@ -20,6 +20,16 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 + const workflows = mastra.listWorkflows();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod v1/workflows-get-workflows .
+```
+
+:::
+
 ### `RuntimeContext` to `RequestContext` in step context
 
 The parameter name `runtimeContext` has been changed to `requestContext` in workflow step execution context. This change aligns with the global rename for clarity.

@@ -33,27 +33,6 @@ npx @mastra/codemod v1/mastra-core-imports .
 
 :::
 
-### Direct property access to getter methods
-
-Direct property access on the Mastra instance is deprecated. Methods like `mastra.logger`, `mastra.storage`, `mastra.agents`, etc. now show deprecation warnings and will be removed in a future version. This change provides better encapsulation and allows for dynamic configuration based on request context.
-
-To migrate, replace direct property access with the corresponding getter methods.
-
-```diff
-- const logger = mastra.logger;
-- const storage = mastra.storage;
-- const agents = mastra.agents;
-- const tts = mastra.tts;
-- const vectors = mastra.vectors;
-- const memory = mastra.memory;
-+ const logger = mastra.getLogger();
-+ const storage = mastra.getStorage();
-+ const agents = mastra.listAgents();
-+ const tts = mastra.getTTS();
-+ const vectors = mastra.getVectors();
-+ const memory = mastra.getMemory();
-```
-
 ### `experimental_auth` to `auth`
 
 The experimental auth configuration has been promoted to stable. This change reflects that the auth API is now stable and production-ready.
@@ -68,6 +47,16 @@ To migrate, rename the `experimental_auth` key to `auth` in your Mastra configur
     },
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod v1/experimental-auth .
+```
+
+:::
 
 ### Required `id` parameter for all mastra primitives
 
@@ -122,6 +111,7 @@ When using separate instances for different purposes, use descriptive unique IDs
 ```
 
 ### Each primtive has a `getById` and a `get` function
+
 ```typescript
 mastra.getMCPServer('myServer');          // Works (registry key)
 mastra.getMCPServerById('my-mcp-server'); // Works (intrinsic ID)
