@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import type { UIMessageWithMetadata } from '@mastra/core/agent';
+import type { MastraDBMessage, UIMessageWithMetadata } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
@@ -20,6 +20,7 @@ describe('Agent Memory Tests', () => {
 
   it(`inherits storage from Mastra instance`, async () => {
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test',
       instructions: '',
       model: openai('gpt-4o-mini'),
@@ -34,22 +35,25 @@ describe('Agent Memory Tests', () => {
         agent,
       },
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
     });
     const agentMemory = (await mastra.getAgent('agent').getMemory())!;
-    await expect(agentMemory.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory.recall({ threadId: '1' })).resolves.not.toThrow();
     const agentMemory2 = (await agent.getMemory())!;
-    await expect(agentMemory2.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory2.recall({ threadId: '1' })).resolves.not.toThrow();
   });
 
   it('should inherit storage from Mastra instance when workingMemory is enabled', async () => {
     const mastra = new Mastra({
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       agents: {
         testAgent: new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model: openai('gpt-4o-mini'),
@@ -96,10 +100,12 @@ describe('Agent Memory Tests', () => {
   it('should work with resource-scoped working memory when storage supports it', async () => {
     const mastra = new Mastra({
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       agents: {
         testAgent: new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a test agent',
           model: openai('gpt-4o-mini'),
@@ -143,10 +149,12 @@ describe('Agent Memory Tests', () => {
 
   it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
     const storage = new LibSQLStore({
+      id: 'inline-storage',
       url: dbFile,
     });
     const vector = new LibSQLVector({
       connectionUrl: dbFile,
+      id: 'test-vector',
     });
 
     const mastra = new Mastra({
@@ -154,6 +162,7 @@ describe('Agent Memory Tests', () => {
       vectors: { default: vector },
       agents: {
         testAgent: new Agent({
+          id: 'test-agent',
           name: 'Test Agent',
           instructions: 'You are a helpful assistant',
           model: openai('gpt-4o-mini'),
@@ -188,7 +197,7 @@ describe('Agent Memory Tests', () => {
     });
 
     // Verify first thread has messages
-    const thread1Messages = await memory.query({ threadId: thread1Id, resourceId });
+    const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
     expect(thread1Messages.messages.length).toBeGreaterThan(0);
 
     // Now create a second thread - this should be able to access memory from thread1
@@ -197,12 +206,14 @@ describe('Agent Memory Tests', () => {
 
     // Mock the getMemoryMessages method to track if it's called
     let getMemoryMessagesCalled = false;
-    let retrievedMemoryMessages: any[] = [];
+    let retrievedMemoryMessages: { messages: MastraDBMessage[] } = { messages: [] };
+
     const originalGetMemoryMessages = (agent as any).getMemoryMessages;
+
     (agent as any).getMemoryMessages = async (...args: any[]) => {
       getMemoryMessagesCalled = true;
       const result = await originalGetMemoryMessages.call(agent, ...args);
-      retrievedMemoryMessages = result || [];
+      retrievedMemoryMessages = result?.messages ? result : { messages: [] };
       return result;
     };
 
@@ -219,13 +230,14 @@ describe('Agent Memory Tests', () => {
     expect(getMemoryMessagesCalled).toBe(true);
 
     // Verify that getMemoryMessages actually returned messages from the first thread
-    expect(retrievedMemoryMessages.length).toBeGreaterThan(0);
+    expect(retrievedMemoryMessages.messages.length).toBeGreaterThan(0);
 
     // Verify that the retrieved messages contain content from the first thread
-    const hasMessagesFromFirstThread = retrievedMemoryMessages.some(
-      msg =>
-        msg.threadId === thread1Id || (typeof msg.content === 'string' && msg.content.toLowerCase().includes('cat')),
-    );
+    const hasMessagesFromFirstThread = retrievedMemoryMessages.messages.some(msg => {
+      const text = (msg.content.parts?.[0]?.type === 'text' && msg.content.parts[0]?.text?.toLowerCase()) || '';
+      return msg.threadId === thread1Id || text?.includes('cat');
+    });
+
     expect(hasMessagesFromFirstThread).toBe(true);
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
   });
@@ -238,14 +250,17 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
       },
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile,
+        id: 'test-vector',
       }),
       embedder: fastembed,
     });
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
@@ -271,12 +286,16 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages, uiMessages } = await agentMemory.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+      const { messages } = await agentMemory.recall({ threadId });
+      const userMessages = messages
+        .filter((m: any) => m.role === 'user')
+        .map((m: any) => {
+          // Extract text from MastraDBMessage content.parts
+          const textParts = m.content.parts?.filter((p: any) => p.type === 'text') || [];
+          return textParts.map((p: any) => p.text).join('');
+        });
 
       expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
-      expect(userUiMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
     });
 
     it('should save assistant responses for both text and object output modes', async () => {
@@ -299,24 +318,15 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages, uiMessages } = await agentMemory.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
-      const assistantUiMessages = uiMessages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
+      const { messages } = await agentMemory.recall({ threadId });
+      const userMessages = messages
+        .filter((m: any) => m.role === 'user')
+        .map((m: any) => m.content.parts?.find((p: any) => p.type === 'text')?.text || '');
+      const assistantMessages = messages
+        .filter((m: any) => m.role === 'assistant')
+        .map((m: any) => m.content.parts?.find((p: any) => p.type === 'text')?.text || '');
       expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
-      expect(userUiMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
-      function flattenAssistantMessages(messages: any[]) {
-        return messages.flatMap(msg =>
-          Array.isArray(msg) ? msg.map(part => (typeof part === 'object' && part.text ? part.text : part)) : msg,
-        );
-      }
-
-      expect(flattenAssistantMessages(assistantMessages)).toEqual(
-        expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
-      );
-
-      expect(flattenAssistantMessages(assistantUiMessages)).toEqual(
+      expect(assistantMessages).toEqual(
         expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
       );
     });
@@ -341,18 +351,20 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Assert that the context messages are NOT saved
-      const savedContextMessages = messages.filter(
-        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
-      );
+      const savedContextMessages = messages.filter((m: any) => {
+        const text = m.content.parts?.find((p: any) => p.type === 'text')?.text || '';
+        return text === contextMessageContent1 || text === contextMessageContent2;
+      });
       expect(savedContextMessages.length).toBe(0);
 
       // Assert that the user message IS saved
       const savedUserMessages = messages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(1);
-      expect(savedUserMessages[0].content).toBe(userMessageContent);
+      const savedUserText = savedUserMessages[0].content.parts?.find((p: any) => p.type === 'text')?.text || '';
+      expect(savedUserText).toBe(userMessageContent);
     });
 
     it('should persist UIMessageWithMetadata through agent generate and memory', async () => {
@@ -393,41 +405,53 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { uiMessages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Check that all user messages were saved
-      const savedUserMessages = uiMessages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
       expect(savedUserMessages.length).toBe(2);
 
       // Check that metadata was persisted in the stored messages
-      const firstMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
-      const secondMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
+      const firstMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Hello with metadata';
+      });
+      const secondMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Another message with different metadata';
+      });
 
       expect(firstMessage).toBeDefined();
-      expect(firstMessage!.metadata).toEqual({
+      expect(firstMessage!.content.metadata).toEqual({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
       expect(secondMessage).toBeDefined();
-      expect(secondMessage!.metadata).toEqual({
+      expect(secondMessage!.content.metadata).toEqual({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',
       });
 
-      // Check UI messages also preserve metadata
-      const firstUIMessage = uiMessages.find((m: any) => m.content === 'Hello with metadata');
-      const secondUIMessage = uiMessages.find((m: any) => m.content === 'Another message with different metadata');
+      // Check stored messages also preserve metadata
+      const firstStoredMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Hello with metadata';
+      });
+      const secondStoredMessage = messages.find((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text;
+        return textContent === 'Another message with different metadata';
+      });
 
-      expect(firstUIMessage?.metadata).toEqual({
+      expect(firstStoredMessage?.content.metadata).toEqual({
         source: 'web-ui',
         timestamp: expect.any(Number),
         customField: 'custom-value',
       });
 
-      expect(secondUIMessage?.metadata).toEqual({
+      expect(secondStoredMessage?.content.metadata).toEqual({
         source: 'mobile-app',
         version: '1.0.0',
         userId: 'user-123',
@@ -443,11 +467,12 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile }),
+      storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentWithTitle = new Agent({
+      id: 'title-on',
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
       model: openai('gpt-4o'),
@@ -456,6 +481,7 @@ describe('Agent Memory Tests', () => {
     });
 
     const agentWithDynamicModelTitle = new Agent({
+      id: 'title-on',
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
       model: ({ requestContext }) => openai(requestContext.get('model') as string),
@@ -470,11 +496,12 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile }),
+      storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentNoTitle = new Agent({
+      id: 'title-off',
       name: 'title-off',
       instructions: 'Test agent with generateTitle off.',
       model: openai('gpt-4o'),
@@ -571,7 +598,7 @@ describe('Agent with message processors', () => {
 
     // Check that tool calls were saved to memory
     const agentMemory = (await memoryProcessorAgent.getMemory())!;
-    const { messages: messagesFromMemory } = await agentMemory.query({ threadId });
+    const { messages: messagesFromMemory } = await agentMemory.recall({ threadId });
     const toolMessages = messagesFromMemory.filter(
       m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
     );
@@ -606,6 +633,7 @@ describe('Agent memory test gemini', () => {
   });
 
   const agent = new Agent({
+    id: 'gemini-agent',
     name: 'gemini-agent',
     instructions:
       'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name.',

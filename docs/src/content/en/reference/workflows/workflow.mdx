@@ -115,21 +115,7 @@ A workflow's `status` indicates its current execution state. The possible values
   ]}
 />
 
-## Extended usage example
-
-```typescript title="src/test-run.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("workflow").createRunAsync();
-
-const result = await run.start({...});
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({...});
-}
-```
-
 ## Related
 
 - [Step Class](./step)
-- [Control flow](/docs/workflows/control-flow)
+- [Control flow](/docs/v1/workflows/control-flow)

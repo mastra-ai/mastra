@@ -6,11 +6,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'content-analyzer-agent-storage',
     url: 'file:../mastra.db',
   }),
 });
 
 export const contentAnalyzerAgent = new Agent({
+  id: 'content-analyzer-agent',
   name: 'Educational Content Analyzer Agent',
   description:
     'An agent specialized in analyzing educational content to identify key concepts, definitions, and learning elements suitable for flash card generation',

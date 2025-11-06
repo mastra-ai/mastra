@@ -37,6 +37,7 @@ export class PostgresPerformanceTest {
   constructor(config: PerformanceTestConfig) {
     this.config = config;
     this.store = new PostgresStore({
+      id: 'perf-test-store',
       connectionString: config.connectionString,
     });
   }
@@ -362,37 +363,26 @@ export class PostgresPerformanceTest {
   async runPerformanceTests(scenario: 'without_indexes' | 'with_indexes'): Promise<PerformanceResult[]> {
     const results: PerformanceResult[] = [];
 
-    // Test getThreadsByResourceId
     const resourceId = 'resource_0';
+    // Test listThreadsByResourceId
     results.push(
       await this.measureOperation(
-        'getThreadsByResourceId',
-        () => this.store.getThreadsByResourceId({ resourceId }),
+        'listThreadsByResourceId',
+        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
         scenario,
       ),
     );
 
-    // Test getThreadsByResourceIdPaginated
-    results.push(
-      await this.measureOperation(
-        'getThreadsByResourceIdPaginated',
-        () => this.store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 20 }),
-        scenario,
-      ),
-    );
-
-    // Test getMessages
     const threadId = 'thread_0';
-    results.push(await this.measureOperation('getMessages', () => this.store.getMessages({ threadId }), scenario));
-
-    // Test getMessagesPaginated
+    // Test listMessages
     results.push(
       await this.measureOperation(
-        'getMessagesPaginated',
+        'listMessages',
         () =>
-          this.store.getMessagesPaginated({
+          this.store.listMessages({
             threadId,
-            selectBy: { pagination: { page: 0, perPage: 20 } },
+            perPage: 20,
+            page: 0,
           }),
         scenario,
       ),
@@ -442,7 +432,7 @@ export class PostgresPerformanceTest {
     console.info('\n=== Query Execution Plans ===');
 
     try {
-      // Analyze getThreadsByResourceId query
+      // Analyze listThreadsByResourceId query
       const threadPlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt"
@@ -450,10 +440,10 @@ export class PostgresPerformanceTest {
         WHERE "resourceId" = 'resource_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('getThreadsByResourceId plan:');
+      console.info('listThreadsByResourceId plan:');
       threadPlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
 
-      // Analyze getMessages query
+      // Analyze listMessages query
       const messagePlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
@@ -461,7 +451,7 @@ export class PostgresPerformanceTest {
         WHERE thread_id = 'thread_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('\ngetMessages plan:');
+      console.info('\nlistMessages plan:');
       messagePlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
     } catch (error) {
       console.warn('Could not analyze query plans:', error);

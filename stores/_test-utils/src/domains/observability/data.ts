@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
-import { AISpanType } from '@mastra/core/ai-tracing';
-import type { AISpanRecord } from '@mastra/core/storage';
+import { SpanType } from '@mastra/core/observability';
+import type { SpanRecord } from '@mastra/core/storage';
 
-export function createSampleAISpanForDB({
+export function createSampleSpanForDB({
   name,
   traceId,
   parentSpanId,
@@ -17,9 +17,9 @@ export function createSampleAISpanForDB({
   parentSpanId?: string | null;
   startedAt?: Date;
   endedAt?: Date;
-  spanType?: AISpanType;
+  spanType?: SpanType;
   isEvent?: boolean;
-}): AISpanRecord {
+}): SpanRecord {
   const now = startedAt || new Date();
   const end = endedAt || new Date(now.getTime() + 1000); // 1 second later
   const generatedTraceId = traceId || `test-trace-${randomUUID()}`;
@@ -34,7 +34,7 @@ export function createSampleAISpanForDB({
       version: '1.0.0',
       environment: 'test',
     },
-    spanType: spanType || AISpanType.GENERIC,
+    spanType: spanType || SpanType.GENERIC,
     attributes: {
       tokenUsage: 100,
     },
@@ -71,14 +71,14 @@ export function createRootSpan(
     traceId?: string;
     startedAt?: Date;
     endedAt?: Date;
-    spanType?: AISpanType;
+    spanType?: SpanType;
     isEvent?: boolean;
   } = {
     name: 'test-root-span',
     scope: 'test-scope',
   },
-): AISpanRecord {
-  return createSampleAISpanForDB({
+): SpanRecord {
+  return createSampleSpanForDB({
     name,
     scope,
     traceId,
@@ -109,8 +109,8 @@ export function createChildSpan({
   startedAt?: Date;
   endedAt?: Date;
   isEvent?: boolean;
-}): AISpanRecord {
-  return createSampleAISpanForDB({
+}): SpanRecord {
+  return createSampleSpanForDB({
     name,
     scope,
     traceId,

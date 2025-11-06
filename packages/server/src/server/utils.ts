@@ -1,4 +1,5 @@
-import type { SystemMessage } from '@mastra/core';
+import type { Mastra } from '@mastra/core';
+import type { SystemMessage } from '@mastra/core/llm';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import type { StepWithComponent, Workflow, WorkflowInfo } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
@@ -66,7 +67,10 @@ export class WorkflowRegistry {
   /**
    * Register all workflows from map
    */
-  static registerTemporaryWorkflows(workflows: Record<string, Workflow>, mastra?: any): void {
+  static registerTemporaryWorkflows(
+    workflows: Record<string, Workflow>,
+    mastra?: Mastra<any, any, any, any, any, any, any, any, any>,
+  ): void {
     for (const [id, workflow] of Object.entries(workflows)) {
       // Register Mastra instance with the workflow if provided
       if (mastra) {
@@ -74,10 +78,9 @@ export class WorkflowRegistry {
         workflow.__registerPrimitives({
           logger: mastra.getLogger(),
           storage: mastra.getStorage(),
-          memory: mastra.getMemory(),
           agents: mastra.listAgents(),
           tts: mastra.getTTS(),
-          vectors: mastra.getVectors(),
+          vectors: mastra.listVectors(),
         });
       }
       this.additionalWorkflows[id] = workflow;

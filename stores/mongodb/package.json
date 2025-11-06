@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "0.14.6",
+  "version": "1.0.0-beta.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -62,5 +62,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

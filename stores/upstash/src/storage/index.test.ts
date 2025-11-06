@@ -7,6 +7,7 @@ vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
 
 createTestSuite(
   new UpstashStore({
+    id: 'upstash-test-store',
     url: 'http://localhost:8079',
     token: 'test_token',
   }),

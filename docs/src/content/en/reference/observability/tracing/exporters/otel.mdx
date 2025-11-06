@@ -1,0 +1,369 @@
+---
+title: "Reference: OtelExporter | Observability | Mastra Docs"
+description: OpenTelemetry exporter for Tracing
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# OtelExporter
+
+:::warning
+
+The OtelExporter is currently **experimental**. APIs and configuration options may change in future releases.
+
+:::
+
+Sends Tracing data to any OpenTelemetry-compatible observability platform using standardized GenAI semantic conventions.
+
+## Constructor
+
+```typescript
+new OtelExporter(config: OtelExporterConfig)
+```
+
+## OtelExporterConfig
+
+```typescript
+interface OtelExporterConfig {
+  provider?: ProviderConfig;
+  timeout?: number;
+  batchSize?: number;
+  logLevel?: "debug" | "info" | "warn" | "error";
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "provider",
+      type: "ProviderConfig",
+      description: "Provider-specific configuration (see below)",
+      required: true,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description: "Export timeout in milliseconds (default: 30000)",
+      required: false,
+    },
+    {
+      name: "batchSize",
+      type: "number",
+      description: "Number of spans per batch (default: 100)",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "Logger level (default: 'warn')",
+      required: false,
+    },
+    {
+      name: "resourceAttributes",
+      type: "DetectedResourceAttributes",
+      description:
+        "Optional OpenTelemetry Resource Attributes (values here override any defaults)",
+      required: false,
+    },
+  ]}
+/>
+
+## Provider Configurations
+
+### Dash0Config
+
+```typescript
+interface Dash0Config {
+  apiKey: string;
+  endpoint: string;
+  dataset?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Dash0 API key",
+      required: true,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "Dash0 ingress endpoint (e.g., ingress.us-west-2.aws.dash0.com:4317)",
+      required: true,
+    },
+    {
+      name: "dataset",
+      type: "string",
+      description: "Optional dataset name for data organization",
+      required: false,
+    },
+  ]}
+/>
+
+### SignozConfig
+
+```typescript
+interface SignozConfig {
+  apiKey: string;
+  region?: "us" | "eu" | "in";
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "SigNoz ingestion key",
+      required: true,
+    },
+    {
+      name: "region",
+      type: "'us' | 'eu' | 'in'",
+      description: "SigNoz cloud region (default: 'us')",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "Custom endpoint for self-hosted SigNoz",
+      required: false,
+    },
+  ]}
+/>
+
+### NewRelicConfig
+
+```typescript
+interface NewRelicConfig {
+  apiKey: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "New Relic license key",
+      required: true,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "Custom endpoint (default: https://otlp.nr-data.net:443/v1/traces)",
+      required: false,
+    },
+  ]}
+/>
+
+### TraceloopConfig
+
+```typescript
+interface TraceloopConfig {
+  apiKey: string;
+  destinationId?: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Traceloop API key",
+      required: true,
+    },
+    {
+      name: "destinationId",
+      type: "string",
+      description: "Optional destination identifier",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "Custom endpoint (default: https://api.traceloop.com/v1/traces)",
+      required: false,
+    },
+  ]}
+/>
+
+### LaminarConfig
+
+```typescript
+interface LaminarConfig {
+  apiKey: string;
+  teamId?: string;
+  endpoint?: string;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Laminar project API key",
+      required: true,
+    },
+    {
+      name: "teamId",
+      type: "string",
+      description: "Optional team identifier (for backwards compatibility)",
+      required: false,
+    },
+    {
+      name: "endpoint",
+      type: "string",
+      description: "Custom endpoint (default: https://api.lmnr.ai/v1/traces)",
+      required: false,
+    },
+  ]}
+/>
+
+### CustomConfig
+
+```typescript
+interface CustomConfig {
+  endpoint: string;
+  protocol?: "http/json" | "http/protobuf" | "grpc" | "zipkin";
+  headers?: Record<string, string>;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "endpoint",
+      type: "string",
+      description: "OTEL collector endpoint URL",
+      required: true,
+    },
+    {
+      name: "protocol",
+      type: "'http/json' | 'http/protobuf' | 'grpc' | 'zipkin'",
+      description: "Export protocol (default: 'http/json')",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "Custom headers for authentication",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to the configured OTEL backend.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending traces and shuts down the exporter.
+
+## Usage Examples
+
+### Basic Usage
+
+```typescript
+import { OtelExporter } from "@mastra/otel-exporter";
+
+const exporter = new OtelExporter({
+  provider: {
+    signoz: {
+      apiKey: process.env.SIGNOZ_API_KEY,
+      region: "us",
+    },
+  },
+});
+```
+
+### With Custom Endpoint
+
+```typescript
+const exporter = new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: "https://my-collector.example.com/v1/traces",
+      protocol: "http/protobuf",
+      headers: {
+        "x-api-key": process.env.API_KEY,
+      },
+    },
+  },
+  timeout: 60000,
+  logLevel: "debug",
+});
+```
+
+## Span Mapping
+
+The exporter maps Mastra AI spans to OpenTelemetry spans following GenAI semantic conventions:
+
+### Span Names
+
+- `MODEL_GENERATION` → `chat {model}` or `tool_selection {model}`
+- `TOOL_CALL` → `tool.execute {tool_name}`
+- `AGENT_RUN` → `agent.{agent_id}`
+- `WORKFLOW_RUN` → `workflow.{workflow_id}`
+
+### Span Kinds
+
+- Root agent/workflow spans → `SERVER`
+- LLM calls → `CLIENT`
+- Tool calls → `INTERNAL` or `CLIENT`
+- Workflow steps → `INTERNAL`
+
+### Attributes
+
+The exporter maps to standard OTEL GenAI attributes:
+
+| Mastra Attribute                    | OTEL Attribute                   |
+| ----------------------------------- | -------------------------------- |
+| `model`                             | `gen_ai.request.model`           |
+| `provider`                          | `gen_ai.system`                  |
+| `inputTokens` / `promptTokens`      | `gen_ai.usage.input_tokens`      |
+| `outputTokens` / `completionTokens` | `gen_ai.usage.output_tokens`     |
+| `temperature`                       | `gen_ai.request.temperature`     |
+| `maxOutputTokens`                   | `gen_ai.request.max_tokens`      |
+| `finishReason`                      | `gen_ai.response.finish_reasons` |
+
+## Protocol Requirements
+
+Different providers require different OTEL exporter packages:
+
+| Protocol      | Required Package                           | Providers                  |
+| ------------- | ------------------------------------------ | -------------------------- |
+| gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  | Dash0                      |
+| HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` | SigNoz, New Relic, Laminar |
+| HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  | Traceloop, Custom          |
+| Zipkin        | `@opentelemetry/exporter-zipkin`           | Zipkin collectors          |
+
+## Parent-Child Relationships
+
+The exporter preserves span hierarchy from Mastra's Tracing:
+
+- Uses `parentSpanId` directly from Mastra spans
+- Maintains correct nesting for agents, workflows, LLM calls, and tools
+- Exports complete traces with all relationships intact

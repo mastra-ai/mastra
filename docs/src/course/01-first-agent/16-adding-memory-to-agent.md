@@ -5,7 +5,7 @@ Now, let's update our agent to include memory. Open your `agents/index.ts` file 
 1. Import the Memory and LibSQLStore classes:
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -24,6 +24,7 @@ export const financialAgent = new Agent({
   tools: { getTransactionsTool },
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "learning-memory-storage",
       url: "file:../../memory.db", // local file-system database. Location is relative to the output directory `.mastra/output`
     }),
   }), // Add memory here

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "0.14.1",
+  "version": "1.0.0-beta.0",
   "description": "",
   "type": "module",
   "files": [
@@ -29,24 +29,14 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./scorers/llm": {
+    "./scorers/prebuilt": {
       "import": {
-        "types": "./dist/scorers/llm/index.d.ts",
-        "default": "./dist/scorers/llm/index.js"
+        "types": "./dist/scorers/prebuilt/index.d.ts",
+        "default": "./dist/scorers/prebuilt/index.js"
       },
       "require": {
-        "types": "./dist/scorers/llm/index.d.ts",
-        "default": "./dist/scorers/llm/index.cjs"
-      }
-    },
-    "./scorers/code": {
-      "import": {
-        "types": "./dist/scorers/code/index.d.ts",
-        "default": "./dist/scorers/code/index.js"
-      },
-      "require": {
-        "types": "./dist/scorers/code/index.d.ts",
-        "default": "./dist/scorers/code/index.cjs"
+        "types": "./dist/scorers/prebuilt/index.d.ts",
+        "default": "./dist/scorers/prebuilt/index.cjs"
       }
     },
     "./scorers/utils": {
@@ -73,7 +63,6 @@
   "license": "Apache-2.0",
   "dependencies": {
     "compromise": "^14.14.4",
-    "difflib": "^0.2.4",
     "fs-extra": "^11.3.2",
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
@@ -89,7 +78,6 @@
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/difflib": "^0.2.7",
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
@@ -101,5 +89,8 @@
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*",
     "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

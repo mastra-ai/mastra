@@ -13,12 +13,12 @@ import { VideoPlayer } from "@site/src/components/video-player";
 
 The `create mastra` CLI command is the quickest way to start a new Mastra project. It walks you through setup and creates example agents, workflows, and tools for you to learn from or adapt.
 
-For more control over setup, or to add Mastra to an existing project, see the [manual installation guide](#install-manually). You can also use [`mastra init`](/reference/cli/mastra#mastra-init) for existing projects.
+For more control over setup, or to add Mastra to an existing project, see the [manual installation guide](#install-manually). You can also use [`mastra init`](/reference/v1/cli/mastra#mastra-init) for existing projects.
 
 ## Before you start
 
-- You'll need an API key from a [model provider](/models) to complete setup. We suggest starting with [OpenAI](https://platform.openai.com/api-keys), but if you need a provider that doesn't require a credit card, Google's [Gemini](https://aistudio.google.com/app/api-keys) is also an option.
-- [Install](https://nodejs.org/en/download) Node.js 20 or later.
+- You'll need an API key from a [model provider](/models/v1) to complete setup. We suggest starting with [OpenAI](https://platform.openai.com/api-keys), but if you need a provider that doesn't require a credit card, Google's [Gemini](https://aistudio.google.com/app/api-keys) is also an option.
+- [Install](https://nodejs.org/en/download) Node.js 22.13.0 or later.
 
 ## Install with `create mastra`
 
@@ -30,28 +30,28 @@ The wizard will guide you through setup, create a new directory for your project
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm create mastra@latest -y
+npm create mastra@beta
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm create mastra@latest -y
+pnpm create mastra@beta
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn create mastra@latest -y
+yarn create mastra@beta
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun create mastra@latest -y
+bun create mastra@beta
 ```
 
 </TabItem>
@@ -59,13 +59,13 @@ bun create mastra@latest -y
 
 :::note
 
-You can use flags with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](/docs/getting-started/templates). Read the [CLI reference](/reference/cli/create-mastra) for all options.
+You can use flags with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](/docs/v1/getting-started/templates). Read the [CLI reference](/reference/v1/cli/create-mastra) for all options.
 
 :::
 
 ### Test your agent
 
-Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open the Playground at http://localhost:4111.
+Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open Studio at http://localhost:4111.
 
 Try asking about the weather. If your API key is set up correctly, you'll get a response:
 
@@ -77,13 +77,13 @@ If you encounter an error, your API key may not be configured correctly. Double-
 
 :::
 
-The [Playground](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
+[Studio](/docs/v1/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your application using the guides below.
 
 ### Next steps
 
-- Read more about [Mastra's features](/docs#why-mastra).
-- Integrate Mastra with your frontend framework: [Next.js](/docs/frameworks/web-frameworks/next-js), [React](/docs/frameworks/web-frameworks/vite-react), or [Astro](/docs/frameworks/web-frameworks/astro).
-- Build an agent from scratch following one of our [guides](/guides).
+- Read more about [Mastra's features](/docs/v1#why-mastra).
+- Integrate Mastra with your frontend framework: [Next.js](/docs/v1/frameworks/web-frameworks/next-js), [React](/docs/v1/frameworks/web-frameworks/vite-react), or [Astro](/docs/v1/frameworks/web-frameworks/astro).
+- Build an agent from scratch following one of our [guides](/guides/v1).
 - Watch conceptual guides on our [YouTube channel](https://www.youtube.com/@mastra-ai) and [subscribe](https://www.youtube.com/@mastra-ai?sub_confirmation=1)!
 
 ## Install manually
@@ -107,8 +107,8 @@ Initialize a TypeScript project and install the following dependencies:
 
 ```bash copy
 npm init -y
-npm install -D typescript @types/node mastra@latest
-npm install @mastra/core@latest zod@^4
+npm install -D typescript @types/node mastra@beta
+npm install @mastra/core@beta zod@^4
 ```
 
 </TabItem>
@@ -116,8 +116,8 @@ npm install @mastra/core@latest zod@^4
 
 ```bash copy
 pnpm init -y
-pnpm add -D typescript @types/node mastra@latest
-pnpm add @mastra/core@latest zod@^4
+pnpm add -D typescript @types/node mastra@beta
+pnpm add @mastra/core@beta zod@^4
 ```
 
 </TabItem>
@@ -125,8 +125,8 @@ pnpm add @mastra/core@latest zod@^4
 
 ```bash copy
 yarn init -y
-yarn add -D typescript @types/node mastra@latest
-yarn add @mastra/core@latest zod@^4
+yarn add -D typescript @types/node mastra@beta
+yarn add @mastra/core@beta zod@^4
 ```
 
 </TabItem>
@@ -134,8 +134,8 @@ yarn add @mastra/core@latest zod@^4
 
 ```bash copy
 bun init -y
-bun add -d typescript @types/node mastra@latest
-bun add @mastra/core@latest zod@^4
+bun add -d typescript @types/node mastra@beta
+bun add @mastra/core@beta zod@^4
 ```
 
 </TabItem>
@@ -206,7 +206,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
 
 :::note
 
-This guide uses Google Gemini, but you can use any supported [model provider](/models), including OpenAI, Anthropic, and more.
+This guide uses Google Gemini, but you can use any supported [model provider](/models/v1), including OpenAI, Anthropic, and more.
 
 :::
 
@@ -245,7 +245,7 @@ export const weatherTool = createTool({
 
 :::info
 
-We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/agents/using-tools).
+We've shortened and simplified the `weatherTool` example here. You can see the complete weather tool under [Giving an Agent a Tool](/docs/v1/agents/using-tools).
 
 :::
 
@@ -266,6 +266,7 @@ import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: `
       You are a helpful weather assistant that provides accurate weather information.
@@ -297,7 +298,7 @@ touch src/mastra/index.ts
 Add the following code:
 
 ```ts title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
@@ -309,7 +310,7 @@ export const mastra = new Mastra({
 
 <StepItem>
 
-You can now launch the [Playground](/docs/getting-started/studio) and test your agent.
+You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent.
 
 <Tabs>
 <TabItem value="npm" label="npm">

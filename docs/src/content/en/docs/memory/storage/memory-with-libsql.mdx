@@ -18,7 +18,7 @@ OPENAI_API_KEY=<your-api-key>
 And install the following package:
 
 ```bash copy
-npm install @mastra/libsql
+npm install @mastra/libsql@beta
 ```
 
 ## Adding memory to an agent
@@ -32,12 +32,14 @@ import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent",
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
       url: "file:libsql-agent.db",
     }),
     options: {
@@ -54,7 +56,7 @@ Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve r
 Install `fastembed` to get started:
 
 ```bash copy
-npm install @mastra/fastembed
+npm install @mastra/fastembed@beta
 ```
 
 Add the following to your agent:
@@ -67,15 +69,18 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { fastembed } from "@mastra/fastembed";
 
 export const libsqlAgent = new Agent({
-  name: "libsql-agent",
+  id: "libsql-agent",
+  name: "LibSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
       url: "file:libsql-agent.db",
     }),
     vector: new LibSQLVector({
+      id: 'libsql-agent-vector',
       connectionUrl: "file:libsql-agent.db",
     }),
     embedder: fastembed,
@@ -137,4 +142,4 @@ for await (const chunk of stream.textStream) {
 
 ## Related
 
-- [Calling Agents](/examples/agents/calling-agents)
+- [Calling Agents](/examples/v1/agents/calling-agents)

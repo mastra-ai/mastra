@@ -1,4 +1,4 @@
-export { OtelExporter } from './ai-tracing.js';
+export { OtelExporter } from './tracing.js';
 export type {
   OtelExporterConfig,
   ProviderConfig,

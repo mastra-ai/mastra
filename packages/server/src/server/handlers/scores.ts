@@ -1,5 +1,5 @@
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
 import type { StoragePagination } from '@mastra/core/storage';
 import type { Context } from '../types';
 import { handleError } from './error';
@@ -18,7 +18,7 @@ async function listScorersFromSystem({
     MastraScorerEntry & { agentIds: string[]; agentNames: string[]; workflowIds: string[]; isRegistered: boolean }
   >();
 
-  for (const [agentId, agent] of Object.entries(agents)) {
+  for (const [_, agent] of Object.entries(agents)) {
     const scorers =
       (await agent.listScorers({
         requestContext,
@@ -26,16 +26,16 @@ async function listScorersFromSystem({
 
     if (Object.keys(scorers).length > 0) {
       for (const [_scorerId, scorer] of Object.entries(scorers)) {
-        const scorerName = scorer.scorer.name;
-        if (scorersMap.has(scorerName)) {
-          scorersMap.get(scorerName)?.agentIds.push(agentId);
-          scorersMap.get(scorerName)?.agentNames.push(agent.name);
+        const scorerId = scorer.scorer.id;
+        if (scorersMap.has(scorerId)) {
+          scorersMap.get(scorerId)?.agentIds.push(agent.id);
+          scorersMap.get(scorerId)?.agentNames.push(agent.name);
         } else {
-          scorersMap.set(scorerName, {
+          scorersMap.set(scorerId, {
             workflowIds: [],
             ...scorer,
             agentNames: [agent.name],
-            agentIds: [agentId],
+            agentIds: [agent.id],
             isRegistered: false,
           });
         }
@@ -69,11 +69,11 @@ async function listScorersFromSystem({
 
   const registeredScorers = await mastra.listScorers();
   for (const [_scorerId, scorer] of Object.entries(registeredScorers || {})) {
-    const scorerName = scorer.name;
-    if (scorersMap.has(scorerName)) {
-      scorersMap.get(scorerName)!.isRegistered = true;
+    const scorerId = scorer.id;
+    if (scorersMap.has(scorerId)) {
+      scorersMap.get(scorerId)!.isRegistered = true;
     } else {
-      scorersMap.set(scorerName, {
+      scorersMap.set(scorerId, {
         scorer: scorer,
         agentIds: [],
         agentNames: [],
@@ -114,13 +114,13 @@ export async function getScorerHandler({
   return scorer;
 }
 
-export async function getScoresByRunIdHandler({
+export async function listScoresByRunIdHandler({
   mastra,
   runId,
   pagination,
 }: Context & { runId: string; pagination: StoragePagination }) {
   try {
-    const scoreResults = (await mastra.getStorage()?.getScoresByRunId?.({
+    const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
       runId,
       pagination,
     })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
@@ -133,7 +133,7 @@ export async function getScoresByRunIdHandler({
   }
 }
 
-export async function getScoresByScorerIdHandler({
+export async function listScoresByScorerIdHandler({
   mastra,
   scorerId,
   pagination,
@@ -141,7 +141,7 @@ export async function getScoresByScorerIdHandler({
   entityType,
 }: Context & { scorerId: string; pagination: StoragePagination; entityId?: string; entityType?: string }) {
   try {
-    const scoreResults = (await mastra.getStorage()?.getScoresByScorerId?.({
+    const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
       scorerId,
       pagination,
       entityId,
@@ -156,7 +156,7 @@ export async function getScoresByScorerIdHandler({
   }
 }
 
-export async function getScoresByEntityIdHandler({
+export async function listScoresByEntityIdHandler({
   mastra,
   entityId,
   entityType,
@@ -173,7 +173,7 @@ export async function getScoresByEntityIdHandler({
       entityIdToUse = workflow.id;
     }
 
-    const scoreResults = (await mastra.getStorage()?.getScoresByEntityId?.({
+    const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
       entityId: entityIdToUse,
       entityType,
       pagination,

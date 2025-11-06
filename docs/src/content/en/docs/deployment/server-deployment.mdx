@@ -9,7 +9,7 @@ Mastra runs as a standard Node.js server and can be deployed across a wide range
 
 ## Default project structure
 
-The [getting started guide](/docs/getting-started/installation) scaffolds a project with sensible defaults to help you begin quickly. By default, the CLI organizes application files under the `src/mastra/` directory, resulting in a structure similar to the following:
+The [getting started guide](/docs/v1/getting-started/installation) scaffolds a project with sensible defaults to help you begin quickly. By default, the CLI organizes application files under the `src/mastra/` directory, resulting in a structure similar to the following:
 
 ```
 src/
@@ -45,7 +45,7 @@ The build process follows these steps:
 1. **Locates entry file**: Finds `index.ts` or `index.js` in your specified directory (default: `src/mastra/`).
 2. **Creates build directory**: Generates a `.mastra/` directory containing:
    - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
-   - **`output`**: Contains the production-ready application bundle with `index.mjs`, `instrumentation.mjs`, and project-specific files.
+   - **`output`**: Contains the production-ready application bundle with `index.mjs` and project-specific files.
 3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
 4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
 5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.
@@ -70,12 +70,4 @@ Start the HTTP server:
 
 ```bash copy
 node .mastra/output/index.mjs
-```
-
-## Enable Telemetry
-
-To enable telemetry and observability, load the instrumentation file:
-
-```bash copy
-node --import=./.mastra/output/instrumentation.mjs .mastra/output/index.mjs
 ```

@@ -1,0 +1,110 @@
+---
+title: "Reference: Memory.listThreadsByResourceId() | Memory | Mastra Docs"
+description: "Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support."
+---
+
+# Memory.listThreadsByResourceId()
+
+The `.listThreadsByResourceId()` method retrieves threads associated with a specific resource ID with pagination support.
+
+## Usage Example
+
+```typescript copy
+await memory.listThreadsByResourceId({
+  resourceId: "user-123",
+  page: 0,
+  perPage: 10,
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "The ID of the resource whose threads are to be retrieved",
+      isOptional: false,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Page number (0-indexed) to retrieve",
+      isOptional: false,
+    },
+    {
+      name: "perPage",
+      type: "number",
+      description: "Maximum number of threads to return per page",
+      isOptional: false,
+    },
+    {
+      name: "orderBy",
+      type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+      description: "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<StorageListThreadsByResourceIdOutput>",
+      description:
+        "A promise that resolves to paginated thread results with metadata",
+    },
+  ]}
+/>
+
+The return object contains:
+- `threads`: Array of thread objects
+- `total`: Total number of threads for this resource
+- `page`: Current page number (same as the input `page` parameter)
+- `perPage`: Items per page (same as the input `perPage` parameter)
+- `hasMore`: Boolean indicating if more results are available
+
+## Extended usage example
+
+```typescript title="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+let currentPage = 0;
+const perPage = 25;
+let hasMorePages = true;
+
+while (hasMorePages) {
+  const result = await memory?.listThreadsByResourceId({
+    resourceId: "user-123",
+    page: currentPage,
+    perPage: perPage,
+    orderBy: { field: "createdAt", direction: "ASC" },
+  });
+
+  if (!result) {
+    console.log("No threads");
+    break;
+  }
+
+  result.threads.forEach((thread) => {
+    console.log(`Thread: ${thread.id}, Created: ${thread.createdAt}`);
+  });
+
+  hasMorePages = result.hasMore;
+  currentPage++; // Move to next page
+}
+```
+
+## Related
+
+- [Memory Class Reference](/reference/v1/memory/memory-class)
+- [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads/resources concept)
+- [createThread](/reference/v1/memory/createThread)
+- [getThreadById](/reference/v1/memory/getThreadById)

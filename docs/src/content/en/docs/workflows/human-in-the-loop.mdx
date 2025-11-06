@@ -36,6 +36,7 @@ import { Memory } from "@mastra/memory";
 import { LibSQLVector } from "@mastra/libsql";
 
 export const famousPersonAgent = new Agent({
+  id: "famous-person-generator",
   name: "Famous Person Generator",
   instructions: `You are a famous person generator for a "Heads Up" guessing game.
 
@@ -53,6 +54,7 @@ Return only the person's name, nothing else.`,
   model: openai("gpt-4o"),
   memory: new Memory({
     vector: new LibSQLVector({
+      id: 'workflow-vector',
       connectionUrl: "file:../mastra.db",
     }),
     embedder: openai.embedding("text-embedding-3-small"),
@@ -67,7 +69,7 @@ Return only the person's name, nothing else.`,
 });
 ```
 
-> See [Agent](/reference/agents/agent) for a full list of configuration options.
+> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
 
 ## Game agent
 
@@ -78,6 +80,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const gameAgent = new Agent({
+  id: "game-agent",
   name: "Game Agent",
   instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
 
@@ -238,14 +241,14 @@ export const headsUpWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [Workflow](/reference/workflows/workflow) for a full list of configuration options.
+> See [Workflow](/reference/v1/workflows/workflow) for a full list of configuration options.
 
 ## Registering the agents and workflow
 
 To use a workflow or an agent, register them in your main Mastra instance.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { headsUpWorkflow } from "./workflows/example-heads-up-workflow";
 import { famousPersonAgent } from "./agents/example-famous-person-agent";
@@ -265,4 +268,4 @@ export const mastra = new Mastra({
 ## Related
 
 - [Running Workflows](./overview#running-workflows)
-- [Control Flow](/docs/workflows/control-flow)
+- [Control Flow](/docs/v1/workflows/control-flow)

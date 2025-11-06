@@ -13,7 +13,7 @@ Mastra's Voice system provides a unified interface for voice interactions, enabl
 
 ## Adding Voice to Agents
 
-To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](/docs/agents/adding-voice) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
+To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](/docs/v1/agents/adding-voice) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -23,6 +23,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -50,6 +51,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -68,7 +70,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/reference/v1/voice/openai) for more information on the OpenAI voice provider.
 
   </TabItem>
   <TabItem value="azure" label="Azure">
@@ -80,6 +82,7 @@ import { AzureVoice } from "@mastra/voice-azure";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -97,7 +100,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+Visit the [Azure Voice Reference](/reference/v1/voice/azure) for more information on the Azure voice provider.
 
   </TabItem>
   <TabItem value="elevenlabs" label="ElevenLabs">
@@ -109,6 +112,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -126,7 +130,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+Visit the [ElevenLabs Voice Reference](/reference/v1/voice/elevenlabs) for more information on the ElevenLabs voice provider.
 
   </TabItem>
   <TabItem value="playai" label="PlayAI">
@@ -138,6 +142,7 @@ import { PlayAIVoice } from "@mastra/voice-playai";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -155,7 +160,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+Visit the [PlayAI Voice Reference](/reference/v1/voice/playai) for more information on the PlayAI voice provider.
 
   </TabItem>
   <TabItem value="google" label="Google">
@@ -167,6 +172,7 @@ import { GoogleVoice } from "@mastra/voice-google";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -184,7 +190,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+Visit the [Google Voice Reference](/reference/v1/voice/google) for more information on the Google voice provider.
 
   </TabItem>
   <TabItem value="cloudflare" label="Cloudflare">
@@ -196,6 +202,7 @@ import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -213,7 +220,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+Visit the [Cloudflare Voice Reference](/reference/v1/voice/cloudflare) for more information on the Cloudflare voice provider.
 
   </TabItem>
   <TabItem value="deepgram" label="Deepgram">
@@ -225,6 +232,7 @@ import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -242,7 +250,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+Visit the [Deepgram Voice Reference](/reference/v1/voice/deepgram) for more information on the Deepgram voice provider.
 
   </TabItem>
   <TabItem value="speechify" label="Speechify">
@@ -254,6 +262,7 @@ import { SpeechifyVoice } from "@mastra/voice-speechify";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -271,7 +280,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+Visit the [Speechify Voice Reference](/reference/v1/voice/speechify) for more information on the Speechify voice provider.
 
   </TabItem>
   <TabItem value="sarvam" label="Sarvam">
@@ -283,6 +292,7 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -300,7 +310,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+Visit the [Sarvam Voice Reference](/reference/v1/voice/sarvam) for more information on the Sarvam voice provider.
 
   </TabItem>
   <TabItem value="murf" label="Murf">
@@ -312,6 +322,7 @@ import { MurfVoice } from "@mastra/voice-murf";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -329,7 +340,7 @@ const audioStream = await voiceAgent.voice.speak(text, {
 playAudio(audioStream);
 ```
 
-Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+Visit the [Murf Voice Reference](/reference/v1/voice/murf) for more information on the Murf voice provider.
 
   </TabItem>
 </Tabs>
@@ -353,6 +364,7 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -371,7 +383,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ```
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/reference/v1/voice/openai) for more information on the OpenAI voice provider.
 
   </TabItem>
   <TabItem value="azure" label="Azure">
@@ -384,6 +396,7 @@ import { AzureVoice } from "@mastra/voice-azure";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -402,7 +415,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ```
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+Visit the [Azure Voice Reference](/reference/v1/voice/azure) for more information on the Azure voice provider.
 
   </TabItem>
   <TabItem value="elevenlabs" label="ElevenLabs">
@@ -414,6 +427,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -432,7 +446,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ```
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+Visit the [ElevenLabs Voice Reference](/reference/v1/voice/elevenlabs) for more information on the ElevenLabs voice provider.
 
   </TabItem>
   <TabItem value="google" label="Google">
@@ -444,6 +458,7 @@ import { GoogleVoice } from "@mastra/voice-google";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -462,7 +477,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ```
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+Visit the [Google Voice Reference](/reference/v1/voice/google) for more information on the Google voice provider.
 
   </TabItem>
   <TabItem value="cloudflare" label="Cloudflare">
@@ -474,6 +489,7 @@ import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -492,7 +508,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ```
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+Visit the [Cloudflare Voice Reference](/reference/v1/voice/cloudflare) for more information on the Cloudflare voice provider.
 
   </TabItem>
   <TabItem value="deepgram" label="Deepgram">
@@ -504,6 +520,7 @@ import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -522,7 +539,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ```
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+Visit the [Deepgram Voice Reference](/reference/v1/voice/deepgram) for more information on the Deepgram voice provider.
 
   </TabItem>
   <TabItem value="sarvam" label="Sarvam">
@@ -534,6 +551,7 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { createReadStream } from "fs";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -552,7 +570,7 @@ console.log(`User said: ${transcript}`);
 const { text } = await voiceAgent.generate(transcript);
 ```
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+Visit the [Sarvam Voice Reference](/reference/v1/voice/sarvam) for more information on the Sarvam voice provider.
 
   </TabItem>
 </Tabs>
@@ -572,6 +590,7 @@ import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -592,7 +611,7 @@ const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
 ```
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/reference/v1/voice/openai-realtime) for more information on the OpenAI voice provider.
 
   </TabItem>
   <TabItem value="google" label="Google">
@@ -604,6 +623,7 @@ import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 
 const voiceAgent = new Agent({
+  id: "voice-agent",
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that can help users with their tasks.",
@@ -643,7 +663,7 @@ const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
 ```
 
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+Visit the [Google Gemini Live Reference](/reference/v1/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
 </Tabs>
@@ -674,7 +694,7 @@ const voice = new OpenAIVoice({
 });
 ```
 
-Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+Visit the [OpenAI Voice Reference](/reference/v1/voice/openai) for more information on the OpenAI voice provider.
 
   </TabItem>
   <TabItem value="azure" label="Azure">
@@ -700,7 +720,7 @@ const voice = new AzureVoice({
 });
 ```
 
-Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+Visit the [Azure Voice Reference](/reference/v1/voice/azure) for more information on the Azure voice provider.
 
   </TabItem>
   <TabItem value="elevenlabs" label="ElevenLabs">
@@ -719,7 +739,7 @@ const voice = new ElevenLabsVoice({
 });
 ```
 
-Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+Visit the [ElevenLabs Voice Reference](/reference/v1/voice/elevenlabs) for more information on the ElevenLabs voice provider.
 
   </TabItem>
   <TabItem value="playai" label="PlayAI">
@@ -738,7 +758,7 @@ const voice = new PlayAIVoice({
 });
 ```
 
-Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+Visit the [PlayAI Voice Reference](/reference/v1/voice/playai) for more information on the PlayAI voice provider.
 
   </TabItem>
   <TabItem value="google" label="Google">
@@ -760,7 +780,7 @@ const voice = new GoogleVoice({
 });
 ```
 
-Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+Visit the [Google Voice Reference](/reference/v1/voice/google) for more information on the Google voice provider.
 
   </TabItem>
   <TabItem value="cloudflare" label="Cloudflare">
@@ -779,7 +799,7 @@ const voice = new CloudflareVoice({
 });
 ```
 
-Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+Visit the [Cloudflare Voice Reference](/reference/v1/voice/cloudflare) for more information on the Cloudflare voice provider.
 
   </TabItem>
   <TabItem value="deepgram" label="Deepgram">
@@ -801,7 +821,7 @@ const voice = new DeepgramVoice({
 });
 ```
 
-Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+Visit the [Deepgram Voice Reference](/reference/v1/voice/deepgram) for more information on the Deepgram voice provider.
 
   </TabItem>
   <TabItem value="speechify" label="Speechify">
@@ -820,7 +840,7 @@ const voice = new SpeechifyVoice({
 });
 ```
 
-Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+Visit the [Speechify Voice Reference](/reference/v1/voice/speechify) for more information on the Speechify voice provider.
 
   </TabItem>
   <TabItem value="sarvam" label="Sarvam">
@@ -838,7 +858,7 @@ const voice = new SarvamVoice({
 });
 ```
 
-Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+Visit the [Sarvam Voice Reference](/reference/v1/voice/sarvam) for more information on the Sarvam voice provider.
 
   </TabItem>
   <TabItem value="murf" label="Murf">
@@ -856,7 +876,7 @@ const voice = new MurfVoice({
 });
 ```
 
-Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+Visit the [Murf Voice Reference](/reference/v1/voice/murf) for more information on the Murf voice provider.
 
   </TabItem>
   <TabItem value="openai-realtime" label="OpenAI Realtime">
@@ -878,7 +898,7 @@ const voice = new OpenAIRealtimeVoice({
 });
 ```
 
-For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
+For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/v1/voice/openai-realtime).
 
   </TabItem>
   <TabItem value="google-gemini-live" label="Google Gemini Live">
@@ -895,7 +915,7 @@ const voice = new GeminiLiveVoice({
 });
 ```
 
-Visit the [Google Gemini Live Reference](/reference/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
+Visit the [Google Gemini Live Reference](/reference/v1/voice/google-gemini-live) for more information on the Google Gemini Live voice provider.
 
   </TabItem>
 </Tabs>
@@ -951,17 +971,17 @@ const responseAudio = await voice.speak(`You said: ${transcript}`, {
 playAudio(responseAudio);
 ```
 
-For more information on the CompositeVoice, refer to the [CompositeVoice Reference](/reference/voice/composite-voice).
+For more information on the CompositeVoice, refer to the [CompositeVoice Reference](/reference/v1/voice/composite-voice).
 
 ## More Resources
 
-- [CompositeVoice](/reference/voice/composite-voice)
-- [MastraVoice](/reference/voice/mastra-voice)
-- [OpenAI Voice](/reference/voice/openai)
-- [OpenAI Realtime Voice](/reference/voice/openai-realtime)
-- [Azure Voice](/reference/voice/azure)
-- [Google Voice](/reference/voice/google)
-- [Google Gemini Live Voice](/reference/voice/google-gemini-live)
-- [Deepgram Voice](/reference/voice/deepgram)
-- [PlayAI Voice](/reference/voice/playai)
-- [Voice Examples](/examples/voice/text-to-speech)
+- [CompositeVoice](/reference/v1/voice/composite-voice)
+- [MastraVoice](/reference/v1/voice/mastra-voice)
+- [OpenAI Voice](/reference/v1/voice/openai)
+- [OpenAI Realtime Voice](/reference/v1/voice/openai-realtime)
+- [Azure Voice](/reference/v1/voice/azure)
+- [Google Voice](/reference/v1/voice/google)
+- [Google Gemini Live Voice](/reference/v1/voice/google-gemini-live)
+- [Deepgram Voice](/reference/v1/voice/deepgram)
+- [PlayAI Voice](/reference/v1/voice/playai)
+- [Voice Examples](/examples/v1/voice/text-to-speech)

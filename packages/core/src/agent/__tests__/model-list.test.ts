@@ -1,7 +1,6 @@
 import { openai } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
@@ -15,6 +14,7 @@ function modelListTests(version: 'v1' | 'v2') {
     () => {
       it('should take and return model list', async () => {
         const agent = new Agent({
+          id: 'test-agent',
           name: 'test',
           instructions: 'test agent instructions',
           model: [
@@ -45,7 +45,8 @@ function modelListTests(version: 'v1' | 'v2') {
 
       it('should reorder model list', async () => {
         const agent = new Agent({
-          name: 'test',
+          id: 'test-agent',
+          name: 'Test Agent',
           instructions: 'test agent instructions',
           model: [
             {
@@ -85,7 +86,8 @@ function modelListTests(version: 'v1' | 'v2') {
 
       it(`should update model list`, async () => {
         const agent = new Agent({
-          name: 'test',
+          id: 'test-agent',
+          name: 'Test Agent',
           instructions: 'test agent instructions',
           model: [
             {
@@ -196,7 +198,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -292,7 +295,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -409,7 +413,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -531,7 +536,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Test Model List Agent',
           instructions: 'test agent',
           model: [
             {
@@ -688,7 +694,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'test-model-list-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -780,7 +787,8 @@ function modelListTests(version: 'v1' | 'v2') {
           },
         });
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'test-model-list-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [{ model: v2Model }, { model: v1Model }],
         });

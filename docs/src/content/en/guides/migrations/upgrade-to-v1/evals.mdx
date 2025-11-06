@@ -1,0 +1,230 @@
+---
+title: "Evals & Scorers | v1 Migration Guide"
+description: "Learn how to migrate evals and scorers changes when upgrading to v1."
+---
+
+# Evals & Scorers
+
+The evaluation API has been consolidated on the new scorers system with updated naming conventions and configuration requirements.
+
+## Changed
+
+### `getScorers` to `listScorers`
+
+The `getScorers()` method has been renamed to `listScorers()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
+
+To migrate, replace all calls to `getScorers()` with `listScorers()`.
+
+```diff
+- const scorers = mastra.getScorers();
++ const scorers = mastra.listScorers();
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/evals-get-scorers .
+```
+
+:::
+
+### `runExperiment` to `runEvals`
+
+The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.
+
+To migrate, update function calls from `runExperiment` to `runEvals`.
+
+```diff
+- import { createScorer, runExperiment } from '@mastra/core/evals';
++ import { createScorer, runEvals } from '@mastra/core/evals';
+  import { myAgent } from './agents/my-agent';
+
+  const scorer = createScorer({
+    id: 'helpfulness-scorer',
+    // ...
+  });
+
+- const result = await runExperiment({ target: myAgent, scorers: [scorer], data: inputs });
++ const result = await runEvals({ target: myAgent, scorers: [scorer], data: inputs });
+```
+
+### `getScorerByName` to `getScorerById`
+
+The `getScorerByName()` method has been renamed to `getScorerById()`. Scorers now require an `id` field instead of `name`. This change aligns with the broader API pattern of using `id` for entity identification.
+
+To migrate, update method calls and scorer configuration to use `id` instead of `name`.
+
+```diff
+  const scorer = createScorer({
+-   name: 'helpfulness-scorer',
++   id: 'helpfulness-scorer',
+    // ...
+  });
+  
+- const scorer = mastra.getScorerByName('helpfulness-scorer');
++ const scorer = mastra.getScorerById('helpfulness-scorer');
+```
+
+### Scorer configuration from `name` to `id`
+
+Scorers now require an `id` field instead of `name`. The `name` field is now optional. This change provides consistency with other Mastra entities.
+
+To migrate, update scorer definitions to use `id` as the required field.
+
+```diff
+  const scorer = createScorer({
+-   name: 'helpfulness-scorer',
++   id: 'helpfulness-scorer',
++   name: 'Helpfulness Scorer', // optional
+    // ...
+  });
+```
+
+### Storage score APIs to `listScoresBy*` pattern
+
+Score storage APIs have been renamed to follow the `listScoresBy*` pattern. This change aligns with the broader storage API naming conventions.
+
+To migrate, update score query methods to use the new naming pattern.
+
+```diff
+- const scores = await storage.getScores({ scorerName: 'helpfulness-scorer' });
++ const scores = await storage.listScoresByScorerId({
++   scorerId: 'helpfulness-scorer',
++ });
+
+// Also available:
+// - listScoresByRunId
+// - listScoresByEntityId  
+// - listScoresBySpan
+```
+
+### Prebuilt scorer imports to `scorers/prebuilt` path
+
+Prebuilt scorer imports have been consolidated under a single `@mastra/evals/scorers/prebuilt` path instead of separate `scorers/llm` and `scorers/code` paths. This change simplifies imports and provides a clearer organization of prebuilt scorers.
+
+To migrate, update import statements to use the new `scorers/prebuilt` path.
+
+```diff
+  // LLM-based scorers
+- import { createHallucinationScorer } from '@mastra/evals/scorers/llm';
+- import { createFaithfulnessScorer } from '@mastra/evals/scorers/llm';
++ import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
++ import { createFaithfulnessScorer } from '@mastra/evals/scorers/prebuilt';
+
+  // Code-based scorers
+- import { createContentSimilarityScorer } from '@mastra/evals/scorers/code';
+- import { createCompletenessScorer } from '@mastra/evals/scorers/code';
++ import { createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
++ import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+```
+
+### Scorer message types from `UIMessage` to `MastraDBMessage`
+
+Scorer input and output types now use `MastraDBMessage[]` instead of `UIMessage`. This change aligns scorers with the database-persisted message format for consistency across the framework.
+
+To migrate, update scorer implementations to use `MastraDBMessage` types and access message content through the nested `content` structure.
+
+```diff
+  import type {
+    ScorerRunInputForAgent,
+    ScorerRunOutputForAgent
+  } from '@mastra/core/evals';
+
+- // ScorerRunInputForAgent uses UIMessage[]
+- const inputMessages: UIMessage[] = run.input.inputMessages;
++ // ScorerRunInputForAgent now uses MastraDBMessage[]
++ import type { MastraDBMessage } from '@mastra/core/agent';
++ const inputMessages: MastraDBMessage[] = run.input.inputMessages;
+```
+
+### Message content structure to nested format
+
+Tool invocations and text content are now accessed through a nested `content` object structure instead of being flat properties on the message. This change provides better type safety and aligns with the database message format.
+
+To migrate, access tool invocations via `message.content.toolInvocations` and text via `message.content.content` or use the `getTextContentFromMastraDBMessage()` helper.
+
+```diff
++ import { getTextContentFromMastraDBMessage } from '@mastra/evals';
++
+  const run = await scorer.run(testRun);
+
+  // Accessing text content
+- const text = message.content;
++ const text = getTextContentFromMastraDBMessage(message);
++ // or directly: message.content.content
+
+  // Accessing tool invocations
+- const toolCalls = message.toolInvocations;
++ const toolCalls = message.content.toolInvocations;
+```
+
+## Removed
+
+### Legacy evals code
+
+Legacy evals code has been removed from `@mastra/core`. This includes legacy evaluation metrics, scorer/judge modules, and hook-based automatic evaluation code. This change simplifies the codebase by removing outdated evaluation approaches.
+
+To migrate, use the new evals/scorers API in `@mastra/core/evals` or `@mastra/evals`.
+
+```diff
+- // Legacy evals APIs
++ import { createScorer, runEvals } from '@mastra/core/evals';
++ 
++ const scorer = createScorer({
++   id: 'my-scorer',
++   // Use new scorer API
++ });
+```
+
+### Agent `TMetrics` generic parameter
+
+The `TMetrics` generic parameter has been removed from `AgentConfig` and the `Agent` constructor. Metrics/scorers are now configured using the scorers API instead of being part of the Agent type system. This change simplifies the Agent type signature.
+
+To migrate, remove the `TMetrics` generic parameter and configure scorers using the scorers API.
+
+```diff
+- const agent = new Agent<AgentId, Tools, Metrics>({
++ const agent = new Agent<AgentId, Tools>({
+    // ...
+  });
+```
+
+### Evals-related type exports
+
+Several evals-related type exports have been removed including `DeprecatedOutputOptions`, `Metric`, and processor option types. These types are now internal or have been replaced by the new scorers API. This change reduces API surface area.
+
+To migrate, remove references to these removed types and use the new scorers API.
+
+```diff
+- import type {
+-   DeprecatedOutputOptions,
+-   Metric,
+-   LanguageDetectorOptions,
+-   ModerationOptions,
+- } from '@mastra/core';
++ // Use new scorers API types
++ import type { Scorer } from '@mastra/core/evals';
+```
+
+### `createUIMessage` test helper
+
+The `createUIMessage()` test helper has been removed and replaced with `createTestMessage()`. The new helper creates `MastraDBMessage` objects with the nested content structure and supports optional tool invocations. This change aligns test utilities with the new message format.
+
+To migrate, replace `createUIMessage()` calls with `createTestMessage()` and update to use `MastraDBMessage` types.
+
+```diff
+- import { createUIMessage } from '@mastra/evals';
++ import { createTestMessage } from '@mastra/evals';
+
+  // Creating test messages
+- const message = createUIMessage({
+-   id: 'test-1',
++ const message = createTestMessage({
++   id: 'test-1', // optional, defaults to 'test-message'
+    role: 'user',
+    content: 'Hello',
+    toolInvocations: [], // optional
+  });
+```

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.15.8",
+  "version": "1.0.0-beta.0",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -86,5 +86,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

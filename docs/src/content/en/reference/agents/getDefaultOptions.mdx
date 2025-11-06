@@ -1,0 +1,69 @@
+---
+title: "Reference: Agent.getDefaultOptions() | Agents | Mastra Docs"
+description: "Documentation for the `Agent.getDefaultOptions()` method in Mastra agents, which retrieves the default options used for stream and generate calls."
+---
+
+# Agent.getDefaultOptions()
+
+Agents can be configured with default options for memory usage, output format, and iteration steps. The `.getDefaultOptions()` method returns these defaults, resolving them if they are functions. These options apply to all `stream()` and `generate()` calls unless overridden and are useful for inspecting an agent’s unknown defaults.
+
+## Usage example
+
+```typescript copy
+await agent.getDefaultOptions();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing request context.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "defaultOptions",
+      type: "AgentExecutionOptions<Output> | Promise<AgentExecutionOptions<Output>>",
+      description:
+        "The default streaming options configured for the agent, either as a direct object or a promise that resolves to the options.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript copy
+await agent.getDefaultOptions({
+  requestContext: new RequestContext(),
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "Request Context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Streaming with agents](/docs/v1/streaming/overview#streaming-with-agents)
+- [Request Context](/docs/v1/server-db/request-context)

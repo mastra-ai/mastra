@@ -1,13 +1,13 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { ModerationResult } from './moderation';
 import { ModerationProcessor } from './moderation';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -24,7 +24,7 @@ function createTestMessageWithContent(
   content: string,
   role: 'user' | 'assistant' = 'user',
   id = 'test-id',
-): MastraMessageV2 {
+): MastraDBMessage {
   return {
     id,
     role,
@@ -85,7 +85,7 @@ describe('ModerationProcessor', () => {
         model,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should use default categories when none specified', () => {
@@ -94,7 +94,7 @@ describe('ModerationProcessor', () => {
         model,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should accept custom categories', () => {
@@ -104,7 +104,7 @@ describe('ModerationProcessor', () => {
         categories: ['custom-category', 'another-category'],
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
 
     it('should accept custom threshold and strategy', () => {
@@ -115,7 +115,7 @@ describe('ModerationProcessor', () => {
         strategy: 'warn',
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
     });
   });
 
@@ -346,7 +346,7 @@ describe('ModerationProcessor', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -386,7 +386,7 @@ describe('ModerationProcessor', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -495,7 +495,7 @@ describe('ModerationProcessor', () => {
         instructions: customInstructions,
       });
 
-      expect(moderator.name).toBe('moderation');
+      expect(moderator.id).toBe('moderation');
       // The custom instructions are used in the Agent constructor
       // which is mocked, but we can verify the processor was created successfully
     });

@@ -1,0 +1,139 @@
+---
+title: "Scorers overview | Evals | Mastra Docs"
+description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
+---
+
+# Scorers overview
+
+While traditional software tests have clear pass/fail conditions, AI outputs are non-deterministic — they can vary with the same input. **Scorers** help bridge this gap by providing quantifiable metrics for measuring agent quality.
+
+Scorers are automated tests that evaluate Agents outputs using model-graded, rule-based, and statistical methods. Scorers return **scores**: numerical values (typically between 0 and 1) that quantify how well an output meets your evaluation criteria. These scores enable you to objectively track performance, compare different approaches, and identify areas for improvement in your AI systems. Scorers can be customized with your own prompts and scoring functions.
+
+Scorers can be run in the cloud, capturing real-time results. But scorers can also be part of your CI/CD pipeline, allowing you to test and monitor your agents over time.
+
+## Types of Scorers
+
+There are different kinds of scorers, each serving a specific purpose. Here are some common types:
+
+1. **Textual Scorers**: Evaluate accuracy, reliability, and context understanding of agent responses
+2. **Classification Scorers**: Measure accuracy in categorizing data based on predefined categories
+3. **Prompt Engineering Scorers**: Explore impact of different instructions and input formats
+
+## Installation
+
+To access Mastra's scorers feature install the `@mastra/evals` package.
+
+```bash copy
+npm install @mastra/evals@beta
+```
+
+## Live evaluations
+
+**Live evaluations** allow you to automatically score AI outputs in real-time as your agents and workflows operate. Instead of running evaluations manually or in batches, scorers run asynchronously alongside your AI systems, providing continuous quality monitoring.
+
+### Adding scorers to agents
+
+You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/v1/evals/off-the-shelf-scorers) for all available options.
+
+```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import {
+  createAnswerRelevancyScorer,
+  createToxicityScorer,
+} from "@mastra/evals/scorers/prebuilt";
+
+export const evaluatedAgent = new Agent({
+  // ...
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 0.5 },
+    },
+    safety: {
+      scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 1 },
+    },
+  },
+});
+```
+
+### Adding scorers to workflow steps
+
+You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
+
+```typescript title="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+import { customStepScorer } from "../scorers/custom-step-scorer";
+
+const contentStep = createStep({
+  // ...
+  scorers: {
+    customStepScorer: {
+      scorer: customStepScorer(),
+      sampling: {
+        type: "ratio",
+        rate: 1, // Score every step execution
+      }
+    }
+  },
+});
+
+export const contentWorkflow = createWorkflow({ ... })
+  .then(contentStep)
+  .commit();
+```
+
+### How live evaluations work
+
+**Asynchronous execution**: Live evaluations run in the background without blocking your agent responses or workflow execution. This ensures your AI systems maintain their performance while still being monitored.
+
+**Sampling control**: The `sampling.rate` parameter (0-1) controls what percentage of outputs get scored:
+
+- `1.0`: Score every single response (100%)
+- `0.5`: Score half of all responses (50%)
+- `0.1`: Score 10% of responses
+- `0.0`: Disable scoring
+
+**Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
+
+## Trace evaluations
+
+In addition to live evaluations, you can use scorers to evaluate historical traces from your agent interactions and workflows. This is particularly useful for analyzing past performance, debugging issues, or running batch evaluations.
+
+:::info
+
+**Observability Required**
+
+To score traces, you must first configure observability in your Mastra instance to collect trace data. See [Tracing documentation](../observability/tracing/overview) for setup instructions.
+
+:::
+
+### Scoring traces with Studio
+
+To score traces, you first need to register your scorers with your Mastra instance:
+
+```typescript
+const mastra = new Mastra({
+  // ...
+  scorers: {
+    answerRelevancy: myAnswerRelevancyScorer,
+    responseQuality: myResponseQualityScorer,
+  },
+});
+```
+
+Once registered, you can score traces interactively within Studio under the Observability section. This provides a user-friendly interface for running scorers against historical traces.
+
+## Testing scorers locally
+
+Mastra provides a CLI command `mastra dev` to test your scorers. Studio includes a scorers section where you can run individual scorers against test inputs and view detailed results.
+
+For more details, see [Studio](/docs/v1/getting-started/studio) docs.
+
+## Next steps
+
+- Learn how to create your own scorers in the [Creating Custom Scorers](/docs/v1/evals/custom-scorers) guide
+- Explore built-in scorers in the [Off-the-shelf Scorers](/docs/v1/evals/off-the-shelf-scorers) section
+- Test scorers with [Studio](/docs/v1/getting-started/studio)

@@ -1,10 +1,10 @@
 import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { Span, SpanType } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
@@ -42,12 +42,8 @@ interface PrepareMemoryStepOptions<
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
+  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
@@ -166,7 +162,7 @@ export function createPrepareMemoryStep<
       const hasResourceScopeSemanticRecall =
         (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
         config?.semanticRecall === true;
-      let [memoryMessages, memorySystemMessage] = await Promise.all([
+      let [memoryResult, memorySystemMessage] = await Promise.all([
         existingThread || hasResourceScopeSemanticRecall
           ? capabilities.getMemoryMessages({
               resourceId,
@@ -175,9 +171,17 @@ export function createPrepareMemoryStep<
               memoryConfig,
               requestContext,
             })
-          : [],
-        memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+          : { messages: [] },
+        memory.getSystemMessage({
+          threadId: threadObject.id,
+          resourceId,
+          memoryConfig: capabilities._agentNetworkAppend
+            ? { ...memoryConfig, workingMemory: { enabled: false } }
+            : memoryConfig,
+        }),
       ]);
+
+      const memoryMessages = memoryResult.messages;
 
       capabilities.logger.debug('Fetched messages from memory', {
         threadId: threadObject.id,
@@ -269,7 +273,7 @@ export function createPrepareMemoryStep<
       // Add user-provided system message if present
       addSystemMessage(processedList, options.system, 'user-provided');
 
-      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v2(), 'user');
+      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.db(), 'user');
 
       return {
         thread: threadObject,

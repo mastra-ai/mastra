@@ -1,59 +1,11 @@
-import { StreamVNextChunkType, WorkflowWatchResult } from '@mastra/client-js';
+import { StreamVNextChunkType } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
 import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
 import { useMutation } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
-import { useDebouncedCallback } from 'use-debounce';
 import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
 import { toast } from '@/lib/toast';
-
-export type ExtendedWorkflowWatchResult = WorkflowWatchResult & {
-  sanitizedOutput?: string | null;
-  sanitizedError?: {
-    message: string;
-    stack?: string;
-  } | null;
-};
-
-const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
-  const formattedResults = Object.entries(record.payload.workflowState.steps || {}).reduce(
-    (acc, [key, value]) => {
-      let output = value.status === 'success' ? value.output : undefined;
-      if (output) {
-        output = Object.entries(output).reduce(
-          (_acc, [_key, _value]) => {
-            const val = _value as { type: string; data: unknown };
-            _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
-            return _acc;
-          },
-          {} as Record<string, unknown>,
-        );
-      }
-      acc[key] = { ...value, output };
-      return acc;
-    },
-    {} as Record<string, unknown>,
-  );
-  const sanitizedRecord: ExtendedWorkflowWatchResult = {
-    ...record,
-    sanitizedOutput: record
-      ? JSON.stringify(
-          {
-            ...record,
-            payload: {
-              ...record.payload,
-              workflowState: { ...record.payload.workflowState, steps: formattedResults },
-            },
-          },
-          null,
-          2,
-        ).slice(0, 50000) // Limit to 50KB
-      : null,
-  };
-
-  return sanitizedRecord;
-};
 
 export const useExecuteWorkflow = () => {
   const client = useMastraClient();
@@ -61,7 +13,7 @@ export const useExecuteWorkflow = () => {
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
       try {
         const workflow = client.getWorkflow(workflowId);
-        const { runId: newRunId } = await workflow.createRunAsync({ runId: prevRunId });
+        const { runId: newRunId } = await workflow.createRun({ runId: prevRunId });
         return { runId: newRunId };
       } catch (error) {
         console.error('Error creating workflow run:', error);
@@ -480,21 +432,4 @@ export const useCancelWorkflowRun = () => {
   });
 
   return cancelWorkflowRun;
-};
-
-export const useSendWorkflowRunEvent = (workflowId: string) => {
-  const client = useMastraClient();
-  const sendWorkflowRunEvent = useMutation({
-    mutationFn: async ({ runId, event, data }: { runId: string; event: string; data: unknown }) => {
-      try {
-        const response = await client.getWorkflow(workflowId).sendRunEvent({ runId, event, data });
-        return response;
-      } catch (error) {
-        console.error('Error sending workflow run event:', error);
-        throw error;
-      }
-    },
-  });
-
-  return sendWorkflowRunEvent;
 };

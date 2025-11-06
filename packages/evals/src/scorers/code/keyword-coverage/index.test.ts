@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createKeywordCoverageScorer } from './index';
 
 describe('KeywordCoverageMetric', () => {
@@ -8,10 +8,14 @@ describe('KeywordCoverageMetric', () => {
 
   it('should return perfect coverage for identical text', async () => {
     const inputMessages = [
-      createUIMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'user', id: 'test-input' }),
+      createTestMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'user', id: 'test-input' }),
     ];
     const output = [
-      createUIMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'assistant', id: 'test-output' }),
+      createTestMessage({
+        content: 'The quick brown fox jumps over the lazy dog',
+        role: 'assistant',
+        id: 'test-output',
+      }),
     ];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
@@ -22,10 +26,14 @@ describe('KeywordCoverageMetric', () => {
 
   it('should handle partial keyword coverage', async () => {
     const inputMessages = [
-      createUIMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'user', id: 'test-input' }),
+      createTestMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'user', id: 'test-input' }),
     ];
     const output = [
-      createUIMessage({ content: 'A quick brown fox runs past a sleeping cat', role: 'assistant', id: 'test-output' }),
+      createTestMessage({
+        content: 'A quick brown fox runs past a sleeping cat',
+        role: 'assistant',
+        id: 'test-output',
+      }),
     ];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
@@ -37,8 +45,8 @@ describe('KeywordCoverageMetric', () => {
   });
 
   it('should ignore common words and stop words', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'A quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'A quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(1); // "the" and "a" should be ignored
@@ -48,8 +56,8 @@ describe('KeywordCoverageMetric', () => {
   });
 
   it('should handle case differences', async () => {
-    const inputMessages = [createUIMessage({ content: 'The Quick Brown Fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'the quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The Quick Brown Fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'the quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(1);
@@ -59,8 +67,8 @@ describe('KeywordCoverageMetric', () => {
   });
 
   it('should handle empty strings', async () => {
-    const inputMessages = [createUIMessage({ content: '', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: '', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: '', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(1);
@@ -69,8 +77,8 @@ describe('KeywordCoverageMetric', () => {
   });
 
   it('should handle one empty string', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: '', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(0);
@@ -79,16 +87,18 @@ describe('KeywordCoverageMetric', () => {
   });
 
   it('should ignore numbers by default', async () => {
-    const inputMessages = [createUIMessage({ content: 'The 123 quick 456 brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [
+      createTestMessage({ content: 'The 123 quick 456 brown fox', role: 'user', id: 'test-input' }),
+    ];
+    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(1);
   });
 
   it('should handle special characters', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick-brown fox!', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick-brown fox!', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     // Hyphenated words are treated as separate keywords
@@ -98,9 +108,9 @@ describe('KeywordCoverageMetric', () => {
 
   it('should handle completely different content', async () => {
     const inputMessages = [
-      createUIMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'user', id: 'test-input' }),
+      createTestMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'user', id: 'test-input' }),
     ];
-    const output = [createUIMessage({ content: 'Lorem ipsum dolor sit amet', role: 'assistant', id: 'test-output' })];
+    const output = [createTestMessage({ content: 'Lorem ipsum dolor sit amet', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(0);
@@ -108,8 +118,8 @@ describe('KeywordCoverageMetric', () => {
   });
 
   it('should include coverage details in result', async () => {
-    const inputMessages = [createUIMessage({ content: 'quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.analyzeStepResult).toMatchObject({

@@ -6,11 +6,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'pdf-processor-agent-storage',
     url: 'file:../mastra.db',
   }),
 });
 
 export const pdfProcessorAgent = new Agent({
+  id: 'pdf-processor-agent',
   name: 'PDF Content Processor',
   description:
     'An agent specialized in processing and extracting educational content from PDF documents for learning and flash card generation',

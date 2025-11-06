@@ -1,0 +1,178 @@
+---
+title: "Workflows | v1 Migration Guide"
+description: "Learn how to migrate workflow-related changes when upgrading to v1."
+---
+
+# Workflows
+
+Legacy workflow features have been removed.
+
+## Changed
+
+### `getWorkflows` to `listWorkflows`
+
+The `mastra.getWorkflows()` method has been renamed to `mastra.listWorkflows()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
+
+To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkflows()`.
+
+```diff
+- const workflows = mastra.getWorkflows();
++ const workflows = mastra.listWorkflows();
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflows-get-workflows .
+```
+
+:::
+
+### `RuntimeContext` to `RequestContext` in step context
+
+The parameter name `runtimeContext` has been changed to `requestContext` in workflow step execution context. This change aligns with the global rename for clarity.
+
+To migrate, update references from `runtimeContext` to `requestContext` in step execution functions.
+
+```diff
+  createStep({
+-   execute: async ({ runtimeContext } ) => {
+-     const userTier = context.runtimeContext.get('userTier');
++   execute: async ({ requestContext } ) => {
++     const userTier = requestContext.get('userTier');
+      return { result: userTier };
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod@beta v1/runtime-context .
+```
+
+:::
+
+### `createRunAsync` to `createRun`
+
+The `createRunAsync()` method has been renamed to `createRun()`. This change simplifies the API by removing the redundant "Async" suffix since all run creation is asynchronous.
+
+To migrate, rename method calls from `createRunAsync` to `createRun`.
+
+```diff
+- await workflow.createRunAsync({ input: { ... } });
++ await workflow.createRun({ input: { ... } });
+```
+
+### `runCount` to `retryCount` (deprecated)
+
+The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. This change provides clearer naming that better describes retry behavior. The old `runCount` still works but shows deprecation warnings.
+
+To migrate, rename `runCount` to `retryCount` in step execution functions.
+
+```diff
+  createStep({
+    execute: async (inputData, context) => {
+-     console.log(`Step run ${context.runCount} times`);
++     console.log(`Step retry count: ${context.retryCount}`);
+    },
+  });
+```
+
+### `getWorkflowRuns` to `listWorkflowRuns`
+
+The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
+
+To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
+
+```diff
+- const runs = await workflow.getWorkflowRuns({ fromDate, toDate });
++ const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
+```
+
+## Removed
+
+### Legacy workflows export
+
+The `./workflows/legacy` export path has been removed from `@mastra/core`. Legacy workflows are no longer supported.
+
+To migrate, use the new workflow API. There is no direct migration path from legacy workflows.
+
+```diff
+- import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
++ // Legacy workflows are no longer supported
++ // Migrate to the new workflow API
+```
+
+### `pipeThrough` and `pipeTo` methods from WorkflowRunOutput
+
+The `pipeThrough()` and `pipeTo()` methods on `WorkflowRunOutput` are deprecated. These methods still work but show console warnings.
+
+To migrate, use the `fullStream` property instead of calling methods directly on the run output.
+
+```diff
+  const run = await workflow.createRun({ input: { ... } });
+- await run.pipeTo(writableStream);
+- const transformed = run.pipeThrough(transformStream);
++ await run.fullStream.pipeTo(writableStream);
++ const transformed = run.fullStream.pipeThrough(transformStream);
+```
+
+### Watch events API
+
+Legacy watch events have been removed and consolidated on the v2 events API. The `watch()` method and related watch endpoints are no longer available.
+
+To migrate, use the workflow events API or streaming instead of watch events.
+
+```diff
+- const workflow = mastraClient.getWorkflow('my-workflow');
+- const run = await workflow.createRun();
+- await run.watch((event) => {
+-   console.log('Step completed:', event);
+- });
+
++ const workflow = mastraClient.getWorkflow('my-workflow');
++ const run = await workflow.createRun();
++ const stream = await run.stream({ inputData: { ... } });
++ for await (const chunk of stream) {
++   console.log('Step completed:', chunk);
++ }
+```
+
+### `waitForEvent` API
+
+The `waitForEvent` API has been removed from workflows. Use the suspend/resume API instead.
+
+To migrate, use suspend/resume API for waiting on workflow execution milestones.
+
+```diff
+- workflow.waitForEvent('step-complete', step1).commit();
++ workflow.then(step1).commit();
++ // Use suspend/resume API instead, in step1 execute function
+createStep({
+- execute: async (inputData, context) => {
+-  // ... execution logic 
+- }
++ execute: async (inputData, context) => {
++   if (!context.resumeData) {
++     return context.suspend({})
++   }
++   //..continue execution logic
++ }
+});
++
++ // after workflow is suspended, you can resume it
++ const result = await run.start({ inputData: { ... } });
++ if (result.status === 'suspended') {
++   const resumedResult = await run.resume({
++     resumeData: {
++       event: 'step-complete',
++     },
++     step: 'step1',
++   });
++ }
+```

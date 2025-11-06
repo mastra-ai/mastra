@@ -16,8 +16,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'test-tool',
       description: 'A test tool with string constraints',
       inputSchema,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema> }) => {
-        const { message } = context;
+      execute: async (input: z.infer<typeof inputSchema>) => {
+        const { message } = input;
         return { result: `Received: ${message}` };
       },
     };
@@ -95,8 +95,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'number-tool',
       description: 'A test tool with number constraints',
       inputSchema: inputSchema2,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema2> }) => {
-        const { age } = context;
+      execute: async (input: z.infer<typeof inputSchema2>) => {
+        const { age } = input;
         return { result: `Age: ${age}` };
       },
     };
@@ -148,8 +148,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'bug-demo-tool',
       description: 'Demonstrates the validation bug',
       inputSchema: inputSchema4,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema4> }) => {
-        const { text } = context;
+      execute: async (input: z.infer<typeof inputSchema4>) => {
+        const { text } = input;
         return { success: true, text };
       },
     };
@@ -216,8 +216,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'updateWorkingMemory',
       description: 'Update working memory',
       inputSchema: inputSchema5,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema5> }) => {
-        const { newMemory, searchString, updateReason } = context;
+      execute: async (input: z.infer<typeof inputSchema5>) => {
+        const { newMemory, searchString, updateReason } = input;
         return { success: true, newMemory, searchString, updateReason };
       },
     };

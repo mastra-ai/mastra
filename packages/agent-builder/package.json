@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "0.2.1",
+  "version": "1.0.0-beta.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -69,7 +69,7 @@
     }
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "keywords": [
     "ai",

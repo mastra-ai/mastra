@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.17.3",
+  "version": "1.0.0-beta.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -48,7 +48,6 @@
     "command-line",
     "devtools"
   ],
-  "author": "",
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "@expo/devcert": "^1.2.0",
@@ -100,5 +99,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

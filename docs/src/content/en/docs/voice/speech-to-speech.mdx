@@ -35,7 +35,8 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: "Agent",
+  id: "agent",
+  name: "OpenAI Realtime Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
   model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
@@ -57,7 +58,7 @@ const micStream = getMicrophoneStream();
 await agent.voice.send(micStream);
 ```
 
-For integrating Speech-to-Speech capabilities with agents, refer to the [Adding Voice to Agents](/docs/agents/adding-voice) documentation.
+For integrating Speech-to-Speech capabilities with agents, refer to the [Adding Voice to Agents](/docs/v1/agents/adding-voice) documentation.
 
 ## Google Gemini Live (Realtime)
 
@@ -67,7 +68,8 @@ import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: "Agent",
+  id: "agent",
+  name: "Gemini Live Agent",
   instructions:
     "You are a helpful assistant with real-time voice capabilities.",
   // Model used for text generation; voice provider handles realtime audio

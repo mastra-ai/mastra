@@ -1,7 +1,8 @@
-import { Step, Workflow } from "@mastra/core/workflows";
+import { createStep, createWorkflow } from "@mastra/core/workflows";
 import csvParser from "csv-parser";
 import fs from "fs";
 import path from "path";
+import { z } from "zod";
 
 // Update the interface to match the new CSV column names
 interface CityData {
@@ -16,13 +17,18 @@ interface CityData {
   attractionId: string;
 }
 
-export const syncCsvDataWorkflow = new Workflow({
-  name: "Sync CSV Data",
-});
-
-const syncCsvDataStep = new Step({
+const syncCsvDataStep = createStep({
   id: "sync-csv-data-step",
   description: "Sync data from City CSV",
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    records: z.array(
+      z.object({
+        data: z.any(),
+        externalId: z.string(),
+      }),
+    ),
+  }),
   execute: async () => {
     const csvFilePath =
       process.env.CSV_FILE_PATH ||
@@ -49,4 +55,17 @@ const syncCsvDataStep = new Step({
   },
 });
 
-syncCsvDataWorkflow.step(syncCsvDataStep);
+export const syncCsvDataWorkflow = createWorkflow({
+  id: "sync-csv-data",
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    records: z.array(
+      z.object({
+        data: z.any(),
+        externalId: z.string(),
+      }),
+    ),
+  }),
+})
+  .then(syncCsvDataStep)
+  .commit();

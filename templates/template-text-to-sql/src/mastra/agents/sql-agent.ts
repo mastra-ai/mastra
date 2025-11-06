@@ -10,11 +10,13 @@ import { sqlGenerationTool } from '../tools/sql-generation-tool';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'sql-agent-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });
 
 export const sqlAgent = new Agent({
+  id: 'sql-agent',
   name: 'SQL Agent',
   instructions: `You are an advanced PostgreSQL database assistant with comprehensive capabilities for database management and querying. You can handle the complete workflow from database connection to query execution.
 

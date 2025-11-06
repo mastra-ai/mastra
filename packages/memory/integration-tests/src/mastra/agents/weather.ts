@@ -16,15 +16,18 @@ export const memory = new Memory({
     semanticRecall: true,
   },
   storage: new LibSQLStore({
+    id: 'weather-storage',
     url: 'file:mastra.db', // relative path from bundled .mastra/output dir
   }),
   vector: new LibSQLVector({
     connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
+    id: 'weather-vector',
   }),
   embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'test',
   instructions:
     'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. When asked for clipboard contents use the clipboard tool to get the clipboard contents.',
@@ -43,10 +46,12 @@ export const weatherAgent = new Agent({
 const memoryWithProcessor = new Memory({
   embedder: openai.embedding('text-embedding-3-small'),
   storage: new LibSQLStore({
+    id: 'processor-storage',
     url: 'file:mastra.db',
   }),
   vector: new LibSQLVector({
     connectionUrl: 'file:mastra.db',
+    id: 'weather-vector',
   }),
   options: {
     semanticRecall: {
@@ -63,6 +68,7 @@ const memoryWithProcessor = new Memory({
 });
 
 export const memoryProcessorAgent = new Agent({
+  id: 'test-processor',
   name: 'test-processor',
   instructions: 'You are a test agent that uses a memory processor to filter out tool call messages.',
   model: openai('gpt-4o'),

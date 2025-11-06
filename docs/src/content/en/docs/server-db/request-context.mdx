@@ -48,7 +48,7 @@ routingAgent.network("What's the weather in London?", {
   requestContext,
 });
 
-const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("weatherWorkflow").createRun();
 await run.start({
   inputData: {
     location: "London",
@@ -75,7 +75,7 @@ await weatherTool.execute({
 You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
 
@@ -99,7 +99,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See [Middleware](/docs/server-db/middleware) for how to use server middleware.
+> See [Middleware](/docs/v1/server-db/middleware) for how to use server middleware.
 
 ## Accessing values with agents
 
@@ -111,7 +111,8 @@ export type UserTier = {
 };
 
 export const weatherAgent = new Agent({
-  name: "weather-agent",
+  id: "weather-agent",
+  name: "Weather Agent",
   instructions: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -134,7 +135,7 @@ export const weatherAgent = new Agent({
 
 You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-> See [Agent](/reference/agents/agent) for a full list of configuration options.
+> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
 
 ## Accessing values from workflow steps
 
@@ -158,7 +159,7 @@ const stepOne = createStep({
 });
 ```
 
-> See [createStep()](/reference/workflows/step) for a full list of configuration options.
+> See [createStep()](/reference/v1/workflows/step) for a full list of configuration options.
 
 ## Accessing values with tools
 
@@ -182,12 +183,12 @@ export const weatherTool = createTool({
 });
 ```
 
-> See [createTool()](/reference/tools/create-tool) for a full list of configuration options.
+> See [createTool()](/reference/v1/tools/create-tool) for a full list of configuration options.
 
 ## Related
 
-- [Request Context Example](/examples/agents/request-context)
-- [Agent Request Context](/docs/agents/overview#using-requestcontext)
+- [Request Context Example](/examples/v1/agents/request-context)
+- [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
 - [Tool Request Context](../tools-mcp/overview#using-requestcontext)
-- [Server Middleware Request Context](/docs/server-db/middleware)
+- [Server Middleware Request Context](/docs/v1/server-db/middleware)

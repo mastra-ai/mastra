@@ -20,7 +20,6 @@ export interface AgentMetadataModelSwitcherProps {
   updateModel: (newModel: UpdateModelParams) => Promise<{ message: string }>;
   resetModel?: () => Promise<{ message: string }>;
   closeEditor?: () => void;
-  modelProviders: string[];
   autoSave?: boolean;
   selectProviderPlaceholder?: string;
 }

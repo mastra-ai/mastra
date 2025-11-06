@@ -57,58 +57,6 @@ async function waitForDynamoDBLocal(client: DynamoDBClient, timeoutMs = 90000): 
   throw new Error(`DynamoDB Local did not become ready within ${timeoutMs}ms.`);
 }
 
-// // Function to clear all items from the single table
-// async function clearSingleTable(client: DynamoDBClient, tableName: string) {
-//   let ExclusiveStartKey: Record<string, any> | undefined;
-//   let items: Record<string, any>[] = [];
-
-//   // Scan all items (handling pagination)
-//   do {
-//     const scanOutput = await client.send(
-//       new ScanCommand({
-//         TableName: tableName,
-//         ExclusiveStartKey,
-//         ProjectionExpression: 'pk, sk', // Only need keys for deletion
-//       }),
-//     );
-//     items = items.concat(scanOutput.Items || []);
-//     ExclusiveStartKey = scanOutput.LastEvaluatedKey;
-//   } while (ExclusiveStartKey);
-
-//   if (items.length === 0) {
-//     return; // Nothing to delete
-//   }
-
-//   // Batch delete items (handling DynamoDB 25 item limit per batch)
-//   const deleteRequests = items.map(item => ({
-//     DeleteRequest: {
-//       Key: { pk: item.pk, sk: item.sk },
-//     },
-//   }));
-
-//   for (let i = 0; i < deleteRequests.length; i += 25) {
-//     const batch = deleteRequests.slice(i, i + 25);
-//     const command = new BatchWriteItemCommand({
-//       RequestItems: {
-//         [tableName]: batch,
-//       },
-//     });
-//     // Handle unprocessed items if necessary (though less likely with local)
-//     let result = await client.send(command);
-//     while (
-//       result.UnprocessedItems &&
-//       result.UnprocessedItems[tableName] &&
-//       result.UnprocessedItems[tableName].length > 0
-//     ) {
-//       console.warn(`Retrying ${result.UnprocessedItems[tableName].length} unprocessed delete items...`);
-//       await new Promise(res => setTimeout(res, 200)); // Simple backoff
-//       const retryCommand = new BatchWriteItemCommand({ RequestItems: result.UnprocessedItems });
-//       result = await client.send(retryCommand);
-//     }
-//   }
-//   // console.log(`Cleared ${items.length} items from ${tableName}`);
-// }
-
 describe('DynamoDBStore', () => {
   // Start DynamoDB Local container and create table
   beforeAll(async () => {
@@ -274,41 +222,11 @@ describe('DynamoDBStore', () => {
     }
   }, 60000); // Increase timeout for beforeAll to accommodate Docker startup and table creation
 
-  // Stop DynamoDB Local container
-  // afterAll(async () => {
-  //   console.log('Stopping DynamoDB Local container...');
-  //   // Optionally delete the table
-  //   // try {
-  //   //   await setupClient.send(new DeleteTableCommand({ TableName: TEST_TABLE_NAME }));
-  //   //   await waitUntilTableNotExists({ client: setupClient, maxWaitTime: 60 }, { TableName: TEST_TABLE_NAME });
-  //   //   console.log(`Test table ${TEST_TABLE_NAME} deleted.`);
-  //   // } catch (error) {
-  //   //   console.error(`Error deleting test table ${TEST_TABLE_NAME}:`, error);
-  //   // }
-
-  //   if (setupClient) {
-  //     setupClient.destroy();
-  //   }
-
-  //   const stopProcess = spawn('docker-compose', ['down', '--volumes'], {
-  //     // Remove volumes too
-  //     cwd: __dirname,
-  //     stdio: 'pipe',
-  //   });
-  //   stopProcess.stderr?.on('data', data => console.error(`docker-compose down stderr: ${data}`));
-  //   stopProcess.on('error', err => console.error('Failed to stop docker-compose:', err));
-  //   await new Promise(resolve => stopProcess.on('close', resolve)); // Wait for compose down
-
-  //   if (dynamodbProcess && !dynamodbProcess.killed) {
-  //     dynamodbProcess.kill();
-  //   }
-  //   console.log('DynamoDB Local container stopped.');
-  // }, 30000); // Increase timeout for afterAll
-
   createTestSuite(
     new DynamoDBStore({
       name: 'DynamoDBStoreTest',
       config: {
+        id: 'dynamodb-test-store',
         tableName: TEST_TABLE_NAME,
         endpoint: LOCAL_ENDPOINT,
         region: LOCAL_REGION,

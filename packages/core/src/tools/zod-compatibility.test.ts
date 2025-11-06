@@ -19,12 +19,12 @@ describe('Zod v3 and v4 Compatibility', () => {
         outputSchema: z.object({
           message: z.string(),
         }),
-        execute: async ({ context }) => {
-          // Type checking: context should have name and age
-          expectTypeOf(context).toHaveProperty('name');
-          expectTypeOf(context).toHaveProperty('age');
+        execute: async input => {
+          // Type checking: input should have name and age
+          expectTypeOf(input).toHaveProperty('name');
+          expectTypeOf(input).toHaveProperty('age');
           return {
-            message: `Hello ${context.name}, you are ${context.age} years old`,
+            message: `Hello ${input.name}, you are ${input.age} years old`,
           };
         },
       });
@@ -47,9 +47,9 @@ describe('Zod v3 and v4 Compatibility', () => {
         outputSchema: zv4.object({
           output: zv4.string(),
         }),
-        execute: async ({ context }) => {
-          const { input } = context;
-          const reversed = input.split('').reverse().join('');
+        execute: async input => {
+          const { input: inputStr } = input;
+          const reversed = inputStr.split('').reverse().join('');
           return {
             output: reversed,
           };
@@ -101,20 +101,14 @@ describe('Zod v3 and v4 Compatibility', () => {
         outputSchema: z.object({
           sum: z.number(),
         }),
-        execute: async ({ context }) => {
+        execute: async input => {
           return {
-            sum: context.x + context.y,
+            sum: input.x + input.y,
           };
         },
       });
 
-      const result = await tool.execute?.({
-        context: { x: 5, y: 3 },
-        runId: 'test',
-        threadId: 'test',
-        requestContext: {} as any,
-        suspend: async () => {},
-      });
+      const result = await tool.execute?.({ x: 5, y: 3 });
 
       expect(result).toEqual({ sum: 8 });
     });
@@ -129,20 +123,14 @@ describe('Zod v3 and v4 Compatibility', () => {
         outputSchema: zv4.object({
           length: zv4.number(),
         }),
-        execute: async ({ context }) => {
+        execute: async input => {
           return {
-            length: context.text.length,
+            length: input.text.length,
           };
         },
       });
 
-      const result = await tool.execute?.({
-        context: { text: 'hello' },
-        runId: 'test',
-        threadId: 'test',
-        requestContext: {} as any,
-        suspend: async () => {},
-      });
+      const result = await tool.execute?.({ text: 'hello' });
 
       expect(result).toEqual({ length: 5 });
     });
@@ -199,9 +187,9 @@ describe('Zod v3 and v4 Compatibility', () => {
         outputSchema: zv4.object({
           output: zv4.string(),
         }),
-        execute: async ({ context }) => {
-          const { input } = context;
-          const reversed = input.split('').reverse().join('');
+        execute: async input => {
+          const { input: inputStr } = input;
+          const reversed = inputStr.split('').reverse().join('');
           return {
             output: reversed,
           };
@@ -219,7 +207,7 @@ describe('Zod v3 and v4 Compatibility', () => {
         id: 'mixed-v3',
         description: 'Uses v3',
         inputSchema: z.object({ v3Input: z.string() }),
-        execute: async ({ context }) => ({ result: context.v3Input }),
+        execute: async input => ({ result: input.v3Input }),
       });
 
       // Others might use v4
@@ -227,7 +215,7 @@ describe('Zod v3 and v4 Compatibility', () => {
         id: 'mixed-v4',
         description: 'Uses v4',
         inputSchema: zv4.object({ v4Input: zv4.string() }),
-        execute: async ({ context }) => ({ result: context.v4Input }),
+        execute: async input => ({ result: input.v4Input }),
       });
 
       // Both should work
@@ -246,11 +234,11 @@ describe('Zod v3 and v4 Compatibility', () => {
           num: z.number(),
           bool: z.boolean(),
         }),
-        execute: async ({ context }) => {
+        execute: async input => {
           // These type checks ensure inference is working
-          expectTypeOf(context.str).toBeString();
-          expectTypeOf(context.num).toBeNumber();
-          expectTypeOf(context.bool).toBeBoolean();
+          expectTypeOf(input.str).toBeString();
+          expectTypeOf(input.num).toBeNumber();
+          expectTypeOf(input.bool).toBeBoolean();
           return { success: true };
         },
       });
@@ -263,11 +251,11 @@ describe('Zod v3 and v4 Compatibility', () => {
           num: zv4.number(),
           bool: zv4.boolean(),
         }),
-        execute: async ({ context }) => {
+        execute: async input => {
           // These type checks ensure inference is working
-          expectTypeOf(context.str).toBeString();
-          expectTypeOf(context.num).toBeNumber();
-          expectTypeOf(context.bool).toBeBoolean();
+          expectTypeOf(input.str).toBeString();
+          expectTypeOf(input.num).toBeNumber();
+          expectTypeOf(input.bool).toBeBoolean();
           return { success: true };
         },
       });

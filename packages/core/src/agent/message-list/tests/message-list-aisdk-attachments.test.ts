@@ -1,6 +1,6 @@
-import * as AIV4 from 'ai';
+import * as AIV4 from '@internal/ai-sdk-v4';
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../types';
+import type { MastraDBMessage } from '../../types';
 import { MessageList } from '../index';
 
 describe('MessageList - AI SDK v4 Attachment Handling', () => {
@@ -9,7 +9,7 @@ describe('MessageList - AI SDK v4 Attachment Handling', () => {
     const imageUrl = 'https://httpbin.org/image/png';
 
     // Create a V2 message with a file part containing a URL
-    const v2Message: MastraMessageV2 = {
+    const v2Message: MastraDBMessage = {
       id: 'test-msg-1',
       role: 'user',
       content: {
@@ -70,7 +70,7 @@ describe('MessageList - AI SDK v4 Attachment Handling', () => {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     const dataUri = `data:image/png;base64,${base64Data}`;
 
-    const v2Message: MastraMessageV2 = {
+    const v2Message: MastraDBMessage = {
       id: 'test-msg-2',
       role: 'user',
       content: {

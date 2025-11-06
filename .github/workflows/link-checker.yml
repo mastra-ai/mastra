@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20.19.5'
+          node-version: 22.13.0
       - name: Check links
         run: npx --force --ignore-engine github:wardpeet/broken-link-checker ${{ github.event.deployment_status.target_url }}/docs -roef
 
@@ -32,7 +32,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '20.19.5'
+          node-version: 22.13.0
           cache: 'npm'
           cache-dependency-path: docs/package-lock.json
 

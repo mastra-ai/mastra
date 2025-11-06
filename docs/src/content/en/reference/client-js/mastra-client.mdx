@@ -5,7 +5,7 @@ description: Learn how to interact with Mastra using the client-js SDK.
 
 # Mastra Client SDK
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/deployment/server-deployment) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/deployment/server-deployment) from your client environment.
 
 ## Usage example
 
@@ -150,16 +150,16 @@ export const mastraClient = new MastraClient({
       description: "Returns the list of configured log transport types.",
     },
     {
-      name: "getAITrace(traceId)",
-      type: "Promise<AITraceRecord>",
+      name: "getTrace(traceId)",
+      type: "Promise<TraceRecord>",
       description:
-        "Retrieves a specific AI trace by ID, including all its spans and details.",
+        "Retrieves a specific trace by ID, including all its spans and details.",
     },
     {
-      name: "getAITraces(params)",
-      type: "Promise<GetAITracesResponse>",
+      name: "getTraces(params)",
+      type: "Promise<GetTracesResponse>",
       description:
-        "Retrieves paginated list of AI trace root spans with optional filtering. Use getAITrace() to get complete traces with all spans.",
+        "Retrieves paginated list of trace root spans with optional filtering. Use getTrace() to get complete traces with all spans.",
     },
   ]}
 />

@@ -20,7 +20,7 @@ Real-time monitoring, suspend/resume, and step-level observability are enabled v
 ## Setup
 
 ```sh
-npm install @mastra/inngest @mastra/core @mastra/deployer
+npm install @mastra/inngest@beta @mastra/core@beta @mastra/deployer@beta
 ```
 
 ## Building an Inngest Workflow
@@ -110,7 +110,7 @@ export { workflow as incrementWorkflow };
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
 ```ts showLineNumbers copy title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";
@@ -321,7 +321,7 @@ export const customWebhookFunction = inngest.createFunction(
 Update your Mastra configuration to include the custom functions:
 
 ```ts showLineNumbers copy title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";

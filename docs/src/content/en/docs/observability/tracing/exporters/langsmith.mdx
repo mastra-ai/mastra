@@ -1,0 +1,79 @@
+---
+title: "LangSmith Exporter | Tracing | Observability | Mastra Docs"
+description: "Send traces to LangSmith for LLM observability and evaluation"
+---
+
+# LangSmith Exporter
+
+[LangSmith](https://smith.langchain.com/) is LangChain's platform for monitoring and evaluating LLM applications. The LangSmith exporter sends your traces to LangSmith, providing insights into model performance, debugging capabilities, and evaluation workflows.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/langsmith@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **LangSmith Account**: Sign up at [smith.langchain.com](https://smith.langchain.com)
+2. **API Key**: Generate an API key in LangSmith Settings → API Keys
+3. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+LANGSMITH_API_KEY=ls-xxxxxxxxxxxx
+LANGSMITH_BASE_URL=https://api.smith.langchain.com  # Optional for self-hosted
+```
+
+### Basic Setup
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LangSmithExporter } from "@mastra/langsmith";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      langsmith: {
+        serviceName: "my-service",
+        exporters: [
+          new LangSmithExporter({
+            apiKey: process.env.LANGSMITH_API_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Configuration Options
+
+### Complete Configuration
+
+```typescript
+new LangSmithExporter({
+  // Required credentials
+  apiKey: process.env.LANGSMITH_API_KEY!,
+
+  // Optional settings
+  apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
+  callerOptions: {
+    // HTTP client options
+    timeout: 30000, // Request timeout in ms
+    maxRetries: 3, // Retry attempts
+  },
+  logLevel: "info", // Diagnostic logging: debug | info | warn | error
+
+  // LangSmith-specific options
+  hideInputs: false, // Hide input data in UI
+  hideOutputs: false, // Hide output data in UI
+});
+```
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [LangSmith Documentation](https://docs.smith.langchain.com/)

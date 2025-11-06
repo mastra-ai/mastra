@@ -21,12 +21,13 @@ OPENCODE_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode/an-gbt"
+  model: "opencode/an-gd4"
 });
 
 // Generate a response
@@ -50,7 +51,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "opencode/an-gbt",
+    "model": "opencode/an-gd4",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -58,8 +59,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 200000,
     "maxOutput": 128000,
-    "inputCost": 1,
-    "outputCost": 3
+    "inputCost": 0.5,
+    "outputCost": 2
   },
   {
     "model": "opencode/big-pickle",
@@ -143,7 +144,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 204800,
     "maxOutput": 131072,
     "inputCost": 0.6,
-    "outputCost": 1.9
+    "outputCost": 2.2
   },
   {
     "model": "opencode/gpt-5",
@@ -200,9 +201,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
-    "inputCost": 1.2,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
     "outputCost": 1.2
   },
   {
@@ -226,10 +227,11 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/v1",
-    id: "opencode/an-gbt",
+    id: "opencode/an-gd4",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -242,12 +244,13 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode/qwen3-coder"
-      : "opencode/an-gbt";
+      : "opencode/an-gd4";
   }
 });
 ```

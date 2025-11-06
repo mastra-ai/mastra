@@ -31,7 +31,7 @@ An introduction to agents, and how they compare to workflows on [YouTube (7 minu
 Add the Mastra core package to your project:
 
 ```bash
-npm install @mastra/core
+npm install @mastra/core@beta
 ```
 
 </StepItem>
@@ -46,7 +46,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Mastra supports more than 600 models. Choose from the [full list](/models).
+Mastra supports more than 600 models. Choose from the [full list](/models/v1).
 
 :::
 
@@ -60,7 +60,8 @@ Create an agent by instantiating the `Agent` class with system `instructions` an
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o-mini",
 });
@@ -78,7 +79,7 @@ export const testAgent = new Agent({
 Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
 
 ```bash
-npm install @mastra/core @ai-sdk/openai
+npm install @mastra/core@beta @ai-sdk/openai
 ```
 
 </StepItem>
@@ -108,7 +109,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
-  name: "test-agent",
+  id: "test-agent",
+  name: "Test Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o-mini"),
 });
@@ -161,14 +163,14 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](/reference/agents/agent) for more information.
+> See the [Agent reference doc](/reference/v1/agents/agent) for more information.
 
 ### Registering an agent
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
 ```typescript {6} showLineNumbers title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { testAgent } from "./agents/test-agent";
 
 export const mastra = new Mastra({
@@ -189,7 +191,7 @@ const testAgent = mastra.getAgent("testAgent");
 
 `mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 
-See [Calling agents](/examples/agents/calling-agents) for more information.
+See [Calling agents](/examples/v1/agents/calling-agents) for more information.
 
 :::
 
@@ -259,7 +261,7 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
+> See [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
 
 ## Structured output
 
@@ -420,6 +422,8 @@ Agents can use tools to go beyond language generation, enabling structured inter
 
 ```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   tools: { testTool },
 });
@@ -437,6 +441,8 @@ export type UserTier = {
 };
 
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   model: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
@@ -448,15 +454,15 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Request Context](/docs/server-db/request-context) for more information.
+> See [Request Context](/docs/v1/server-db/request-context) for more information.
 
-## Testing with Mastra Playground
+## Testing with Studio
 
-Use the Mastra [Playground](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/v1/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
 - [Using Tools](./using-tools)
 - [Agent Memory](./agent-memory)
-- [Request Context](/examples/agents/request-context)
-- [Calling Agents](/examples/agents/calling-agents)
+- [Request Context](/examples/v1/agents/request-context)
+- [Calling Agents](/examples/v1/agents/calling-agents)

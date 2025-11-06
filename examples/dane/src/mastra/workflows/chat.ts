@@ -21,7 +21,7 @@ const messageStep = new Step({
   execute: async () => {
     const content = await input({
       message: '\n You:',
-      validate: input => input.trim().length > 0 || 'Message cannot be empty',
+      validate: input => inputData.trim().length > 0 || 'Message cannot be empty',
     });
 
     return { message: content };
@@ -49,16 +49,6 @@ const messageOutputStep = new Step({
     const message = context?.steps?.['message-input']?.output?.message;
 
     try {
-      // TODO: why was this unused?
-      // let messages = await mastra?.memory?.getContextWindow({
-      //   threadId,
-      //   format: 'core_message',
-      // });
-      //
-      // if (!messages || messages.length === 0) {
-      //   messages = [];
-      // }
-
       const res = await mastra?.getAgent('dane')?.stream(message, {
         maxSteps: 5,
         resourceId,

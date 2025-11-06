@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "0.3.6",
+  "version": "1.0.0-beta.0",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -56,5 +56,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -1,8 +1,8 @@
-import type { MastraMessageV2, MessageList } from '../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import { AISpanType } from '../ai-tracing';
-import type { AISpan, TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import { SpanType } from '../observability';
+import type { Span, TracingContext } from '../observability';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
@@ -14,16 +14,16 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
-  public span?: AISpan<AISpanType.PROCESSOR_RUN>;
+  public span?: Span<SpanType.PROCESSOR_RUN>;
 
   constructor(options: { processorName: string; tracingContext?: TracingContext; processorIndex?: number }) {
     const { processorName, tracingContext, processorIndex } = options;
     const currentSpan = tracingContext?.currentSpan;
 
     // Find the AGENT_RUN span by walking up the parent chain
-    const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+    const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
     this.span = parentSpan?.createChildSpan({
-      type: AISpanType.PROCESSOR_RUN,
+      type: SpanType.PROCESSOR_RUN,
       name: `output processor: ${processorName}`,
       attributes: {
         processorName: processorName,
@@ -81,11 +81,11 @@ export class ProcessorRunner {
   }
 
   async runOutputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
-    const responseMessages = messageList.clear.response.v2();
+    const responseMessages = messageList.clear.response.db();
 
-    let processableMessages: MastraMessageV2[] = [...responseMessages];
+    let processableMessages: MastraDBMessage[] = [...responseMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
@@ -94,7 +94,7 @@ export class ProcessorRunner {
 
     for (const [index, processor] of this.outputProcessors.entries()) {
       const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.name}`);
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
 
       ctx.abort = abort;
@@ -108,12 +108,12 @@ export class ProcessorRunner {
       }
 
       const currentSpan = tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: AISpanType.PROCESSOR_RUN,
-        name: `output processor: ${processor.name}`,
+        type: SpanType.PROCESSOR_RUN,
+        name: `output processor: ${processor.id}`,
         attributes: {
-          processorName: processor.name,
+          processorName: processor.name ?? processor.id,
           processorType: 'output',
           processorIndex: index,
         },
@@ -160,14 +160,14 @@ export class ProcessorRunner {
         try {
           if (processor.processOutputStream && processedPart) {
             // Get or create state for this processor
-            let state = processorStates.get(processor.name);
+            let state = processorStates.get(processor.id);
             if (!state) {
               state = new ProcessorState<OUTPUT>({
-                processorName: processor.name,
+                processorName: processor.name ?? processor.id,
                 tracingContext,
                 processorIndex: index,
               });
-              processorStates.set(processor.name, state);
+              processorStates.set(processor.id, state);
             }
 
             // Add the current part to accumulated text
@@ -178,7 +178,7 @@ export class ProcessorRunner {
               streamParts: state.streamParts as ChunkType[],
               state: state.customState,
               abort: (reason?: string) => {
-                throw new TripWire(reason || `Stream part blocked by ${processor.name}`);
+                throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
               tracingContext: { currentSpan: state.span },
             });
@@ -193,17 +193,17 @@ export class ProcessorRunner {
         } catch (error) {
           if (error instanceof TripWire) {
             // End span with blocked metadata
-            const state = processorStates.get(processor.name);
+            const state = processorStates.get(processor.id);
             state?.span?.end({
               metadata: { blocked: true, reason: error.message },
             });
             return { part: null, blocked: true, reason: error.message };
           }
           // End span with error
-          const state = processorStates.get(processor.name);
+          const state = processorStates.get(processor.id);
           state?.span?.error({ error: error as Error, endSpan: true });
           // Log error but continue with original part
-          this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.name} failed:`, error);
+          this.logger.error(`[Agent:${this.agentName}] - Output processor ${processor.id} failed:`, error);
         }
       }
 
@@ -286,11 +286,11 @@ export class ProcessorRunner {
   }
 
   async runInputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
-    const userMessages = messageList.clear.input.v2();
+    const userMessages = messageList.clear.input.db();
 
-    let processableMessages: MastraMessageV2[] = [...userMessages];
+    let processableMessages: MastraDBMessage[] = [...userMessages];
 
-    const ctx: { messages: MastraMessageV2[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
@@ -299,7 +299,7 @@ export class ProcessorRunner {
 
     for (const [index, processor] of this.inputProcessors.entries()) {
       const abort = (reason?: string): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.name}`);
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`);
       };
 
       ctx.abort = abort;
@@ -313,12 +313,12 @@ export class ProcessorRunner {
       }
 
       const currentSpan = tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: AISpanType.PROCESSOR_RUN,
-        name: `input processor: ${processor.name}`,
+        type: SpanType.PROCESSOR_RUN,
+        name: `input processor: ${processor.id}`,
         attributes: {
-          processorName: processor.name,
+          processorName: processor.name ?? processor.id,
           processorType: 'input',
           processorIndex: index,
         },
@@ -341,10 +341,11 @@ export class ProcessorRunner {
 
       // Add system messages using addSystem
       for (const sysMsg of systemMessages) {
-        messageList.addSystem(
-          (sysMsg.content.content as string) ||
-            sysMsg.content.parts.map(p => (p.type === 'text' ? p.text : '')).join('\n'),
-        );
+        const systemText =
+          (sysMsg.content.content as string | undefined) ??
+          sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+          '';
+        messageList.addSystem(systemText);
       }
 
       // Add non-system messages normally

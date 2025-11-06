@@ -1,0 +1,265 @@
+---
+title: "Agent Class | v1 Migration Guide"
+description: "Learn how to migrate Agent class changes when upgrading to v1."
+---
+
+# Agent Class
+
+The Agent class has been updated with reorganized voice methods, updated property access patterns, and streamlined streaming APIs.
+
+## Changed
+
+### `getAgents` to `listAgents`
+
+The `mastra.getAgents()` method has been renamed to `mastra.listAgents()`. This change aligns with the naming convention used across the API where plural getter methods use the `list` prefix.
+
+To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`.
+
+```diff
+- const agents = mastra.getAgents();
++ const agents = mastra.listAgents();
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-get-agents .
+```
+
+:::
+
+### `RuntimeContext` to `RequestContext`
+
+The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.
+
+To migrate, update all imports and parameter names from `RuntimeContext`/`runtimeContext` to `RequestContext`/`requestContext`.
+
+```diff
+- import { RuntimeContext } from '@mastra/core/runtime-context';
++ import { RequestContext } from '@mastra/core/request-context';
+
+- const runtimeContext = new RuntimeContext();
+- runtimeContext.set('userTier', 'enterprise');
++ const requestContext = new RequestContext();
++ requestContext.set('userTier', 'enterprise');
+
+- await agent.generate(messages, { runtimeContext });
++ await agent.generate(messages, { requestContext });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/runtime-context .
+```
+
+:::
+
+### Direct property access to getter methods
+
+Direct property access to `agent.llm`, `agent.tools`, and `agent.instructions` is deprecated. This change provides better encapsulation and consistency with the broader API design.
+
+To migrate, replace property access with the corresponding getter methods.
+
+```diff
+- const llm = agent.llm;
+- const tools = agent.tools;
+- const instructions = agent.instructions;
++ const llm = agent.getLLM();
++ const tools = agent.getTools();
++ const instructions = agent.getInstructions();
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-property-access .
+```
+
+:::
+
+### Voice methods moved to `agent.voice` namespace
+
+Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.
+
+To migrate, update voice method calls to use the `agent.voice` namespace.
+
+```diff
+- await agent.speak('Hello');
+- await agent.listen();
+- const speakers = agent.getSpeakers();
++ await agent.voice.speak('Hello');
++ await agent.voice.listen();
++ const speakers = agent.voice.getSpeakers();
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-voice .
+```
+
+:::
+
+### `agent.fetchMemory()` to `(await agent.getMemory()).recall()`
+
+The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
+
+To migrate, replace `fetchMemory()` calls with the new API.
+
+```diff
+- const messages = await agent.fetchMemory({ threadId: 'thread-123' });
++ const memory = await agent.getMemory();
++ const result = await memory.recall({ threadId: 'thread-123' });
++ const messages = result.messages;
+```
+
+### Processor method names from `get*` to `list*`
+
+Agent processor methods have been renamed from `get*` to `list*` pattern for consistency with the broader API. This change aligns with the convention that `list*` methods return collections.
+
+To migrate, update processor method names.
+
+```diff
+- const inputProcessors = await agent.getInputProcessors(runtimeContext);
+- const outputProcessors = await agent.getOutputProcessors(runtimeContext);
++ const inputProcessors = await agent.listInputProcessors(requestContext);
++ const outputProcessors = await agent.listOutputProcessors(requestContext);
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-processor-methods .
+```
+
+:::
+
+### Default options method renames for AI SDK versions
+
+Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5) APIs. This change helps developers understand which AI SDK version they're targeting.
+
+To migrate, update method names based on which AI SDK version you're using.
+
+```diff
+  // For legacy AI SDK v4
+- const options = await agent.getDefaultGenerateOptions();
+- const streamOptions = await agent.getDefaultStreamOptions();
++ const options = await agent.getDefaultGenerateOptionsLegacy();
++ const streamOptions = await agent.getDefaultStreamOptionsLegacy();
+
+  // For new AI SDK v5 (default)
+  const streamOptions = await agent.getDefaultStreamOptions();
+```
+
+### `modelSettings.abortSignal` to top-level `abortSignal`
+
+The `abortSignal` option has been moved from `modelSettings` to the top level of stream/generate options. This change provides a clearer separation between model-specific settings and execution control.
+
+To migrate, move `abortSignal` from `modelSettings` to the top level.
+
+```diff
+  agent.stream('Hello', {
+-   modelSettings: {
+-     abortSignal: abortController.signal,
+-   },
++   abortSignal: abortController.signal,
+  });
+```
+
+### `output` to `structuredOutput.schema`
+
+The deprecated `output` and `experimental_output` options have been removed. This change consolidates on a single, stable API for structured output.
+
+To migrate, update from `output` or `experimental_output` to `structuredOutput.schema`.
+
+```diff
+  agent.stream('Hello', {
+-   output: z.object({ result: z.string() }),
++   structuredOutput: {
++     schema: z.object({ result: z.string() }),
++   },
+  });
+```
+
+## Removed
+
+### `generateVNext` and `streamVNext` methods
+
+The deprecated `generateVNext()` and `streamVNext()` methods have been removed. These methods were previously used for AI SDK v5 compatibility but are now the standard implementation.
+
+To migrate, use the standard `generate()` and `stream()` methods.
+
+```diff
+- const result = await agent.generateVNext('Hello');
+- const stream = await agent.streamVNext('Hello');
++ const result = await agent.generate('Hello');
++ const stream = await agent.stream('Hello');
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-generate-stream-v-next .
+```
+
+:::
+
+### `format` parameter from `stream()` and `generate()`
+
+The `format` parameter has been removed from `agent.stream()` and `agent.generate()` methods. AI SDK stream transformations are now handled by the `@mastra/ai-sdk` package. This change improves tree-shaking by moving AI SDK-specific code to a dedicated package.
+
+To migrate, use the `toAISdkStream()` function from `@mastra/ai-sdk` for AI SDK format conversion.
+
+```diff
+- const stream = await agent.stream(messages, {
+-   format: 'aisdk',
+- });
+
++ import { toAISdkStream } from '@mastra/ai-sdk';
++ 
++ const stream = await agent.stream(messages);
++ const aiSdkStream = toAISdkStream(stream, { from: 'agent' });
+```
+
+### `agent.toStep()` method
+
+The `toStep()` method has been removed from the Agent class. Agents can now be added directly to workflow steps without explicit conversion.
+
+To migrate, add agents directly to workflow steps. Workflows handle the transformation automatically.
+
+```diff
+- const step = agent.toStep();
+- const workflow = new Workflow({
+-   steps: [step],
+- });
+
++ const workflow = new Workflow({
++   steps: [agent],
++ });
+```
+
+### `TMetrics` generic parameter from Agent
+
+The `TMetrics` generic parameter has been removed from `AgentConfig` and the `Agent` constructor. Metrics/scorers are now configured using the scorers API instead of being part of the Agent type system.
+
+To migrate, remove the `TMetrics` generic parameter and configure scorers using the new API.
+
+```diff
+- const agent = new Agent<AgentId, Tools, Metrics>({
++ const agent = new Agent<AgentId, Tools>({
+    // ...
+  });
+```

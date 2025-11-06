@@ -9,11 +9,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'pdf-to-audio-agent-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });
 
 export const pdfToAudioAgent = new Agent({
+  id: 'pdf-to-audio-agent',
   name: 'pdfToAudioAgent',
   description: 'An agent that can download PDFs, generate summaries, and create audio from PDF content',
   instructions: `

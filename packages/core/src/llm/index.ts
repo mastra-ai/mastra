@@ -1,24 +1,24 @@
 import type {
+  EmbedManyResult as AiEmbedManyResult,
+  EmbedResult as AiEmbedResult,
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
   CoreSystemMessage as AiCoreSystemMessage,
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
-  EmbedManyResult as AiEmbedManyResult,
-  EmbedResult as AiEmbedResult,
+  UIMessage,
   streamText,
   streamObject,
   generateText,
   generateObject,
-  UIMessage,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from 'ai';
+} from '@internal/ai-sdk-v4';
 import type { SystemModelMessage } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { TracingContext } from '../ai-tracing';
+import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { Run } from '../run/types';
 import type { CoreTool } from '../tools/types';

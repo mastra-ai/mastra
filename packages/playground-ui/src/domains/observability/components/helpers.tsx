@@ -1,8 +1,8 @@
 import { format } from 'date-fns';
-import { AISpanRecord } from '@mastra/core';
+import { SpanRecord } from '@mastra/core/storage';
 import { useLinkComponent } from '@/lib/framework';
 
-export function useTraceInfo(trace: AISpanRecord | undefined) {
+export function useTraceInfo(trace: SpanRecord | undefined) {
   const { paths } = useLinkComponent();
   if (!trace) {
     return [];
@@ -11,7 +11,7 @@ export function useTraceInfo(trace: AISpanRecord | undefined) {
   const agentsLink = paths.agentsLink();
   const workflowsLink = paths.workflowsLink();
   const agentLink = paths.agentLink(trace?.metadata?.resourceId!);
-  const workflowLink = paths.workflowLink(trace?.metadata?.resourceId!);
+  const workflowLink = paths.workflowLink(trace?.attributes?.workflowId!);
 
   return [
     {
@@ -55,7 +55,7 @@ export function useTraceInfo(trace: AISpanRecord | undefined) {
 }
 
 type getSpanInfoProps = {
-  span: AISpanRecord | undefined;
+  span: SpanRecord | undefined;
   withTraceId?: boolean;
   withSpanId?: boolean;
 };

@@ -21,12 +21,12 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
 To enable memory in Mastra, install the `@mastra/memory` package along with a storage provider.
 
 ```bash npm2yarn copy
-npm install @mastra/memory@latest @mastra/libsql@latest
+npm install @mastra/memory@beta @mastra/libsql@beta
 ```
 
 ## Storage providers
 
-Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/server-db/storage) documentation.
+Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/v1/server-db/storage) documentation.
 
 ## Configuring memory
 
@@ -40,6 +40,8 @@ import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     options: {
@@ -51,7 +53,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See the [Memory Class](/reference/memory/memory-class) docs for a full list of configuration options.
+See the [Memory Class](/reference/v1/memory/memory-class) docs for a full list of configuration options.
 
 :::
 
@@ -62,12 +64,13 @@ See the [Memory Class](/reference/memory/memory-class) docs for a full list of c
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
 ```typescript {6-8} title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   // ..
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 });
@@ -75,7 +78,7 @@ export const mastra = new Mastra({
 
 :::note
 
-See the [LibSQL Storage](/reference/storage/libsql) docs for a full list of configuration options.
+See the [LibSQL Storage](/reference/v1/storage/libsql) docs for a full list of configuration options.
 
 :::
 
@@ -90,9 +93,12 @@ import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'mastra-storage',
       url: ":memory:",
     }),
   }),
@@ -108,13 +114,13 @@ Include a `memory` object with both `resource` and `thread` to track conversatio
 
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
 
-```typescript {3-4}
+```typescript {5-6}
 const response = await memoryAgent.generate(
   "Remember my favorite color is blue.",
   {
     memory: {
-      thread: "user-123",
-      resource: "test-123",
+      resource: "user-123",
+      thread: "conversation-123",
     },
   },
 );
@@ -125,8 +131,8 @@ To recall information stored in memory, call the agent with the same `resource` 
 ```typescript {3-4}
 const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
-    thread: "user-123",
-    resource: "test-123",
+    resource: "user-123",
+    thread: "conversation-123",
   },
 });
 ```
@@ -135,7 +141,7 @@ To learn more about memory see the [Memory](../memory/overview) documentation.
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/server-db/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RequestContext](/docs/v1/server-db/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
 export type UserTier = {
@@ -151,6 +157,8 @@ const standardMemory = new Memory({
 });
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
   // ...
   memory: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
@@ -162,7 +170,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See [Request Context](/docs/server-db/request-context) docs for more information.
+See [Request Context](/docs/v1/server-db/request-context) docs for more information.
 
 :::
 
@@ -171,4 +179,4 @@ See [Request Context](/docs/server-db/request-context) docs for more information
 - [Working Memory](../memory/working-memory)
 - [Semantic Recall](../memory/semantic-recall)
 - [Threads and Resources](../memory/threads-and-resources)
-- [Request Context](/docs/server-db/request-context)
+- [Request Context](/docs/v1/server-db/request-context)

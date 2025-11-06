@@ -1,0 +1,79 @@
+---
+title: "Reference: getScorerById() | Core | Mastra Docs"
+description: "Documentation for the `getScorerById()` method in Mastra, which retrieves a scorer by its id property rather than registration key."
+---
+
+# getScorerById()
+
+The `getScorerById()` method retrieves a scorer by searching for its `id` property (or `name` property as a fallback) rather than the registration key. This is useful when you know the scorer's id but not necessarily how it was registered in the Mastra instance.
+
+## Usage Example
+
+```typescript
+import { mastra } from "./mastra";
+
+// Get a scorer by its id property
+const relevancyScorer = mastra.getScorerById("answer-relevancy-scorer");
+
+const weatherAgent = mastra.getAgent("weatherAgent");
+
+// Use the scorer to evaluate an AI output
+await weatherAgent.generate("What is the weather in Rome", {
+  scorers: {
+    answerRelevancy: {
+      scorer: relevancyScorer,
+    },
+  },
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "The id property of the scorer to retrieve. This should match the 'id' field specified when creating the scorer with createScorer(). The method will also search by 'name' property as a fallback.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorer",
+      type: "MastraScorer",
+      description:
+        "The MastraScorer instance that has the matching id (or name) property.",
+    },
+  ]}
+/>
+
+## Error Handling
+
+This method throws a `MastraError` if:
+
+- No scorer with the specified id is found
+- No scorers are registered with the Mastra instance
+
+```typescript
+try {
+  const scorer = mastra.getScorerById("non-existent-scorer");
+} catch (error) {
+  if (error.id === "MASTRA_GET_SCORER_BY_ID_NOT_FOUND") {
+    console.log("Scorer with that id not found");
+  }
+}
+```
+
+## Related
+
+- [getScorer()](/reference/v1/core/getScorer) - Get a scorer by its registration key
+- [listScorers()](/reference/v1/core/listScorers) - Get all registered scorers
+- [createScorer()](/reference/v1/evals/create-scorer) - Learn how to create scorers with ids
+

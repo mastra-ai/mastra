@@ -1,0 +1,224 @@
+---
+title: "Reference: runEvals | Evals | Mastra Docs"
+description: "Documentation for the runEvals function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
+---
+
+# runEvals
+
+The `runEvals` function enables batch evaluation of agents and workflows by running multiple test cases against scorers concurrently. This is essential for systematic testing, performance analysis, and validation of AI systems.
+
+## Usage Example
+
+```typescript
+import { runEvals } from "@mastra/core/evals";
+import { myAgent } from "./agents/my-agent";
+import { myScorer1, myScorer2 } from "./scorers";
+
+const result = await runEvals({
+  target: myAgent,
+  data: [
+    { input: "What is machine learning?" },
+    { input: "Explain neural networks" },
+    { input: "How does AI work?" },
+  ],
+  scorers: [myScorer1, myScorer2],
+  concurrency: 2,
+  onItemComplete: ({ item, targetResult, scorerResults }) => {
+    console.log(`Completed: ${item.input}`);
+    console.log(`Scores:`, scorerResults);
+  },
+});
+
+console.log(`Average scores:`, result.scores);
+console.log(`Processed ${result.summary.totalItems} items`);
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "target",
+      type: "Agent | Workflow",
+      description: "The agent or workflow to evaluate.",
+      isOptional: false,
+    },
+    {
+      name: "data",
+      type: "RunEvalsDataItem[]",
+      description:
+        "Array of test cases with input data and optional ground truth.",
+      isOptional: false,
+    },
+    {
+      name: "scorers",
+      type: "MastraScorer[] | WorkflowScorerConfig",
+      description:
+        "Array of scorers for agents, or configuration object for workflows specifying scorers for the workflow and individual steps.",
+      isOptional: false,
+    },
+    {
+      name: "concurrency",
+      type: "number",
+      description: "Number of test cases to run concurrently.",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "onItemComplete",
+      type: "function",
+      description:
+        "Callback function called after each test case completes. Receives item, target result, and scorer results.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Data Item Structure
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | string[] | CoreMessage[] | any",
+      description:
+        "Input data for the target. For agents: messages or strings. For workflows: workflow input data.",
+      isOptional: false,
+    },
+    {
+      name: "groundTruth",
+      type: "any",
+      description:
+        "Expected or reference output for comparison during scoring.",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "Request Context to pass to the target during execution.",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "Tracing context for observability and debugging.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Workflow Scorer Configuration
+
+For workflows, you can specify scorers at different levels using `WorkflowScorerConfig`:
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "MastraScorer[]",
+      description: "Array of scorers to evaluate the entire workflow output.",
+      isOptional: true,
+    },
+    {
+      name: "steps",
+      type: "Record<string, MastraScorer[]>",
+      description:
+        "Object mapping step IDs to arrays of scorers for evaluating individual step outputs.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "scores",
+      type: "Record<string, any>",
+      description:
+        "Average scores across all test cases, organized by scorer name.",
+    },
+    {
+      name: "summary",
+      type: "object",
+      description: "Summary information about the experiment execution.",
+    },
+    {
+      name: "summary.totalItems",
+      type: "number",
+      description: "Total number of test cases processed.",
+    },
+  ]}
+/>
+
+## Examples
+
+### Agent Evaluation
+
+```typescript
+import { createScorer, runEvals } from "@mastra/core/evals";
+
+const myScorer = createScorer({
+  name: "My Scorer",
+  description: "Check if Agent's response contains ground truth",
+  type: "agent",
+}).generateScore(({ run }) => {
+  const response = run.output[0]?.content || "";
+  const expectedResponse = run.groundTruth;
+  return response.includes(expectedResponse) ? 1 : 0;
+});
+
+const result = await runEvals({
+  target: chatAgent,
+  data: [
+    {
+      input: "What is AI?",
+      groundTruth:
+        "AI is a field of computer science that creates intelligent machines.",
+    },
+    {
+      input: "How does machine learning work?",
+      groundTruth:
+        "Machine learning uses algorithms to learn patterns from data.",
+    },
+  ],
+  scorers: [relevancyScorer],
+  concurrency: 3,
+});
+```
+
+### Workflow Evaluation
+
+```typescript
+const workflowResult = await runEvals({
+  target: myWorkflow,
+  data: [
+    { input: { query: "Process this data", priority: "high" } },
+    { input: { query: "Another task", priority: "low" } },
+  ],
+  scorers: {
+    workflow: [outputQualityScorer],
+    steps: {
+      "validation-step": [validationScorer],
+      "processing-step": [processingScorer],
+    },
+  },
+  onItemComplete: ({ item, targetResult, scorerResults }) => {
+    console.log(`Workflow completed for: ${item.inputData.query}`);
+    if (scorerResults.workflow) {
+      console.log("Workflow scores:", scorerResults.workflow);
+    }
+    if (scorerResults.steps) {
+      console.log("Step scores:", scorerResults.steps);
+    }
+  },
+});
+```
+
+## Related
+
+- [createScorer()](/reference/v1/evals/create-scorer) - Create custom scorers for experiments
+- [MastraScorer](/reference/v1/evals/mastra-scorer) - Learn about scorer structure and methods
+- [Custom Scorers](/docs/v1/evals/custom-scorers) - Guide to building evaluation logic
+- [Scorers Overview](/docs/v1/evals/overview) - Understanding scorer concepts
