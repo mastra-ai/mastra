@@ -7,9 +7,10 @@ import { Text } from '@/components/ui/text';
 import { cn } from '@/lib/utils';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, Footprints, Clock } from 'lucide-react';
+import { ChevronDown, Footprints } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
 import { Icon } from '@/ds/icons';
+import { BADGE_COLORS, BADGE_ICONS } from './workflow-node-badges';
 
 export type AfterNode = Node<
   {
@@ -31,7 +32,7 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
 
       <CollapsibleTrigger className="flex items-center justify-between w-full">
-        <Badge icon={<Clock className="text-current" style={{ color: '#14B8A6' }} />}>AFTER</Badge>
+        <Badge icon={<BADGE_ICONS.after className="text-current" style={{ color: BADGE_COLORS.after }} />}>AFTER</Badge>
         <Icon>
           <ChevronDown
             className={cn('transition-transform text-icon3', {

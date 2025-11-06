@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, Network, Repeat, RefreshCw, Timer, GitBranch, CornerDownRight, Repeat1 } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import { getConditionIconAndColor } from './workflow-node-badges';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCurrentRun } from '../context/use-current-run';
@@ -27,27 +28,6 @@ export type ConditionNode = Node<
   },
   'condition-node'
 >;
-
-const getConditionIconAndColor = (type: string) => {
-  switch (type) {
-    case 'when':
-      return { icon: Network, color: '#ECB047' }; // Orange
-    case 'dountil':
-      return { icon: Repeat1, color: '#8B5CF6' }; // Purple
-    case 'dowhile':
-      return { icon: Repeat, color: '#06B6D4' }; // Cyan
-    case 'until':
-      return { icon: Timer, color: '#F59E0B' }; // Amber
-    case 'while':
-      return { icon: RefreshCw, color: '#10B981' }; // Green
-    case 'if':
-      return { icon: GitBranch, color: '#3B82F6' }; // Blue
-    case 'else':
-      return { icon: CornerDownRight, color: '#6B7280' }; // Gray
-    default:
-      return { icon: null, color: null };
-  }
-};
 
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const { conditions, previousStepId, nextStepId, withoutTopHandle } = data;
@@ -87,7 +67,13 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           }}
         >
           <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2">
-            <Badge icon={IconComponent ? <IconComponent className="text-current" style={{ color }} /> : null}>
+            <Badge
+              icon={
+                IconComponent ? (
+                  <IconComponent className="text-current" {...(color ? { style: { color } } : {})} />
+                ) : null
+              }
+            >
               {type?.toUpperCase()}
             </Badge>
             {isCollapsible && (
@@ -176,7 +162,10 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                                 <Badge
                                   icon={
                                     ConjIconComponent ? (
-                                      <ConjIconComponent className="text-current" style={{ color: conjColor }} />
+                                      <ConjIconComponent
+                                        className="text-current"
+                                        {...(conjColor ? { style: { color: conjColor } } : {})}
+                                      />
                                     ) : null
                                   }
                                 >

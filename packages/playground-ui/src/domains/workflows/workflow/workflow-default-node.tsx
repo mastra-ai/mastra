@@ -1,21 +1,12 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import {
-  CircleDashed,
-  HourglassIcon,
-  Loader2,
-  PauseIcon,
-  Timer,
-  CalendarClock,
-  List,
-  Workflow,
-  PlayCircle,
-} from 'lucide-react';
+import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 import { Badge } from '@/ds/components/Badge';
 
 import { Clock } from './workflow-clock';
+import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 
 import { cn } from '@/lib/utils';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
@@ -23,6 +14,7 @@ import { WorkflowStepActionBar } from './workflow-step-action-bar';
 export type DefaultNode = Node<
   {
     label: string;
+    stepId?: string;
     description?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
@@ -44,6 +36,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
   const { steps, runId } = useCurrentRun();
   const {
     label,
+    stepId,
     description,
     withoutTopHandle,
     withoutBottomHandle,
@@ -59,16 +52,14 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
 
   const step = steps[fullLabel];
 
-  const isSleepNode = Boolean(duration || date);
-  const sleepIconColor = '#A855F7'; // Purple color for sleep nodes
-  const isForEachNode = Boolean(isForEach);
-  const isMapNode = Boolean(mapConfig && !isForEach);
-  const forEachIconColor = '#F97316'; // Orange color for forEach nodes
-  const mapIconColor = '#F97316'; // Orange color for map nodes
-  const parallelIconColor = '#3B82F6'; // Blue color for parallel nodes
-  const suspendIconColor = '#EC4899'; // Pink color for suspend/resume nodes
-
-  const hasSpecialBadge = isSleepNode || canSuspend || isParallel || isForEachNode || isMapNode;
+  const { isSleepNode, isForEachNode, isMapNode, hasSpecialBadge } = getNodeBadgeInfo({
+    duration,
+    date,
+    isForEach,
+    mapConfig,
+    canSuspend,
+    isParallel,
+  });
 
   return (
     <>
@@ -89,33 +80,37 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
         )}
       >
         {hasSpecialBadge && (
-          <div className="px-3 pt-2 pb-1">
+          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
             {isSleepNode && (
               <Badge
                 icon={
                   date ? (
-                    <CalendarClock className="text-current" style={{ color: sleepIconColor }} />
+                    <BADGE_ICONS.sleepUntil className="text-current" style={{ color: BADGE_COLORS.sleep }} />
                   ) : (
-                    <Timer className="text-current" style={{ color: sleepIconColor }} />
+                    <BADGE_ICONS.sleep className="text-current" style={{ color: BADGE_COLORS.sleep }} />
                   )
                 }
               >
                 {date ? 'SLEEP UNTIL' : 'SLEEP'}
               </Badge>
             )}
-            {!isSleepNode && canSuspend && (
-              <Badge icon={<PlayCircle className="text-current" style={{ color: suspendIconColor }} />}>
+            {canSuspend && (
+              <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
                 SUSPEND/RESUME
               </Badge>
             )}
-            {!isSleepNode && !canSuspend && isParallel && (
-              <Badge icon={<Workflow className="text-current" style={{ color: parallelIconColor }} />}>PARALLEL</Badge>
+            {isParallel && (
+              <Badge icon={<BADGE_ICONS.parallel className="text-current" style={{ color: BADGE_COLORS.parallel }} />}>
+                PARALLEL
+              </Badge>
             )}
-            {!isSleepNode && !canSuspend && !isParallel && isForEachNode && (
-              <Badge icon={<List className="text-current" style={{ color: forEachIconColor }} />}>FOREACH</Badge>
+            {isForEachNode && (
+              <Badge icon={<BADGE_ICONS.forEach className="text-current" style={{ color: BADGE_COLORS.forEach }} />}>
+                FOREACH
+              </Badge>
             )}
-            {!isSleepNode && !canSuspend && !isParallel && !isForEachNode && isMapNode && (
-              <Badge icon={<List className="text-current" style={{ color: mapIconColor }} />}>MAP</Badge>
+            {isMapNode && (
+              <Badge icon={<BADGE_ICONS.map className="text-current" style={{ color: BADGE_COLORS.map }} />}>MAP</Badge>
             )}
           </div>
         )}
@@ -126,8 +121,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
             {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
             {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
             {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-            {!step && !hasSpecialBadge && <CircleDashed className="text-icon2" />}
-            {!step && hasSpecialBadge && <CircleDashed className="text-icon2" />}
+            {!step && <CircleDashed className="text-icon2" />}
           </Icon>
 
           <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">
@@ -154,6 +148,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
 
         <WorkflowStepActionBar
           stepName={label}
+          stepId={stepId}
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}

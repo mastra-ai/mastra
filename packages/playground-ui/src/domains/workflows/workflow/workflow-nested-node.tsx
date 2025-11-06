@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { CircleDashed, HourglassIcon, Loader2, PauseIcon, List, Workflow, PlayCircle } from 'lucide-react';
+import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { cn } from '@/lib/utils';
@@ -12,10 +12,12 @@ import { Txt } from '@/ds/components/Txt';
 import { Badge } from '@/ds/components/Badge';
 import { Clock } from './workflow-clock';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
+import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 
 export type NestedNode = Node<
   {
     label: string;
+    stepId?: string;
     description?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
@@ -38,6 +40,7 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
 
   const {
     label,
+    stepId,
     description,
     withoutTopHandle,
     withoutBottomHandle,
@@ -52,14 +55,13 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
 
   const step = steps[fullLabel];
 
-  const isForEachNode = Boolean(isForEach);
-  const isMapNode = Boolean(mapConfig && !isForEach);
-  const forEachIconColor = '#F97316'; // Orange color for forEach nodes
-  const mapIconColor = '#F97316'; // Orange color for map nodes
-  const parallelIconColor = '#3B82F6'; // Blue color for parallel nodes
-  const suspendIconColor = '#EC4899'; // Pink color for suspend/resume nodes
-
-  const hasSpecialBadge = canSuspend || isParallel || isForEachNode || isMapNode;
+  const { isForEachNode, isMapNode, isNestedWorkflow, hasSpecialBadge } = getNodeBadgeInfo({
+    isForEach,
+    mapConfig,
+    canSuspend,
+    isParallel,
+    stepGraph,
+  });
 
   return (
     <>
@@ -79,20 +81,29 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
         )}
       >
         {hasSpecialBadge && (
-          <div className="px-3 pt-2 pb-1">
+          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
             {canSuspend && (
-              <Badge icon={<PlayCircle className="text-current" style={{ color: suspendIconColor }} />}>
+              <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
                 SUSPEND/RESUME
               </Badge>
             )}
-            {!canSuspend && isParallel && (
-              <Badge icon={<Workflow className="text-current" style={{ color: parallelIconColor }} />}>PARALLEL</Badge>
+            {isParallel && (
+              <Badge icon={<BADGE_ICONS.parallel className="text-current" style={{ color: BADGE_COLORS.parallel }} />}>
+                PARALLEL
+              </Badge>
             )}
-            {!canSuspend && !isParallel && isForEachNode && (
-              <Badge icon={<List className="text-current" style={{ color: forEachIconColor }} />}>FOREACH</Badge>
+            {isNestedWorkflow && (
+              <Badge icon={<BADGE_ICONS.workflow className="text-current" style={{ color: BADGE_COLORS.workflow }} />}>
+                WORKFLOW
+              </Badge>
             )}
-            {!canSuspend && !isParallel && !isForEachNode && isMapNode && (
-              <Badge icon={<List className="text-current" style={{ color: mapIconColor }} />}>MAP</Badge>
+            {isForEachNode && (
+              <Badge icon={<BADGE_ICONS.forEach className="text-current" style={{ color: BADGE_COLORS.forEach }} />}>
+                FOREACH
+              </Badge>
+            )}
+            {isMapNode && (
+              <Badge icon={<BADGE_ICONS.map className="text-current" style={{ color: BADGE_COLORS.map }} />}>MAP</Badge>
             )}
           </div>
         )}
@@ -119,6 +130,7 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
 
         <WorkflowStepActionBar
           stepName={label}
+          stepId={stepId}
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}
