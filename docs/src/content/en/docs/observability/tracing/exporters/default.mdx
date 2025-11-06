@@ -23,7 +23,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-  id: 'mastra-storage',
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Required for trace persistence
   }),
   observability: new Observability({
@@ -47,7 +47,7 @@ import { Observability } from "@mastra/observability";
 import { LibSQLStore } from "@mastra/libsql";
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-  id: 'mastra-storage',
+    id: 'mastra-storage',
     url: "file:./mastra.db",
   }),
   observability: new Observability({

@@ -32,7 +32,7 @@ export const mastra = new Mastra({
   // ... other config
   logger: new PinoLogger(),
   storage: new LibSQLStore({
-  id: 'mastra-storage',
+    id: 'mastra-storage',
     url: "file:./mastra.db", // Storage is required for tracing
   }),
   observability: new Observability({ // Enables Tracing
