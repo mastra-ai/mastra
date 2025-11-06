@@ -7,9 +7,9 @@ description: "Human-in-the-loop workflows in Mastra allow you to pause execution
 
 Some workflows need to pause for a human decision before continuing. When a workflow is [suspended](/docs/workflows/suspend-and-resume#pausing-a-workflow-with-suspend), it can include a message explaining why it paused. The workflow [resumes](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume) only after input is received. You can use this approach for manual approvals, gated decisions, or any step that requires human oversight.
 
-## Pausing workflows for human approval
+## Pausing workflows for human input
 
-Human-in-the-loop approval works much like [pausing a workflow](/docs/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
+Human-in-the-loop input works much like [pausing a workflow](/docs/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
 
@@ -23,7 +23,7 @@ const step1 = createStep({
     userEmail: z.string()
   }),
   outputSchema: z.object({
-    output: z.string()
+    message: z.string()
   }),
   resumeSchema: z.object({
     okToSend: z.boolean()
@@ -37,17 +37,12 @@ const step1 = createStep({
 
     if (!okToSend) {
       return await suspend({
-        reason: "Confirm to send email."
+        reason: "Human approval required."
       });
     }
 
-    await fetch("https://httpbin.org/post", {
-      method: "POST",
-      body: JSON.stringify({ to: userEmail })
-    });
-
     return {
-      output: `Email sent to ${userEmail}`
+      message: `Email sent to ${userEmail}`
     };
   }
 });
@@ -94,9 +89,9 @@ The data returned by the step can include a reason and help the user understand 
 { reason: 'Confirm to send email.' }
 ```
 
-## Resuming workflows with human approval
+## Resuming workflows with human input
 
-As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume), call `resume()` with `resumeData` to restart the workflow from where it was paused.
+As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume), call `resume()` with `resumeData` to restart the workflow from the step where it was paused.
 
 ![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
 
@@ -104,18 +99,86 @@ As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-
 const workflow = mastra.getWorkflow("testWorkflow");
 const run = await workflow.createRunAsync();
 
-const result = await run.start({
+await run.start({
   inputData: {
     userEmail: "alex@example.com"
   }
 });
 
 const handleResume = async () => {
-  const resumedResult = await run.resume({
+  const result = await run.resume({
     step: "step-1",
     resumeData: { okToSend: true }
   });
-  console.log(resumedResult);
+};
+```
+
+## Multi-turn human input
+
+For workflows that require input at multiple stages, the suspend pattern remains the same. Each step typically defines a unique `resumeSchema`, while using the same `suspendSchema` to make it easier to surface consistent feedback in the UI.
+
+```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  id: "step-2",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+  resumeSchema: z.object({
+    okToDelete: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string()
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { message } = inputData;
+    const { okToDelete } = resumeData ?? {};
+
+    if (!okToDelete) {
+      return await suspend({
+        reason: "Deletion confirmation required."
+      });
+    }
+
+    return {
+      output: `${message} - Deleted`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    userEmail: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+Each step must be resumed in sequence, with a separate call to `resume()` for each suspended step. This approach helps manage multi-step approvals with consistent UI feedback and clear input handling at each stage.
+
+```typescript {4,11} showLineNumbers copy
+const handleResume = async () => {
+  const result = await run.resume({
+    step: "step-1",
+    resumeData: { okToSend: true }
+  });
+};
+
+const handleDelete = async () => {
+  const result = await run.resume({
+    step: "step-2",
+    resumeData: { okToDelete: true }
+  });
 };
 ```
 

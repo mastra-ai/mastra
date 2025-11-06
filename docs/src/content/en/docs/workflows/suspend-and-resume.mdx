@@ -36,11 +36,6 @@ const step1 = createStep({
       return await suspend({});
     }
 
-    await fetch("https://httpbin.org/post", {
-      method: "POST",
-      body: JSON.stringify({ to: userEmail })
-    });
-
     return {
       output: `Email sent to ${userEmail}`
     };
@@ -81,7 +76,6 @@ const handleResume = async () => {
     step: 'step-1',
     resumeData: { okToSend: true }
   });
-  console.log(result);
 };
 ```
 
