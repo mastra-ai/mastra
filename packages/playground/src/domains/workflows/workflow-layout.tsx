@@ -7,19 +7,20 @@ import {
   MainContentLayout,
   MainContentContent,
   useWorkflow,
-  useWorkflowRuns,
   WorkflowRunList,
   WorkflowInformation,
+  useWorkflowRunExecutionResult,
 } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { WorkflowHeader } from './workflow-header';
+import { WorkflowRunState } from '@mastra/core/workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
-  const { data: runs } = useWorkflowRuns(workflowId!);
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
+  const { data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId ?? '', runId ?? '');
 
   if (isWorkflowLoading) {
     return (
@@ -33,10 +34,19 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const run = runs?.runs.find(run => run.runId === runId);
+  const snapshot = {
+    context: {
+      input: runExecutionResult?.payload,
+      ...runExecutionResult?.steps,
+    } as any,
+    status: runExecutionResult?.status,
+    result: runExecutionResult?.result,
+    error: runExecutionResult?.error,
+    runId,
+  } as WorkflowRunState;
 
   return (
-    <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
+    <WorkflowRunProvider snapshot={snapshot}>
       <MainContentLayout>
         <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} runId={runId} />
         <MainContentContent isDivided={true} hasLeftServiceColumn={true}>

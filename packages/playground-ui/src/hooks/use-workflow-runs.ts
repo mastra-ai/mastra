@@ -19,5 +19,7 @@ export const useWorkflowRunExecutionResult = (workflowId: string, runId: string)
     queryKey: ['workflow-run-execution-result', workflowId, runId],
     queryFn: () => client.getWorkflow(workflowId).runExecutionResult(runId),
     enabled: Boolean(workflowId && runId),
+    gcTime: 0,
+    staleTime: 0,
   });
 };
