@@ -72,6 +72,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       // Alternative solution: in message list allow combining text deltas together when the message source is "response" and the text parts are directly next to each other
       // simple solution for now is to not flush text deltas on response-metadata
       chunk.type !== 'response-metadata' &&
+      // Raw chunks carry provider metadata only; letting them flush buffered text fragments causes whitespace loss.
+      chunk.type !== 'raw' &&
       runState.state.isStreaming
     ) {
       if (runState.state.textDeltas.length) {
@@ -112,6 +114,8 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       chunk.type !== 'redacted-reasoning' &&
       chunk.type !== 'reasoning-signature' &&
       chunk.type !== 'response-metadata' &&
+      // Raw chunks are metadata-only and should not terminate reasoning streams either.
+      chunk.type !== 'raw' &&
       runState.state.isReasoning
     ) {
       runState.setState({
@@ -287,6 +291,14 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         );
         controller.enqueue(chunk);
         break;
+
+      case 'raw': {
+        // Raw chunks expose provider-specific payloads to the caller without affecting buffered content.
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
 
       case 'source':
         messageList.add(
