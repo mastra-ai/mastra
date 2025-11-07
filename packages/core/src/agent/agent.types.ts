@@ -120,7 +120,7 @@ export type AgentExecutionOptions<
   requireToolApproval?: boolean;
 
   /** Structured output generation with enhanced developer experience  */
-  structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
 };
 
 export type InnerAgentExecutionOptions<
