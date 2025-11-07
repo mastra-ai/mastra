@@ -8,8 +8,8 @@ export const threadIdPathParams = z.object({
 /**
  * Common query parameter: optional agent ID
  */
-const agentIdQuerySchema = z.object({
-  agentId: z.string().optional(),
+export const agentIdQuerySchema = z.object({
+  agentId: z.string(),
 });
 
 /**
