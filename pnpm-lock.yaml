@@ -290,8 +290,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/_types-builder
       '@tsconfig/recommended':
-        specifier: ^1.0.10
-        version: 1.0.10
+        specifier: ^1.0.11
+        version: 1.0.11
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
@@ -1202,7 +1202,7 @@ importers:
     devDependencies:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.12
-        version: 3.0.12(zod@3.25.76)
+        version: 3.0.16(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -9370,8 +9370,8 @@ packages:
   '@ts-morph/common@0.28.1':
     resolution: {integrity: sha512-W74iWf7ILp1ZKNYXY5qbddNaml7e9Sedv5lvU1V8lftlitkc9Pq1A+jlH23ltDgWYeZFFEqGCD1Ies9hqu3O+g==}
 
-  '@tsconfig/recommended@1.0.10':
-    resolution: {integrity: sha512-cGvydvg03lONp5Z9yaplW493Vw9/um7k588mvDkm+VFPF2PZUVPx0uswq4PFpeEySsLbQRETrDRhzh4Dmxaslw==}
+  '@tsconfig/recommended@1.0.11':
+    resolution: {integrity: sha512-irACIVvr9SnQK+zsrO7TkBVTq9LAafdyrjUxv6qgNh2wPi3/hFHcKEWMMlOd4HnRIDMdtI7ciVoPcZ9EuB7xMg==}
 
   '@turbopuffer/turbopuffer@0.6.17':
     resolution: {integrity: sha512-E658zBLNTMhUidAdFsNSbzBo0LzWLWO7x9G9BHIazgE6IiJVUHiSd4kBqcc9NnlZ7Yq4O63lqlQTQD+uLmPaXQ==}
@@ -22531,7 +22531,7 @@ snapshots:
       path-browserify: 1.0.1
       tinyglobby: 0.2.15
 
-  '@tsconfig/recommended@1.0.10': {}
+  '@tsconfig/recommended@1.0.11': {}
 
   '@turbopuffer/turbopuffer@0.6.17':
     dependencies:
