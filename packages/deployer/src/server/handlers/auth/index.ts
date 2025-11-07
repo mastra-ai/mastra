@@ -6,6 +6,7 @@ import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
   const authConfig = mastra.getServer()?.auth;
+  const apiRootPath = mastra.getServer()?.apiRootPath;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
@@ -18,12 +19,12 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     return next();
   }
 
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig, apiRootPath)) {
     return next();
   }
 
   // Skip authentication for public routes
-  if (canAccessPublicly(c.req.path, c.req.method, authConfig)) {
+  if (canAccessPublicly(c.req.path, c.req.method, authConfig, apiRootPath)) {
     return next();
   }
 
@@ -68,6 +69,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
   const authConfig = mastra.getServer()?.auth;
+  const apiRootPath = mastra.getServer()?.apiRootPath;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
@@ -83,12 +85,12 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig, apiRootPath)) {
     return next();
   }
 
   // Skip for public routes
-  if (canAccessPublicly(path, method, authConfig)) {
+  if (canAccessPublicly(path, method, authConfig, apiRootPath)) {
     return next();
   }
 
@@ -127,7 +129,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
 
   // Custom rule-based authorization
   if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
-    const isAuthorized = await checkRules(authConfig.rules, path, method, user);
+    const isAuthorized = await checkRules(authConfig.rules, path, method, user, apiRootPath);
 
     if (isAuthorized) {
       return next();
@@ -138,7 +140,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
 
   // Default rule-based authorization
   if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
-    const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
+    const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user, apiRootPath);
 
     if (isAuthorized) {
       return next();
