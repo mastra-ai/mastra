@@ -1152,6 +1152,11 @@ export class Agent extends BaseResource {
         )
         .catch(error => {
           console.error('Error piping to controller:', error);
+          try {
+            controller.close();
+          } catch {
+            // Already closed
+          }
         });
 
       // Process the other branch for chat response handling
