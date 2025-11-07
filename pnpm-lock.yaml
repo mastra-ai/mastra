@@ -299,8 +299,8 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       ai-v5:
         specifier: npm:ai@^5
         version: ai@5.0.76(zod@3.25.76)
@@ -971,8 +971,8 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       ai-v5:
         specifier: npm:ai@5.0.76
         version: ai@5.0.76(zod@3.25.76)
@@ -1076,8 +1076,8 @@ importers:
         specifier: ^7.53.1
         version: 7.53.1(@types/node@20.19.23)
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.38.0(jiti@2.6.1)
@@ -1202,7 +1202,7 @@ importers:
     devDependencies:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.12
-        version: 3.0.12(zod@3.25.76)
+        version: 3.0.16(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1216,8 +1216,8 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.38.0(jiti@2.6.1)
@@ -1956,8 +1956,8 @@ importers:
         specifier: ^4.0.2
         version: 4.0.2
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -2267,8 +2267,8 @@ importers:
         specifier: ^1.35.5
         version: 1.35.6
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       ai-v5:
         specifier: npm:ai@5.0.60
         version: ai@5.0.60(zod@3.25.76)
@@ -2760,8 +2760,8 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
@@ -2912,8 +2912,8 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       ai:
-        specifier: ^4.3.16
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -4249,8 +4249,8 @@ importers:
         specifier: ^20.19.21
         version: 20.19.23
       ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.0)(zod@3.25.76)
+        specifier: ^5.0.0
+        version: 5.0.76(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)

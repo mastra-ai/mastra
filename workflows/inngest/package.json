@@ -43,7 +43,7 @@
     "@mastra/deployer": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
-    "ai": "^4.3.19",
+    "ai": "^5.0.0",
     "eslint": "^9.37.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
