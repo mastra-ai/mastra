@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'stream/web';
+import { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -1103,7 +1103,11 @@ export class Agent extends BaseResource {
     onFinish?.({ message, finishReason, usage });
   }
 
-  async processStreamResponse(processedParams: any, writable: any, route: string = 'stream') {
+  async processStreamResponse(
+    processedParams: any,
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    route: string = 'stream',
+  ) {
     const response: Response = await this.request(`/api/agents/${this.agentId}/${route}`, {
       method: 'POST',
       body: processedParams,
@@ -1119,37 +1123,33 @@ export class Agent extends BaseResource {
       let messages: UIMessage[] = [];
 
       // Use tee() to split the stream into two branches
-      const [streamForWritable, streamForProcessing] = response.body.tee();
+      const [streamForController, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream without holding a persistent lock
-
-      streamForWritable
+      // Pipe one branch directly to the controller
+      const pipePromise = streamForController
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
-              let writer;
-
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
-                writer = writable.getWriter();
                 const text = new TextDecoder().decode(chunk);
                 const lines = text.split('\n\n');
-                const readableLines = lines.filter(line => line !== '[DONE]').join('\n\n');
-
-                await writer.write(new TextEncoder().encode(readableLines));
-              } catch {
-                await writer?.write(chunk);
-              } finally {
-                writer?.releaseLock();
+                const readableLines = lines
+                  .filter(line => line !== '[DONE]' && line !== 'data: [DONE]' && !line.includes('[DONE]'))
+                  .join('\n\n');
+                if (readableLines) {
+                  const encoded = new TextEncoder().encode(readableLines);
+                  controller.enqueue(encoded);
+                }
+              } catch (error) {
+                console.error('Error enqueueing to controller:', error);
+                controller.enqueue(chunk);
               }
             },
           }),
-          {
-            preventClose: true,
-          },
         )
         .catch(error => {
-          console.error('Error piping to writable stream:', error);
+          console.error('Error piping to controller:', error);
         });
 
       // Process the other branch for chat response handling
@@ -1224,32 +1224,44 @@ export class Agent extends BaseResource {
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
                 // Recursively call stream with updated messages
-                this.processStreamResponse(
-                  {
-                    ...processedParams,
-                    messages: updatedMessages,
-                  },
-                  writable,
-                ).catch(error => {
-                  console.error('Error processing stream response:', error);
-                });
+                // This will wait for the recursive stream to complete before continuing
+                try {
+                  await this.processStreamResponse(
+                    {
+                      ...processedParams,
+                      messages: updatedMessages,
+                    },
+                    controller,
+                  );
+                } catch (error) {
+                  console.error('Error processing recursive stream response:', error);
+                }
               }
             }
 
+            // Close the controller after all processing is complete
+            // Wait for current pipe to finish before closing
             if (!shouldExecuteClientTool) {
-              setTimeout(() => {
-                writable.close();
-              }, 0);
+              await pipePromise;
+              controller.close();
             }
+            // If client tool was executed, the recursive call will handle closing the stream
           } else {
-            setTimeout(() => {
-              writable.close();
-            }, 0);
+            // No tool calls - wait for pipe to complete then close the stream
+            await pipePromise;
+            controller.close();
           }
         },
         lastMessage: undefined,
-      }).catch(error => {
+      }).catch(async error => {
         console.error('Error processing stream response:', error);
+        // On error, wait for pipe to complete then close the controller
+        try {
+          await pipePromise;
+          controller.close();
+        } catch {
+          // Already closed
+        }
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
@@ -1362,11 +1374,17 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, writable);
+    // This returns immediately with response metadata and continues streaming in background
+    const response = await this.processStreamResponse(processedParams, readableController!);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1405,11 +1423,16 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, writable, 'approve-tool-call');
+    const response = await this.processStreamResponse(params, readableController!, 'approve-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1448,11 +1471,16 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, writable, 'decline-tool-call');
+    const response = await this.processStreamResponse(params, readableController!, 'decline-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
