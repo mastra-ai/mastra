@@ -3,7 +3,7 @@ import { SpanType } from '@mastra/core/observability';
 import type { TracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import {
   getTraceHandler as getOriginalTraceHandler,
-  getAITracesPaginatedHandler as getOriginalTracesPaginatedHandler,
+  getTracesPaginatedHandler as getOriginalTracesPaginatedHandler,
   scoreTracesHandler as getOriginalScoreTracesHandler,
   listScoresBySpan as getOriginalScoresBySpanHandler,
 } from '@mastra/server/handlers/observability';

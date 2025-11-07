@@ -10,11 +10,11 @@ describe('Memory Routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Create memory instance
+    // Create memory instance with InMemoryStore (following handler test pattern)
     const memory = createMockMemory();
 
-    // Create agent with memory (needed for memory routes with agentId query param)
-    const testAgent = createTestAgent();
+    // Create agent WITH memory (needed for memory routes with agentId query param)
+    const testAgent = createTestAgent({ memory });
     mockAgentMethods(testAgent);
 
     // Create Mastra instance with both global memory and agent

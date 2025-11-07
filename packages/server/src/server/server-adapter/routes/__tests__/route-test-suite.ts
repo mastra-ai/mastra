@@ -13,9 +13,40 @@ import {
 } from './test-helpers';
 
 /**
+ * Generate context-aware test value based on field name
+ */
+function generateContextualValue(fieldName?: string): string {
+  if (!fieldName) return 'test-string';
+
+  // Match common field name patterns
+  const field = fieldName.toLowerCase();
+
+  if (field.includes('agent')) return 'test-agent';
+  if (field.includes('workflow')) return 'test-workflow';
+  if (field.includes('tool')) return 'test-tool';
+  if (field.includes('thread')) return 'test-thread';
+  if (field.includes('resource')) return 'test-resource';
+  if (field.includes('run')) return 'test-run';
+  if (field.includes('step')) return 'test-step';
+  if (field.includes('task')) return 'test-task';
+  if (field.includes('scorer') || field.includes('score')) return 'test-scorer';
+  if (field.includes('trace')) return 'test-trace';
+  if (field.includes('span')) return 'test-span';
+  if (field.includes('vector')) return 'test-vector';
+  if (field.includes('index')) return 'test-index';
+  if (field.includes('message')) return 'test-message';
+  if (field.includes('transport')) return 'test-transport';
+  if (field.includes('model')) return 'gpt-4o';
+  if (field.includes('action')) return 'merge-template';
+  if (field.includes('entity')) return 'test-entity';
+
+  return 'test-string';
+}
+
+/**
  * Generate valid test data from a Zod schema
  */
-function generateValidDataFromSchema(schema: z.ZodTypeAny): any {
+function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): any {
   // Unwrap effects (refine, transform, etc)
   while (schema instanceof z.ZodEffects) {
     schema = schema._def.schema;
@@ -23,14 +54,14 @@ function generateValidDataFromSchema(schema: z.ZodTypeAny): any {
 
   // Handle optional/nullable/default
   if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
-    return generateValidDataFromSchema(schema._def.innerType);
+    return generateValidDataFromSchema(schema._def.innerType, fieldName);
   }
   if (schema instanceof z.ZodDefault) {
     return schema._def.defaultValue();
   }
 
-  // Primitive types
-  if (schema instanceof z.ZodString) return 'test-string';
+  // Primitive types - use contextual values for strings
+  if (schema instanceof z.ZodString) return generateContextualValue(fieldName);
   if (schema instanceof z.ZodNumber) return 10; // Use 10 instead of 0 to avoid validation issues
   if (schema instanceof z.ZodBoolean) return true;
   if (schema instanceof z.ZodNull) return null;
@@ -62,7 +93,8 @@ function generateValidDataFromSchema(schema: z.ZodTypeAny): any {
       if (fieldSchema instanceof z.ZodOptional) {
         continue;
       }
-      obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny);
+      // Pass field name for contextual value generation
+      obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
     }
     return obj;
   }
@@ -210,14 +242,79 @@ export function createRouteTestSuite(config: RouteTestConfig) {
           const mastra = getMastra();
           const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' });
 
-          // Stream handlers return generators, not Promises - skip for now
           if (route.responseType === 'stream') {
-            // TODO: Handle generator error testing properly
-            // Generators don't throw immediately, need to consume first value
-            return;
+            // For stream handlers, consume first chunk to trigger error
+            const generator = (await route.handler(params)) as unknown as AsyncGenerator;
+            await expect(generator.next()).rejects.toThrow();
+          } else {
+            await expect(route.handler(params)).rejects.toThrow();
           }
+        });
 
-          await expect(route.handler(params)).rejects.toThrow();
+        it('should return properly formatted error response', async () => {
+          const mastra = getMastra();
+          const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' });
+
+          try {
+            if (route.responseType === 'stream') {
+              const generator = (await route.handler(params)) as unknown as AsyncGenerator;
+              await generator.next();
+            } else {
+              await route.handler(params);
+            }
+            // Should not reach here
+            expect(true).toBe(false);
+          } catch (error: any) {
+            // Verify error has expected structure
+            expect(error).toBeDefined();
+            expect(error.message).toBeDefined();
+            expect(typeof error.message).toBe('string');
+            // HTTPException should have status
+            if (error.status) {
+              expect(error.status).toBe(404);
+            }
+          }
+        });
+      }
+
+      // Stream-specific tests
+      if (route.responseType === 'stream') {
+        it('should return async generator for stream responses', async () => {
+          const mastra = getMastra();
+          const params = await buildHandlerParams(route, mastra);
+
+          const result = await route.handler(params);
+
+          // Verify it's an async generator
+          expect(result).toBeDefined();
+          expect(typeof (result as any).next).toBe('function');
+          expect(typeof (result as any)[Symbol.asyncIterator]).toBe('function');
+        });
+
+        it('should be consumable as async iterator', async () => {
+          const mastra = getMastra();
+          const params = await buildHandlerParams(route, mastra);
+
+          const generator = (await route.handler(params)) as unknown as AsyncGenerator;
+
+          // Should be able to get at least one value
+          const firstChunk = await generator.next();
+          expect(firstChunk).toBeDefined();
+          // Don't validate value structure here - that's handler's job
+          // We just verify the adapter can consume the stream
+        });
+      }
+
+      // JSON response type test
+      if (route.responseType === 'json') {
+        it('should return JSON-serializable response', async () => {
+          const mastra = getMastra();
+          const params = await buildHandlerParams(route, mastra);
+
+          const result = await route.handler(params);
+
+          // Verify result can be JSON stringified (no circular refs, functions, etc)
+          expect(() => JSON.stringify(result)).not.toThrow();
         });
       }
     });

@@ -89,10 +89,12 @@ export function createMockVoice(speaker = 'alloy') {
 }
 
 /**
- * Creates a mock memory instance with __registerMastra
+ * Creates a mock memory instance with InMemoryStore
+ * Following the pattern from handler tests - uses actual MockMemory implementation
  */
 export function createMockMemory() {
-  const mockMemory = new MockMemory();
+  const storage = new InMemoryStore();
+  const mockMemory = new MockMemory({ storage });
   (mockMemory as any).__registerMastra = vi.fn();
   return mockMemory;
 }
@@ -178,7 +180,7 @@ export function createTestWorkflow(
 ) {
   const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
   const stepA = createStep({
-    id: 'test-string',
+    id: 'test-step',
     inputSchema: z.object({}),
     outputSchema: z.object({}),
     execute: async ({ suspend }: any) => {
@@ -408,19 +410,19 @@ export async function setupAgentBuilderTests() {
 export async function setupObservabilityTests() {
   // Create test scorer
   const testScorer = {
-    id: 'test-string',
+    id: 'test-scorer',
     name: 'Test Scorer',
     description: 'Test scorer for observability tests',
     executor: async () => ({ score: 0.5 }),
     config: {
-      id: 'test-string',
+      id: 'test-scorer',
       name: 'Test Scorer',
     },
   };
 
   // Create Mastra instance with scorer
   const mastra = createTestMastra({
-    scorers: { 'test-string': testScorer },
+    scorers: { 'test-scorer': testScorer },
   });
 
   // Add test trace by creating a span with that traceId
