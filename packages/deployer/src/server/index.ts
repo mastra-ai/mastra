@@ -76,6 +76,7 @@ export async function createHonoServer(
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
+  const apiRootPath = server?.apiRootPath ?? '/api';
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
@@ -399,7 +400,7 @@ export async function createHonoServer(
 
   // API routes
   app.get(
-    '/api',
+    `${apiRootPath}`,
     describeRoute({
       description: 'Get API status',
       tags: ['system'],
@@ -413,30 +414,30 @@ export async function createHonoServer(
   );
 
   // Agents routes
-  app.route('/api/agents', agentsRouter(bodyLimitOptions));
+  app.route(`${apiRootPath}/agents`, agentsRouter(bodyLimitOptions));
 
   if (options.isDev) {
-    app.route('/api/agents', agentsRouterDev(bodyLimitOptions));
+    app.route(`${apiRootPath}/agents`, agentsRouterDev(bodyLimitOptions));
   }
 
   // MCP server routes
-  app.route('/api/mcp', mcpRouter(bodyLimitOptions));
+  app.route(`${apiRootPath}/mcp`, mcpRouter(bodyLimitOptions));
   // Network Memory routes
-  app.route('/api/memory', memoryRoutes(bodyLimitOptions));
+  app.route(`${apiRootPath}/memory`, memoryRoutes(bodyLimitOptions));
   // Observability routes
-  app.route('/api/observability', observabilityRouter());
+  app.route(`${apiRootPath}/observability`, observabilityRouter());
   // Legacy Workflow routes
-  app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
+  app.route(`${apiRootPath}/workflows`, workflowsRouter(bodyLimitOptions));
   // Log routes
-  app.route('/api/logs', logsRouter());
+  app.route(`${apiRootPath}/logs`, logsRouter());
   // Scores routes
-  app.route('/api/scores', scoresRouter(bodyLimitOptions));
+  app.route(`${apiRootPath}/scores`, scoresRouter(bodyLimitOptions));
   // Agent builder routes
-  app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
+  app.route(`${apiRootPath}/agent-builder`, agentBuilderRouter(bodyLimitOptions));
   // Tool routes
-  app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
+  app.route(`${apiRootPath}/tools`, toolsRouter(bodyLimitOptions, options.tools));
   // Vector routes
-  app.route('/api/vector', vectorRouter(bodyLimitOptions));
+  app.route(`${apiRootPath}/vector`, vectorRouter(bodyLimitOptions));
 
   if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
     app.get(
@@ -517,7 +518,8 @@ export async function createHonoServer(
   app.get('*', async (c, next) => {
     // Skip if it's an API route
     if (
-      c.req.path.startsWith('/api/') ||
+      c.req.path.startsWith(`${apiRootPath}/`) ||
+      c.req.path === apiRootPath ||
       c.req.path.startsWith('/swagger-ui') ||
       c.req.path.startsWith('/openapi.json')
     ) {
@@ -566,6 +568,7 @@ export async function createHonoServer(
 export async function createNodeServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
+  const apiRootPath = serverOptions?.apiRootPath ?? '/api';
 
   const key =
     serverOptions?.https?.key ??
@@ -596,7 +599,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
+      logger.info(` Mastra API running on port ${protocol}://${host}:${port}${apiRootPath}`);
       if (options?.playground) {
         const playgroundUrl = `${protocol}://${host}:${port}`;
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
