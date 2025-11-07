@@ -104,6 +104,9 @@ async function executeToolCallAndRespond({
       }
     }
   }
+
+  // If no client tool was executed, return the original response
+  return response;
 }
 
 export class AgentVoice extends BaseResource {
