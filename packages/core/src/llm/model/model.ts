@@ -1,11 +1,11 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import { generateObject, generateText, Output, streamObject, streamText } from '@internal/ai-sdk-v4';
 import type {
+  CoreMessage,
   LanguageModelV1 as LanguageModel,
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
-} from '@internal/ai-sdk-v4/model';
-import { generateObject, generateText, Output, streamObject, streamText } from '@internal/ai-sdk-v4/model';
-import type { Schema } from '@internal/ai-sdk-v4/schema';
+  Schema,
+} from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,

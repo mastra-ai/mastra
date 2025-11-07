@@ -84,7 +84,7 @@ For tools that are executed inside a workflow, access workflow-specific properti
 ```
 
 :::note
-For MCP-specific tool context changes, see the [MCP migration guide](/guides/migrations/upgrade-to-v1/mcp).
+For MCP-specific tool context changes, see the [MCP migration guide](/guides/v1/migrations/upgrade-to-v1/mcp).
 :::
 
 ### `RuntimeContext` to `RequestContext`
@@ -109,7 +109,7 @@ To migrate, update references from `runtimeContext` to `requestContext` in tool 
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod v1/runtime-context .
+npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::

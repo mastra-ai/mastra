@@ -1,4 +1,4 @@
-import type { TextStreamPart } from '@internal/ai-sdk-v4/model';
+import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
 import type { Mastra } from '../mastra';
 import type { TracingPolicy, TracingProperties } from '../observability';
@@ -269,6 +269,7 @@ export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   component?: string;
   serializedStepFlow?: SerializedStepFlowEntry[];
   mapConfig?: string;
+  canSuspend?: boolean;
 };
 
 export type SerializedStepFlowEntry =

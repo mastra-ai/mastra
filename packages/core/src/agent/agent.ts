@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { TextPart, UIMessage } from '@internal/ai-sdk-v4/message';
-import type { StreamObjectResult } from '@internal/ai-sdk-v4/model';
+import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';

@@ -9,17 +9,23 @@ import { WorkflowNestedGraphContext } from '../context/workflow-nested-graph-con
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
+import { Badge } from '@/ds/components/Badge';
 import { Clock } from './workflow-clock';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
+import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 
 export type NestedNode = Node<
   {
     label: string;
+    stepId?: string;
     description?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
     stepGraph: SerializedStepFlowEntry[];
     mapConfig?: string;
+    isParallel?: boolean;
+    canSuspend?: boolean;
+    isForEach?: boolean;
   },
   'nested-node'
 >;
@@ -32,11 +38,31 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
   const { steps } = useCurrentRun();
   const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
 
-  const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig } = data;
+  const {
+    label,
+    stepId,
+    description,
+    withoutTopHandle,
+    withoutBottomHandle,
+    stepGraph,
+    mapConfig,
+    isParallel,
+    canSuspend,
+    isForEach,
+  } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
+  const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
 
-  const step = steps[fullLabel];
+  const step = steps[stepKey];
+
+  const { isForEachNode, isMapNode, isNestedWorkflow, hasSpecialBadge } = getNodeBadgeInfo({
+    isForEach,
+    mapConfig,
+    canSuspend,
+    isParallel,
+    stepGraph,
+  });
 
   return (
     <>
@@ -46,7 +72,8 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
         data-workflow-node
         data-workflow-step-status={step?.status}
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
+          'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
+          hasSpecialBadge ? 'pt-0' : 'pt-2',
           step?.status === 'success' && 'bg-accent1Darker',
           step?.status === 'failed' && 'bg-accent2Darker',
           step?.status === 'suspended' && 'bg-accent3Darker',
@@ -54,6 +81,33 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
           step?.status === 'running' && 'bg-accent6Darker',
         )}
       >
+        {hasSpecialBadge && (
+          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
+            {canSuspend && (
+              <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
+                SUSPEND/RESUME
+              </Badge>
+            )}
+            {isParallel && (
+              <Badge icon={<BADGE_ICONS.parallel className="text-current" style={{ color: BADGE_COLORS.parallel }} />}>
+                PARALLEL
+              </Badge>
+            )}
+            {isNestedWorkflow && (
+              <Badge icon={<BADGE_ICONS.workflow className="text-current" style={{ color: BADGE_COLORS.workflow }} />}>
+                WORKFLOW
+              </Badge>
+            )}
+            {isForEachNode && (
+              <Badge icon={<BADGE_ICONS.forEach className="text-current" style={{ color: BADGE_COLORS.forEach }} />}>
+                FOREACH
+              </Badge>
+            )}
+            {isMapNode && (
+              <Badge icon={<BADGE_ICONS.map className="text-current" style={{ color: BADGE_COLORS.map }} />}>MAP</Badge>
+            )}
+          </div>
+        )}
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
           <Icon>
             {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
@@ -77,6 +131,7 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
 
         <WorkflowStepActionBar
           stepName={label}
+          stepId={stepId}
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';

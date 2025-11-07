@@ -3,8 +3,10 @@ import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
+import { Badge } from '@/ds/components/Badge';
 
 import { Clock } from './workflow-clock';
+import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 
 import { cn } from '@/lib/utils';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
@@ -12,12 +14,16 @@ import { WorkflowStepActionBar } from './workflow-step-action-bar';
 export type DefaultNode = Node<
   {
     label: string;
+    stepId?: string;
     description?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
     mapConfig?: string;
     duration?: number;
     date?: Date;
+    isParallel?: boolean;
+    canSuspend?: boolean;
+    isForEach?: boolean;
   },
   'default-node'
 >;
@@ -28,11 +34,33 @@ export interface WorkflowDefaultNodeProps {
 
 export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
   const { steps, runId } = useCurrentRun();
-  const { label, description, withoutTopHandle, withoutBottomHandle, mapConfig, duration, date } = data;
+  const {
+    label,
+    stepId,
+    description,
+    withoutTopHandle,
+    withoutBottomHandle,
+    mapConfig,
+    duration,
+    date,
+    isParallel,
+    canSuspend,
+    isForEach,
+  } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
+  const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
 
-  const step = steps[fullLabel];
+  const step = steps[stepKey];
+
+  const { isSleepNode, isForEachNode, isMapNode, hasSpecialBadge } = getNodeBadgeInfo({
+    duration,
+    date,
+    isForEach,
+    mapConfig,
+    canSuspend,
+    isParallel,
+  });
 
   return (
     <>
@@ -43,7 +71,8 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
         data-workflow-step-status={step?.status ?? 'idle'}
         data-testid="workflow-default-node"
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
+          'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
+          hasSpecialBadge ? 'pt-0' : 'pt-2',
           step?.status === 'success' && 'bg-accent1Darker',
           step?.status === 'failed' && 'bg-accent2Darker',
           step?.status === 'suspended' && 'bg-accent3Darker',
@@ -51,6 +80,41 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
           step?.status === 'running' && 'bg-accent6Darker',
         )}
       >
+        {hasSpecialBadge && (
+          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
+            {isSleepNode && (
+              <Badge
+                icon={
+                  date ? (
+                    <BADGE_ICONS.sleepUntil className="text-current" style={{ color: BADGE_COLORS.sleep }} />
+                  ) : (
+                    <BADGE_ICONS.sleep className="text-current" style={{ color: BADGE_COLORS.sleep }} />
+                  )
+                }
+              >
+                {date ? 'SLEEP UNTIL' : 'SLEEP'}
+              </Badge>
+            )}
+            {canSuspend && (
+              <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
+                SUSPEND/RESUME
+              </Badge>
+            )}
+            {isParallel && (
+              <Badge icon={<BADGE_ICONS.parallel className="text-current" style={{ color: BADGE_COLORS.parallel }} />}>
+                PARALLEL
+              </Badge>
+            )}
+            {isForEachNode && (
+              <Badge icon={<BADGE_ICONS.forEach className="text-current" style={{ color: BADGE_COLORS.forEach }} />}>
+                FOREACH
+              </Badge>
+            )}
+            {isMapNode && (
+              <Badge icon={<BADGE_ICONS.map className="text-current" style={{ color: BADGE_COLORS.map }} />}>MAP</Badge>
+            )}
+          </div>
+        )}
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
           <Icon>
             {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
@@ -85,6 +149,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
 
         <WorkflowStepActionBar
           stepName={label}
+          stepId={stepId}
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}

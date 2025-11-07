@@ -198,7 +198,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 49+ AI providers and 858+ models through Mastras model router.
+- [Models](https://mastra.ai/en/models): Access 49+ AI providers and 864+ models through Mastras model router.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
 - [Alibaba | Models | Mastra](https://mastra.ai/en/models/providers/alibaba): Use Alibaba models with Mastra. 39 models available.
@@ -228,8 +228,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
 - [Mistral | Models | Mastra](https://mastra.ai/en/models/providers/mistral): Use Mistral models with Mastra. 19 models available.
 - [ModelScope | Models | Mastra](https://mastra.ai/en/models/providers/modelscope): Use ModelScope models with Mastra. 7 models available.
-- [Moonshot AI (China) | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai-cn): Use Moonshot AI (China) models with Mastra. 3 models available.
-- [Moonshot AI | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai): Use Moonshot AI models with Mastra. 3 models available.
+- [Moonshot AI (China) | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai-cn): Use Moonshot AI (China) models with Mastra. 5 models available.
+- [Moonshot AI | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai): Use Moonshot AI models with Mastra. 5 models available.
 - [Morph | Models | Mastra](https://mastra.ai/en/models/providers/morph): Use Morph models with Mastra. 3 models available.
 - [Nebius AI Studio | Models | Mastra](https://mastra.ai/en/models/providers/nebius): Use Nebius AI Studio models with Mastra. 15 models available.
 - [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 20 models available.
