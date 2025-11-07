@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "ai": "^5.0.76",
-    "ai-v4": "npm:ai@4.3.19",
+    "ai-v4": "npm:ai@5.0.52",
     "@ai-sdk/provider": "^2.0.0",
     "fastembed": "^1.14.4"
   },
