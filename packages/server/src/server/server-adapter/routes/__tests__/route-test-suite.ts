@@ -81,7 +81,7 @@ function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): 
 
   // Array
   if (schema instanceof z.ZodArray) {
-    return [generateValidDataFromSchema(schema._def.type)];
+    return [generateValidDataFromSchema(schema._def.type, fieldName)];
   }
 
   // Object
@@ -101,30 +101,30 @@ function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): 
 
   // Record/Map
   if (schema instanceof z.ZodRecord) {
-    return { key: generateValidDataFromSchema(schema._def.valueType) };
+    return { key: generateValidDataFromSchema(schema._def.valueType, fieldName) };
   }
 
   // Union - try first option
   if (schema instanceof z.ZodUnion) {
-    return generateValidDataFromSchema(schema._def.options[0]);
+    return generateValidDataFromSchema(schema._def.options[0], fieldName);
   }
 
   // Discriminated Union - use first option
   if (schema instanceof z.ZodDiscriminatedUnion) {
     const options = Array.from(schema._def.options.values());
-    return generateValidDataFromSchema(options[0] as z.ZodTypeAny);
+    return generateValidDataFromSchema(options[0] as z.ZodTypeAny, fieldName);
   }
 
   // Intersection - merge both schemas
   if (schema instanceof z.ZodIntersection) {
-    const left = generateValidDataFromSchema(schema._def.left);
-    const right = generateValidDataFromSchema(schema._def.right);
+    const left = generateValidDataFromSchema(schema._def.left, fieldName);
+    const right = generateValidDataFromSchema(schema._def.right, fieldName);
     return { ...left, ...right };
   }
 
   // Tuple
   if (schema instanceof z.ZodTuple) {
-    return schema._def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item));
+    return schema._def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item, fieldName));
   }
 
   // Any/Unknown
