@@ -651,8 +651,7 @@ describe('vNext Workflow Handlers', () => {
         runId: 'test-run-observe-resource',
         resourceId,
       });
-      const x = await run.start({ inputData: {} });
-      console.log(x);
+      await run.start({ inputData: {} });
 
       const runBefore = await mockWorkflow.getWorkflowRunById('test-run-observe-resource');
       expect(runBefore?.resourceId).toBe(resourceId);

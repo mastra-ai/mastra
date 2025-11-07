@@ -279,29 +279,32 @@ export function createRouteTestSuite(config: RouteTestConfig) {
 
       // Stream-specific tests
       if (route.responseType === 'stream') {
-        it('should return async generator for stream responses', async () => {
+        it('should return ReadableStream for stream responses', async () => {
           const mastra = getMastra();
           const params = await buildHandlerParams(route, mastra);
 
           const result = await route.handler(params);
 
-          // Verify it's an async generator
+          // Verify it's a ReadableStream (web streams API)
           expect(result).toBeDefined();
-          expect(typeof (result as any).next).toBe('function');
-          expect(typeof (result as any)[Symbol.asyncIterator]).toBe('function');
+          expect(typeof (result as any).getReader).toBe('function');
         });
 
-        it('should be consumable as async iterator', async () => {
+        it('should be consumable via ReadableStream reader', async () => {
           const mastra = getMastra();
           const params = await buildHandlerParams(route, mastra);
 
-          const generator = (await route.handler(params)) as unknown as AsyncGenerator;
+          const stream = (await route.handler(params)) as ReadableStream;
+          const reader = stream.getReader();
 
-          // Should be able to get at least one value
-          const firstChunk = await generator.next();
+          // Should be able to get at least one chunk
+          const firstChunk = await reader.read();
           expect(firstChunk).toBeDefined();
           // Don't validate value structure here - that's handler's job
           // We just verify the adapter can consume the stream
+
+          // Clean up
+          reader.releaseLock();
         });
       }
 
