@@ -16,6 +16,7 @@ import { noopLogger } from '../logger';
 import { Mastra } from '../mastra';
 import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
+import { MessageHistory, ToolCallFilter, TokenLimiterProcessor, WorkingMemory } from '../processors';
 import { RequestContext } from '../request-context';
 import { MockStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -6360,6 +6361,216 @@ describe('Agent Tests', () => {
     ).toBeUndefined();
 
     expect(finalCoreMessages.length).toBe(4); // Assistant call for tool-1, Tool result for tool-1, Assistant call for tool-2, Tool result for tool-2
+  });
+
+  it('should deduplicate memory processors when manually configured', async () => {
+    const mockModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        text: 'test response',
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 5 },
+      }),
+    });
+
+    const storage = new MockStore();
+    const memory = new MockMemory();
+
+    // Create custom instances of memory processors
+    const customMessageHistory = new MessageHistory({ storage });
+    const customWorkingMemory = new WorkingMemory();
+
+    // Configure agent with memory and manually add the same processors
+    const agent = new Agent({
+      name: 'test-dedup',
+      instructions: 'test',
+      model: mockModel,
+      memory,
+      inputProcessors: [customWorkingMemory],
+      outputProcessors: [customMessageHistory],
+    });
+
+    // Get resolved processors
+    const context = new RequestContext();
+    context.set('threadId', 'test-thread');
+    context.set('resourceId', 'test-resource');
+    const inputProcessors = await agent.listInputProcessors(context);
+    const outputProcessors = await agent.listOutputProcessors(context);
+
+    // Count instances of each processor type
+    const messageHistoryCount = outputProcessors.filter(p => p.constructor.name === 'MessageHistory').length;
+    const workingMemoryCount = inputProcessors.filter(p => p.constructor.name === 'WorkingMemory').length;
+
+    // Each processor should appear exactly once (deduplication working)
+    expect(messageHistoryCount).toBe(1);
+    expect(workingMemoryCount).toBe(1);
+  });
+
+  it('should deduplicate memory processors when manually added to inputProcessors', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', textDelta: 'test response' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 5 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const storage = new MockStore();
+    const memory = new MockMemory();
+
+    // Track processor execution order
+    const executionOrder: string[] = [];
+
+    // Create custom MessageHistory that tracks execution
+    const customMessageHistory = new MessageHistory({ storage });
+    const originalProcessInput = customMessageHistory.processInput.bind(customMessageHistory);
+    customMessageHistory.processInput = async (messages, context) => {
+      executionOrder.push('MessageHistory');
+      return originalProcessInput(messages, context);
+    };
+
+    // Create ToolCallFilter that tracks execution
+    const toolCallFilter = new ToolCallFilter();
+    const originalFilterProcessInput = toolCallFilter.processInput.bind(toolCallFilter);
+    toolCallFilter.processInput = async (messages, context) => {
+      executionOrder.push('ToolCallFilter');
+      return originalFilterProcessInput(messages, context);
+    };
+
+    // Create TokenLimiterProcessor that tracks execution
+    const tokenLimiter = new TokenLimiterProcessor(4000);
+    const originalLimiterProcessInput = tokenLimiter.processInput.bind(tokenLimiter);
+    tokenLimiter.processInput = async (messages, context) => {
+      executionOrder.push('TokenLimiter');
+      return originalLimiterProcessInput(messages, context);
+    };
+
+    // Configure agent with memory processor before utility processors
+    // MessageHistory is manually added, but MastraMemory also auto-generates one
+    // The system should deduplicate and only run once
+    const agent = new Agent({
+      name: 'test-dedup',
+      instructions: 'test',
+      model: mockModel,
+      memory,
+      inputProcessors: [customMessageHistory, toolCallFilter, tokenLimiter],
+    });
+
+    // Generate to trigger processor execution
+    await agent.generate('test message', {
+      threadId: 'test-thread',
+      resourceId: 'test-resource',
+    });
+
+    // Verify execution order: MessageHistory should run once before ToolCallFilter and TokenLimiter
+    // If deduplication failed, MessageHistory would run twice
+    expect(executionOrder).toEqual(['MessageHistory', 'ToolCallFilter', 'TokenLimiter']);
+  });
+
+  it('should automatically add memory processors when memory is configured', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', textDelta: 'test response' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 10 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const storage = new MockStore();
+    const memory = new MockMemory({ storage });
+    // Configure memory with lastMessages to enable auto-generation of MessageHistory
+    memory.threadConfig = { lastMessages: 10 };
+
+    // Track processor execution order
+    const executionOrder: string[] = [];
+
+    // Spy on MessageHistory.prototype.processInput to track auto-generated instances
+    const originalMessageHistoryProcessInput = MessageHistory.prototype.processInput;
+    MessageHistory.prototype.processInput = async function (messages, context) {
+      executionOrder.push('MessageHistory');
+      return originalMessageHistoryProcessInput.call(this, messages, context);
+    };
+
+    // Create ToolCallFilter that tracks execution
+    const toolCallFilter = new ToolCallFilter();
+    const originalFilterProcessInput = toolCallFilter.processInput.bind(toolCallFilter);
+    toolCallFilter.processInput = async (messages, context) => {
+      executionOrder.push('ToolCallFilter');
+      return originalFilterProcessInput(messages, context);
+    };
+
+    try {
+      // Configure agent with memory but NO manual MessageHistory
+      // MastraMemory should auto-generate MessageHistory
+      const agent = new Agent({
+        name: 'test-auto-add',
+        instructions: 'test',
+        model: mockModel,
+        memory,
+        inputProcessors: [toolCallFilter],
+      });
+
+      // Generate to trigger processor execution
+      await agent.generate('test message', {
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      });
+
+      // Verify execution order: MessageHistory should run automatically before ToolCallFilter
+      expect(executionOrder).toEqual(['MessageHistory', 'ToolCallFilter']);
+    } finally {
+      // Restore original MessageHistory.prototype.processInput
+      MessageHistory.prototype.processInput = originalMessageHistoryProcessInput;
+    }
+  });
+
+  it('should always place auto-generated memory processors first for input', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'text-delta', textDelta: 'test response' },
+          { type: 'finish', finishReason: 'stop', usage: { promptTokens: 10, completionTokens: 5 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+    const storage = new MockStore();
+    const memory = new MockMemory({ storage });
+    memory.threadConfig = { lastMessages: 10 };
+
+    // Create multiple utility processors
+    const toolCallFilter = new ToolCallFilter();
+    const tokenLimiter = new TokenLimiterProcessor(4000);
+
+    // Configure agent with memory and multiple utility processors
+    const agent = new Agent({
+      name: 'test-ordering',
+      instructions: 'test',
+      model: mockModel,
+      memory,
+      inputProcessors: [toolCallFilter, tokenLimiter],
+    });
+
+    // Get resolved processors
+    const resolvedProcessors = await agent.listInputProcessors();
+
+    // Verify MessageHistory is first, followed by configured processors
+    expect(resolvedProcessors[0]).toBeInstanceOf(MessageHistory);
+    expect(resolvedProcessors[1]).toBe(toolCallFilter);
+    expect(resolvedProcessors[2]).toBe(tokenLimiter);
+    expect(resolvedProcessors.length).toBe(3);
   });
 
   agentTests({ version: 'v1' });

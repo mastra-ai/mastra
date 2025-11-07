@@ -67,7 +67,6 @@ const memoryWithProcessor = new Memory({
     lastMessages: 20,
     generateTitle: true,
   },
-  processors: [new ToolCallFilter()],
 });
 
 export const memoryProcessorAgent = new Agent({
@@ -76,6 +75,7 @@ export const memoryProcessorAgent = new Agent({
   instructions: 'You are a test agent that uses a memory processor to filter out tool call messages.',
   model: openai('gpt-4o'),
   memory: memoryWithProcessor,
+  inputProcessors: [new ToolCallFilter()],
   tools: {
     get_weather: weatherTool,
   },
