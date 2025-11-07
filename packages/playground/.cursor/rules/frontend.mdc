@@ -110,7 +110,6 @@ export default function AgentsPage() { ... }
 
 - **FORBIDDEN**: Data fetching in this package
 - All hooks must be imported from `packages/playground-ui`
-- Only use data-fetching hooks when **absolutely necessary** for routing logic
 
 ### Type Definitions
 
