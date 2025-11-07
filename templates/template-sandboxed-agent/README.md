@@ -1,20 +1,20 @@
 # Runloop Sandboxed Agent
 
-An advanced Mastra template that provides a coding agent capable of planning, writing, executing, and iterating on code in secure, isolated Runloop devboxes with comprehensive file management and development workflow capabilities.
+An Mastra template that provides a sandboxed agent capable of planning, writing, executing, and iterating on code in secure, isolated Runloop devboxes with file management and development workflow capabilities.
 
 ## Overview
 
-This template demonstrates how to build an AI coding assistant that can work with real development environments. The agent can create devboxes, manage files and directories, execute code in multiple languages, and monitor development workflows - all within secure, isolated Runloop devboxes.
+This template demonstrates how to build an AI assistant that can work with real development environments. The agent can create devboxes, manage files and directories, execute code in multiple languages, interact with browser, interact with the computer, and monitor development workflows - all within secure, isolated Runloop devboxes.
 
 ## Features
 
-- **Secure Code Execution**: Run Python, JavaScript, and TypeScript code in isolated Runloop devboxes using direct execution via `python -c` and `node -e`
+- **Secure Code Execution**: Run any code in isolated Runloop devboxes using direct execution. Native execution with `python -c` and `node -e` are availabe as tools and the agent has direct access to shell for other languages.
 - **Complete File Management**: Create, read, write, delete files and directories with batch operations
-- **Multi-Language Support**: Execute code in Python, JavaScript, and TypeScript environments
-- **Live Development Monitoring**: Monitor directory changes via polling and track development workflows
-- **Command Execution**: Run shell commands, install packages, and manage dependencies
-- **Memory System**: Persistent conversation memory with semantic recall and working memory
-- **Development Workflows**: Professional development patterns with build automation
+- **Multi-Language Support**: Execute code with Python, JavaScript, and TypeScript natively; install any other environments to the isolated sandbox.
+- **Live Development Monitoring**: Monitor directory changes via polling and track development workflows.
+- **Command Execution**: Run shell commands, install packages, and manage dependencies.
+- **Memory System**: Persistent conversation memory with semantic recall and working memory.
+- **Development Workflows**: Professional development patterns with build automation.
 
 ## Prerequisites
 
@@ -117,12 +117,12 @@ The agent includes a configured memory system:
 ```bash
 RUNLOOP_API_KEY=your_runloop_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
-RUNLOOP_BLUEPRINT_NAME=runloop/mastra-base  # Optional: specify a blueprint for faster devbox creation
+RUNLOOP_BLUEPRINT_NAME=runloop/mastra-base  # Optional: specify a specific blueprint; runloop/mastra-base has the latest version of Mastra available
 ```
 
 #### Blueprint Configuration
 
-Blueprints are pre-configured environments that speed up devbox creation. Set `RUNLOOP_BLUEPRINT_NAME` to use a specific blueprint when creating devboxes. This is optional but recommended for faster startup times.
+Blueprints are pre-configured environments that speed up devbox creation. Set `RUNLOOP_BLUEPRINT_NAME` to use a specific blueprint when creating devboxes. `runloop/mastra-base` has Mastra installed in addition to the base environment.
 
 ### Customization
 
