@@ -11,6 +11,12 @@ export interface WorkingMemoryTemplate {
 
 export interface WorkingMemoryConfig {
   template?: WorkingMemoryTemplate;
+  /**
+   * Scope of working memory
+   * - 'thread': Working memory is scoped to the current thread
+   * - 'resource': Working memory is shared across all threads for the resource
+   * @default 'resource'
+   */
   scope?: 'thread' | 'resource';
   useVNext?: boolean;
 }
@@ -69,8 +75,8 @@ export class WorkingMemory implements InputProcessor {
     }
 
     try {
-      // Determine scope (default to 'thread')
-      const scope = this.options.scope || 'thread';
+      // Determine scope (default to 'resource')
+      const scope = this.options.scope || 'resource';
 
       // Retrieve working memory based on scope
       let workingMemoryData: string | null = null;
