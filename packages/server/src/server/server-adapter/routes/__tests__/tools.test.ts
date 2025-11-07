@@ -6,16 +6,18 @@ import { createTestTool, createTestMastra } from './test-helpers';
 
 describe('Tools Routes', () => {
   let mastra: Mastra;
+  let tools: Record<string, any>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Create test tool
     const testTool = createTestTool();
+    tools = { 'test-tool': testTool };
 
     // Create Mastra instance
     mastra = createTestMastra({
-      tools: { 'test-tool': testTool },
+      tools,
     });
   });
 
@@ -23,5 +25,6 @@ describe('Tools Routes', () => {
   createRouteTestSuite({
     routes: TOOLS_ROUTES,
     getMastra: () => mastra,
+    getTools: () => tools,
   });
 });

@@ -152,6 +152,8 @@ export interface RouteTestConfig {
   routes: ServerRoute[];
   /** Function that returns the Mastra instance (called in beforeEach) */
   getMastra: () => Mastra;
+  /** Optional function that returns tools (for tools routes) */
+  getTools?: () => Record<string, any>;
 }
 
 /**
@@ -159,7 +161,7 @@ export interface RouteTestConfig {
  * Similar to stores/_test-utils pattern
  */
 export function createRouteTestSuite(config: RouteTestConfig) {
-  const { routes, getMastra } = config;
+  const { routes, getMastra, getTools } = config;
 
   describe('Route Registration and Metadata', () => {
     it(`should have all ${routes.length} routes registered`, () => {
@@ -233,7 +235,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       // Handler integration test - always run
       it('should execute handler with valid inputs', async () => {
         const mastra = getMastra();
-        const params = await buildHandlerParams(route, mastra);
+        const tools = getTools?.();
+        const params = await buildHandlerParams(route, mastra, {}, tools);
 
         const result = await route.handler(params);
         expect(result).toBeDefined();
@@ -248,7 +251,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       if (hasAgentIdParam(route)) {
         it('should throw 404 when agent not found', async () => {
           const mastra = getMastra();
-          const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' });
+          const tools = getTools?.();
+          const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' }, tools);
 
           if (route.responseType === 'stream') {
             // For stream handlers, consume first chunk to trigger error
@@ -261,7 +265,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
 
         it('should return properly formatted error response', async () => {
           const mastra = getMastra();
-          const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' });
+          const tools = getTools?.();
+          const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' }, tools);
 
           try {
             if (route.responseType === 'stream') {
@@ -289,7 +294,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       if (route.responseType === 'stream') {
         it('should return ReadableStream for stream responses', async () => {
           const mastra = getMastra();
-          const params = await buildHandlerParams(route, mastra);
+          const tools = getTools?.();
+          const params = await buildHandlerParams(route, mastra, {}, tools);
 
           const result = await route.handler(params);
 
@@ -300,7 +306,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
 
         it('should be consumable via ReadableStream reader', async () => {
           const mastra = getMastra();
-          const params = await buildHandlerParams(route, mastra);
+          const tools = getTools?.();
+          const params = await buildHandlerParams(route, mastra, {}, tools);
 
           const stream = (await route.handler(params)) as ReadableStream;
           const reader = stream.getReader();
@@ -320,7 +327,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       if (route.responseType === 'json') {
         it('should return JSON-serializable response', async () => {
           const mastra = getMastra();
-          const params = await buildHandlerParams(route, mastra);
+          const tools = getTools?.();
+          const params = await buildHandlerParams(route, mastra, {}, tools);
 
           const result = await route.handler(params);
 
@@ -384,6 +392,7 @@ async function buildHandlerParams(
   route: ServerRoute,
   mastra: Mastra,
   overrides: Record<string, any> = {},
+  tools?: Record<string, any>,
 ): Promise<any> {
   const params: any = {
     mastra,
@@ -396,6 +405,11 @@ async function buildHandlerParams(
   const testTask = createTestTask();
   await populateTaskStore(taskStore, [{ agentId: 'test-agent', task: testTask }]);
   params.taskStore = taskStore;
+
+  // Add tools if provided (for tools routes)
+  if (tools) {
+    params.tools = tools;
+  }
 
   // Add path parameters - auto-generated from route
   if (route.pathParamSchema) {
