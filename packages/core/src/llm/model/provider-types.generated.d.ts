@@ -660,6 +660,7 @@ export type ProviderModelsMap = {
     'openrouter/cypher-alpha:free',
     'openrouter/horizon-alpha',
     'openrouter/horizon-beta',
+    'openrouter/polaris-alpha',
     'openrouter/sonoma-dusk-alpha',
     'openrouter/sonoma-sky-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
