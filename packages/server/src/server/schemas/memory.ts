@@ -95,8 +95,8 @@ const messageSchema = z
     role: z.string(),
     content: z.any(), // Complex nested structure, allow any
     createdAt: z.date(),
-    threadId: z.string().optional(),
-    resourceId: z.string().optional(),
+    threadId: z.string(),
+    resourceId: z.string(),
   })
   .passthrough();
 
@@ -118,7 +118,7 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
  * GET /api/memory/threads
  */
 export const listThreadsQuerySchema = createOffsetPaginationSchema(100).extend({
-  agentId: z.string().optional(),
+  agentId: z.string(),
   resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
 });
@@ -132,7 +132,7 @@ export const getThreadByIdQuerySchema = agentIdQuerySchema;
  * GET /api/memory/threads/:threadId/messages
  */
 export const getMessagesQuerySchema = createPagePaginationSchema(40).extend({
-  agentId: z.string().optional(),
+  agentId: z.string(),
   orderBy: storageOrderBySchema.optional(),
   include: z.unknown().optional(),
   filter: z.unknown().optional(),
@@ -142,7 +142,7 @@ export const getMessagesQuerySchema = createPagePaginationSchema(40).extend({
  * GET /api/memory/threads/:threadId/working-memory
  */
 export const getWorkingMemoryQuerySchema = z.object({
-  agentId: z.string().optional(),
+  agentId: z.string(),
   resourceId: z.string().optional(),
   memoryConfig: z.record(z.string(), z.unknown()).optional(), // Complex config object
 });
@@ -210,7 +210,7 @@ export const getWorkingMemoryResponseSchema = z.object({
  * Body schema for POST /api/memory/messages
  */
 export const saveMessagesBodySchema = z.object({
-  messages: z.array(z.unknown()), // Array of message objects
+  messages: z.array(messageSchema),
 });
 
 /**
@@ -245,6 +245,7 @@ export const updateWorkingMemoryBodySchema = z.object({
  * Query schema for GET /api/memory/messages
  */
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
+  agentId: z.string(),
   threadId: z.string(),
   resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
@@ -263,6 +264,7 @@ export const deleteMessagesQuerySchema = z.object({
  * Query schema for GET /api/memory/search
  */
 export const searchMemoryQuerySchema = z.object({
+  agentId: z.string(),
   searchQuery: z.string(),
   resourceId: z.string(),
   threadId: z.string().optional(),
@@ -274,7 +276,7 @@ export const searchMemoryQuerySchema = z.object({
  * Response schemas
  */
 export const saveMessagesResponseSchema = z.object({
-  ids: z.array(z.string()),
+  messages: z.array(messageSchema),
 });
 
 export const deleteThreadResponseSchema = z.object({

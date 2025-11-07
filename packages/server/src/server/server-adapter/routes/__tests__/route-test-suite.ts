@@ -21,6 +21,10 @@ function generateContextualValue(fieldName?: string): string {
   // Match common field name patterns
   const field = fieldName.toLowerCase();
 
+  // Exact matches first
+  if (field === 'role') return 'user';
+
+  // Partial matches
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
   if (field.includes('tool')) return 'test-tool';
@@ -129,6 +133,10 @@ function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): 
 
   // Any/Unknown
   if (schema instanceof z.ZodAny || schema instanceof z.ZodUnknown) {
+    // Special case: message content must be an array of parts
+    if (fieldName === 'content') {
+      return [{ type: 'text', text: 'test message content' }];
+    }
     return 'test-value';
   }
 

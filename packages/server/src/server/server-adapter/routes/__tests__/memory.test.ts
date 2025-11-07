@@ -7,11 +7,18 @@ import { createMockMemory, createTestMastra, createTestAgent, mockAgentMethods }
 describe('Memory Routes', () => {
   let mastra: Mastra;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
 
     // Create memory instance with InMemoryStore (following handler test pattern)
     const memory = createMockMemory();
+
+    // Pre-create a test thread for routes that need existing threads
+    await memory.createThread({
+      threadId: 'test-thread',
+      resourceId: 'test-resource',
+      metadata: {},
+    });
 
     // Create agent WITH memory (needed for memory routes with agentId query param)
     const testAgent = createTestAgent({ memory });
