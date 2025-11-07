@@ -341,7 +341,7 @@ describe('Agent vNext', () => {
     // Note: Current implementation executes client tools sequentially in processChatResponse_vNext,
     // but only the first client tool found triggers a recursive stream call.
     // This test verifies chunks from both tool calls are received.
-    
+
     // Verify we received tool-call chunks for both tools
     const toolCallChunks = receivedChunks.filter(c => c.type === 'tool-call');
     expect(toolCallChunks).toHaveLength(2);
@@ -843,11 +843,11 @@ describe('Agent vNext', () => {
     // Verify error chunk was received
     expect(errorChunk).not.toBeNull();
     expect(errorChunk).toBeDefined();
-    
+
     if (!errorChunk) {
       throw new Error('Error chunk was not received');
     }
-    
+
     expect(errorChunk.type).toBe('error');
 
     // Verify error properties are preserved in serialization
