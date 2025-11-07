@@ -23599,7 +23599,7 @@ OPENAI_API_KEY=your_key_here
 The `scores` object contains average scores for each scorer across all test cases:
 
 - **1.0**: All test cases passed the scorer criteria
-- **0.50.9**: Some test cases passed, indicating partial success
+- **0.5-0.9**: Some test cases passed, indicating partial success
 - **0.0**: No test cases passed the scorer criteria
 
 Each scorer's average score is calculated by summing individual scores and dividing by the total number of test cases.
@@ -35315,18 +35315,18 @@ Gateway providers aggregate multiple model providers and add features like cachi
     <CardGridItem
       title="Netlify"
       description="34 models"
-      href="/models/gateways/netlify"
+      href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
       description="121 models"
-      href="/models/gateways/openrouter"
+      href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
     />    <CardGridItem
       title="Vercel"
       description="85 models"
-      href="/models/gateways/vercel"
+      href="/models/v1/gateways/vercel"
       logo="https://models.dev/logos/vercel.svg"
 
     />
@@ -35839,7 +35839,7 @@ Browse the directory of available models using the navigation on the left, or ex
 <CardGrid>
     <CardGridItem
       title="Gateways"
-      href="/models/gateways"
+      href="/models/v1/gateways"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -35861,7 +35861,7 @@ Browse the directory of available models using the navigation on the left, or ex
     </CardGridItem>
     <CardGridItem
       title="Providers"
-      href="/models/providers"
+      href="/models/v1/providers"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -35885,7 +35885,7 @@ Browse the directory of available models using the navigation on the left, or ex
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the `model` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/v1/getting-started/studio) UI.
 
 :::info
 
@@ -35919,7 +35919,7 @@ const reasoningAgent = new Agent({
 ```
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [request context](/docs/server-db/request-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server-db/request-context), variables, or any other logic.
 
 ```typescript showLineNumbers
 const agent = new Agent({
@@ -36045,7 +36045,7 @@ const agent = new Agent({
   model: groq('gemma2-9b-it')
 })
 ```
-You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/evals/overview).
+You can use an AI SDK model (e.g. `groq('gemma2-9b-it')`) anywhere that accepts a `"provider/model"` string, including within model router fallbacks and [scorers](/docs/v1/evals/overview).
 
 ---
 title: "AIHubMix"
@@ -36061,7 +36061,7 @@ AIHubMix is available through the AI SDK. Install the provider package to use th
 
 For detailed provider-specific documentation, see the [AI SDK AIHubMix provider docs](https://ai-sdk.dev/providers/community-providers/aihubmix).
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
 
 ## Installation
 
@@ -37470,7 +37470,7 @@ Amazon Bedrock is available through the AI SDK. Install the provider package to 
 
 For detailed provider-specific documentation, see the [AI SDK Amazon Bedrock provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock).
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
 
 ## Installation
 
@@ -37869,7 +37869,7 @@ Azure is available through the AI SDK. Install the provider package to use their
 
 For detailed provider-specific documentation, see the [AI SDK Azure provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/azure).
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
 
 ## Installation
 
@@ -38638,7 +38638,7 @@ Cloudflare Workers AI is available through the AI SDK. Install the provider pack
 
 For detailed provider-specific documentation, see the [AI SDK Cloudflare Workers AI provider docs](https://ai-sdk.dev/providers/community-providers/cloudflare-workers-ai).
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
 
 ## Installation
 
@@ -40394,7 +40394,7 @@ Vertex is available through the AI SDK. Install the provider package to use thei
 
 For detailed provider-specific documentation, see the [AI SDK Vertex provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/google-vertex).
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
 
 ## Installation
 
@@ -41870,232 +41870,232 @@ Direct access to individual AI model providers. Each provider offers unique mode
     <CardGridItem
       title="OpenAI"
       description="31 models"
-      href="/models/providers/openai"
+      href="/models/v1/providers/openai"
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
       title="Anthropic"
       description="19 models"
-      href="/models/providers/anthropic"
+      href="/models/v1/providers/anthropic"
       logo="https://models.dev/logos/anthropic.svg"
     />    <CardGridItem
       title="Google"
       description="24 models"
-      href="/models/providers/google"
+      href="/models/v1/providers/google"
       logo="https://models.dev/logos/google.svg"
     />    <CardGridItem
       title="DeepSeek"
       description="2 models"
-      href="/models/providers/deepseek"
+      href="/models/v1/providers/deepseek"
       logo="https://models.dev/logos/deepseek.svg"
     />    <CardGridItem
       title="Groq"
       description="17 models"
-      href="/models/providers/groq"
+      href="/models/v1/providers/groq"
       logo="https://models.dev/logos/groq.svg"
     />    <CardGridItem
       title="Mistral"
       description="19 models"
-      href="/models/providers/mistral"
+      href="/models/v1/providers/mistral"
       logo="https://models.dev/logos/mistral.svg"
     />    <CardGridItem
       title="xAI"
       description="20 models"
-      href="/models/providers/xai"
+      href="/models/v1/providers/xai"
       logo="https://models.dev/logos/xai.svg"
     />    <CardGridItem
       title="Alibaba"
       description="39 models"
-      href="/models/providers/alibaba"
+      href="/models/v1/providers/alibaba"
       logo="https://models.dev/logos/alibaba.svg"
     />    <CardGridItem
       title="Alibaba (China)"
       description="61 models"
-      href="/models/providers/alibaba-cn"
+      href="/models/v1/providers/alibaba-cn"
       logo="https://models.dev/logos/alibaba-cn.svg"
     />    <CardGridItem
       title="Baseten"
       description="3 models"
-      href="/models/providers/baseten"
+      href="/models/v1/providers/baseten"
       logo="https://models.dev/logos/baseten.svg"
     />    <CardGridItem
       title="Cerebras"
       description="4 models"
-      href="/models/providers/cerebras"
+      href="/models/v1/providers/cerebras"
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
       title="Chutes"
       description="31 models"
-      href="/models/providers/chutes"
+      href="/models/v1/providers/chutes"
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
       title="Cortecs"
       description="11 models"
-      href="/models/providers/cortecs"
+      href="/models/v1/providers/cortecs"
       logo="https://models.dev/logos/cortecs.svg"
     />    <CardGridItem
       title="Deep Infra"
       description="4 models"
-      href="/models/providers/deepinfra"
+      href="/models/v1/providers/deepinfra"
       logo="https://models.dev/logos/deepinfra.svg"
     />    <CardGridItem
       title="FastRouter"
       description="14 models"
-      href="/models/providers/fastrouter"
+      href="/models/v1/providers/fastrouter"
       logo="https://models.dev/logos/fastrouter.svg"
     />    <CardGridItem
       title="Fireworks AI"
       description="11 models"
-      href="/models/providers/fireworks-ai"
+      href="/models/v1/providers/fireworks-ai"
       logo="https://models.dev/logos/fireworks-ai.svg"
     />    <CardGridItem
       title="GitHub Models"
       description="55 models"
-      href="/models/providers/github-models"
+      href="/models/v1/providers/github-models"
       logo="https://models.dev/logos/github-models.svg"
     />    <CardGridItem
       title="Hugging Face"
       description="14 models"
-      href="/models/providers/huggingface"
+      href="/models/v1/providers/huggingface"
       logo="https://models.dev/logos/huggingface.svg"
     />    <CardGridItem
       title="iFlow"
       description="17 models"
-      href="/models/providers/iflowcn"
+      href="/models/v1/providers/iflowcn"
       logo="https://models.dev/logos/iflowcn.svg"
     />    <CardGridItem
       title="Inception"
       description="2 models"
-      href="/models/providers/inception"
+      href="/models/v1/providers/inception"
       logo="https://models.dev/logos/inception.svg"
     />    <CardGridItem
       title="Inference"
       description="9 models"
-      href="/models/providers/inference"
+      href="/models/v1/providers/inference"
       logo="https://models.dev/logos/inference.svg"
     />    <CardGridItem
       title="Llama"
       description="7 models"
-      href="/models/providers/llama"
+      href="/models/v1/providers/llama"
       logo="https://models.dev/logos/llama.svg"
     />    <CardGridItem
       title="LMStudio"
       description="3 models"
-      href="/models/providers/lmstudio"
+      href="/models/v1/providers/lmstudio"
       logo="https://models.dev/logos/lmstudio.svg"
     />    <CardGridItem
       title="LucidQuery AI"
       description="2 models"
-      href="/models/providers/lucidquery"
+      href="/models/v1/providers/lucidquery"
       logo="https://models.dev/logos/lucidquery.svg"
     />    <CardGridItem
       title="ModelScope"
       description="7 models"
-      href="/models/providers/modelscope"
+      href="/models/v1/providers/modelscope"
       logo="https://models.dev/logos/modelscope.svg"
     />    <CardGridItem
       title="Moonshot AI"
       description="5 models"
-      href="/models/providers/moonshotai"
+      href="/models/v1/providers/moonshotai"
       logo="https://models.dev/logos/moonshotai.svg"
     />    <CardGridItem
       title="Moonshot AI (China)"
       description="5 models"
-      href="/models/providers/moonshotai-cn"
+      href="/models/v1/providers/moonshotai-cn"
       logo="https://models.dev/logos/moonshotai-cn.svg"
     />    <CardGridItem
       title="Morph"
       description="3 models"
-      href="/models/providers/morph"
+      href="/models/v1/providers/morph"
       logo="https://models.dev/logos/morph.svg"
     />    <CardGridItem
       title="Nebius AI Studio"
       description="15 models"
-      href="/models/providers/nebius"
+      href="/models/v1/providers/nebius"
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
       title="Nvidia"
       description="20 models"
-      href="/models/providers/nvidia"
+      href="/models/v1/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
       title="OpenCode Zen"
       description="14 models"
-      href="/models/providers/opencode"
+      href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
       title="Perplexity"
       description="4 models"
-      href="/models/providers/perplexity"
+      href="/models/v1/providers/perplexity"
       logo="https://models.dev/logos/perplexity.svg"
     />    <CardGridItem
       title="Requesty"
       description="13 models"
-      href="/models/providers/requesty"
+      href="/models/v1/providers/requesty"
       logo="https://models.dev/logos/requesty.svg"
     />    <CardGridItem
       title="Scaleway"
       description="13 models"
-      href="/models/providers/scaleway"
+      href="/models/v1/providers/scaleway"
       logo="https://models.dev/logos/scaleway.svg"
     />    <CardGridItem
       title="submodel"
       description="9 models"
-      href="/models/providers/submodel"
+      href="/models/v1/providers/submodel"
       logo="https://models.dev/logos/submodel.svg"
     />    <CardGridItem
       title="Synthetic"
       description="22 models"
-      href="/models/providers/synthetic"
+      href="/models/v1/providers/synthetic"
       logo="https://models.dev/logos/synthetic.svg"
     />    <CardGridItem
       title="Together AI"
       description="6 models"
-      href="/models/providers/togetherai"
+      href="/models/v1/providers/togetherai"
       logo="https://models.dev/logos/togetherai.svg"
     />    <CardGridItem
       title="Upstage"
       description="2 models"
-      href="/models/providers/upstage"
+      href="/models/v1/providers/upstage"
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
       description="14 models"
-      href="/models/providers/venice"
+      href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
       title="Vultr"
       description="5 models"
-      href="/models/providers/vultr"
+      href="/models/v1/providers/vultr"
       logo="https://models.dev/logos/vultr.svg"
     />    <CardGridItem
       title="Weights &amp; Biases"
       description="10 models"
-      href="/models/providers/wandb"
+      href="/models/v1/providers/wandb"
       logo="https://models.dev/logos/wandb.svg"
     />    <CardGridItem
       title="Z.AI"
       description="5 models"
-      href="/models/providers/zai"
+      href="/models/v1/providers/zai"
       logo="https://models.dev/logos/zai.svg"
     />    <CardGridItem
       title="Z.AI Coding Plan"
       description="5 models"
-      href="/models/providers/zai-coding-plan"
+      href="/models/v1/providers/zai-coding-plan"
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
       title="ZenMux"
       description="18 models"
-      href="/models/providers/zenmux"
+      href="/models/v1/providers/zenmux"
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
       title="Zhipu AI"
       description="5 models"
-      href="/models/providers/zhipuai"
+      href="/models/v1/providers/zhipuai"
       logo="https://models.dev/logos/zhipuai.svg"
     />    <CardGridItem
       title="Zhipu AI Coding Plan"
       description="5 models"
-      href="/models/providers/zhipuai-coding-plan"
+      href="/models/v1/providers/zhipuai-coding-plan"
       logo="https://models.dev/logos/zhipuai-coding-plan.svg"
     />
 </CardGrid>
@@ -44288,7 +44288,7 @@ Ollama is available through the AI SDK. Install the provider package to use thei
 
 For detailed provider-specific documentation, see the [AI SDK Ollama provider docs](https://ai-sdk.dev/providers/community-providers/ollama).
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
 
 ## Installation
 
