@@ -1,8 +1,11 @@
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import type { MastraDBMessage } from '../../agent/message-list';
+import { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
+
 import { TokenLimiterProcessor } from './token-limiter';
 
 function createTestMessage(text: string, role: 'user' | 'assistant' = 'assistant', id = 'test-id'): MastraDBMessage {
@@ -229,7 +232,7 @@ describe('TokenLimiterProcessor', () => {
     it('should handle object chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 50 });
 
-      const part: ChunkType = {
+      const part: ChunkType<any> = {
         type: 'object',
         object: { message: 'Hello world', count: 42 },
         runId: 'test-run-id',
@@ -243,7 +246,7 @@ describe('TokenLimiterProcessor', () => {
     it('should count tokens in object chunks correctly', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
-      const part: ChunkType = {
+      const part: ChunkType<any> = {
         type: 'object',
         object: { message: 'This is a very long message that will exceed the token limit' },
         runId: 'test-run-id',
@@ -521,6 +524,258 @@ describe('TokenLimiterProcessor', () => {
 
       // Total tokens should not exceed the limit
       expect(processor.getCurrentTokens()).toBeLessThanOrEqual(15);
+    });
+  });
+
+  describe('processInput', () => {
+    it('should limit input messages to the specified token count', async () => {
+      const processor = new TokenLimiterProcessor({
+        limit: 35, // Lower limit to actually trigger filtering (will allow ~32 tokens after overhead)
+      });
+
+      // Create messages with content that will exceed the limit
+      const messages: MastraMessageV2[] = [
+        {
+          id: 'message-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'This is the first message with some content',
+            parts: [{ type: 'text', text: 'This is the first message with some content' }],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        {
+          id: 'message-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'This is a response with more content',
+            parts: [{ type: 'text', text: 'This is a response with more content' }],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        {
+          id: 'message-3',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Another message here',
+            parts: [{ type: 'text', text: 'Another message here' }],
+          },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+        {
+          id: 'message-4',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'Final response',
+            parts: [{ type: 'text', text: 'Final response' }],
+          },
+          createdAt: new Date('2023-01-01T00:03:00Z'),
+        },
+        {
+          id: 'message-5',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Latest message',
+            parts: [{ type: 'text', text: 'Latest message' }],
+          },
+          createdAt: new Date('2023-01-01T00:04:00Z'),
+        },
+      ];
+
+      const result = await processor.processInput({
+        messages,
+        abort: mockAbort,
+        runtimeContext: new RequestContext(),
+      });
+
+      console.log('Input messages:', messages.length);
+      console.log('Output messages:', result.length);
+      console.log(
+        'Output message IDs:',
+        result.map(m => m.id),
+      );
+
+      // Should prioritize newest messages (higher ids) and exclude oldest
+      expect(result.length).toBeLessThan(messages.length);
+      // The newest messages should be included
+      expect(result.some(m => m.id === 'message-5')).toBe(true);
+      expect(result.some(m => m.id === 'message-4')).toBe(true);
+      // The oldest message should be excluded
+      expect(result.some(m => m.id === 'message-1')).toBe(false);
+    });
+
+    it('should handle empty messages array', async () => {
+      const processor = new TokenLimiterProcessor({
+        limit: 1000,
+      });
+
+      const result = await processor.processInput({
+        messages: [],
+        abort: mockAbort,
+        runtimeContext: new RequestContext(),
+      });
+      expect(result).toEqual([]);
+    });
+
+    it('should handle system messages correctly', async () => {
+      const processor = new TokenLimiterProcessor({
+        limit: 200,
+      });
+
+      const messages: MastraMessageV2[] = [
+        {
+          id: 'system-1',
+          role: 'system',
+          content: {
+            format: 2,
+            content: 'You are a helpful assistant', // ~6 tokens
+            parts: [{ type: 'text', text: 'You are a helpful assistant' }],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        {
+          id: 'user-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Hello', // ~1 token
+            parts: [{ type: 'text', text: 'Hello' }],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'Hi there!', // ~3 tokens
+            parts: [{ type: 'text', text: 'Hi there!' }],
+          },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+      ];
+
+      const result = await processor.processInput({
+        messages,
+        abort: mockAbort,
+        runtimeContext: new RequestContext(),
+      });
+
+      // System message should always be included
+      expect(result.length).toBe(3);
+      expect(result[0].role).toBe('system');
+      expect(result[0].id).toBe('system-1');
+    });
+
+    it('should handle tool call messages', async () => {
+      const processor = new TokenLimiterProcessor({
+        limit: 300,
+      });
+
+      const messages: MastraMessageV2[] = [
+        {
+          id: 'tool-call-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '', // Tool calls don't have content text
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'call',
+                  toolCallId: 'call_1',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        {
+          id: 'tool-result-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'The result is 4',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_1',
+                  toolName: 'calculator',
+                  result: 'The result is 4',
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        {
+          id: 'user-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Calculate 2+2',
+            parts: [{ type: 'text', text: 'Calculate 2+2' }],
+          },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+      ];
+
+      const result = await processor.processInput({
+        messages,
+        abort: mockAbort,
+        runtimeContext: new RequestContext(),
+      });
+
+      // All messages should fit within the limit
+      expect(result.length).toBe(3);
+    });
+
+    it('should apply the same limit to both input and output processing', async () => {
+      const processor = new TokenLimiterProcessor({
+        limit: 50,
+      });
+
+      const messages: MastraMessageV2[] = [
+        {
+          id: 'message-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Hello world',
+            parts: [{ type: 'text', text: 'Hello world' }],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        {
+          id: 'message-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'This is a response',
+            parts: [{ type: 'text', text: 'This is a response' }],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+      ];
+
+      const result = await processor.processInput({
+        messages,
+        abort: mockAbort,
+        runtimeContext: new RequestContext(),
+      });
+
+      // Should apply input limit (150 tokens)
+      expect(result.length).toBe(2);
     });
   });
 });
