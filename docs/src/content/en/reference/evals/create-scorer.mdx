@@ -13,7 +13,8 @@ Use the `createScorer` factory to define your scorer with a name, description, a
 
 ```typescript
 const scorer = createScorer({
-  name: "My Custom Scorer",
+  id: "my-custom-scorer",
+  name: "My Custom Scorer", // Optional, defaults to id
   description: "Evaluates responses based on custom criteria",
   type: "agent", // Optional: for agent evaluation with automatic typing
   judge: {
@@ -40,10 +41,16 @@ const scorer = createScorer({
 <PropertiesTable
   content={[
     {
-      name: "name",
+      name: "id",
       type: "string",
       required: true,
-      description: "Name of the scorer.",
+      description: "Unique identifier for the scorer. Used as the name if name is not provided.",
+    },
+    {
+      name: "name",
+      type: "string",
+      required: false,
+      description: "Name of the scorer. Defaults to id if not provided.",
     },
     {
       name: "description",
