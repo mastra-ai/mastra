@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '../agent/message-list';
 import type { TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 
 export interface Processor {
@@ -13,6 +14,7 @@ export interface Processor {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraDBMessage[]> | MastraDBMessage[];
 
   /**
@@ -26,6 +28,7 @@ export interface Processor {
     state: Record<string, any>;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    runtimeContext?: RequestContext;
   }): Promise<ChunkType | null | undefined>;
 
   /**
@@ -35,6 +38,7 @@ export interface Processor {
     messages: MastraDBMessage[];
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
+    runtimeContext?: RequestContext;
   }): Promise<MastraDBMessage[]> | MastraDBMessage[];
 }
 
@@ -49,4 +53,4 @@ export type OutputProcessor =
 export type ProcessorTypes = InputProcessor | OutputProcessor;
 
 export * from './processors';
-export { ProcessorState } from './runner';
+export { ProcessorState, ProcessorRunner } from './runner';

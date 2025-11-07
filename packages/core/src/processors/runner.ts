@@ -3,6 +3,7 @@ import { TripWire } from '../agent/trip-wire';
 import type { IMastraLogger } from '../logger';
 import { SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
+import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
@@ -80,16 +81,22 @@ export class ProcessorRunner {
     this.agentName = agentName;
   }
 
-  async runOutputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
+  async runOutputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    telemetry?: any,
+    runtimeContext?: RequestContext,
+  ): Promise<MessageList> {
     const responseMessages = messageList.clear.response.db();
 
     let processableMessages: MastraDBMessage[] = [...responseMessages];
 
-    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never; runtimeContext?: RequestContext } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
       },
+      runtimeContext,
     };
 
     for (const [index, processor] of this.outputProcessors.entries()) {
@@ -120,12 +127,34 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      processableMessages = await processMethod({
-        messages: processableMessages,
-        abort: ctx.abort,
-        tracingContext: { currentSpan: processorSpan },
-      });
-
+      if (!telemetry) {
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext: { currentSpan: processorSpan },
+          runtimeContext: ctx.runtimeContext,
+        });
+      } else {
+        await telemetry.traceMethod(
+          async () => {
+            processableMessages = await processMethod({
+              messages: processableMessages,
+              abort: ctx.abort,
+              tracingContext: { currentSpan: processorSpan },
+              runtimeContext: ctx.runtimeContext,
+            });
+            return processableMessages;
+          },
+          {
+            spanName: `agent.outputProcessor.${processor.name}`,
+            attributes: {
+              'processor.name': processor.name,
+              'processor.index': index.toString(),
+              'processor.total': this.outputProcessors.length.toString(),
+            },
+          },
+        )();
+      }
       processorSpan?.end({ output: processableMessages });
     }
 
@@ -143,6 +172,7 @@ export class ProcessorRunner {
     part: ChunkType<OUTPUT>,
     processorStates: Map<string, ProcessorState<OUTPUT>>,
     tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -181,6 +211,7 @@ export class ProcessorRunner {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`);
               },
               tracingContext: { currentSpan: state.span },
+              runtimeContext,
             });
 
             if (state.span && !state.span.isEvent) {
@@ -236,6 +267,7 @@ export class ProcessorRunner {
   async runOutputProcessorsForStream<OUTPUT extends OutputSchema = undefined>(
     streamResult: MastraModelOutput<OUTPUT>,
     tracingContext?: TracingContext,
+    runtimeContext?: RequestContext,
   ): Promise<ReadableStream<any>> {
     return new ReadableStream({
       start: async controller => {
@@ -256,7 +288,7 @@ export class ProcessorRunner {
               part: processedPart,
               blocked,
               reason,
-            } = await this.processPart(value, processorStates, tracingContext);
+            } = await this.processPart(value, processorStates, tracingContext, runtimeContext);
 
             if (blocked) {
               // Log that part was blocked
@@ -285,16 +317,23 @@ export class ProcessorRunner {
     });
   }
 
-  async runInputProcessors(messageList: MessageList, tracingContext?: TracingContext): Promise<MessageList> {
-    const userMessages = messageList.clear.input.db();
+  async runInputProcessors(
+    messageList: MessageList,
+    tracingContext?: TracingContext,
+    telemetry?: any,
+    runtimeContext?: RequestContext,
+  ): Promise<MessageList> {
+    // Get input messages without clearing yet
+    const originalUserMessages = messageList.get.input.db();
 
-    let processableMessages: MastraDBMessage[] = [...userMessages];
+    let processableMessages: MastraDBMessage[] = [...originalUserMessages];
 
-    const ctx: { messages: MastraDBMessage[]; abort: () => never } = {
+    const ctx: { messages: MastraDBMessage[]; abort: () => never; runtimeContext?: RequestContext } = {
       messages: processableMessages,
       abort: () => {
         throw new TripWire('Tripwire triggered');
       },
+      runtimeContext,
     };
 
     for (const [index, processor] of this.inputProcessors.entries()) {
@@ -325,12 +364,34 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
-      processableMessages = await processMethod({
-        messages: processableMessages,
-        abort: ctx.abort,
-        tracingContext: { currentSpan: processorSpan },
-      });
-
+      if (!telemetry) {
+        processableMessages = await processMethod({
+          messages: processableMessages,
+          abort: ctx.abort,
+          tracingContext: { currentSpan: processorSpan },
+          runtimeContext: ctx.runtimeContext,
+        });
+      } else {
+        await telemetry.traceMethod(
+          async () => {
+            processableMessages = await processMethod({
+              messages: processableMessages,
+              abort: ctx.abort,
+              tracingContext: { currentSpan: processorSpan },
+              runtimeContext: ctx.runtimeContext,
+            });
+            return processableMessages;
+          },
+          {
+            spanName: `agent.inputProcessor.${processor.name}`,
+            attributes: {
+              'processor.name': processor.name,
+              'processor.index': index.toString(),
+              'processor.total': this.inputProcessors.length.toString(),
+            },
+          },
+        )();
+      }
       processorSpan?.end({ output: processableMessages });
     }
 
@@ -338,6 +399,12 @@ export class ProcessorRunner {
       // Separate system messages from other messages since they need different handling
       const systemMessages = processableMessages.filter(m => m.role === 'system');
       const nonSystemMessages = processableMessages.filter(m => m.role !== 'system');
+
+      // Track IDs of original user messages to distinguish them from historical messages
+      const originalMessageIds = new Set(originalUserMessages.map(m => m.id).filter(Boolean));
+
+      // Clear the original input messages before adding processed ones
+      messageList.clear.input.db();
 
       // Add system messages using addSystem
       for (const sysMsg of systemMessages) {
@@ -348,9 +415,26 @@ export class ProcessorRunner {
         messageList.addSystem(systemText);
       }
 
-      // Add non-system messages normally
+      // First, remove ALL original input messages from the MessageList
+      // This ensures messages filtered out by processors are actually removed
+      for (const originalMsg of originalUserMessages) {
+        const existingIndex = messageList['messages'].findIndex(m => m.id === originalMsg.id);
+        if (existingIndex !== -1) {
+          messageList['messages'].splice(existingIndex, 1);
+        }
+      }
+
+      // Add non-system messages with correct source
+      // Messages that were in the original input get source='input'
+      // Messages added by processors (e.g., MessageHistory) get source='memory'
       if (nonSystemMessages.length > 0) {
-        messageList.add(nonSystemMessages, 'input');
+        for (const msg of nonSystemMessages) {
+          // Determine the correct source based on whether this was an original message
+          const isOriginalMessage = msg.id && originalMessageIds.has(msg.id);
+          const source = isOriginalMessage ? 'input' : 'memory';
+
+          messageList.add([msg], source);
+        }
       }
     }
 
