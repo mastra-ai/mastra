@@ -66,9 +66,7 @@ export class MessageHistory implements Processor {
 
       // 3. Merge with incoming messages (avoiding duplicates by ID)
       const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-      const uniqueHistoricalMessages = filteredMessages.filter(
-        (m: MastraDBMessage) => !m.id || !messageIds.has(m.id),
-      );
+      const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
 
       const mergedMessages = [...uniqueHistoricalMessages, ...messages];
       return mergedMessages;

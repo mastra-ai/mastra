@@ -243,7 +243,7 @@ describe('Agent Memory Tests', () => {
     expect(secondResponse.text.toLowerCase()).toMatch(/(cat|animal|discuss)/);
 
     // Verify that the second thread now has messages
-    const thread2Messages = await memory.query({ threadId: thread2Id, resourceId });
+    const thread2Messages = await memory.recall({ threadId: thread2Id, resourceId });
     expect(thread2Messages.messages.length).toBeGreaterThan(0);
   });
 
