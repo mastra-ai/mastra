@@ -103,6 +103,8 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: c.get('requestContext'),
           mastra: this.mastra,
+          tools: c.get('tools'),
+          taskStore: c.get('taskStore'),
         };
 
         try {

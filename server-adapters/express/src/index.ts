@@ -83,6 +83,8 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         ...(typeof params.body === 'object' ? params.body : {}),
         requestContext: res.locals.requestContext,
         mastra: this.mastra,
+        tools: res.locals.tools,
+        taskStore: res.locals.taskStore,
       };
 
       console.dir({ params }, { depth: null });
