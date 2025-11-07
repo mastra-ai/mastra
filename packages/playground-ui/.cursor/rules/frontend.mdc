@@ -23,9 +23,9 @@ Standards and conventions for building components in `packages/playground-ui`.
 ### Responsibilities
 
 - **UI Components**: Reusable presentational components
-- **Business Hooks**: Data-fetching and state management (`src/domain`)
+- **Business Hooks**: Data-fetching and state management (`src/domains`)
   - Examples: `useAgents()`, `useWorkflows()`
-- **Business Components**: Domain-specific components (`src/domain`)
+- **Business Components**: Domain-specific components (`src/domains`)
   - Examples: `<AgentsTable>`, `<AgentInformation>`
 
 ---
@@ -35,7 +35,7 @@ Standards and conventions for building components in `packages/playground-ui`.
 ### Tailwind CSS (v3.x)
 
 - Use Tailwind for all styling
-- **REQUIRED**: Use design tokens from `src/ds/index.ts`
+- **REQUIRED**: Use design tokens from `src/ds/tokens/index.ts`
 - **FORBIDDEN**: Arbitrary values (e.g., `bg-[#1A1A1A]`) unless explicitly requested
 
 #### Examples
@@ -92,7 +92,7 @@ export default function EntryList() { ... }
 
 ```tsx
 // ✅ Good
-import { useMastraClient } from './client';
+import { useMastraClient } from '.@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 export function useAgents() {
