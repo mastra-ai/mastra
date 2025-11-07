@@ -54,8 +54,6 @@ export const BADGE_ICONS = {
   else: CornerDownRight,
 } as const;
 
-export type ConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
-
 export interface ConditionIconConfig {
   icon: LucideIcon | undefined;
   color: string | undefined;

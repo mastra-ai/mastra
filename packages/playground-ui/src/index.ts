@@ -6,7 +6,6 @@ export * from './domains/tools/index';
 export * from './domains/workflows/index';
 export * from './domains/templates/index';
 export * from './domains/observability/index';
-export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
 export * from './components/ui/containers';
 export * from './components/ui/elements';
