@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Read(//Users/mfrachet/soft/mastra/packages/playground/**)"
     ],
     "deny": [],
     "ask": []
