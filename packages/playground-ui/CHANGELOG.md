@@ -1,5 +1,328 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.0
+
+### Major Changes
+
+- # Major Changes ([#9695](https://github.com/mastra-ai/mastra/pull/9695))
+
+  ## Storage Layer
+
+  ### BREAKING: Removed `storage.getMessages()`
+
+  The `getMessages()` method has been removed from all storage implementations. Use `listMessages()` instead, which provides pagination support.
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const messages = await storage.getMessages({ threadId: 'thread-1' });
+
+  // After
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    page: 0,
+    perPage: 50,
+  });
+  const messages = result.messages; // Access messages array
+  console.log(result.total); // Total count
+  console.log(result.hasMore); // Whether more pages exist
+  ```
+
+  ### Message ordering default
+
+  `listMessages()` defaults to ASC (oldest first) ordering by `createdAt`, matching the previous `getMessages()` behavior.
+
+  **To use DESC ordering (newest first):**
+
+  ```typescript
+  const result = await storage.listMessages({
+    threadId: 'thread-1',
+    orderBy: { field: 'createdAt', direction: 'DESC' },
+  });
+  ```
+
+  ## Client SDK
+
+  ### BREAKING: Renamed `client.getThreadMessages()` → `client.listThreadMessages()`
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  const response = await client.getThreadMessages(threadId, { agentId });
+
+  // After
+  const response = await client.listThreadMessages(threadId, { agentId });
+  ```
+
+  The response format remains the same.
+
+  ## Type Changes
+
+  ### BREAKING: Removed `StorageGetMessagesArg` type
+
+  Use `StorageListMessagesInput` instead:
+
+  ```typescript
+  // Before
+  import type { StorageGetMessagesArg } from '@mastra/core';
+
+  // After
+  import type { StorageListMessagesInput } from '@mastra/core';
+  ```
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Replace `getThreadsByResourceIdPaginated` with `listThreadsByResourceId` across memory handlers. Update client SDK to use `listThreads()` with `offset`/`limit` parameters instead of deprecated `getMemoryThreads()`. Consolidate `/api/memory/threads` routes to single paginated endpoint. ([#9508](https://github.com/mastra-ai/mastra/pull/9508))
+
+- Rename RuntimeContext to RequestContext ([#9511](https://github.com/mastra-ai/mastra/pull/9511))
+
+- Renamed a bunch of observability/tracing-related things to drop the AI prefix. ([#9744](https://github.com/mastra-ai/mastra/pull/9744))
+
+- **Breaking Change**: Remove legacy v1 watch events and consolidate on v2 implementation. ([#9252](https://github.com/mastra-ai/mastra/pull/9252))
+
+  This change simplifies the workflow watching API by removing the legacy v1 event system and promoting v2 as the standard (renamed to just `watch`).
+
+  ### What's Changed
+  - Removed legacy v1 watch event handlers and types
+  - Renamed `watch-v2` to `watch` throughout the codebase
+  - Removed `.watch()` method from client-js SDK (`Workflow` and `AgentBuilder` classes)
+  - Removed `/watch` HTTP endpoints from server and deployer
+  - Removed `WorkflowWatchResult` and v1 `WatchEvent` types
+
+- **BREAKING CHANGE**: Pagination APIs now use `page`/`perPage` instead of `offset`/`limit` ([#9592](https://github.com/mastra-ai/mastra/pull/9592))
+
+  All storage and memory pagination APIs have been updated to use `page` (0-indexed) and `perPage` instead of `offset` and `limit`, aligning with standard REST API patterns.
+
+  **Affected APIs:**
+  - `Memory.listThreadsByResourceId()`
+  - `Memory.listMessages()`
+  - `Storage.listWorkflowRuns()`
+
+  **Migration:**
+
+  ```typescript
+  // Before
+  await memory.listThreadsByResourceId({
+    resourceId: 'user-123',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await memory.listThreadsByResourceId({
+    resourceId: 'user-123',
+    page: 2, // page = Math.floor(offset / limit)
+    perPage: 10,
+  });
+
+  // Before
+  await memory.listMessages({
+    threadId: 'thread-456',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await memory.listMessages({
+    threadId: 'thread-456',
+    page: 2,
+    perPage: 10,
+  });
+
+  // Before
+  await storage.listWorkflowRuns({
+    workflowName: 'my-workflow',
+    offset: 20,
+    limit: 10,
+  });
+
+  // After
+  await storage.listWorkflowRuns({
+    workflowName: 'my-workflow',
+    page: 2,
+    perPage: 10,
+  });
+  ```
+
+  **Additional improvements:**
+  - Added validation for negative `page` values in all storage implementations
+  - Improved `perPage` validation to handle edge cases (negative values, `0`, `false`)
+  - Added reusable query parser utilities for consistent validation in handlers
+
+- ```([#9709](https://github.com/mastra-ai/mastra/pull/9709))
+  import { Mastra } from '@mastra/core';
+  import { Observability } from '@mastra/observability';  // Explicit import
+
+  const mastra = new Mastra({
+    ...other_config,
+    observability: new Observability({
+      default: { enabled: true }
+    })  // Instance
+  });
+  ```
+
+  Instead of:
+
+  ```
+  import { Mastra } from '@mastra/core';
+  import '@mastra/observability/init';  // Explicit import
+
+  const mastra = new Mastra({
+    ...other_config,
+    observability: {
+      default: { enabled: true }
+    }
+  });
+  ```
+
+  Also renamed a bunch of:
+  - `Tracing` things to `Observability` things.
+  - `AI-` things to just things.
+
+- Changing getAgents -> listAgents, getTools -> listTools, getWorkflows -> listWorkflows ([#9495](https://github.com/mastra-ai/mastra/pull/9495))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+- Renamed `MastraMessageV2` to `MastraDBMessage` ([#9255](https://github.com/mastra-ai/mastra/pull/9255))
+  Made the return format of all methods that return db messages consistent. It's always `{ messages: MastraDBMessage[] }` now, and messages can be converted after that using `@mastra/ai-sdk/ui`'s `toAISdkV4/5Messages()` function
+
+- Remove legacy evals from Mastra ([#9491](https://github.com/mastra-ai/mastra/pull/9491))
+
+### Minor Changes
+
+- Moving scorers under the eval domain, api method consistency, prebuilt evals, scorers require ids. ([#9589](https://github.com/mastra-ai/mastra/pull/9589))
+
+- Update peer dependencies to match core package version bump (0.22.1) ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Toast error from workflow stream and resume stream ([#9431](https://github.com/mastra-ai/mastra/pull/9431))
+  Update peer dependencies to match core package version bump (0.22.3)
+
+- Update peer dependencies to match core package version bump (0.22.0) ([#9045](https://github.com/mastra-ai/mastra/pull/9045))
+
+### Patch Changes
+
+- dependencies updates: ([#9800](https://github.com/mastra-ai/mastra/pull/9800))
+  - Updated dependency [`@lezer/highlight@^1.2.3` ↗︎](https://www.npmjs.com/package/@lezer/highlight/v/1.2.3) (from `^1.2.1`, in `dependencies`)
+
+- fetch from the client-js sdk instead of local fetch ([#9376](https://github.com/mastra-ai/mastra/pull/9376))
+
+- Update MainSidebar component to fit required changes in Cloud CTA link ([#9318](https://github.com/mastra-ai/mastra/pull/9318))
+
+- Add enhance instruction capability + instruction tweak for experiment purpose ([#9302](https://github.com/mastra-ai/mastra/pull/9302))
+
+- Update peer dependencies to match core package version bump (1.0.0) ([#9237](https://github.com/mastra-ai/mastra/pull/9237))
+
+- Use client-js search memory instead of custom fetch one ([#9326](https://github.com/mastra-ai/mastra/pull/9326))
+
+- Render zod unions and discriminated unions correctly in dynamic form. ([#9317](https://github.com/mastra-ai/mastra/pull/9317))
+
+- Add breacrumb action for popovers ([#9378](https://github.com/mastra-ai/mastra/pull/9378))
+
+- Prefill `providerOptions` on Mastra Studio. When creating your agent, you can add `providerOptions` to the Agent `instructions`, we now prefill the `providerOptions` field on Mastra Studio model settings advanced settings section with the `instructions.providerOptions` added. ([#9156](https://github.com/mastra-ai/mastra/pull/9156))
+
+  Example agent code
+
+  ```@typescript
+  export const chefModelV2Agent = new Agent({
+    name: 'Chef Agent V2 Model',
+    description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
+    instructions: {
+      content: `
+        You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
+        ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
+        You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+        `,
+      role: 'system',
+      providerOptions: {
+        openai: {
+          reasoning_effort: 'high',
+        },
+      },
+    },
+    model: openai('gpt-4o-mini'),
+    tools: {
+      cookingTool,
+    },
+    memory
+  });
+  ```
+
+- Add tool call approval ([#8649](https://github.com/mastra-ai/mastra/pull/8649))
+
+- Fixes issue where clicking the reset button in the model picker would fail to restore the original LanguageModelV2 (or any other types) object that was passed during agent construction. ([#9481](https://github.com/mastra-ai/mastra/pull/9481))
+
+- Fix multi modal in playground-ui ([#9373](https://github.com/mastra-ai/mastra/pull/9373))
+
+- Remove "show trace" that pointed to legacy traces ([#9470](https://github.com/mastra-ai/mastra/pull/9470))
+
+- Fix resume form for nested workflow not displaying when viewing a previously suspended run on studio ([#9805](https://github.com/mastra-ai/mastra/pull/9805))
+
+- Avoid fetch retries when fetching model providers ([#9452](https://github.com/mastra-ai/mastra/pull/9452))
+
+- Remove unused /model-providers API ([#9533](https://github.com/mastra-ai/mastra/pull/9533))
+
+- Fix undefined runtimeContext using memory from playground ([#9328](https://github.com/mastra-ai/mastra/pull/9328))
+
+- Fix playground white screen when Zod discriminatedUnion is intersected using `and()`. ([#9692](https://github.com/mastra-ai/mastra/pull/9692))
+  This now works, but zod validation will fail, please use `extend` instead
+
+  Instead of
+
+  ```
+  z.discriminatedUnion('type', [
+    z.object({ type: z.literal('byCity'), city: z.string() }),
+    z.object({ type: z.literal('byCoords'), lat: z.number(), lon: z.number() }),
+  ]).and(
+    z.object({ order: z.number() })
+  )
+  ```
+
+  do
+
+  ```
+  z.discriminatedUnion('type', [
+    z.object({ type: z.literal('byCity'), city: z.string() }).extend({ order: z.number() }),
+    z.object({ type: z.literal('byCoords'), lat: z.number(), lon: z.number() }).extend({ order: z.number() }),
+  ]);
+  ```
+
+- Extract more components to playground-ui for sharing with cloud ([#9241](https://github.com/mastra-ai/mastra/pull/9241))
+
+- Fix undefined window issue when Sidebar used in Next app ([#9448](https://github.com/mastra-ai/mastra/pull/9448))
+
+- Move WorkflowInformation to playground-ui ([#9297](https://github.com/mastra-ai/mastra/pull/9297))
+
+- Remove `waitForEvent` from workflows. `waitForEvent` is now removed, please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details on suspend & resume flow. ([#9214](https://github.com/mastra-ai/mastra/pull/9214))
+
+- Add combobox in playground for entities and update routes and error handling ([#9743](https://github.com/mastra-ai/mastra/pull/9743))
+
+- **Breaking Changes:** ([#9045](https://github.com/mastra-ai/mastra/pull/9045))
+  - Moved `generateTitle` from `threads.generateTitle` to top-level memory option
+  - Changed default value from `true` to `false`
+  - Using `threads.generateTitle` now throws an error
+
+  **Migration:**
+  Replace `threads: { generateTitle: true }` with `generateTitle: true` at the top level of memory options.
+
+  **Playground:**
+  The playground UI now displays thread IDs instead of "Chat from" when titles aren't generated.
+
+- Move some components to playground-ui for usage in cloud ([#9177](https://github.com/mastra-ai/mastra/pull/9177))
+
+- Fix the link from traces to workflow ([#9764](https://github.com/mastra-ai/mastra/pull/9764))
+
+- Remove unecessary react components + dependencies ([#9295](https://github.com/mastra-ai/mastra/pull/9295))
+
+- Fix studio crashing when message contains non JSON text output of tool call ([#9189](https://github.com/mastra-ai/mastra/pull/9189))
+
+- Updated dependencies [[`39c9743`](https://github.com/mastra-ai/mastra/commit/39c97432d084294f8ba85fbf3ef28098ff21459e), [`f743dbb`](https://github.com/mastra-ai/mastra/commit/f743dbb8b40d1627b5c10c0e6fc154f4ebb6e394), [`3852192`](https://github.com/mastra-ai/mastra/commit/3852192c81b2a4f1f883f17d80ce50e0c60dba55), [`fec5129`](https://github.com/mastra-ai/mastra/commit/fec5129de7fc64423ea03661a56cef31dc747a0d), [`0491e7c`](https://github.com/mastra-ai/mastra/commit/0491e7c9b714cb0ba22187ee062147ec2dd7c712), [`f6f4903`](https://github.com/mastra-ai/mastra/commit/f6f4903397314f73362061dc5a3e8e7c61ea34aa), [`0e8ed46`](https://github.com/mastra-ai/mastra/commit/0e8ed467c54d6901a6a365f270ec15d6faadb36c), [`6c049d9`](https://github.com/mastra-ai/mastra/commit/6c049d94063fdcbd5b81c4912a2bf82a92c9cc0b), [`2f897df`](https://github.com/mastra-ai/mastra/commit/2f897df208508f46f51b7625e5dd20c37f93e0e3), [`f0f8f12`](https://github.com/mastra-ai/mastra/commit/f0f8f125c308f2d0fd36942ef652fd852df7522f), [`3443770`](https://github.com/mastra-ai/mastra/commit/3443770662df8eb24c9df3589b2792d78cfcb811), [`f0a07e0`](https://github.com/mastra-ai/mastra/commit/f0a07e0111b3307c5fabfa4094c5c2cfb734fbe6), [`aaa40e7`](https://github.com/mastra-ai/mastra/commit/aaa40e788628b319baa8e889407d11ad626547fa), [`1521d71`](https://github.com/mastra-ai/mastra/commit/1521d716e5daedc74690c983fbd961123c56756b), [`9e1911d`](https://github.com/mastra-ai/mastra/commit/9e1911db2b4db85e0e768c3f15e0d61e319869f6), [`ebac155`](https://github.com/mastra-ai/mastra/commit/ebac15564a590117db7078233f927a7e28a85106), [`dd1c38d`](https://github.com/mastra-ai/mastra/commit/dd1c38d1b75f1b695c27b40d8d9d6ed00d5e0f6f), [`5948e6a`](https://github.com/mastra-ai/mastra/commit/5948e6a5146c83666ba3f294b2be576c82a513fb), [`8940859`](https://github.com/mastra-ai/mastra/commit/89408593658199b4ad67f7b65e888f344e64a442), [`e629310`](https://github.com/mastra-ai/mastra/commit/e629310f1a73fa236d49ec7a1d1cceb6229dc7cc), [`4c6b492`](https://github.com/mastra-ai/mastra/commit/4c6b492c4dd591c6a592520c1f6855d6e936d71f), [`dff01d8`](https://github.com/mastra-ai/mastra/commit/dff01d81ce1f4e4087cfac20fa868e6db138dd14), [`7491634`](https://github.com/mastra-ai/mastra/commit/7491634fd198c37d9934675756b274ae2e5e415e), [`9d819d5`](https://github.com/mastra-ai/mastra/commit/9d819d54b61481639f4008e4694791bddf187edd), [`b7de533`](https://github.com/mastra-ai/mastra/commit/b7de53361667eb51fefd89fcaed924f3c57cee8d), [`71c8d6c`](https://github.com/mastra-ai/mastra/commit/71c8d6c161253207b2b9588bdadb7eed604f7253), [`6179a9b`](https://github.com/mastra-ai/mastra/commit/6179a9ba36ffac326de3cc3c43cdc8028d37c251), [`00f4921`](https://github.com/mastra-ai/mastra/commit/00f4921dd2c91a1e5446799599ef7116a8214a1a), [`ca8041c`](https://github.com/mastra-ai/mastra/commit/ca8041cce0379fda22ed293a565bcb5b6ddca68a), [`7051bf3`](https://github.com/mastra-ai/mastra/commit/7051bf38b3b122a069008f861f7bfc004a6d9f6e), [`a8f1494`](https://github.com/mastra-ai/mastra/commit/a8f1494f4bbdc2770bcf327d4c7d869e332183f1), [`1ee3411`](https://github.com/mastra-ai/mastra/commit/1ee34113192b11aa8bcdd8d9d5830ae13254b345), [`0793497`](https://github.com/mastra-ai/mastra/commit/079349753620c40246ffd673e3f9d7d9820beff3), [`5df9cce`](https://github.com/mastra-ai/mastra/commit/5df9cce1a753438413f64c11eeef8f845745c2a8), [`f93d992`](https://github.com/mastra-ai/mastra/commit/f93d992a37d5431ab4a71246835d403ef7c4ce85), [`a854ede`](https://github.com/mastra-ai/mastra/commit/a854ede62bf5ac0945a624ac48913dd69c73aabf), [`c576fc0`](https://github.com/mastra-ai/mastra/commit/c576fc0b100b2085afded91a37c97a0ea0ec09c7), [`3defc80`](https://github.com/mastra-ai/mastra/commit/3defc80cf2b88a1b7fc1cc4ddcb91e982a614609), [`16153fe`](https://github.com/mastra-ai/mastra/commit/16153fe7eb13c99401f48e6ca32707c965ee28b9), [`9f4a683`](https://github.com/mastra-ai/mastra/commit/9f4a6833e88b52574665c028fd5508ad5c2f6004), [`ea0b8de`](https://github.com/mastra-ai/mastra/commit/ea0b8dec0d4bc86a72a7e75b2f56c6017c58786d), [`bc94344`](https://github.com/mastra-ai/mastra/commit/bc943444a1342d8a662151b7bce1df7dae32f59c), [`d4efaf3`](https://github.com/mastra-ai/mastra/commit/d4efaf34e6ec269714d50984d2ba7858f2d2079f), [`57d157f`](https://github.com/mastra-ai/mastra/commit/57d157f0b163a95c3e6c9eae31bdb11d1bfc64f9), [`903f67d`](https://github.com/mastra-ai/mastra/commit/903f67d184504a273893818c02b961f5423a79ad), [`2a90c55`](https://github.com/mastra-ai/mastra/commit/2a90c55a86a9210697d5adaab5ee94584b079adc), [`0b6112e`](https://github.com/mastra-ai/mastra/commit/0b6112eea01134d2dce13aabda8bb15c37993315), [`eb09742`](https://github.com/mastra-ai/mastra/commit/eb09742197f66c4c38154c3beec78313e69760b2), [`96d35f6`](https://github.com/mastra-ai/mastra/commit/96d35f61376bc2b1bf148648a2c1985bd51bef55), [`5cbe88a`](https://github.com/mastra-ai/mastra/commit/5cbe88aefbd9f933bca669fd371ea36bf939ac6d), [`a1bd7b8`](https://github.com/mastra-ai/mastra/commit/a1bd7b8571db16b94eb01588f451a74758c96d65), [`d78b38d`](https://github.com/mastra-ai/mastra/commit/d78b38d898fce285260d3bbb4befade54331617f), [`0633100`](https://github.com/mastra-ai/mastra/commit/0633100a911ad22f5256471bdf753da21c104742), [`c710c16`](https://github.com/mastra-ai/mastra/commit/c710c1652dccfdc4111c8412bca7a6bb1d48b441), [`354ad0b`](https://github.com/mastra-ai/mastra/commit/354ad0b7b1b8183ac567f236a884fc7ede6d7138), [`cfae733`](https://github.com/mastra-ai/mastra/commit/cfae73394f4920635e6c919c8e95ff9a0788e2e5), [`e3dfda7`](https://github.com/mastra-ai/mastra/commit/e3dfda7b11bf3b8c4bb55637028befb5f387fc74), [`519d9e6`](https://github.com/mastra-ai/mastra/commit/519d9e6d31910457c54bdae8b7b7cb3a69f41831), [`844ea5d`](https://github.com/mastra-ai/mastra/commit/844ea5dc0c248961e7bf73629ae7dcff503e853c), [`398fde3`](https://github.com/mastra-ai/mastra/commit/398fde3f39e707cda79372cdae8f9870e3b57c8d), [`dfe3f8c`](https://github.com/mastra-ai/mastra/commit/dfe3f8c7376ffe159236819e19ca522143c1f972), [`f0f8f12`](https://github.com/mastra-ai/mastra/commit/f0f8f125c308f2d0fd36942ef652fd852df7522f), [`0d7618b`](https://github.com/mastra-ai/mastra/commit/0d7618bc650bf2800934b243eca5648f4aeed9c2), [`7b763e5`](https://github.com/mastra-ai/mastra/commit/7b763e52fc3eaf699c2a99f2adf418dd46e4e9a5), [`e8dcd71`](https://github.com/mastra-ai/mastra/commit/e8dcd71fa5e473c8ba1d6dad99eef182d20a0491), [`d36cfbb`](https://github.com/mastra-ai/mastra/commit/d36cfbbb6565ba5f827883cc9bb648eb14befdc1), [`63f2f18`](https://github.com/mastra-ai/mastra/commit/63f2f1863dffe3ad23221d0660ed4e4f2b81789d), [`3697853`](https://github.com/mastra-ai/mastra/commit/3697853deeb72017d90e0f38a93c1e29221aeca0), [`c23200d`](https://github.com/mastra-ai/mastra/commit/c23200ddfd60830effb39329674ba4ca93be6aac), [`b2e45ec`](https://github.com/mastra-ai/mastra/commit/b2e45eca727a8db01a81ba93f1a5219c7183c839), [`e4ab0a4`](https://github.com/mastra-ai/mastra/commit/e4ab0a4ff7aae1b837cfbd8fb726fc1376165b56), [`d6d49f7`](https://github.com/mastra-ai/mastra/commit/d6d49f7b8714fa19a52ff9c7cf7fb7e73751901e), [`a534e95`](https://github.com/mastra-ai/mastra/commit/a534e9591f83b3cc1ebff99c67edf4cda7bf81d3), [`9d0e7fe`](https://github.com/mastra-ai/mastra/commit/9d0e7feca8ed98de959f53476ee1456073673348), [`53d927c`](https://github.com/mastra-ai/mastra/commit/53d927cc6f03bff33655b7e2b788da445a08731d), [`3f2faf2`](https://github.com/mastra-ai/mastra/commit/3f2faf2e2d685d6c053cc5af1bf9fedf267b2ce5), [`22f64bc`](https://github.com/mastra-ai/mastra/commit/22f64bc1d37149480b58bf2fefe35b79a1e3e7d5), [`363284b`](https://github.com/mastra-ai/mastra/commit/363284bb974e850f06f40f89a28c79d9f432d7e4), [`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc), [`7fa87f0`](https://github.com/mastra-ai/mastra/commit/7fa87f09b9edfd45a274e5e0d5e109d1a5d9ae8b), [`b7959e6`](https://github.com/mastra-ai/mastra/commit/b7959e6e25a46b480f9ea2217c4c6c588c423791), [`bda6370`](https://github.com/mastra-ai/mastra/commit/bda637009360649aaf579919e7873e33553c273e), [`d7acd8e`](https://github.com/mastra-ai/mastra/commit/d7acd8e987b5d7eff4fd98b0906c17c06a2e83d5), [`c7f1f7d`](https://github.com/mastra-ai/mastra/commit/c7f1f7d24f61f247f018cc2d1f33bf63212959a7), [`0bddc6d`](https://github.com/mastra-ai/mastra/commit/0bddc6d8dbd6f6008c0cba2e4960a2da75a55af1), [`735d8c1`](https://github.com/mastra-ai/mastra/commit/735d8c1c0d19fbc09e6f8b66cf41bc7655993838), [`acf322e`](https://github.com/mastra-ai/mastra/commit/acf322e0f1fd0189684cf529d91c694bea918a45), [`c942802`](https://github.com/mastra-ai/mastra/commit/c942802a477a925b01859a7b8688d4355715caaa), [`a0c8c1b`](https://github.com/mastra-ai/mastra/commit/a0c8c1b87d4fee252aebda73e8637fbe01d761c9), [`cc34739`](https://github.com/mastra-ai/mastra/commit/cc34739c34b6266a91bea561119240a7acf47887), [`c218bd3`](https://github.com/mastra-ai/mastra/commit/c218bd3759e32423735b04843a09404572631014), [`2c4438b`](https://github.com/mastra-ai/mastra/commit/2c4438b87817ab7eed818c7990fef010475af1a3), [`2b8893c`](https://github.com/mastra-ai/mastra/commit/2b8893cb108ef9acb72ee7835cd625610d2c1a4a), [`8e5c75b`](https://github.com/mastra-ai/mastra/commit/8e5c75bdb1d08a42d45309a4c72def4b6890230f), [`e59e0d3`](https://github.com/mastra-ai/mastra/commit/e59e0d32afb5fcf2c9f3c00c8f81f6c21d3a63fa), [`fa8409b`](https://github.com/mastra-ai/mastra/commit/fa8409bc39cfd8ba6643b9db5269b90b22e2a2f7), [`173c535`](https://github.com/mastra-ai/mastra/commit/173c535c0645b0da404fe09f003778f0b0d4e019)]:
+  - @mastra/core@1.0.0-beta.0
+  - @mastra/client-js@1.0.0-beta.0
+  - @mastra/ai-sdk@1.0.0-beta.0
+  - @mastra/react@0.1.0-beta.0
+
 ## 6.6.2
 
 ### Patch Changes

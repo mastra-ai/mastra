@@ -46,12 +46,12 @@ test('initial workflow run state', async ({ page }) => {
   await expect(nodes.nth(0)).toContainText('add-letter');
   await expect(nodes.nth(1)).toContainText('add-letter-b');
   await expect(nodes.nth(2)).toContainText('add-letter-c');
-  await expect(nodes.nth(3)).toContainText('mapping');
+  await expect(nodes.nth(3)).toContainText('MAP'); // MAP badge now shows formatted label
   await expect(nodes.nth(4)).toContainText('WHEN');
   await expect(nodes.nth(5)).toContainText('short-text'); // condition short path
   await expect(nodes.nth(6)).toContainText('WHEN');
   await expect(nodes.nth(7)).toContainText('long-text'); // condition long path
-  await expect(nodes.nth(8)).toContainText('mapping');
+  await expect(nodes.nth(8)).toContainText('MAP'); // MAP badge now shows formatted label
   await expect(nodes.nth(9)).toContainText('nested-text-processor');
   await expect(nodes.nth(10)).toContainText('add-letter-with-count');
   await expect(nodes.nth(11)).toContainText('DOUNTIL');

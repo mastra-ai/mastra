@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
