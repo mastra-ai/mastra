@@ -35,14 +35,35 @@ export const isProtectedPath = (
   method: string,
   authConfig: MastraAuthConfig,
   customRouteAuthConfig?: Map<string, boolean>,
+  apiRootPath?: string,
 ): boolean => {
-  const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
+  const defaultProtected = (defaultAuthConfig.protected || []).map(pattern => {
+    if (typeof pattern === 'string' && pattern.startsWith('/api/')) {
+      return pattern.replace('/api/', `${apiRootPath || '/api'}/`);
+    }
+    if (typeof pattern === 'string' && pattern === '/api') {
+      return apiRootPath || '/api';
+    }
+    return pattern;
+  });
+
+  const protectedAccess = [...defaultProtected, ...(authConfig.protected || [])];
   return isAnyMatch(path, method, protectedAccess) || !isCustomRoutePublic(path, method, customRouteAuthConfig);
 };
 
-export const canAccessPublicly = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
+export const canAccessPublicly = (path: string, method: string, authConfig: MastraAuthConfig, apiRootPath?: string): boolean => {
   // Check if this path+method combination is publicly accessible
-  const publicAccess = [...(defaultAuthConfig.public || []), ...(authConfig.public || [])];
+  const defaultPublic = (defaultAuthConfig.public || []).map(pattern => {
+    if (typeof pattern === 'string' && pattern.startsWith('/api/')) {
+      return pattern.replace('/api/', `${apiRootPath || '/api'}/`);
+    }
+    if (typeof pattern === 'string' && pattern === '/api') {
+      return apiRootPath || '/api';
+    }
+    return pattern;
+  });
+
+  const publicAccess = [...defaultPublic, ...(authConfig.public || [])];
 
   return isAnyMatch(path, method, publicAccess);
 };
@@ -88,11 +109,18 @@ export const pathMatchesPattern = (path: string, pattern: string): boolean => {
   return path === pattern;
 };
 
-export const pathMatchesRule = (path: string, rulePath: string | RegExp | string[] | undefined): boolean => {
+export const pathMatchesRule = (path: string, rulePath: string | RegExp | string[] | undefined, apiRootPath?: string): boolean => {
   if (!rulePath) return true; // No path specified means all paths
 
   if (typeof rulePath === 'string') {
-    return pathMatchesPattern(path, rulePath);
+    // Adjust default API paths to use the configured apiRootPath
+    let adjustedRulePath = rulePath;
+    if (rulePath.startsWith('/api/')) {
+      adjustedRulePath = rulePath.replace('/api/', `${apiRootPath || '/api'}/`);
+    } else if (rulePath === '/api') {
+      adjustedRulePath = apiRootPath || '/api';
+    }
+    return pathMatchesPattern(path, adjustedRulePath);
   }
 
   if (rulePath instanceof RegExp) {
@@ -100,7 +128,16 @@ export const pathMatchesRule = (path: string, rulePath: string | RegExp | string
   }
 
   if (Array.isArray(rulePath)) {
-    return rulePath.some(p => pathMatchesPattern(path, p));
+    return rulePath.some(p => {
+      // Adjust default API paths to use the configured apiRootPath
+      let adjustedPath = p;
+      if (typeof p === 'string' && p.startsWith('/api/')) {
+        adjustedPath = p.replace('/api/', `${apiRootPath || '/api'}/`);
+      } else if (typeof p === 'string' && p === '/api') {
+        adjustedPath = apiRootPath || '/api';
+      }
+      return pathMatchesPattern(path, adjustedPath);
+    });
   }
 
   return false;
@@ -124,12 +161,13 @@ export const checkRules = async (
   path: string,
   method: string,
   user: unknown,
+  apiRootPath?: string,
 ): Promise<boolean> => {
   // Go through rules in order (first match wins)
   for (const i in rules || []) {
     const rule = rules?.[i]!;
     // Check if rule applies to this path
-    if (!pathMatchesRule(path, rule.path)) {
+    if (!pathMatchesRule(path, rule.path, apiRootPath)) {
       continue;
     }
 
