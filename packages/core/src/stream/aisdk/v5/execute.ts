@@ -124,7 +124,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
         const pRetry = await import('p-retry');
         return await pRetry.default(
           async () => {
-            const streamResult = await model.doStream({
+            const streamResult = await model.doGenerate({
               ...toolsAndToolChoice,
               prompt,
               providerOptions: providerOptionsToUse,

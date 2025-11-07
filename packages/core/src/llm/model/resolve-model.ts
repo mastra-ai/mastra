@@ -79,14 +79,14 @@ export async function resolveModelConfig(
 
   // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
   if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {
-    return new ModelRouterLanguageModel(modelConfig);
+    return new ModelRouterLanguageModel(modelConfig) as unknown as MastraLanguageModel;
   }
 
   // If it's a function, resolve it first
   if (typeof modelConfig === 'function') {
     const fromDynamic = await modelConfig({ requestContext, mastra });
     if (typeof fromDynamic === 'string' || isOpenAICompatibleObjectConfig(fromDynamic)) {
-      return new ModelRouterLanguageModel(fromDynamic);
+      return new ModelRouterLanguageModel(fromDynamic) as unknown as MastraLanguageModel;
     }
     return fromDynamic;
   }

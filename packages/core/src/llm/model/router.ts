@@ -17,7 +17,11 @@ function getStaticProvidersByGateway(name: string) {
 
 export const gateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
 
-export class ModelRouterLanguageModel implements LanguageModelV2 {
+type CustomModel = Omit<LanguageModelV2, 'doGenerate'> & {
+  doGenerate(options: LanguageModelV2CallOptions): Promise<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
+};
+
+export class ModelRouterLanguageModel implements CustomModel {
   readonly specificationVersion = 'v2' as const;
   readonly defaultObjectGenerationMode = 'json' as const;
   readonly supportsStructuredOutputs = true;
@@ -85,11 +89,100 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
     this.config = parsedConfig;
   }
 
-  async doGenerate(): Promise<never> {
-    throw new Error(
-      'doGenerate is not supported by Mastra model router. ' +
-        'Mastra only uses streaming (doStream) for all LLM calls.',
-    );
+  async doGenerate(options: LanguageModelV2CallOptions) {
+    let apiKey: string;
+    try {
+      // If custom URL is provided, skip gateway API key resolution
+      // The provider might not be in the registry (e.g., custom providers like ollama)
+      if (this.config.url) {
+        apiKey = this.config.apiKey || '';
+      } else {
+        apiKey = this.config.apiKey || (await this.gateway.getApiKey(this.config.routerId));
+      }
+    } catch (error) {
+      // Return an error stream instead of throwing
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'error',
+              error: error,
+            } as LanguageModelV2StreamPart);
+          },
+        }),
+      } as never;
+    }
+
+    const model = await this.resolveLanguageModel({
+      apiKey,
+      ...parseModelRouterId(this.config.routerId, this.gateway.prefix),
+    });
+
+    //
+    const result = await model.doGenerate(options);
+
+    return {
+      request: result.request,
+      response: result.response,
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: result.warnings });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: result.response?.id,
+            modelId: result.response?.modelId,
+            timestamp: result.response?.timestamp,
+          });
+
+          for (const message of result.content) {
+            if (message.type === 'tool-call') {
+              const toolCall = message;
+              controller.enqueue({
+                type: 'tool-input-start',
+                id: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+              });
+              controller.enqueue({
+                type: 'tool-input-delta',
+                id: toolCall.toolCallId,
+                delta: toolCall.input,
+              });
+              controller.enqueue({
+                type: 'tool-input-end',
+                id: toolCall.toolCallId,
+              });
+              controller.enqueue(toolCall);
+            } else if (message.type === 'text') {
+              const text = message;
+              const id = 'msg_dummy_id';
+              controller.enqueue({
+                type: 'text-start',
+                id,
+                providerMetadata: text.providerMetadata,
+              });
+              controller.enqueue({
+                type: 'text-delta',
+                id,
+                delta: text.text,
+              });
+              controller.enqueue({
+                type: 'text-end',
+                id,
+              });
+            }
+          }
+
+          controller.enqueue({
+            type: 'finish',
+            finishReason: result.finishReason,
+            usage: result.usage,
+            providerMetadata: result.providerMetadata,
+          });
+
+          controller.close();
+        },
+      }),
+    } satisfies Awaited<ReturnType<LanguageModelV2['doStream']>>;
   }
 
   async doStream(options: LanguageModelV2CallOptions): Promise<Awaited<ReturnType<LanguageModelV2['doStream']>>> {
