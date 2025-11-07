@@ -90,7 +90,10 @@
     "@types/node": "^20.19.21",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
-    "jsondiffpatch": ">=0.7.3"
+    "jsondiffpatch": ">=0.7.3",
+    "glob": ">=11.0.0",
+    "rimraf": ">=6.0.0",
+    "@npmcli/move-file": ">=3.0.0"
   },
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.2",
