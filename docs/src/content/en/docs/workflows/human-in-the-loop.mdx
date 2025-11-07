@@ -89,7 +89,7 @@ The data returned by the step can include a reason and help the user understand 
 { reason: 'Confirm to send email.' }
 ```
 
-## Resuming workflows with human input
+## Resuming workflows with human input - TODO
 
 As with [restarting a workflow](/docs/workflows/suspend-and-resume#restarting-a-workflow-with-resume), call `resume()` with `resumeData` to restart the workflow from the step where it was paused.
 
@@ -111,6 +111,36 @@ const handleResume = async () => {
     resumeData: { okToSend: true }
   });
 };
+```
+
+### Bailing workflows - TODO Rejecting human input?
+
+You can exit a workflow and gracefully complete the flow using `bail()`...
+
+```typescript {13} showLineNumbers copy
+const step1 = createStep({
+  // ...
+  execute: async ({ inputData, resumeData, suspend, bail }) => {
+    const { userEmail } = inputData;
+    const { okToSend } = resumeData ?? {};
+
+    if (okToSend === false) {
+      return bail({
+        reason: "User rejected the request"
+      });
+    }
+
+    if (!okToSend) {
+      return await suspend({
+        reason: "Human approval required."
+      });
+    }
+
+    return {
+      message: `Email sent to ${userEmail}`
+    };
+  }
+});
 ```
 
 ## Multi-turn human input
