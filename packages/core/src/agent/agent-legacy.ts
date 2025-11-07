@@ -278,7 +278,7 @@ export class AgentLegacyHandler {
           methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
         });
 
-        const messageList = new MessageList({
+        let messageList = new MessageList({
           threadId,
           resourceId,
           generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
@@ -361,6 +361,13 @@ export class AgentLegacyHandler {
           });
         }
 
+        // Set memory context in RequestContext for processors to access
+        requestContext.set('MastraMemory', {
+          thread: threadObject,
+          resourceId,
+          memoryConfig,
+        });
+
         const config = memory.getMergedThreadConfig(memoryConfig || {});
         const hasResourceScopeSemanticRecall =
           (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
@@ -394,82 +401,63 @@ export class AgentLegacyHandler {
           memorySystemMessage = ``;
         }
         if (resultsFromOtherThreads.length) {
-          memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${(() => {
-            let result = ``;
+          memorySystemMessage += `
+The following messages were remembered from a different conversation:
+<remembered_from_other_conversation>
+${(() => {
+  let result = ``;
 
-            const messages = new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1();
-            let lastYmd: string | null = null;
-            for (const msg of messages) {
-              const date = msg.createdAt;
-              const year = date.getUTCFullYear();
-              const month = date.toLocaleString('default', { month: 'short' });
-              const day = date.getUTCDate();
-              const ymd = `${year}, ${month}, ${day}`;
-              const utcHour = date.getUTCHours();
-              const utcMinute = date.getUTCMinutes();
-              const hour12 = utcHour % 12 || 12;
-              const ampm = utcHour < 12 ? 'AM' : 'PM';
-              const timeofday = `${hour12}:${utcMinute < 10 ? '0' : ''}${utcMinute} ${ampm}`;
+  const messages = new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1();
+  let lastYmd: string | null = null;
+  for (const msg of messages) {
+    const date = msg.createdAt;
+    const year = date.getUTCFullYear();
+    const month = date.toLocaleString('default', { month: 'short' });
+    const day = date.getUTCDate();
+    const ymd = `${year}, ${month}, ${day}`;
+    const utcHour = date.getUTCHours();
+    const utcMinute = date.getUTCMinutes();
+    const hour12 = utcHour % 12 || 12;
+    const ampm = utcHour < 12 ? 'AM' : 'PM';
+    const timeofday = `${hour12}:${utcMinute < 10 ? '0' : ''}${utcMinute} ${ampm}`;
 
-              if (!lastYmd || lastYmd !== ymd) {
-                result += `\nthe following messages are from ${ymd}\n`;
-              }
-              result += `
+    if (!lastYmd || lastYmd !== ymd) {
+      result += `
+the following messages are from ${ymd}
+`;
+    }
+    result += `
   Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
 
-              lastYmd = ymd;
-            }
-            return result;
-          })()}\n<end_remembered_from_other_conversation>`;
+    lastYmd = ymd;
+  }
+  return result;
+})()}
+<end_remembered_from_other_conversation>`;
         }
 
         if (memorySystemMessage) {
           messageList.addSystem(memorySystemMessage, 'memory');
         }
 
-        messageList
-          .add(
-            memoryMessages.filter((m: MastraDBMessage) => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
-            'memory',
-          )
-          // add new user messages to the list AFTER remembered messages to make ordering more reliable
-          .add(messages, 'user');
+        // Add new user messages to the list
+        // Historical messages will be added by MessageHistory input processor
+        messageList.add(messages, 'user');
 
-        const { tripwireTriggered, tripwireReason } = await this.capabilities.__runInputProcessors({
+        const {
+          messageList: processedMessageList,
+          tripwireTriggered,
+          tripwireReason,
+        } = await this.capabilities.__runInputProcessors({
           requestContext,
           tracingContext: innerTracingContext,
           messageList,
         });
+        messageList = processedMessageList;
 
-        const systemMessages = messageList.getSystemMessages();
-
-        const systemMessage =
-          [...systemMessages, ...messageList.getSystemMessages('memory')]?.map(m => m.content)?.join(`\n`) ?? undefined;
-
-        const processedMemoryMessages = await memory.processMessages({
-          // these will be processed
-          messages: messageList.get.remembered.v1() as CoreMessage[],
-          // these are here for inspecting but shouldn't be returned by the processor
-          // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
-          newMessages: messageList.get.input.v1() as CoreMessage[],
-          systemMessage,
-          memorySystemMessage: memorySystemMessage || undefined,
-        });
-
-        const processedList = new MessageList({
-          threadId: threadObject.id,
-          resourceId,
-          generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-ignore Flag for agent network messages
-          _agentNetworkAppend: this.capabilities._agentNetworkAppend,
-        })
-          .addSystem(instructions || (await this.capabilities.getInstructions({ requestContext })))
-          .addSystem(memorySystemMessage)
-          .addSystem(systemMessages)
-          .add(context || [], 'context')
-          .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.db(), 'user')
-          .get.all.prompt();
+        // Messages are already processed by __runInputProcessors above
+        // which includes memory processors (WorkingMemory, MessageHistory, etc.)
+        const processedList = messageList.get.all.prompt();
 
         return {
           convertedTools,

@@ -86,7 +86,7 @@ export function createPrepareMemoryStep<
       addSystemMessage(messageList, options.system, 'user-provided');
 
       if (!memory || (!thread?.id && !resourceId)) {
-        messageList.add(options.messages, 'user');
+        messageList.add(options.messages, 'input');
         const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
           requestContext,
           tracingContext,
@@ -158,81 +158,15 @@ export function createPrepareMemoryStep<
         });
       }
 
-      const config = memory.getMergedThreadConfig(memoryConfig || {});
-      const hasResourceScopeSemanticRecall =
-        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
-        config?.semanticRecall === true;
-      let [memoryResult, memorySystemMessage] = await Promise.all([
-        existingThread || hasResourceScopeSemanticRecall
-          ? capabilities.getMemoryMessages({
-              resourceId,
-              threadId: threadObject.id,
-              vectorMessageSearch: new MessageList().add(options.messages, `user`).getLatestUserContent() || '',
-              memoryConfig,
-              requestContext,
-            })
-          : { messages: [] },
-        memory.getSystemMessage({
-          threadId: threadObject.id,
-          resourceId,
-          memoryConfig: capabilities._agentNetworkAppend
-            ? { ...memoryConfig, workingMemory: { enabled: false } }
-            : memoryConfig,
-        }),
-      ]);
-
-      const memoryMessages = memoryResult.messages;
-
-      capabilities.logger.debug('Fetched messages from memory', {
-        threadId: threadObject.id,
-        runId,
-        fetchedCount: memoryMessages.length,
+      // Set memory context in RequestContext for processors to access
+      requestContext.set('MastraMemory', {
+        thread: threadObject,
+        resourceId,
+        memoryConfig,
       });
 
-      // Handle messages from other threads
-      const resultsFromOtherThreads = memoryMessages.filter((m: any) => m.threadId !== threadObject.id);
-      if (resultsFromOtherThreads.length && !memorySystemMessage) {
-        memorySystemMessage = ``;
-      }
-      if (resultsFromOtherThreads.length) {
-        memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${(() => {
-          let result = ``;
-
-          const messages = new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1();
-          let lastYmd: string | null = null;
-          for (const msg of messages) {
-            const date = msg.createdAt;
-            const year = date.getUTCFullYear();
-            const month = date.toLocaleString('default', { month: 'short' });
-            const day = date.getUTCDate();
-            const ymd = `${year}, ${month}, ${day}`;
-            const utcHour = date.getUTCHours();
-            const utcMinute = date.getUTCMinutes();
-            const hour12 = utcHour % 12 || 12;
-            const ampm = utcHour < 12 ? 'AM' : 'PM';
-            const timeofday = `${hour12}:${utcMinute < 10 ? '0' : ''}${utcMinute} ${ampm}`;
-
-            if (!lastYmd || lastYmd !== ymd) {
-              result += `\nthe following messages are from ${ymd}\n`;
-            }
-            result += `Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
-
-            lastYmd = ymd;
-          }
-          return result;
-        })()}\n<end_remembered_from_other_conversation>`;
-      }
-
-      if (memorySystemMessage) {
-        messageList.addSystem(memorySystemMessage, 'memory');
-      }
-
-      messageList
-        .add(
-          memoryMessages.filter((m: any) => m.threadId === threadObject.id),
-          'memory',
-        )
-        .add(options.messages, 'user');
+      // Add user messages - memory processors will handle history/semantic recall/working memory
+      messageList.add(options.messages, 'input');
 
       const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
         requestContext,
@@ -241,43 +175,18 @@ export function createPrepareMemoryStep<
         inputProcessorOverrides: options.inputProcessors,
       });
 
-      const systemMessages = messageList.getSystemMessages();
+      // Add instructions as system message(s) to the existing messageList
+      // which already contains processed historical messages from input processors
+      addSystemMessage(messageList, instructions);
 
-      const systemMessage =
-        [...systemMessages, ...messageList.getSystemMessages('memory')]?.map((m: any) => m.content)?.join(`\n`) ??
-        undefined;
-
-      const processedMemoryMessages = await memory.processMessages({
-        messages: messageList.get.remembered.v1() as any,
-        newMessages: messageList.get.input.v1() as any,
-        systemMessage,
-        memorySystemMessage: memorySystemMessage || undefined,
-      });
-
-      const processedList = new MessageList({
-        threadId: threadObject.id,
-        resourceId,
-        generateMessageId: capabilities.generateMessageId,
-        // @ts-ignore Flag for agent network messages
-        _agentNetworkAppend: capabilities._agentNetworkAppend,
-      });
-
-      // Add instructions as system message(s)
-      addSystemMessage(processedList, instructions);
-
-      processedList
-        .addSystem(memorySystemMessage)
-        .addSystem(systemMessages)
-        .add(options.context || [], 'context');
+      messageList.add(options.context || [], 'context');
 
       // Add user-provided system message if present
-      addSystemMessage(processedList, options.system, 'user-provided');
-
-      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.db(), 'user');
+      addSystemMessage(messageList, options.system, 'user-provided');
 
       return {
         thread: threadObject,
-        messageList: processedList,
+        messageList: messageList,
         ...(tripwireTriggered && {
           tripwire: true,
           tripwireReason,

@@ -100,10 +100,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
               content: inputData.map(toolCall => {
                 return {
                   type: 'tool-result',
-                  args: toolCall.args,
+                  input: toolCall.args, // AI SDK v5 uses 'input' instead of 'args'
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
-                  result: toolCall.result,
+                  output: toolCall.result, // AI SDK v5 uses 'output' instead of 'result'
                 };
               }),
             },
