@@ -209,6 +209,7 @@
     "mistral": {
       "url": "https://api.mistral.ai/v1",
       "apiKeyEnvVar": "MISTRAL_API_KEY",
+      "apiKeyHeader": "Authorization",
       "name": "Mistral",
       "models": [
         "codestral-latest",
@@ -330,10 +331,10 @@
       "gateway": "models.dev"
     },
     "nebius": {
-      "url": "https://api.tokenfactory.nebius.com/v1",
+      "url": "https://api.studio.nebius.com/v1/",
       "apiKeyEnvVar": "NEBIUS_API_KEY",
       "apiKeyHeader": "Authorization",
-      "name": "Nebius Token Factory",
+      "name": "Nebius AI Studio",
       "models": [
         "NousResearch/hermes-4-405b",
         "NousResearch/hermes-4-70b",
@@ -351,7 +352,7 @@
         "zai-org/glm-4.5",
         "zai-org/glm-4.5-air"
       ],
-      "docUrl": "https://docs.tokenfactory.nebius.com/",
+      "docUrl": "https://docs.studio.nebius.com/quickstart",
       "gateway": "models.dev"
     },
     "deepseek": {
