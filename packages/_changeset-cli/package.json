@@ -25,7 +25,7 @@
     "@inquirer/editor": "^4.2.21",
     "@manypkg/get-packages": "^2.2.2",
     "@manypkg/tools": "^2.1.0",
-    "@octokit/rest": "^22.0.0",
+    "@octokit/rest": "^22.0.1",
     "citty": "^0.1.6",
     "dotenv": "^17.2.3",
     "execa": "^9.6.0",
