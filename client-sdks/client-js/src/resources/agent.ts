@@ -55,7 +55,7 @@ async function executeToolCallAndRespond({
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
       response as unknown as {
-        toolCalls: { toolName: string; args: any; toolCallId: string }[];
+        toolCalls: { payload: { toolName: string; args: any; toolCallId: string } }[];
         messages: CoreMessage[];
       }
     ).toolCalls;
@@ -65,15 +65,15 @@ async function executeToolCallAndRespond({
     }
 
     for (const toolCall of toolCalls) {
-      const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+      const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(toolCall?.args, {
+        const result = await clientTool.execute(toolCall?.payload.args, {
           requestContext: requestContext as RequestContext,
           tracingContext: { currentSpan: undefined },
           agent: {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
-            toolCallId: toolCall?.toolCallId,
+            toolCallId: toolCall?.payload.toolCallId,
             suspend: async () => {},
             threadId,
             resourceId,
@@ -89,8 +89,8 @@ async function executeToolCallAndRespond({
             content: [
               {
                 type: 'tool-result',
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
+                toolCallId: toolCall.payload.toolCallId,
+                toolName: toolCall.payload.toolName,
                 result,
               },
             ],
