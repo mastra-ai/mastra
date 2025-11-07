@@ -407,6 +407,9 @@ importers:
 
   deployers/cloud:
     dependencies:
+      '@mastra/cloud-storage':
+        specifier: workspace:*
+        version: link:../../stores/mastra-cloud
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../../packages/deployer
@@ -3284,6 +3287,40 @@ importers:
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../packages/_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@microsoft/api-extractor':
+        specifier: ^7.52.8
+        version: 7.53.1(@types/node@20.19.23)
+      '@types/node':
+        specifier: ^20.19.21
+        version: 20.19.23
+      eslint:
+        specifier: ^9.37.0
+        version: 9.38.0(jiti@2.6.1)
+      tsup:
+        specifier: ^8.5.0
+        version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+
+  stores/mastra-cloud:
+    dependencies:
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../libsql
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder

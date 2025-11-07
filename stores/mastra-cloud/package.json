@@ -1,13 +1,8 @@
 {
-  "name": "@mastra/deployer-cloud",
+  "name": "@mastra/cloud-storage",
   "version": "1.0.0-beta.0",
-  "description": "",
+  "description": "Mastra Cloud storage provider - LibSQL-based storage for Mastra Cloud deployments",
   "type": "module",
-  "files": [
-    "dist",
-    "CHANGELOG.md",
-    "versions.json"
-  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -27,44 +22,39 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint .",
-    "prepack": "node scripts/sync-versions.mjs"
+    "lint": "eslint ."
   },
-  "keywords": [],
   "license": "Apache-2.0",
   "dependencies": {
-    "@mastra/deployer": "workspace:^",
-    "@mastra/loggers": "workspace:*",
-    "@mastra/cloud-storage": "workspace:*",
-    "execa": "^9.6.0",
-    "fs-extra": "^11.3.2",
-    "pino": "^9.7.0",
-    "redis": "^5.8.3"
+    "@mastra/libsql": "workspace:*"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@manypkg/get-packages": "^3.1.0",
-    "@types/fs-extra": "^11.0.4",
+    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://mastra.ai",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "deployers/cloud"
+    "directory": "stores/mastra-cloud"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
-  "homepage": "https://mastra.ai",
   "engines": {
     "node": ">=22.13.0"
   }
