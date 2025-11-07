@@ -14,8 +14,10 @@ export const actionRunPathParams = z.object({
 // Import them from workflows
 export {
   listWorkflowRunsQuerySchema,
+  optionalRunIdQuerySchema,
+  resumeBodySchema,
+  runIdQuerySchema,
   streamWorkflowBodySchema,
-  resumeStreamBodySchema,
   startAsyncWorkflowBodySchema,
   sendWorkflowRunEventBodySchema,
   workflowExecutionResultSchema,
