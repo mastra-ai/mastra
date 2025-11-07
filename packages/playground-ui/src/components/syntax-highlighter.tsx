@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 
-export const useCodemirrorTheme = (): Extension[] => {
+export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => {
     const baseTheme = draculaInit({
       settings: {
@@ -30,7 +30,7 @@ export const useCodemirrorTheme = (): Extension[] => {
       },
     });
 
-    // Merge both into a single Extension[]
+    // Compose both extensions into a single Extension
     return [baseTheme, customLineNumberTheme];
   }, []);
 };
