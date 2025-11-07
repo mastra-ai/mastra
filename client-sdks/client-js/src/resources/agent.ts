@@ -1137,7 +1137,7 @@ export class Agent extends BaseResource {
                 const text = new TextDecoder().decode(chunk);
                 const lines = text.split('\n\n');
                 const readableLines = lines
-                  .filter(line => line !== '[DONE]' && line !== 'data: [DONE]' && !line.includes('[DONE]'))
+                  .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
                   .join('\n\n');
                 if (readableLines) {
                   const encoded = new TextEncoder().encode(readableLines);
