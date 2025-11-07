@@ -129,23 +129,23 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 
 ## Methods
 
-### listTools()
+### getTools()
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
 
 ```ts
-new Agent({ tools: await mcp.listTools() });
+new Agent({ tools: await mcp.getTools() });
 ```
 
-### listToolsets()
+### getToolsets()
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
 Intended to be passed dynamically into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
-  toolsets: await mcp.listToolsets(),
+  toolsets: await mcp.getToolsets(),
 });
 ```
 
