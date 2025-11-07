@@ -90,19 +90,35 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
 });
 
 /**
+ * Query parameter schema for runId (required)
+ * Used by stream, resume-stream, start-async routes where runId comes from query
+ */
+export const runIdQuerySchema = z.object({
+  runId: z.string(),
+});
+
+/**
+ * Query parameter schema for runId (optional)
+ * Used by create-run route where runId is optional
+ */
+export const optionalRunIdQuerySchema = z.object({
+  runId: z.string().optional(),
+});
+
+/**
  * Schema for stream workflow body
  * Used by both /stream and /streamVNext endpoints
  */
 export const streamWorkflowBodySchema = z.object({
-  runId: z.string().optional(),
   inputData: z.unknown().optional(),
   tracingOptions: z.object({}).passthrough().optional(),
 });
 
 /**
- * Schema for resume stream workflow body
+ * Schema for resume workflow body
+ * Used by resume-stream, resume-async and resume endpoints
  */
-export const resumeStreamBodySchema = z.object({
+export const resumeBodySchema = z.object({
   step: z.union([z.string(), z.array(z.string())]),
   resumeData: z.unknown().optional(),
 });
@@ -111,7 +127,6 @@ export const resumeStreamBodySchema = z.object({
  * Schema for start async workflow body
  */
 export const startAsyncWorkflowBodySchema = z.object({
-  runId: z.string().optional(),
   inputData: z.unknown().optional(),
   tracingOptions: z.object({}).passthrough().optional(),
 });
