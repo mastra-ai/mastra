@@ -38,10 +38,15 @@ const z = require('zod');
  * Mock Voice implementation for testing
  */
 export class MockVoice extends MastraVoice {
-  async speak(): Promise<NodeJS.ReadableStream> {
-    const stream = new PassThrough();
-    stream.end('mock audio');
-    return stream;
+  async speak(): Promise<ReadableStream> {
+    // Return a web ReadableStream instead of NodeJS stream
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('mock audio data'));
+        controller.close();
+      },
+    });
+    return stream as any;
   }
 
   async listen(): Promise<string> {
@@ -136,10 +141,39 @@ export function createTestAgent(
 export function mockAgentMethods(agent: Agent) {
   // Mock agent methods that would normally require API calls
   vi.spyOn(agent, 'generate').mockResolvedValue({ text: 'test response' } as any);
-  vi.spyOn(agent, 'stream').mockResolvedValue({
-    toTextStreamResponse: vi.fn().mockReturnValue(new Response()),
-    toDataStreamResponse: vi.fn().mockReturnValue(new Response()),
-  } as any);
+
+  // Create a reusable mock stream that has ReadableStream interface
+  const createMockStream = () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"type":"text-delta","textDelta":"test"}\n\n'));
+        controller.close();
+      },
+    });
+
+    return {
+      getReader: () => stream.getReader(),
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'text-delta', textDelta: 'test' };
+      },
+    };
+  };
+
+  // Mock stream method
+  vi.spyOn(agent, 'stream').mockResolvedValue(createMockStream() as any);
+
+  // Mock approveToolCall method
+  vi.spyOn(agent, 'approveToolCall').mockResolvedValue(createMockStream() as any);
+
+  // Mock declineToolCall method
+  vi.spyOn(agent, 'declineToolCall').mockResolvedValue(createMockStream() as any);
+
+  // Mock network method
+  vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
+
+  // Mock getVoice to return the voice object that the handler expects
+  const mockVoice = createMockVoice();
+  vi.spyOn(agent, 'getVoice').mockResolvedValue(mockVoice);
 
   // Mock model list methods with proper model data structure
   vi.spyOn(agent, 'getModelList').mockResolvedValue([

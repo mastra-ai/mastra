@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import { Mastra } from '@mastra/core/mastra';
+import type { Agent } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { AGENTS_ROUTES } from '../agents';
 import { createRouteTestSuite } from './route-test-suite';

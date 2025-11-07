@@ -250,13 +250,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
           const mastra = getMastra();
           const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' });
 
-          if (route.responseType === 'stream') {
-            // For stream handlers, consume first chunk to trigger error
-            const generator = (await route.handler(params)) as unknown as AsyncGenerator;
-            await expect(generator.next()).rejects.toThrow();
-          } else {
-            await expect(route.handler(params)).rejects.toThrow();
-          }
+          // Both stream and JSON handlers throw validation errors immediately
+          await expect(route.handler(params)).rejects.toThrow();
         });
 
         it('should return properly formatted error response', async () => {
@@ -264,12 +259,8 @@ export function createRouteTestSuite(config: RouteTestConfig) {
           const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' });
 
           try {
-            if (route.responseType === 'stream') {
-              const generator = (await route.handler(params)) as unknown as AsyncGenerator;
-              await generator.next();
-            } else {
-              await route.handler(params);
-            }
+            // Both stream and JSON handlers throw immediately
+            await route.handler(params);
             // Should not reach here
             expect(true).toBe(false);
           } catch (error: any) {
