@@ -10,9 +10,8 @@ import {
   WorkflowRunList,
   WorkflowInformation,
   useWorkflowRunExecutionResult,
+  Skeleton,
 } from '@mastra/playground-ui';
-
-import { Skeleton } from '@/components/ui/skeleton';
 
 import { WorkflowHeader } from './workflow-header';
 import { WorkflowRunState } from '@mastra/core/workflows';
