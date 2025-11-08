@@ -1,5 +1,5 @@
 import z from 'zod';
-import { createPagePaginationSchema } from './memory';
+import { createPagePaginationSchema, baseLogMessageSchema } from './common';
 
 // Path parameter schemas
 export const transportIdPathParams = z.object({
@@ -21,7 +21,7 @@ export const listLogsQuerySchema = createPagePaginationSchema().extend({
 
 // Response schemas
 export const listLogsResponseSchema = z.object({
-  logs: z.array(z.unknown()), // BaseLogMessage - complex type
+  logs: z.array(baseLogMessageSchema),
   total: z.number(),
   page: z.number(),
   perPage: z.number(),

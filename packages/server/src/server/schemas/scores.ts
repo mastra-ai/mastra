@@ -1,4 +1,5 @@
 import z from 'zod';
+import { paginationInfoSchema } from './common';
 
 /**
  * Schema for sampling configuration
@@ -78,13 +79,6 @@ export const saveScoreBodySchema = z.object({
 });
 
 // Response schemas
-const paginationInfoSchema = z.object({
-  total: z.number(),
-  page: z.number(),
-  perPage: z.number(),
-  hasMore: z.boolean(),
-});
-
 export const scoresWithPaginationResponseSchema = z.object({
   pagination: paginationInfoSchema,
   scores: z.array(z.unknown()), // Array of score records

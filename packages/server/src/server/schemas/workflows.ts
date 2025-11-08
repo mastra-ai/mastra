@@ -1,5 +1,6 @@
 import z from 'zod';
-import { createOffsetPaginationSchema } from './memory';
+import { createOffsetPaginationSchema } from './common';
+import { tracingOptionsSchema } from './common';
 
 // Path parameter schemas
 export const workflowIdPathParams = z.object({
@@ -111,7 +112,7 @@ export const optionalRunIdQuerySchema = z.object({
  */
 export const streamWorkflowBodySchema = z.object({
   inputData: z.unknown().optional(),
-  tracingOptions: z.object({}).passthrough().optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
 });
 
 /**
@@ -128,7 +129,7 @@ export const resumeBodySchema = z.object({
  */
 export const startAsyncWorkflowBodySchema = z.object({
   inputData: z.unknown().optional(),
-  tracingOptions: z.object({}).passthrough().optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
 });
 
 /**

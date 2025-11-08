@@ -1,4 +1,10 @@
 import z from 'zod';
+import {
+  paginationInfoSchema,
+  createPagePaginationSchema,
+  createOffsetPaginationSchema,
+  coreMessageSchema,
+} from './common';
 
 // Path parameter schemas
 export const threadIdPathParams = z.object({
@@ -21,60 +27,6 @@ const storageOrderBySchema = z.object({
 });
 
 /**
- * Pagination information in responses
- */
-const paginationInfoSchema = z.object({
-  total: z.number(),
-  page: z.number(),
-  perPage: z.number(),
-  hasMore: z.boolean(),
-});
-
-/**
- * Factory function for page/perPage pagination
- * @param defaultPerPage - Default value for perPage (can be number or undefined for no default)
- */
-export const createPagePaginationSchema = (defaultPerPage?: number) => {
-  const baseSchema = {
-    page: z.coerce.number().optional().default(0),
-  };
-
-  if (defaultPerPage !== undefined) {
-    return z.object({
-      ...baseSchema,
-      perPage: z.coerce.number().optional().default(defaultPerPage),
-    });
-  } else {
-    return z.object({
-      ...baseSchema,
-      perPage: z.coerce.number().optional(),
-    });
-  }
-};
-
-/**
- * Factory function for offset/limit pagination
- * @param defaultLimit - Default value for limit (can be number or undefined for no default)
- */
-export const createOffsetPaginationSchema = (defaultLimit?: number) => {
-  const baseSchema = {
-    offset: z.coerce.number().optional().default(0),
-  };
-
-  if (defaultLimit !== undefined) {
-    return z.object({
-      ...baseSchema,
-      limit: z.coerce.number().optional().default(defaultLimit),
-    });
-  } else {
-    return z.object({
-      ...baseSchema,
-      limit: z.coerce.number().optional(),
-    });
-  }
-};
-
-/**
  * Thread object structure
  */
 const threadSchema = z.object({
@@ -87,18 +39,15 @@ const threadSchema = z.object({
 });
 
 /**
- * Message structure (simplified - uses passthrough for flexibility)
+ * Message structure for storage
+ * Extends coreMessageSchema with storage-specific fields
  */
-const messageSchema = z
-  .object({
-    id: z.string(),
-    role: z.string(),
-    content: z.any(), // Complex nested structure, allow any
-    createdAt: z.date(),
-    threadId: z.string(),
-    resourceId: z.string(),
-  })
-  .passthrough();
+const messageSchema = coreMessageSchema.extend({
+  id: z.string(),
+  createdAt: z.date(),
+  threadId: z.string(),
+  resourceId: z.string(),
+});
 
 // ============================================================================
 // Query Parameter Schemas
@@ -288,7 +237,7 @@ export const updateWorkingMemoryResponseSchema = z.object({
 });
 
 export const listMessagesResponseSchema = z.object({
-  messages: z.array(z.unknown()),
+  messages: z.array(coreMessageSchema),
   pagination: paginationInfoSchema.optional(),
 });
 

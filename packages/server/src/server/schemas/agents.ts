@@ -1,4 +1,5 @@
 import z from 'zod';
+import { tracingOptionsSchema, coreMessageSchema } from './common';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -162,16 +163,6 @@ const agentMemoryOptionSchema = z.object({
 });
 
 /**
- * Schema for tracing options
- */
-const tracingOptionsSchema = z.object({
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  requestContextKeys: z.array(z.string()).optional(),
-  traceId: z.string().optional(),
-  parentSpanId: z.string().optional(),
-});
-
-/**
  * Schema for tool choice configuration
  */
 const toolChoiceSchema = z.union([
@@ -192,14 +183,14 @@ export const agentExecutionBodySchema = z
   .object({
     // REQUIRED
     messages: z.union([
-      z.array(z.unknown()), // Array of messages
+      z.array(coreMessageSchema), // Array of messages
       z.string(), // Single user message shorthand
     ]),
 
     // Message Configuration
     instructions: systemMessageSchema.optional(),
     system: systemMessageSchema.optional(),
-    context: z.array(z.unknown()).optional(),
+    context: z.array(coreMessageSchema).optional(),
 
     // Memory & Persistence
     memory: agentMemoryOptionSchema.optional(),

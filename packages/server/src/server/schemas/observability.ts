@@ -1,5 +1,5 @@
 import z from 'zod';
-import { createPagePaginationSchema } from './memory';
+import { createPagePaginationSchema, paginationInfoSchema } from './common';
 
 /**
  * Schema for AI span types
@@ -23,17 +23,6 @@ export const aiSpanTypeSchema = z.enum([
   'workflow_sleep',
   'workflow_wait_event',
 ]);
-
-/**
- * Schema for pagination information
- * Used across various paginated endpoints
- */
-export const paginationInfoSchema = z.object({
-  total: z.number(),
-  page: z.number(),
-  perPage: z.number(),
-  hasMore: z.boolean(),
-});
 
 /**
  * Schema for AI span record
