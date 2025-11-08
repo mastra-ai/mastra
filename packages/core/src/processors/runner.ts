@@ -176,10 +176,7 @@ export class ProcessorRunner {
       processorSpan?.end({ output: processableMessages });
     }
 
-    if (processableMessages.length > 0) {
-      messageList.add(processableMessages, 'response');
-    }
-
+    // Processed messages are already in the message list, no need to re-add them
     return messageList;
   }
 
