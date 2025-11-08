@@ -204,15 +204,15 @@ describe('Memory with Processors', () => {
       perPage: 20,
     });
     const toolCallFilter = new ToolCallFilter({ exclude: ['weather'] });
-    const filteredMessages = await toolCallFilter.processInput({
+    const filteredResult = await toolCallFilter.processInput({
       messages: queryResult.messages,
       abort: () => {
         throw new Error('Aborted');
       },
       runtimeContext: new RequestContext(),
+      messageList: new MessageList({ threadId: thread.id, resourceId }),
     });
-    const result = v2ToCoreMessages(filteredMessages);
-    const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.db();
+    const messages = Array.isArray(filteredResult) ? filteredResult : filteredResult.get.all.db();
 
     // ToolCallFilter removes tool parts but doesn't necessarily remove entire messages
     // if they contain other content. The key test is that weather tools are gone.

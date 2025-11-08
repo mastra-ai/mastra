@@ -71,13 +71,22 @@ export function generateConversationHistory({
 
     // Create assistant message
     if (includeTool) {
-      // Assistant message with tool call
+      // Assistant message with tool call and result
       messages.push({
         role: 'assistant',
         content: {
           format: 2,
           parts: [
             { type: 'text', text: `Using ${toolName} tool:` },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: `tool-${i}`,
+                toolName,
+                args: toolArgs[toolName as keyof typeof toolArgs] || {},
+              },
+            },
             {
               type: 'tool-invocation',
               toolInvocation: {

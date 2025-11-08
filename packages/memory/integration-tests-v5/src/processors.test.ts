@@ -16,7 +16,13 @@ import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
+import {
+  filterToolCallsByName,
+  filterToolResultsByName,
+  filterMastraToolCallsByName,
+  filterMastraToolResultsByName,
+  generateConversationHistory,
+} from './test-utils';
 
 function v2ToCoreMessages(messages: MastraDBMessage[] | UIMessage[]): CoreMessage[] {
   return new MessageList().add(messages, 'memory').get.all.core();
@@ -169,14 +175,49 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       perPage: 20,
     });
+
+    console.log('DEBUG: messagesV2 count:', messagesV2.length);
+    console.log(
+      'DEBUG: messagesV2 with tool calls:',
+      messagesV2.filter(m => m.content.parts?.some(p => p.type === 'tool-invocation')).length,
+    );
+    console.log(
+      'DEBUG: messagesV2 sample with tool:',
+      JSON.stringify(
+        messagesV2.find(m => m.content.parts?.some(p => p.type === 'tool-invocation')),
+        null,
+        2,
+      ),
+    );
+    console.log('DEBUG: queryResult.messages count:', queryResult.messages.length);
+    console.log(
+      'DEBUG: queryResult with tool calls:',
+      queryResult.messages.filter(m => m.content.parts?.some(p => p.type === 'tool-invocation')).length,
+    );
+
     const toolCallFilter = new ToolCallFilter({ exclude: ['weather'] });
-    const filteredMessages = await toolCallFilter.processInput({
+
+    // Create a MessageList and add the messages to it
+    const messageList = new MessageList({ threadId: thread.id, resourceId });
+    for (const message of queryResult.messages) {
+      messageList.add(message, 'memory');
+    }
+
+    const filteredResult = await toolCallFilter.processInput({
       messages: queryResult.messages,
       abort: new AbortController().signal,
       runtimeContext: new RequestContext(),
+      messageList,
     });
-    const result = v2ToCoreMessages(filteredMessages);
-    const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.db();
+    const messages = Array.isArray(filteredResult) ? filteredResult : filteredResult.get.all.db();
+
+    console.log('DEBUG: messages after filter count:', messages.length);
+    console.log(
+      'DEBUG: messages after filter with tool calls:',
+      messages.filter(m => m.content.parts?.some(p => p.type === 'tool-invocation')).length,
+    );
+    console.log('DEBUG: calculator calls after filter:', filterMastraToolCallsByName(messages, 'calculator').length);
+    console.log('DEBUG: weather calls after filter:', filterMastraToolCallsByName(messages, 'weather').length);
 
     // Count parts before and after filtering
     const totalPartsBefore = messagesV2.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
@@ -185,11 +226,11 @@ describe('Memory with Processors', () => {
     // Assert that parts were removed (not necessarily entire messages)
     expect(totalPartsAfter).toBeLessThan(totalPartsBefore);
 
-    // Assert tool calls/results are filtered correctly
-    expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
-    expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
-    expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
-    expect(filterToolResultsByName(result, 'calculator')).toHaveLength(1);
+    // Assert tool calls/results are filtered correctly (using Mastra format helpers)
+    expect(filterMastraToolCallsByName(messages, 'weather')).toHaveLength(0);
+    expect(filterMastraToolResultsByName(messages, 'weather')).toHaveLength(0);
+    expect(filterMastraToolCallsByName(messages, 'calculator')).toHaveLength(1);
+    expect(filterMastraToolResultsByName(messages, 'calculator')).toHaveLength(1);
 
     // make another query with no processors to make sure memory messages in DB were not altered and were only filtered from results
     const queryResult2 = await memory.recall({
@@ -213,9 +254,18 @@ describe('Memory with Processors', () => {
       perPage: 20,
     });
     const toolCallFilter3 = new ToolCallFilter({ exclude: ['weather', 'calculator'] });
+
+    // Create a MessageList and add the messages to it
+    const messageList3 = new MessageList({ threadId: thread.id, resourceId });
+    for (const message of queryResult3.messages) {
+      messageList3.add(message, 'memory');
+    }
+
     const filteredMessages3 = await toolCallFilter3.processInput({
       messages: queryResult3.messages,
+      abort: new AbortController().signal,
       runtimeContext: new RequestContext(),
+      messageList: messageList3,
     });
     const result3 = v2ToCoreMessages(filteredMessages3);
 

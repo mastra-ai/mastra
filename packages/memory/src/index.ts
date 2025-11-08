@@ -774,12 +774,20 @@ ${workingMemory}`;
    * @param memoryConfig - The memory configuration containing the working memory settings
    * @returns The working memory template with format and content, or null if working memory is disabled
    */
-  public async getWorkingMemoryTemplate({
-    memoryConfig,
-  }: {
-    memoryConfig?: MemoryConfig;
+  public async getWorkingMemoryTemplate(args: {
+    threadId?: string;
+    resourceId?: string;
   }): Promise<WorkingMemoryTemplate | null> {
-    const config = this.getMergedThreadConfig(memoryConfig || {});
+    // Get the thread config
+    let memoryConfig: MemoryConfig = {};
+    if (args.threadId) {
+      const thread = await this.getThread({ threadId: args.threadId });
+      if (thread?.metadata?.memory) {
+        memoryConfig = thread.metadata.memory as MemoryConfig;
+      }
+    }
+
+    const config = this.getMergedThreadConfig(memoryConfig);
 
     if (!config.workingMemory?.enabled) {
       return null;
@@ -825,7 +833,7 @@ ${workingMemory}`;
       return null;
     }
 
-    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ memoryConfig: config });
+    const workingMemoryTemplate = await this.getWorkingMemoryTemplate({ threadId, resourceId });
     const workingMemoryData = await this.getWorkingMemory({ threadId, resourceId, memoryConfig: config });
 
     if (!workingMemoryTemplate) {

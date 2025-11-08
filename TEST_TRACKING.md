@@ -15,6 +15,7 @@
   - `src/processors.test.ts:180`: `AssertionError: expected 11 to be less than 11` (ToolCallFilter) - FIXED
 - **Memory Tests**:
   - `src/processors.test.ts:220`: `AssertionError: expected to have a length of +0 but got 1` (ToolCallFilter) - FIXED
+  - `src/agent-memory.test.ts:617`: `AssertionError: expected 2 to be 4` (ToolCallFilter not invoked) - FIXED (incorrect import from deprecated `@mastra/memory/processors` instead of `@mastra/core/processors`)
 
 ### 🔴 Remaining Issues
 
@@ -22,7 +23,6 @@
 - **Memory Tests (StreamVNext/AI5)**:
   - `src/working-memory.test.ts:334`: `AssertionError: expected '# user information...' to contain 'submarine under the sea'` - INVESTIGATED (LLM behavior issue, not processor bug)
 - **Memory Tests**:
-  - `src/agent-memory.test.ts:617`: `AssertionError: expected 2 to be 4`
   - `src/working-memory.test.ts:656`: `AssertionError: expected { 'User Information': { ...(10) } } to match object { city: 'Denver', temperature: 75 }`
 - **Vercel – mastra-docs-1.x** & **Vercel – mastra-docs**: External failures (logs unavailable)
 

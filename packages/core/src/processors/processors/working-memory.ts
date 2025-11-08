@@ -22,6 +22,14 @@ export interface WorkingMemoryConfig {
 }
 
 /**
+ * Interface for getting working memory template dynamically.
+ * This allows the processor to fetch schema-aware templates at runtime.
+ */
+export interface WorkingMemoryTemplateProvider {
+  getWorkingMemoryTemplate(args: { threadId?: string; resourceId?: string }): Promise<WorkingMemoryTemplate | null>;
+}
+
+/**
  * WorkingMemory processor injects working memory data as a system message.
  *
  * This is an INPUT processor that:
@@ -54,6 +62,7 @@ export class WorkingMemory implements InputProcessor {
       template?: WorkingMemoryTemplate;
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
+      templateProvider?: WorkingMemoryTemplateProvider;
     },
   ) {}
 
@@ -91,11 +100,24 @@ export class WorkingMemory implements InputProcessor {
         workingMemoryData = resource?.workingMemory || null;
       }
 
-      // Get template (use provided or default)
-      const template = this.options.template || {
-        format: 'markdown' as const,
-        content: this.defaultWorkingMemoryTemplate,
-      };
+      // Get template (use template provider if available, then provided template, then default)
+      let template: WorkingMemoryTemplate;
+      if (this.options.templateProvider) {
+        const dynamicTemplate = await this.options.templateProvider.getWorkingMemoryTemplate({
+          threadId,
+          resourceId,
+        });
+        template = dynamicTemplate ||
+          this.options.template || {
+            format: 'markdown' as const,
+            content: this.defaultWorkingMemoryTemplate,
+          };
+      } else {
+        template = this.options.template || {
+          format: 'markdown' as const,
+          content: this.defaultWorkingMemoryTemplate,
+        };
+      }
 
       // Format working memory instruction
       const instruction = this.options.useVNext

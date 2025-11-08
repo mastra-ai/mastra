@@ -131,7 +131,7 @@ export class ToolCallFilter implements InputProcessor {
       }
 
       // Second pass: filter out excluded tool invocation parts
-      return messagesToFilter
+      const filteredMessages = messagesToFilter
         .map(message => {
           if (!hasToolInvocations(message)) {
             return message;
@@ -223,6 +223,8 @@ export class ToolCallFilter implements InputProcessor {
           };
         })
         .filter((message): message is MastraDBMessage => message !== null);
+
+      return filteredMessages;
     }
 
     // Case 3: Empty exclude array, return original messages
