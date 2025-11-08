@@ -154,3 +154,19 @@ export function filterToolResultsByName(messages: CoreMessage[], name: string) {
     m => Array.isArray(m.content) && m.content.some(part => part.type === 'tool-result' && part.toolName === name),
   );
 }
+
+export function filterMastraToolCallsByName(messages: MastraDBMessage[], name: string) {
+  return messages.filter(m =>
+    m.content.parts.some(
+      part => part.type === 'tool-invocation' && part.toolInvocation.state === 'call' && part.toolInvocation.toolName === name,
+    ),
+  );
+}
+
+export function filterMastraToolResultsByName(messages: MastraDBMessage[], name: string) {
+  return messages.filter(m =>
+    m.content.parts.some(
+      part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result' && part.toolInvocation.toolName === name,
+    ),
+  );
+}

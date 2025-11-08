@@ -16,7 +16,7 @@ import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
+import { filterToolCallsByName, filterToolResultsByName, filterMastraToolCallsByName, filterMastraToolResultsByName, generateConversationHistory } from './test-utils';
 
 function v2ToCoreMessages(messages: MastraDBMessage[] | UIMessage[]): CoreMessage[] {
   return new MessageList().add(messages, 'response').get.all.core();
@@ -203,24 +203,31 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       perPage: 20,
     });
+    
+    console.log('queryResult.messages.length:', queryResult.messages.length);
+    console.log('messagesV2.length:', messagesV2.length);
+    
     const toolCallFilter = new ToolCallFilter({ exclude: ['weather'] });
+    const messageList = new MessageList({ threadId: thread.id, resourceId });
+    messageList.add(queryResult.messages, 'memory');
+    
     const filteredResult = await toolCallFilter.processInput({
       messages: queryResult.messages,
       abort: () => {
         throw new Error('Aborted');
       },
       runtimeContext: new RequestContext(),
-      messageList: new MessageList({ threadId: thread.id, resourceId }),
+      messageList,
     });
     const messages = Array.isArray(filteredResult) ? filteredResult : filteredResult.get.all.db();
-
+    
     // ToolCallFilter removes tool parts but doesn't necessarily remove entire messages
     // if they contain other content. The key test is that weather tools are gone.
     expect(messages.length).toBe(messagesV2.length);
-    expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
-    expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
-    expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
-    expect(filterToolResultsByName(result, 'calculator')).toHaveLength(1);
+    expect(filterMastraToolCallsByName(messages, 'weather')).toHaveLength(0);
+    expect(filterMastraToolResultsByName(messages, 'weather')).toHaveLength(0);
+    expect(filterMastraToolCallsByName(messages, 'calculator')).toHaveLength(1);
+    expect(filterMastraToolResultsByName(messages, 'calculator')).toHaveLength(1);
 
     // make another query with no processors to make sure memory messages in DB were not altered and were only filtered from results
     const queryResult2 = await memory.recall({
