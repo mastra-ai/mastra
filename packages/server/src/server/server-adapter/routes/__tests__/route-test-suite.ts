@@ -232,6 +232,17 @@ export function createRouteTestSuite(config: RouteTestConfig) {
         });
       }
 
+      // Response schema requirement for JSON endpoints
+      if (route.responseType === 'json') {
+        it('should have response schema defined for JSON endpoint', () => {
+          if (!route.responseSchema) {
+            throw new Error(
+              `${route.method} ${route.path} is missing responseSchema. Add a Zod schema to ensure type safety and API documentation.`,
+            );
+          }
+        });
+      }
+
       // Handler integration test - always run
       it('should execute handler with valid inputs', async () => {
         const mastra = getMastra();
