@@ -7,8 +7,7 @@ export const workflowIdPathParams = z.object({
   workflowId: z.string().describe('Unique identifier for the workflow'),
 });
 
-export const workflowRunPathParams = z.object({
-  workflowId: z.string().describe('Unique identifier for the workflow'),
+export const workflowRunPathParams = workflowIdPathParams.extend({
   runId: z.string().describe('Unique identifier for the workflow run'),
 });
 
@@ -107,13 +106,18 @@ export const optionalRunIdQuerySchema = z.object({
 });
 
 /**
- * Schema for stream workflow body
- * Used by both /stream and /streamVNext endpoints
+ * Base schema for workflow execution with input data and tracing
  */
-export const streamWorkflowBodySchema = z.object({
+const workflowExecutionBodySchema = z.object({
   inputData: z.unknown().optional(),
   tracingOptions: tracingOptionsSchema.optional(),
 });
+
+/**
+ * Schema for stream workflow body
+ * Used by both /stream and /streamVNext endpoints
+ */
+export const streamWorkflowBodySchema = workflowExecutionBodySchema;
 
 /**
  * Schema for resume workflow body
@@ -127,10 +131,7 @@ export const resumeBodySchema = z.object({
 /**
  * Schema for start async workflow body
  */
-export const startAsyncWorkflowBodySchema = z.object({
-  inputData: z.unknown().optional(),
-  tracingOptions: tracingOptionsSchema.optional(),
-});
+export const startAsyncWorkflowBodySchema = workflowExecutionBodySchema;
 
 /**
  * Schema for send workflow run event body

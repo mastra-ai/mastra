@@ -5,27 +5,28 @@ export const vectorNamePathParams = z.object({
   vectorName: z.string().describe('Name of the vector store'),
 });
 
-export const vectorIndexPathParams = z.object({
-  vectorName: z.string().describe('Name of the vector store'),
+export const vectorIndexPathParams = vectorNamePathParams.extend({
   indexName: z.string().describe('Name of the index'),
 });
 
 // Body schemas
-export const upsertVectorsBodySchema = z.object({
+// Base schema for operations that require an index name
+const indexBodyBaseSchema = z.object({
   indexName: z.string(),
+});
+
+export const upsertVectorsBodySchema = indexBodyBaseSchema.extend({
   vectors: z.array(z.array(z.number())),
   metadata: z.array(z.record(z.string(), z.any())).optional(),
   ids: z.array(z.string()).optional(),
 });
 
-export const createIndexBodySchema = z.object({
-  indexName: z.string(),
+export const createIndexBodySchema = indexBodyBaseSchema.extend({
   dimension: z.number(),
   metric: z.enum(['cosine', 'euclidean', 'dotproduct']).optional(),
 });
 
-export const queryVectorsBodySchema = z.object({
-  indexName: z.string(),
+export const queryVectorsBodySchema = indexBodyBaseSchema.extend({
   queryVector: z.array(z.number()),
   topK: z.number().optional(),
   filter: z.record(z.string(), z.any()).optional(),

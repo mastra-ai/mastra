@@ -5,8 +5,7 @@ export const a2aAgentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
 });
 
-export const a2aTaskPathParams = z.object({
-  agentId: z.string().describe('Unique identifier for the agent'),
+export const a2aTaskPathParams = a2aAgentIdPathParams.extend({
   taskId: z.string().describe('Unique identifier for the task'),
 });
 

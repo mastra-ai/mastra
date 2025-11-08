@@ -10,13 +10,11 @@ export const toolIdPathParams = z.object({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
-export const agentToolPathParams = z.object({
-  agentId: z.string().describe('Unique identifier for the agent'),
+export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
-export const modelConfigIdPathParams = z.object({
-  agentId: z.string().describe('Unique identifier for the agent'),
+export const modelConfigIdPathParams = agentIdPathParams.extend({
   modelConfigId: z.string().describe('Unique identifier for the model configuration'),
 });
 

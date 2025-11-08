@@ -62,8 +62,7 @@ export const traceIdPathParams = z.object({
   traceId: z.string().describe('Unique identifier for the trace'),
 });
 
-export const traceSpanPathParams = z.object({
-  traceId: z.string().describe('Unique identifier for the trace'),
+export const traceSpanPathParams = traceIdPathParams.extend({
   spanId: z.string().describe('Unique identifier for the span'),
 });
 

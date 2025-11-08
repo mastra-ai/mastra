@@ -6,8 +6,7 @@ export const transportIdPathParams = z.object({
   transportId: z.string().describe('Unique identifier for the log transport'),
 });
 
-export const transportRunIdPathParams = z.object({
-  transportId: z.string().describe('Unique identifier for the log transport'),
+export const transportRunIdPathParams = transportIdPathParams.extend({
   runId: z.string().describe('Unique identifier for the run'),
 });
 
