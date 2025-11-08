@@ -386,3 +386,12 @@ export const transcribeSpeechResponseSchema = z.object({
  * Response schema for get listener
  */
 export const getListenerResponseSchema = z.unknown(); // Listener info structure varies
+
+/**
+ * Response schema for agent generation endpoints
+ * These return AI SDK types which have complex structures
+ */
+export const generateResponseSchema = z.unknown(); // AI SDK GenerateResult type
+export const streamResponseSchema = z.unknown(); // AI SDK StreamResult type
+export const speakResponseSchema = z.unknown(); // Voice synthesis result
+export const executeToolResponseSchema = z.unknown(); // Tool execution result varies by tool

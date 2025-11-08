@@ -86,21 +86,14 @@ describe('Schema Consistency Across All Routes', () => {
   });
 
   describe('Response Schemas', () => {
-    it('most JSON routes should have response schemas', () => {
+    it('all JSON routes must have response schemas', () => {
       const jsonRoutes = SERVER_ROUTES.filter(route => route.responseType === 'json');
-      const jsonRoutesWithResponse = jsonRoutes.filter(route => route.responseSchema);
+      const jsonRoutesWithoutResponse = jsonRoutes.filter(route => !route.responseSchema);
 
-      const percentageWithResponse = (jsonRoutesWithResponse.length / jsonRoutes.length) * 100;
-      expect(percentageWithResponse).toBeGreaterThan(60);
-    });
-
-    it('stream routes typically do not have response schemas', () => {
-      const streamRoutes = SERVER_ROUTES.filter(route => route.responseType === 'stream');
-      const streamRoutesWithResponse = streamRoutes.filter(route => route.responseSchema);
-
-      // Most stream routes should not have response schemas
-      const percentageWithResponse = (streamRoutesWithResponse.length / streamRoutes.length) * 100;
-      expect(percentageWithResponse).toBeLessThan(30);
+      if (jsonRoutesWithoutResponse.length > 0) {
+        const routeList = jsonRoutesWithoutResponse.map(r => `${r.method} ${r.path}`).join('\n  ');
+        throw new Error(`All JSON routes must have response schemas. Missing schemas for:\n  ${routeList}`);
+      }
     });
   });
 

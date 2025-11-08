@@ -31,7 +31,7 @@ function honoPathToOpenAPI(path: string): string {
 
 describe('Deployer Routes → Server Adapter Parity', () => {
   let mastra: Mastra;
-  let deployerApp: Hono;
+  let deployerApp: Hono<{ Variables: { mastra: Mastra } }>;
   let uniqueDeployerRoutes: RouteInfo[];
   let serverRoutes: RouteInfo[];
   let serverRoutesMap: Map<string, ServerRoute>;
@@ -76,7 +76,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
 
     // Create deployer app with ALL old routes
-    deployerApp = new Hono();
+    deployerApp = new Hono<{ Variables: { mastra: Mastra } }>();
     deployerApp.use('*', async (c, next) => {
       c.set('mastra', mastra);
       await next();
@@ -132,7 +132,9 @@ describe('Deployer Routes → Server Adapter Parity', () => {
       json: (data: any) => data,
     } as any;
 
-    deployerOpenAPISpec = await openAPIHandler(mockContext);
+    const mockNext = async () => {};
+
+    deployerOpenAPISpec = await openAPIHandler(mockContext, mockNext);
   });
 
   describe('1. Route Coverage: Deployer routes not in Server-Adapter', () => {
@@ -276,8 +278,9 @@ describe('Deployer Routes → Server Adapter Parity', () => {
 
         if (!deployerPathSpec) return; // Skip if no OpenAPI spec
 
-        const deployerParams = deployerPathSpec.parameters?.filter((p: any) => p.in === 'path') || [];
-        const deployerParamNames = new Set(deployerParams.map((p: any) => p.name));
+        const deployerParams: Array<{ name: string; in: string }> =
+          deployerPathSpec.parameters?.filter((p: any) => p.in === 'path') || [];
+        const deployerParamNames = new Set(deployerParams.map(p => p.name));
         const hasServerPathSchema = !!serverRoute.pathParamSchema;
 
         // If deployer has path params, server-adapter must too
@@ -344,10 +347,9 @@ describe('Deployer Routes → Server Adapter Parity', () => {
 
         if (!deployerPathSpec) return;
 
-        const deployerQueryParams = deployerPathSpec.parameters?.filter((p: any) => p.in === 'query') || [];
-        const deployerParamMap = new Map(
-          deployerQueryParams.map((p: any) => [p.name, { required: p.required || false }]),
-        );
+        const deployerQueryParams: Array<{ name: string; in: string; required?: boolean }> =
+          deployerPathSpec.parameters?.filter((p: any) => p.in === 'query') || [];
+        const deployerParamMap = new Map(deployerQueryParams.map(p => [p.name, { required: p.required || false }]));
         const hasServerQuerySchema = !!serverRoute.queryParamSchema;
 
         // If deployer has query params, server-adapter must too
@@ -499,7 +501,8 @@ describe('Deployer Routes → Server Adapter Parity', () => {
         if (!deployerPathSpec) return;
 
         // Check query parameter required status
-        const deployerQueryParams = deployerPathSpec.parameters?.filter((p: any) => p.in === 'query') || [];
+        const deployerQueryParams: Array<{ name: string; in: string; required?: boolean }> =
+          deployerPathSpec.parameters?.filter((p: any) => p.in === 'query') || [];
         if (deployerQueryParams.length > 0 && serverRoute.queryParamSchema) {
           const serverSchema = serverRoute.queryParamSchema as any;
           const serverShape = serverSchema.shape || {};

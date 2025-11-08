@@ -156,3 +156,11 @@ export const workflowExecutionResultSchema = z
 export const workflowControlResponseSchema = z.object({
   message: z.string(),
 });
+
+/**
+ * Response schema for create workflow run operation
+ * Returns only the runId after creating a run
+ */
+export const createWorkflowRunResponseSchema = z.object({
+  runId: z.string(),
+});

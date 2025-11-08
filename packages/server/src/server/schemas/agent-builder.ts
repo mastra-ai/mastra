@@ -13,6 +13,7 @@ export const actionRunPathParams = z.object({
 // Agent-builder actions use the same schemas as workflows since they're wrapped workflow handlers
 // Import them from workflows
 export {
+  createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   optionalRunIdQuerySchema,
   resumeBodySchema,

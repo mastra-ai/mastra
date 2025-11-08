@@ -4,6 +4,7 @@ import {
   serializedToolSchema,
   toolIdPathParams,
   executeToolBodySchema,
+  executeToolResponseSchema,
 } from '../../schemas/agents';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
@@ -37,6 +38,7 @@ export const TOOLS_ROUTES: ServerRoute[] = [
     path: '/api/tools/:toolId/execute',
     pathParamSchema: toolIdPathParams,
     bodySchema: executeToolBodySchema,
+    responseSchema: executeToolResponseSchema,
     summary: 'Execute tool',
     description: 'Executes a specific tool with the provided input data',
     tags: ['Tools'],
