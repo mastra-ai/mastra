@@ -1,5 +1,5 @@
 import z from 'zod';
-import { tracingOptionsSchema, coreMessageSchema } from './common';
+import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -280,22 +280,24 @@ export const voiceSpeakersResponseSchema = z.array(
 // ============================================================================
 
 /**
- * Body schema for approving tool call
+ * Base schema for tool approval/decline operations
+ * Both approve and decline use the same parameters
  */
-export const approveToolCallBodySchema = z.object({
+const toolCallActionBodySchema = z.object({
   runId: z.string(),
   requestContext: z.string().optional(),
   toolCallId: z.string(),
 });
 
 /**
+ * Body schema for approving tool call
+ */
+export const approveToolCallBodySchema = toolCallActionBodySchema;
+
+/**
  * Body schema for declining tool call
  */
-export const declineToolCallBodySchema = z.object({
-  runId: z.string(),
-  requestContext: z.string().optional(),
-  toolCallId: z.string(),
-});
+export const declineToolCallBodySchema = toolCallActionBodySchema;
 
 /**
  * Response schema for tool approval/decline
@@ -340,9 +342,7 @@ export const updateAgentModelInModelListBodySchema = z.object({
 /**
  * Response schema for model management operations
  */
-export const modelManagementResponseSchema = z.object({
-  message: z.string(),
-});
+export const modelManagementResponseSchema = messageResponseSchema;
 
 // ============================================================================
 // Voice Schemas

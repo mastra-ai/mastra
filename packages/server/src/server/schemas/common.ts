@@ -101,6 +101,26 @@ export const coreMessageSchema = z
   .passthrough();
 
 // ============================================================================
+// Common Response Schemas
+// ============================================================================
+
+/**
+ * Standard success response schema
+ * Used by operations that return only a success boolean
+ */
+export const successResponseSchema = z.object({
+  success: z.boolean(),
+});
+
+/**
+ * Standard message response schema
+ * Used by operations that return only a message string
+ */
+export const messageResponseSchema = z.object({
+  message: z.string(),
+});
+
+// ============================================================================
 // Logging Schemas
 // ============================================================================
 

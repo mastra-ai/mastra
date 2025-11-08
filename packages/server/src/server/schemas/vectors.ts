@@ -1,4 +1,5 @@
 import z from 'zod';
+import { successResponseSchema } from './common';
 
 // Path parameter schemas
 export const vectorNamePathParams = z.object({
@@ -38,9 +39,7 @@ export const upsertVectorsResponseSchema = z.object({
   ids: z.array(z.string()),
 });
 
-export const createIndexResponseSchema = z.object({
-  success: z.boolean(),
-});
+export const createIndexResponseSchema = successResponseSchema;
 
 export const queryVectorsResponseSchema = z.array(z.unknown()); // QueryResult[]
 
@@ -52,6 +51,4 @@ export const describeIndexResponseSchema = z.object({
   metric: z.string().optional(),
 });
 
-export const deleteIndexResponseSchema = z.object({
-  success: z.boolean(),
-});
+export const deleteIndexResponseSchema = successResponseSchema;

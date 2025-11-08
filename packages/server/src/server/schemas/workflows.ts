@@ -1,6 +1,5 @@
 import z from 'zod';
-import { createOffsetPaginationSchema } from './common';
-import { tracingOptionsSchema } from './common';
+import { createOffsetPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
 // Path parameter schemas
 export const workflowIdPathParams = z.object({
@@ -155,9 +154,7 @@ export const workflowExecutionResultSchema = z
 /**
  * Response schema for workflow control operations
  */
-export const workflowControlResponseSchema = z.object({
-  message: z.string(),
-});
+export const workflowControlResponseSchema = messageResponseSchema;
 
 /**
  * Response schema for create workflow run operation

@@ -4,6 +4,7 @@ import {
   createPagePaginationSchema,
   createOffsetPaginationSchema,
   coreMessageSchema,
+  successResponseSchema,
 } from './common';
 
 // Path parameter schemas
@@ -232,17 +233,14 @@ export const deleteThreadResponseSchema = z.object({
   result: z.string(),
 });
 
-export const updateWorkingMemoryResponseSchema = z.object({
-  success: z.boolean(),
-});
+export const updateWorkingMemoryResponseSchema = successResponseSchema;
 
 export const listMessagesResponseSchema = z.object({
   messages: z.array(coreMessageSchema),
   pagination: paginationInfoSchema.optional(),
 });
 
-export const deleteMessagesResponseSchema = z.object({
-  success: z.boolean(),
+export const deleteMessagesResponseSchema = successResponseSchema.extend({
   message: z.string(),
 });
 
