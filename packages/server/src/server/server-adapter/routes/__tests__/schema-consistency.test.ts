@@ -155,7 +155,6 @@ describe('Schema Consistency Across All Routes', () => {
 
   describe('Route Statistics', () => {
     it('should report total number of routes', () => {
-      console.log(`\nTotal routes: ${SERVER_ROUTES.length}`);
       expect(SERVER_ROUTES.length).toBeGreaterThan(0);
     });
 
@@ -164,7 +163,6 @@ describe('Schema Consistency Across All Routes', () => {
       SERVER_ROUTES.forEach(route => {
         methodCounts[route.method] = (methodCounts[route.method] || 0) + 1;
       });
-      console.log('\nRoutes by method:', methodCounts);
       expect(Object.keys(methodCounts).length).toBeGreaterThan(0);
     });
 
@@ -173,7 +171,6 @@ describe('Schema Consistency Across All Routes', () => {
       SERVER_ROUTES.forEach(route => {
         typeCounts[route.responseType] = (typeCounts[route.responseType] || 0) + 1;
       });
-      console.log('Routes by response type:', typeCounts);
       expect(typeCounts.json).toBeGreaterThan(0);
     });
 
@@ -186,7 +183,6 @@ describe('Schema Consistency Across All Routes', () => {
           });
         }
       });
-      console.log('Routes by tag:', tagCounts);
       expect(Object.keys(tagCounts).length).toBeGreaterThan(0);
     });
 
@@ -198,7 +194,6 @@ describe('Schema Consistency Across All Routes', () => {
         withResponse: SERVER_ROUTES.filter(r => r.responseSchema).length,
         withOpenAPI: SERVER_ROUTES.filter(r => r.openapi).length,
       };
-      console.log('Schema coverage:', stats);
       expect(stats.withOpenAPI).toBeGreaterThan(0);
     });
   });
@@ -235,7 +230,6 @@ describe('Schema Consistency Across All Routes', () => {
       });
 
       // Common ID params should be present
-      console.log('\nID parameters used:', Array.from(idParams).sort());
       expect(idParams.size).toBeGreaterThan(0);
     });
   });

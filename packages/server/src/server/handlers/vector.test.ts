@@ -35,7 +35,7 @@ describe('Vector Handlers', () => {
       await expect(
         upsertVectors({
           mastra: new Mastra(),
-          index: {
+          body: {
             indexName: 'test-index',
             vectors: [[1, 2, 3]],
           },
@@ -48,7 +48,7 @@ describe('Vector Handlers', () => {
         upsertVectors({
           mastra: new Mastra(),
           vectorName: 'test-vector',
-          index: {
+          body: {
             indexName: 'test-index',
             vectors: [[1, 2, 3]],
           },
@@ -62,7 +62,7 @@ describe('Vector Handlers', () => {
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
           // @ts-expect-error
-          index: {
+          body: {
             indexName: 'test-index',
           },
         }),
@@ -76,7 +76,7 @@ describe('Vector Handlers', () => {
       const result = await upsertVectors({
         mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
         vectorName: 'test-vector',
-        index: {
+        body: {
           indexName: 'test-index',
           vectors: [
             [1, 2, 3],
@@ -105,7 +105,7 @@ describe('Vector Handlers', () => {
       await expect(
         createIndex({
           mastra: new Mastra(),
-          index: {
+          body: {
             indexName: 'test-index',
             dimension: 3,
           },
@@ -118,7 +118,7 @@ describe('Vector Handlers', () => {
         createIndex({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
-          index: {
+          body: {
             indexName: 'test-index',
             dimension: -1,
           },
@@ -135,7 +135,7 @@ describe('Vector Handlers', () => {
         createIndex({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
-          index: {
+          body: {
             indexName: 'test-index',
             dimension: 3,
             metric: 'invalid' as any,
@@ -150,7 +150,7 @@ describe('Vector Handlers', () => {
       const result = await createIndex({
         mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
         vectorName: 'test-vector',
-        index: {
+        body: {
           indexName: 'test-index',
           dimension: 3,
           metric: 'cosine',
@@ -171,7 +171,7 @@ describe('Vector Handlers', () => {
       await expect(
         queryVectors({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
-          query: {
+          body: {
             indexName: 'test-index',
             queryVector: [1, 2, 3],
           },
@@ -186,7 +186,7 @@ describe('Vector Handlers', () => {
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
           // @ts-expect-error
-          query: {
+          body: {
             indexName: 'test-index',
           },
         }),
@@ -203,7 +203,7 @@ describe('Vector Handlers', () => {
       const result = await queryVectors({
         mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
         vectorName: 'test-vector',
-        query: {
+        body: {
           indexName: 'test-index',
           queryVector: [1, 2, 3],
           topK: 2,

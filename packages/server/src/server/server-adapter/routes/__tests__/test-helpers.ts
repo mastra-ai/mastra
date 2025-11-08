@@ -1,4 +1,3 @@
-import { PassThrough } from 'stream';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
@@ -7,7 +6,7 @@ import { SpanType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { MastraVector } from '@mastra/core/vector';
-import { MastraVoice, CompositeVoice } from '@mastra/core/voice';
+import { CompositeVoice } from '@mastra/core/voice';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { vi } from 'vitest';
 import { InMemoryTaskStore } from '../../../a2a/store';
@@ -35,34 +34,6 @@ vi.mock('zod', async importOriginal => {
 const z = require('zod');
 
 /**
- * Mock Voice implementation for testing
- */
-export class MockVoice extends MastraVoice {
-  async speak(): Promise<ReadableStream> {
-    // Return a web ReadableStream instead of NodeJS stream
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode('mock audio data'));
-        controller.close();
-      },
-    });
-    return stream as any;
-  }
-
-  async listen(): Promise<string> {
-    return 'transcribed text';
-  }
-
-  async getSpeakers() {
-    return [];
-  }
-
-  async getListener() {
-    return { enabled: false };
-  }
-}
-
-/**
  * Creates a test tool with basic schema
  */
 export function createTestTool(
@@ -86,11 +57,8 @@ export function createTestTool(
 /**
  * Creates a mock voice provider
  */
-export function createMockVoice(speaker = 'alloy') {
-  return new CompositeVoice({
-    output: new MockVoice({ speaker }),
-    input: new MockVoice({ speaker }),
-  });
+export function createMockVoice() {
+  return new CompositeVoice({});
 }
 
 /**
@@ -173,6 +141,20 @@ export function mockAgentMethods(agent: Agent) {
 
   // Mock getVoice to return the voice object that the handler expects
   const mockVoice = createMockVoice();
+
+  // Mock voice methods to avoid "No listener/speaker provider configured" errors
+  vi.spyOn(mockVoice, 'getSpeakers').mockResolvedValue([]);
+  vi.spyOn(mockVoice, 'getListener').mockResolvedValue({ enabled: false } as any);
+  vi.spyOn(mockVoice, 'speak').mockResolvedValue(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('mock audio data'));
+        controller.close();
+      },
+    }) as any,
+  );
+  vi.spyOn(mockVoice, 'listen').mockResolvedValue('transcribed text');
+
   vi.spyOn(agent, 'getVoice').mockResolvedValue(mockVoice);
 
   // Mock model list methods with proper model data structure

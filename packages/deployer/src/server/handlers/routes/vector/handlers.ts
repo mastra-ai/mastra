@@ -53,7 +53,7 @@ export async function upsertVectors(c: Context) {
     const result = await getOriginalUpsertVectorsHandler({
       mastra,
       vectorName,
-      index: body,
+      body,
     });
 
     return c.json({ ids: result });
@@ -72,7 +72,7 @@ export async function createIndex(c: Context) {
     await getOriginalCreateIndexHandler({
       mastra,
       vectorName,
-      index: body,
+      body,
     });
 
     return c.json({ success: true });
@@ -91,7 +91,7 @@ export async function queryVectors(c: Context) {
     const results: QueryResult[] = await getOriginalQueryVectorsHandler({
       mastra,
       vectorName,
-      query: { indexName, queryVector, topK, filter, includeVector },
+      body: { indexName, queryVector, topK, filter, includeVector },
     });
 
     return c.json({ results });

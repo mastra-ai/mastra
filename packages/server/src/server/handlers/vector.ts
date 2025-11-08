@@ -43,14 +43,14 @@ function getVector(mastra: Context['mastra'], vectorName?: string): MastraVector
 }
 
 // Upsert vectors
-export async function upsertVectors({ mastra, vectorName, index }: VectorContext & { index: UpsertRequest }) {
+export async function upsertVectors({ mastra, vectorName, body }: VectorContext & { body: UpsertRequest }) {
   try {
-    if (!index?.indexName || !index?.vectors || !Array.isArray(index.vectors)) {
+    if (!body?.indexName || !body?.vectors || !Array.isArray(body.vectors)) {
       throw new HTTPException(400, { message: 'Invalid request index. indexName and vectors array are required.' });
     }
 
     const vector = getVector(mastra, vectorName);
-    const result = await vector.upsert(index);
+    const result = await vector.upsert(body);
     return { ids: result };
   } catch (error) {
     return handleError(error, 'Error upserting vectors');
@@ -61,10 +61,10 @@ export async function upsertVectors({ mastra, vectorName, index }: VectorContext
 export async function createIndex({
   mastra,
   vectorName,
-  index,
-}: Pick<VectorContext, 'mastra' | 'vectorName'> & { index: CreateIndexRequest }) {
+  body,
+}: Pick<VectorContext, 'mastra' | 'vectorName'> & { body: CreateIndexRequest }) {
   try {
-    const { indexName, dimension, metric } = index;
+    const { indexName, dimension, metric } = body;
 
     if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
       throw new HTTPException(400, {
@@ -88,15 +88,15 @@ export async function createIndex({
 export async function queryVectors({
   mastra,
   vectorName,
-  query,
-}: Pick<VectorContext, 'mastra' | 'vectorName'> & { query: QueryRequest }) {
+  body,
+}: Pick<VectorContext, 'mastra' | 'vectorName'> & { body: QueryRequest }) {
   try {
-    if (!query?.indexName || !query?.queryVector || !Array.isArray(query.queryVector)) {
+    if (!body?.indexName || !body?.queryVector || !Array.isArray(body.queryVector)) {
       throw new HTTPException(400, { message: 'Invalid request query. indexName and queryVector array are required.' });
     }
 
     const vector = getVector(mastra, vectorName);
-    const results: QueryResult[] = await vector.query(query);
+    const results: QueryResult[] = await vector.query(body);
     return results;
   } catch (error) {
     return handleError(error, 'Error querying vectors');
