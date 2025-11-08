@@ -2517,6 +2517,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           });
         }
 
+        // Run output processors (e.g., SemanticRecall) to create embeddings BEFORE flushing messages
+
+        await this.__runOutputProcessors({ messageList, requestContext, tracingContext: { currentSpan: agentSpan } });
+
         // Parallelize title generation and message saving
         const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
 
@@ -2598,6 +2602,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         messageList.add(responseMessages, 'response');
       }
     }
+
+    // Run output processors (e.g., SemanticRecall for embeddings)
+    await this.__runOutputProcessors({
+      messageList,
+      requestContext,
+      tracingContext: { currentSpan: agentSpan },
+    });
 
     await this.#runScorers({
       messageList,

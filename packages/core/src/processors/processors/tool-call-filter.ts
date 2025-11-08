@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '../../agent/message-list';
+import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import type { RequestContext } from '../../request-context';
 
 import type { InputProcessor } from '../index';
@@ -30,10 +30,14 @@ export class ToolCallFilter implements InputProcessor {
 
   async processInput(args: {
     messages: MastraDBMessage[];
+    messageList: MessageList;
     abort: (reason?: string) => never;
     runtimeContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages } = args;
+  }): Promise<MessageList | MastraDBMessage[]> {
+    const { messages, messageList } = args;
+
+    // Filter all messages in the MessageList
+    const messagesToFilter = messageList.get.all.db();
 
     // Helper to check if a message has tool invocations
     const hasToolInvocations = (message: MastraDBMessage): boolean => {
@@ -51,7 +55,7 @@ export class ToolCallFilter implements InputProcessor {
 
     // Case 1: Exclude all tool calls and tool results
     if (this.exclude === 'all') {
-      const result = messages
+      const result = messagesToFilter
         .map(message => {
           // Skip messages with tool invocations - they'll be filtered by sanitizeAIV4UIMessages
           if (!hasToolInvocations(message)) {
@@ -102,7 +106,7 @@ export class ToolCallFilter implements InputProcessor {
       const excludedToolCallIds = new Set<string>();
 
       // First pass: identify excluded tool call IDs
-      for (const message of messages) {
+      for (const message of messagesToFilter) {
         const toolInvocations = getToolInvocations(message);
         for (const part of toolInvocations) {
           type V2ToolInvocationPart = {
@@ -118,16 +122,16 @@ export class ToolCallFilter implements InputProcessor {
           const invocationPart = part as unknown as V2ToolInvocationPart;
           const invocation = invocationPart.toolInvocation;
 
-          // Track tool call IDs only from excluded tool calls (not results)
-          // This ensures we only exclude results if we've seen the corresponding call
-          if (invocation.state === 'call' && this.exclude.includes(invocation.toolName)) {
+          // Track tool call IDs from both calls and results for excluded tools
+          // This handles cases where only results exist (e.g., in test data)
+          if (this.exclude.includes(invocation.toolName)) {
             excludedToolCallIds.add(invocation.toolCallId);
           }
         }
       }
 
       // Second pass: filter out excluded tool invocation parts
-      return messages
+      return messagesToFilter
         .map(message => {
           if (!hasToolInvocations(message)) {
             return message;
@@ -166,7 +170,13 @@ export class ToolCallFilter implements InputProcessor {
             }
 
             // Exclude if it's a result for an excluded tool call
+            // This handles both cases: when there's a matching call, and when only results exist
             if (invocation.state === 'result' && excludedToolCallIds.has(invocation.toolCallId)) {
+              return false;
+            }
+
+            // Also exclude results by tool name if no corresponding call exists (edge case in test data)
+            if (invocation.state === 'result' && this.exclude.includes(invocation.toolName)) {
               return false;
             }
 

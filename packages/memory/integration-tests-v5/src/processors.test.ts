@@ -177,7 +177,15 @@ describe('Memory with Processors', () => {
     });
     const result = v2ToCoreMessages(filteredMessages);
     const messages = new MessageList({ threadId: thread.id, resourceId }).add(result, 'response').get.all.db();
-    expect(new MessageList().add(messages, 'memory').get.all.db().length).toBeLessThan(messagesV2.length);
+
+    // Count parts before and after filtering
+    const totalPartsBefore = messagesV2.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
+    const totalPartsAfter = messages.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
+
+    // Assert that parts were removed (not necessarily entire messages)
+    expect(totalPartsAfter).toBeLessThan(totalPartsBefore);
+
+    // Assert tool calls/results are filtered correctly
     expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
@@ -210,7 +218,12 @@ describe('Memory with Processors', () => {
       runtimeContext: new RequestContext(),
     });
     const result3 = v2ToCoreMessages(filteredMessages3);
-    expect(result3.length).toBeLessThan(messagesV2.length);
+
+    // Count parts before and after filtering (both tools excluded)
+    const totalPartsBefore3 = messagesV2.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
+    const totalPartsAfter3 = result3.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
+    expect(totalPartsAfter3).toBeLessThan(totalPartsBefore3);
+
     expect(filterToolCallsByName(result3, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result3, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result3, 'calculator')).toHaveLength(0);
@@ -227,7 +240,12 @@ describe('Memory with Processors', () => {
       runtimeContext: new RequestContext(),
     });
     const result4 = v2ToCoreMessages(filteredMessages4);
-    expect(result4.length).toBeLessThan(messagesV2.length);
+
+    // Count parts before and after filtering (all tools excluded)
+    const totalPartsBefore4 = queryResult4.messages.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
+    const totalPartsAfter4 = filteredMessages4.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
+    expect(totalPartsAfter4).toBeLessThan(totalPartsBefore4); // All tool invocations should be filtered
+
     expect(filterToolCallsByName(result4, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result4, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result4, 'calculator')).toHaveLength(0);

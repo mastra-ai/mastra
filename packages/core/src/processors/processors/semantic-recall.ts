@@ -1,3 +1,4 @@
+import type { MessageList } from '../../agent/message-list';
 import { parseMemoryRuntimeContext } from '../../memory/types';
 import type { MastraDBMessage } from '../../memory/types';
 import type { TracingContext } from '../../observability';
@@ -125,21 +126,17 @@ export class SemanticRecall implements Processor {
 
   async processInput(args: {
     messages: MastraDBMessage[];
+    messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    const { messages, runtimeContext } = args;
-
-    console.log('DEBUG SemanticRecall.processInput called!');
-    console.log('DEBUG SemanticRecall: messages.length=', messages.length);
+  }): Promise<MessageList | MastraDBMessage[]> {
+    const { messages, messageList, runtimeContext } = args;
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRuntimeContext(runtimeContext);
-    console.log('DEBUG SemanticRecall: memoryContext=', memoryContext);
     if (!memoryContext) {
       // No memory context available, return messages unchanged
-      console.log('DEBUG SemanticRecall: No memory context, returning early');
       return messages;
     }
 
@@ -148,16 +145,13 @@ export class SemanticRecall implements Processor {
 
     if (!threadId) {
       // No thread ID available, return messages unchanged
-      console.log('DEBUG SemanticRecall: No threadId, returning early');
       return messages;
     }
 
     // Extract user query from the last user message
     const userQuery = this.extractUserQuery(messages);
-    console.log('DEBUG SemanticRecall: userQuery=', userQuery);
     if (!userQuery) {
       // No user query to search with, return messages unchanged
-      console.log('DEBUG SemanticRecall: No userQuery, returning early');
       return messages;
     }
 
@@ -179,48 +173,38 @@ export class SemanticRecall implements Processor {
       const newMessages = similarMessages.filter(m => !existingIds.has(m.id));
 
       if (newMessages.length === 0) {
-        // All similar messages are already in input, return original
-        return messages;
+        // All similar messages are already in input, return original messageList
+        return messageList;
       }
-
-      // Tag all recalled messages with ephemeral metadata to mark them as 'memory' source
-      const taggedMessages = newMessages.map(msg => ({
-        ...msg,
-        content: {
-          ...msg.content,
-          metadata: {
-            ...msg.content.metadata,
-            __mastra: {
-              ...msg.content.metadata?.__mastra,
-              ephemeral: {
-                source: 'memory' as const,
-              },
-            },
-          },
-        },
-      }));
 
       // If scope is 'resource', check for cross-thread messages and format them specially
       if (this.scope === 'resource') {
-        const crossThreadMessages = taggedMessages.filter(m => m.threadId && m.threadId !== threadId);
+        const crossThreadMessages = newMessages.filter(m => m.threadId && m.threadId !== threadId);
 
         if (crossThreadMessages.length > 0) {
           // Format cross-thread messages as a system message
           const formattedSystemMessage = this.formatCrossThreadMessages(crossThreadMessages);
 
-          // Return system message + same-thread messages + original messages
-          const sameThreadMessages = taggedMessages.filter(m => !m.threadId || m.threadId === threadId);
-          return [formattedSystemMessage, ...sameThreadMessages, ...messages];
+          // Add cross-thread messages as a system message (no source tagging needed)
+          messageList.add([formattedSystemMessage], 'context');
+
+          // Add same-thread messages with 'memory' source
+          const sameThreadMessages = newMessages.filter(m => !m.threadId || m.threadId === threadId);
+          if (sameThreadMessages.length > 0) {
+            messageList.add(sameThreadMessages, 'memory');
+          }
+
+          return messageList;
         }
       }
 
-      // Prepend similar messages to input
-      // They come first so they provide context for the new user message
-      return [...taggedMessages, ...messages];
+      // Add all recalled messages with 'memory' source
+      messageList.add(newMessages, 'memory');
+      return messageList;
     } catch (error) {
       // Log error but don't fail the request
       console.error('[SemanticRecall] Error during semantic search:', error);
-      return messages;
+      return messageList;
     }
   }
 
@@ -319,10 +303,8 @@ ${formattedSections.join('\n')}
     threadId: string;
     resourceId?: string;
   }): Promise<MastraDBMessage[]> {
-    console.log('DEBUG SemanticRecall: performSemanticSearch called with query=', query);
     // Generate embeddings for the query
     const { embeddings, dimension } = await this.embedMessageContent(query);
-    console.log('DEBUG SemanticRecall: generated', embeddings.length, 'embeddings with dimension', dimension);
 
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
@@ -342,19 +324,14 @@ ${formattedSections.join('\n')}
         topK: this.topK,
         filter: this.scope === 'resource' && resourceId ? { resource_id: resourceId } : { thread_id: threadId },
       });
-      console.log('DEBUG SemanticRecall: vector.query returned', results.length, 'results');
 
       vectorResults.push(...results);
     }
-    console.log('DEBUG SemanticRecall: total vectorResults.length=', vectorResults.length);
-
     // Filter by threshold if specified
     const filteredResults =
       this.threshold !== undefined ? vectorResults.filter(r => r.score >= this.threshold!) : vectorResults;
-    console.log('DEBUG SemanticRecall: filteredResults.length=', filteredResults.length);
 
     if (filteredResults.length === 0) {
-      console.log('DEBUG SemanticRecall: No filtered results, returning empty array');
       return [];
     }
 
@@ -434,24 +411,21 @@ ${formattedSections.join('\n')}
    */
   async processOutputResult(args: {
     messages: MastraDBMessage[];
+    messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
-  }): Promise<MastraDBMessage[]> {
-    console.log('DEBUG SemanticRecall.processOutputResult called! messages.length=', args.messages.length);
-    const { messages, runtimeContext } = args;
+  }): Promise<MessageList | MastraDBMessage[]> {
+    const { messages, messageList, runtimeContext } = args;
 
     if (!this.vector || !this.embedder || !this.storage) {
-      console.log('DEBUG SemanticRecall: Missing vector/embedder/storage, returning early');
       return messages;
     }
 
     try {
       const memoryContext = parseMemoryRuntimeContext(runtimeContext);
-      console.log('DEBUG SemanticRecall: memoryContext=', memoryContext);
 
       if (!memoryContext) {
-        console.log('DEBUG SemanticRecall: No memoryContext, returning early');
         return messages;
       }
 
@@ -459,10 +433,8 @@ ${formattedSections.join('\n')}
       const threadId = thread?.id;
 
       if (!threadId) {
-        console.log('DEBUG SemanticRecall: No threadId, returning early');
         return messages;
       }
-      console.log('DEBUG SemanticRecall: About to create embeddings for', messages.length, 'messages');
 
       const indexName = this.indexName || this.getDefaultIndexName();
 
@@ -529,7 +501,7 @@ ${formattedSections.join('\n')}
       console.error('[SemanticRecall] Error in processOutputResult:', error);
     }
 
-    return messages;
+    return messageList;
   }
 
   /**
@@ -551,7 +523,7 @@ ${formattedSections.join('\n')}
         return parts
           .filter(part => part.type === 'text')
           .map(part => part.text || '')
-          .join(' ');
+          .join('\n');
       }
     }
 

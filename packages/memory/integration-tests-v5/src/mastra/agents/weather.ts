@@ -1,9 +1,9 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { ToolCallFilter } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { ToolCallFilter } from '@mastra/memory/processors';
 import { z } from 'zod';
 import { weatherTool } from '../tools/weather';
 

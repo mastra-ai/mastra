@@ -149,7 +149,7 @@ export class MessageList {
       this.addOne(
         typeof message === `string`
           ? {
-              role: 'user',
+              role: `user`,
               content: message,
             }
           : message,

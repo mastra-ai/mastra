@@ -368,80 +368,8 @@ export class AgentLegacyHandler {
           memoryConfig,
         });
 
-        const config = memory.getMergedThreadConfig(memoryConfig || {});
-        const hasResourceScopeSemanticRecall =
-          (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
-          config?.semanticRecall === true;
-        let [memoryResult, memorySystemMessage] = await Promise.all([
-          existingThread || hasResourceScopeSemanticRecall
-            ? this.capabilities.getMemoryMessages({
-                resourceId,
-                threadId: threadObject.id,
-                vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
-                memoryConfig,
-                requestContext,
-              })
-            : { messages: [] },
-          memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
-        ]);
-
-        const memoryMessages = memoryResult.messages;
-
-        this.capabilities.logger.debug('Fetched messages from memory', {
-          threadId: threadObject.id,
-          runId,
-          fetchedCount: memoryMessages.length,
-        });
-
-        // So the agent doesn't get confused and start replying directly to messages
-        // that were added via semanticRecall from a different conversation,
-        // we need to pull those out and add to the system message.
-        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadObject.id);
-        if (resultsFromOtherThreads.length && !memorySystemMessage) {
-          memorySystemMessage = ``;
-        }
-        if (resultsFromOtherThreads.length) {
-          memorySystemMessage += `
-The following messages were remembered from a different conversation:
-<remembered_from_other_conversation>
-${(() => {
-  let result = ``;
-
-  const messages = new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1();
-  let lastYmd: string | null = null;
-  for (const msg of messages) {
-    const date = msg.createdAt;
-    const year = date.getUTCFullYear();
-    const month = date.toLocaleString('default', { month: 'short' });
-    const day = date.getUTCDate();
-    const ymd = `${year}, ${month}, ${day}`;
-    const utcHour = date.getUTCHours();
-    const utcMinute = date.getUTCMinutes();
-    const hour12 = utcHour % 12 || 12;
-    const ampm = utcHour < 12 ? 'AM' : 'PM';
-    const timeofday = `${hour12}:${utcMinute < 10 ? '0' : ''}${utcMinute} ${ampm}`;
-
-    if (!lastYmd || lastYmd !== ymd) {
-      result += `
-the following messages are from ${ymd}
-`;
-    }
-    result += `
-  Message ${msg.threadId && msg.threadId !== threadObject.id ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
-
-    lastYmd = ymd;
-  }
-  return result;
-})()}
-<end_remembered_from_other_conversation>`;
-        }
-
-        if (memorySystemMessage) {
-          messageList.addSystem(memorySystemMessage, 'memory');
-        }
-
         // Add new user messages to the list
-        // Historical messages will be added by MessageHistory input processor
+        // Historical messages, semantic recall, and working memory will be added by input processors
         messageList.add(messages, 'user');
 
         const {
@@ -717,7 +645,9 @@ the following messages are from ${ymd}
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string } & TripwireProperties & { agentSpan?: Span<SpanType.AGENT_RUN> }
+      > & { runId: string } & TripwireProperties & { agentSpan?: Span<SpanType.AGENT_RUN> } & {
+          messageList: MessageList;
+        }
     >;
     after: (args: {
       result: GenerateReturn<any, Output, ExperimentalOutput> | StreamReturn<any, Output, ExperimentalOutput>;
@@ -847,7 +777,7 @@ the following messages are from ${ymd}
           agentSpan,
         } as any;
 
-        return result;
+        return { ...result, messageList, requestContext };
       },
       after: async ({
         result,
@@ -934,6 +864,7 @@ the following messages are from ${ymd}
 
     const llmToUse = llm as MastraLLMV1;
     const beforeResult = await before();
+    const { messageList, requestContext: contextWithMemory } = beforeResult;
     const traceId = beforeResult.agentSpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
@@ -982,20 +913,20 @@ the following messages are from ${ymd}
         experimental_output,
       } as any);
 
+      // Add the response to the full message list before running output processors
+      messageList.add(
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: result.text }],
+        },
+        'response',
+      );
+
       const outputProcessorResult = await this.capabilities.__runOutputProcessors({
-        requestContext: mergedGenerateOptions.requestContext || new RequestContext(),
+        requestContext: contextWithMemory || new RequestContext(),
         tracingContext,
         outputProcessorOverrides: finalOutputProcessors,
-        messageList: new MessageList({
-          threadId: llmOptions.threadId || '',
-          resourceId: llmOptions.resourceId || '',
-        }).add(
-          {
-            role: 'assistant',
-            content: [{ type: 'text', text: result.text }],
-          },
-          'response',
-        ),
+        messageList, // Use the full message list with complete conversation history
       });
 
       // Handle tripwire for output processors
@@ -1099,19 +1030,19 @@ the following messages are from ${ymd}
 
     const outputText = JSON.stringify(result.object);
 
+    // Add the response to the full message list before running output processors
+    messageList.add(
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: outputText }],
+      },
+      'response',
+    );
+
     const outputProcessorResult = await this.capabilities.__runOutputProcessors({
-      requestContext: mergedGenerateOptions.requestContext || new RequestContext(),
+      requestContext: contextWithMemory || new RequestContext(),
       tracingContext,
-      messageList: new MessageList({
-        threadId: llmOptions.threadId || '',
-        resourceId: llmOptions.resourceId || '',
-      }).add(
-        {
-          role: 'assistant',
-          content: [{ type: 'text', text: outputText }],
-        },
-        'response',
-      ),
+      messageList, // Use the full message list with complete conversation history
     });
 
     // Handle tripwire for output processors

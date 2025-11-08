@@ -1,4 +1,5 @@
-import type { MastraDBMessage, MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
+import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { IMastraLogger } from '../logger';
 import { SpanType } from '../observability';
@@ -87,7 +88,7 @@ export class ProcessorRunner {
     telemetry?: any,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    const responseMessages = messageList.clear.response.db();
+    const responseMessages = messageList.get.response.db();
 
     let processableMessages: MastraDBMessage[] = [...responseMessages];
 
@@ -127,33 +128,50 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
+      let result: MessageList | MastraDBMessage[];
+
       if (!telemetry) {
-        processableMessages = await processMethod({
+        result = await processMethod({
           messages: processableMessages,
+          messageList,
           abort: ctx.abort,
           tracingContext: { currentSpan: processorSpan },
           runtimeContext: ctx.runtimeContext,
         });
       } else {
-        await telemetry.traceMethod(
+        result = await telemetry.traceMethod(
           async () => {
-            processableMessages = await processMethod({
+            const r = await processMethod({
               messages: processableMessages,
+              messageList,
               abort: ctx.abort,
               tracingContext: { currentSpan: processorSpan },
               runtimeContext: ctx.runtimeContext,
             });
-            return processableMessages;
+            return r;
           },
           {
-            spanName: `agent.outputProcessor.${processor.name}`,
+            spanName: `agent.inputProcessor.${processor.name}`,
             attributes: {
               'processor.name': processor.name,
               'processor.index': index.toString(),
-              'processor.total': this.outputProcessors.length.toString(),
+              'processor.total': this.inputProcessors.length.toString(),
             },
           },
         )();
+      }
+
+      // Handle the new return type
+      if (result instanceof MessageList) {
+        // Processor returned the MessageList, validate it's the same instance
+        if (result !== messageList) {
+          throw new Error(`Processor ${processor.id} must return the same MessageList instance that was passed in`);
+        }
+        // Get all messages from the MessageList for the next processor
+        processableMessages = messageList.get.all.db();
+      } else {
+        // Processor returned an array of messages
+        processableMessages = result;
       }
       processorSpan?.end({ output: processableMessages });
     }
@@ -323,10 +341,12 @@ export class ProcessorRunner {
     telemetry?: any,
     runtimeContext?: RequestContext,
   ): Promise<MessageList> {
-    // Get input messages without clearing yet
+    // Get all messages for processing (input + memory + context)
+    // This allows processors like ToolCallFilter to work with semantically recalled messages
     const originalUserMessages = messageList.get.input.db();
+    const allMessages = messageList.get.all.db();
 
-    let processableMessages: MastraDBMessage[] = [...originalUserMessages];
+    let processableMessages: MastraDBMessage[] = [...allMessages];
 
     const ctx: { messages: MastraDBMessage[]; abort: () => never; runtimeContext?: RequestContext } = {
       messages: processableMessages,
@@ -364,23 +384,27 @@ export class ProcessorRunner {
         input: processableMessages,
       });
 
+      let result: MessageList | MastraDBMessage[];
+
       if (!telemetry) {
-        processableMessages = await processMethod({
+        result = await processMethod({
           messages: processableMessages,
+          messageList,
           abort: ctx.abort,
           tracingContext: { currentSpan: processorSpan },
           runtimeContext: ctx.runtimeContext,
         });
       } else {
-        await telemetry.traceMethod(
+        result = await telemetry.traceMethod(
           async () => {
-            processableMessages = await processMethod({
+            const r = await processMethod({
               messages: processableMessages,
+              messageList,
               abort: ctx.abort,
               tracingContext: { currentSpan: processorSpan },
               runtimeContext: ctx.runtimeContext,
             });
-            return processableMessages;
+            return r;
           },
           {
             spanName: `agent.inputProcessor.${processor.name}`,
@@ -391,6 +415,19 @@ export class ProcessorRunner {
             },
           },
         )();
+      }
+
+      // Handle the new return type
+      if (result instanceof MessageList) {
+        // Processor returned the MessageList, validate it's the same instance
+        if (result !== messageList) {
+          throw new Error(`Processor ${processor.id} must return the same MessageList instance that was passed in`);
+        }
+        // Get all messages from the MessageList for the next processor
+        processableMessages = messageList.get.all.db();
+      } else {
+        // Processor returned an array of messages
+        processableMessages = result;
       }
       processorSpan?.end({ output: processableMessages });
     }
