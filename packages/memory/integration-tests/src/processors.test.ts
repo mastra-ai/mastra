@@ -283,10 +283,10 @@ describe('Memory with Processors', () => {
     // ToolCallFilter removes tool parts but doesn't necessarily remove entire messages
     // if they contain other content. The key validation is that the specific tools are gone.
     expect(result4.length).toBeLessThanOrEqual(messagesV2.length);
-    expect(filterToolCallsByName(result4, 'weather')).toHaveLength(0);
-    expect(filterToolResultsByName(result4, 'weather')).toHaveLength(0);
-    expect(filterToolCallsByName(result4, 'calculator')).toHaveLength(0);
-    expect(filterToolResultsByName(result4, 'calculator')).toHaveLength(0);
+    expect(filterMastraToolCallsByName(filteredMessages4, 'weather')).toHaveLength(0);
+    expect(filterMastraToolResultsByName(filteredMessages4, 'weather')).toHaveLength(0);
+    expect(filterMastraToolCallsByName(filteredMessages4, 'calculator')).toHaveLength(0);
+    expect(filterMastraToolResultsByName(filteredMessages4, 'calculator')).toHaveLength(0);
   });
 
   it('should apply multiple processors in order', async () => {
