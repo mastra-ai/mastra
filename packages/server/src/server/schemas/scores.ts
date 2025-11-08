@@ -1,5 +1,4 @@
 import z from 'zod';
-import { createPagePaginationSchema } from './memory';
 
 /**
  * Schema for sampling configuration
@@ -50,14 +49,28 @@ export const entityPathParams = z.object({
 });
 
 // Query parameter schemas
-export const listScoresByRunIdQuerySchema = createPagePaginationSchema(10);
+// Note: Handlers expect pagination as a nested object, not flat page/perPage
+// This matches the deployer pattern where query params are transformed into pagination object
+export const listScoresByRunIdQuerySchema = z.object({
+  pagination: z.object({
+    page: z.number(),
+    perPage: z.number(),
+  }),
+});
 
-export const listScoresByScorerIdQuerySchema = createPagePaginationSchema(10).extend({
+export const listScoresByScorerIdQuerySchema = z.object({
+  page: z.number().optional().default(0),
+  perPage: z.number().optional().default(10),
   entityId: z.string().optional(),
   entityType: z.string().optional(),
 });
 
-export const listScoresByEntityIdQuerySchema = createPagePaginationSchema(10);
+export const listScoresByEntityIdQuerySchema = z.object({
+  pagination: z.object({
+    page: z.number(),
+    perPage: z.number(),
+  }),
+});
 
 // Body schema for saving scores
 export const saveScoreBodySchema = z.object({
@@ -77,4 +90,6 @@ export const scoresWithPaginationResponseSchema = z.object({
   scores: z.array(z.unknown()), // Array of score records
 });
 
-export const saveScoreResponseSchema = z.array(z.unknown());
+export const saveScoreResponseSchema = z.object({
+  score: z.unknown(), // ScoreRowData
+});

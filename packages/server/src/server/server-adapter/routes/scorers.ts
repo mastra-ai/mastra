@@ -40,7 +40,7 @@ export const SCORES_ROUTES: ServerRoute[] = [
     handler: getScorerHandler as unknown as ServerRouteHandler,
     path: '/api/scores/scorers/:scorerId',
     pathParamSchema: scorerIdPathParams,
-    responseSchema: scorerEntrySchema,
+    responseSchema: scorerEntrySchema.nullable(),
     summary: 'Get scorer by ID',
     description: 'Returns details for a specific scorer including its configuration and associations',
     tags: ['Scoring'],
