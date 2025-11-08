@@ -177,8 +177,11 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Step 2: Add included messages with context (if any), excluding duplicates
     if (include && include.length > 0) {
+      console.log('🔍 Storage: Processing include items', { includeCount: include.length, totalMessagesInStorage: this.collection.messages.size });
       for (const includeItem of include) {
+        console.log('🔍 Storage: Looking for message', { messageId: includeItem.id });
         const targetMessage = this.collection.messages.get(includeItem.id);
+        console.log('🔍 Storage: Found message?', { found: !!targetMessage, message: targetMessage });
         if (targetMessage) {
           // Convert StorageMessageType to MastraDBMessage
           const convertedMessage = {

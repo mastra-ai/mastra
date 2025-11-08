@@ -315,6 +315,21 @@ export class MemoryPG extends MemoryStorage {
         // First delete all messages associated with this thread
         await t.none(`DELETE FROM ${tableName} WHERE thread_id = $1`, [threadId]);
 
+        // Delete vector embeddings for this thread (if they exist)
+        // We need to delete from all possible vector tables (different dimensions)
+        const schemaName = this.schema || 'public';
+        const vectorTables = await t.manyOrNone<{ tablename: string }>(`
+          SELECT tablename 
+          FROM pg_tables 
+          WHERE schemaname = $1 
+          AND (tablename = 'memory_messages' OR tablename LIKE 'memory_messages_%')
+        `, [schemaName]);
+
+        for (const { tablename } of vectorTables) {
+          const vectorTableName = getTableName({ indexName: tablename, schemaName: getSchemaName(this.schema) });
+          await t.none(`DELETE FROM ${vectorTableName} WHERE metadata->>'thread_id' = $1`, [threadId]);
+        }
+
         // Then delete the thread
         await t.none(`DELETE FROM ${threadTableName} WHERE id = $1`, [threadId]);
       });
