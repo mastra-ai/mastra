@@ -402,7 +402,7 @@ export class Memory extends MastraMemory {
 
     try {
       const existingWorkingMemory = (await this.getWorkingMemory({ threadId, resourceId, memoryConfig })) || '';
-      const template = await this.getWorkingMemoryTemplate({ memoryConfig });
+      const template = await this.getWorkingMemoryTemplate({ threadId, resourceId });
 
       let reason = '';
       if (existingWorkingMemory) {
@@ -781,7 +781,7 @@ ${workingMemory}`;
     // Get the thread config
     let memoryConfig: MemoryConfig = {};
     if (args.threadId) {
-      const thread = await this.getThread({ threadId: args.threadId });
+      const thread = await this.storage.getThreadById({ threadId: args.threadId });
       if (thread?.metadata?.memory) {
         memoryConfig = thread.metadata.memory as MemoryConfig;
       }

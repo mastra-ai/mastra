@@ -376,7 +376,7 @@ export async function getWorkingMemoryHandler({
     }
     const thread = await memory.getThreadById({ threadId: threadId! });
     const threadExists = !!thread;
-    const template = await memory.getWorkingMemoryTemplate({ memoryConfig });
+    const template = await memory.getWorkingMemoryTemplate({ threadId: threadId!, resourceId });
     const workingMemoryTemplate =
       template?.format === 'json'
         ? { ...template, content: JSON.stringify(generateEmptyFromSchema(template.content)) }
