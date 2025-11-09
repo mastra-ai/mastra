@@ -1,0 +1,566 @@
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { AzureAISearchVector } from './index';
+import { AzureAISearchFilterTranslator } from './filter';
+import type { AzureAISearchVectorFilter } from './filter';
+
+// Mock Azure SDK
+vi.mock('@azure/search-documents', () => ({
+  SearchClient: vi.fn(),
+  SearchIndexClient: vi.fn(),
+  AzureKeyCredential: vi.fn(),
+}));
+
+vi.mock('@azure/core-auth', () => ({}));
+
+describe('AzureAISearchVector', () => {
+  let azureVector: AzureAISearchVector;
+  let mockIndexClient: any;
+  let mockSearchClientInstance: any;
+
+  beforeEach(async () => {
+    // Reset all mocks
+    vi.clearAllMocks();
+    
+    mockIndexClient = {
+      createIndex: vi.fn(),
+      listIndexes: vi.fn(),
+      getIndex: vi.fn(),
+      deleteIndex: vi.fn(),
+    };
+
+    mockSearchClientInstance = {
+      uploadDocuments: vi.fn(),
+      search: vi.fn(),
+      getDocument: vi.fn(),
+      mergeDocuments: vi.fn(),
+      deleteDocuments: vi.fn(),
+      getDocumentsCount: vi.fn(),
+    };
+
+    // Get the mocked constructors
+    const { SearchIndexClient, SearchClient, AzureKeyCredential } = await vi.importMock<typeof import('@azure/search-documents')>('@azure/search-documents');
+    
+    // Setup mock implementations
+    (SearchIndexClient as Mock).mockImplementation(() => mockIndexClient);
+    (SearchClient as Mock).mockImplementation(() => mockSearchClientInstance);
+    (AzureKeyCredential as Mock).mockImplementation((key: string) => ({ key }));
+
+    azureVector = new AzureAISearchVector({
+      id: 'test-azure-vector',
+      endpoint: 'https://test.search.windows.net',
+      credential: 'test-api-key',
+    });
+  });
+
+  describe('createIndex', () => {
+    it('should create index successfully', async () => {
+      mockIndexClient.createIndex.mockResolvedValue(undefined);
+
+      await azureVector.createIndex({
+        indexName: 'test-index',
+        dimension: 1536,
+        metric: 'cosine',
+      });
+
+      expect(mockIndexClient.createIndex).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'test-index',
+          fields: expect.arrayContaining([
+            expect.objectContaining({ name: 'id', type: 'Edm.String', key: true }),
+            expect.objectContaining({ 
+              name: 'vector', 
+              type: 'Collection(Edm.Single)', 
+              vectorSearchDimensions: 1536 
+            }),
+          ]),
+          vectorSearch: expect.objectContaining({
+            algorithms: expect.arrayContaining([
+              expect.objectContaining({
+                name: 'vector-algorithm',
+                kind: 'hnsw'
+              })
+            ]),
+            profiles: expect.arrayContaining([
+              expect.objectContaining({
+                name: 'vector-profile',
+                algorithmConfigurationName: 'vector-algorithm'
+              })
+            ])
+          })
+        })
+      );
+    });
+
+    it('should validate dimension parameter', async () => {
+      await expect(
+        azureVector.createIndex({
+          indexName: 'test-index',
+          dimension: -1,
+          metric: 'cosine',
+        })
+      ).rejects.toThrow('Dimension must be a positive integer');
+    });
+
+    it('should handle existing index', async () => {
+      const error = new Error('Index already exists');
+      (error as any).statusCode = 409;
+      mockIndexClient.createIndex.mockRejectedValue(error);
+      
+      // Mock validateExistingIndex method
+      vi.spyOn(azureVector as any, 'validateExistingIndex').mockResolvedValue(undefined);
+
+      await expect(
+        azureVector.createIndex({
+          indexName: 'existing-index',
+          dimension: 1536,
+          metric: 'cosine',
+        })
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('listIndexes', () => {
+    it('should return list of index names', async () => {
+      const mockIndexes = [
+        { name: 'index1' },
+        { name: 'index2' },
+        { name: 'index3' },
+      ];
+      
+      mockIndexClient.listIndexes.mockReturnValue({
+        async *[Symbol.asyncIterator]() {
+          for (const index of mockIndexes) {
+            yield index;
+          }
+        },
+      });
+
+      const result = await azureVector.listIndexes();
+      expect(result).toEqual(['index1', 'index2', 'index3']);
+    });
+  });
+
+  describe('describeIndex', () => {
+    it('should return index statistics', async () => {
+      const mockIndex = {
+        fields: [
+          { name: 'vector', dimensions: 1536 },
+        ],
+        vectorSearch: {
+          algorithms: [
+            {
+              hnswParameters: { metric: 'cosine' },
+            },
+          ],
+        },
+      };
+
+      mockIndexClient.getIndex.mockResolvedValue(mockIndex);
+      mockSearchClientInstance.getDocumentsCount.mockResolvedValue(100);
+
+      const result = await azureVector.describeIndex({ indexName: 'test-index' });
+
+      expect(result).toEqual({
+        dimension: 1536,
+        count: 100,
+        metric: 'cosine',
+      });
+    });
+  });
+
+  describe('deleteIndex', () => {
+    it('should delete index successfully', async () => {
+      mockIndexClient.deleteIndex.mockResolvedValue(undefined);
+
+      await azureVector.deleteIndex({ indexName: 'test-index' });
+
+      expect(mockIndexClient.deleteIndex).toHaveBeenCalledWith('test-index');
+    });
+  });
+
+  describe('upsert', () => {
+    it('should upsert vectors successfully', async () => {
+      const vectors = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
+      const metadata = [{ category: 'test1' }, { category: 'test2' }];
+      const ids = ['id1', 'id2'];
+
+      // Mock describeIndex to validate dimensions
+      vi.spyOn(azureVector, 'describeIndex').mockResolvedValue({
+        dimension: 3,
+        count: 0,
+        metric: 'cosine',
+      });
+
+      mockSearchClientInstance.uploadDocuments.mockResolvedValue({
+        results: [
+          { succeeded: true },
+          { succeeded: true },
+        ],
+      });
+
+      const result = await azureVector.upsert({
+        indexName: 'test-index',
+        vectors,
+        metadata,
+        ids,
+      });
+
+      expect(result).toEqual(ids);
+      expect(mockSearchClientInstance.uploadDocuments).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ 
+            id: 'id1', 
+            vector: vectors[0], 
+            metadata: JSON.stringify(metadata[0]),
+            content: ''
+          }),
+          expect.objectContaining({ 
+            id: 'id2', 
+            vector: vectors[1], 
+            metadata: JSON.stringify(metadata[1]),
+            content: ''
+          }),
+        ])
+      );
+    });
+
+    it('should generate IDs when not provided', async () => {
+      const vectors = [[0.1, 0.2, 0.3]];
+
+      vi.spyOn(azureVector, 'describeIndex').mockResolvedValue({
+        dimension: 3,
+        count: 0,
+        metric: 'cosine',
+      });
+
+      mockSearchClientInstance.uploadDocuments.mockResolvedValue({
+        results: [{ succeeded: true }],
+      });
+
+      // Mock crypto.randomUUID
+      const mockUUID = 'mock-uuid';
+      vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValue(mockUUID) });
+
+      const result = await azureVector.upsert({
+        indexName: 'test-index',
+        vectors,
+      });
+
+      expect(result).toEqual([mockUUID]);
+    });
+  });
+
+  describe('query', () => {
+    it('should perform vector search successfully', async () => {
+      const mockResults = {
+        results: [
+          {
+            document: {
+              id: 'doc1',
+              metadata: '{"category":"test"}',
+              content: 'Test content',
+              vector: [0.1, 0.2, 0.3],
+            },
+            score: 0.95,
+          },
+        ],
+        async *[Symbol.asyncIterator]() {
+          for (const result of this.results) {
+            yield result;
+          }
+        },
+      };
+
+      mockSearchClientInstance.search.mockResolvedValue(mockResults);
+
+      const result = await azureVector.query({
+        indexName: 'test-index',
+        queryVector: [0.1, 0.2, 0.3],
+        topK: 5,
+      });
+
+      expect(result).toEqual([
+        {
+          id: 'doc1',
+          score: 0.95,
+          metadata: { category: 'test' },
+          document: 'Test content',
+        },
+      ]);
+    });
+
+    it('should handle includeVector parameter gracefully', async () => {
+      const mockResults = {
+        results: [
+          {
+            document: {
+              id: 'doc1',
+              metadata: '{"category":"test"}',
+              content: 'Test content',
+            },
+            score: 0.95,
+          },
+        ],
+        async *[Symbol.asyncIterator]() {
+          for (const result of this.results) {
+            yield result;
+          }
+        },
+      };
+
+      mockSearchClientInstance.search.mockResolvedValue(mockResults);
+
+      const result = await azureVector.query({
+        indexName: 'test-index',
+        queryVector: [0.1, 0.2, 0.3],
+        topK: 5,
+        includeVector: true, // This parameter is accepted but ignored due to Azure AI Search limitations
+      });
+
+      expect(result).toEqual([
+        {
+          id: 'doc1',
+          score: 0.95,
+          metadata: { category: 'test' },
+          document: 'Test content',
+        },
+      ]);
+      // Verify that vector is never included due to Azure AI Search platform limitations
+      expect(result[0]).not.toHaveProperty('vector');
+    });
+
+    it('should apply filters correctly', async () => {
+      const filter: AzureAISearchVectorFilter = {
+        eq: { metadata: '{"category":"electronics"}' },
+      };
+
+      mockSearchClientInstance.search.mockResolvedValue({
+        results: [],
+        async *[Symbol.asyncIterator]() {
+          // Empty iterator
+        },
+      });
+
+      await azureVector.query({
+        indexName: 'test-index',
+        queryVector: [0.1, 0.2, 0.3],
+        filter,
+      });
+
+      expect(mockSearchClientInstance.search).toHaveBeenCalledWith(
+        '*',
+        expect.objectContaining({
+          filter: "metadata eq '{\"category\":\"electronics\"}'",
+        })
+      );
+    });
+  });
+
+  describe('updateVector', () => {
+    it('should update vector successfully', async () => {
+      const existingDoc = {
+        id: 'doc1',
+        vector: [0.1, 0.2, 0.3],
+        metadata: '{"category":"old"}',
+        content: 'old content',
+      };
+
+      mockSearchClientInstance.getDocument.mockResolvedValue(existingDoc);
+      mockSearchClientInstance.mergeDocuments.mockResolvedValue(undefined);
+
+      vi.spyOn(azureVector, 'describeIndex').mockResolvedValue({
+        dimension: 3,
+        count: 1,
+        metric: 'cosine',
+      });
+
+      await azureVector.updateVector({
+        indexName: 'test-index',
+        id: 'doc1',
+        update: {
+          vector: [0.4, 0.5, 0.6],
+          metadata: { category: 'new' },
+        },
+      });
+
+      expect(mockSearchClientInstance.mergeDocuments).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'doc1',
+          vector: [0.4, 0.5, 0.6],
+          metadata: JSON.stringify({ category: 'new' }),
+          content: 'old content',
+        }),
+      ]);
+    });
+  });
+
+  describe('deleteVector', () => {
+    it('should delete vector successfully', async () => {
+      mockSearchClientInstance.deleteDocuments.mockResolvedValue(undefined);
+
+      await azureVector.deleteVector({
+        indexName: 'test-index',
+        id: 'doc1',
+      });
+
+      expect(mockSearchClientInstance.deleteDocuments).toHaveBeenCalledWith([{ id: 'doc1' }]);
+    });
+
+    it('should handle non-existent document gracefully', async () => {
+      const error = new Error('Not found');
+      (error as any).statusCode = 404;
+      mockSearchClientInstance.deleteDocuments.mockRejectedValue(error);
+
+      await expect(
+        azureVector.deleteVector({
+          indexName: 'test-index',
+          id: 'non-existent',
+        })
+      ).resolves.toBeUndefined();
+    });
+  });
+});
+
+describe('AzureAISearchFilterTranslator', () => {
+  let translator: AzureAISearchFilterTranslator;
+
+  beforeEach(() => {
+    translator = new AzureAISearchFilterTranslator();
+  });
+
+  describe('translate', () => {
+    it('should return undefined for empty filter', () => {
+      expect(translator.translate()).toBeUndefined();
+      expect(translator.translate({})).toBe('');
+    });
+
+    it('should use raw $filter when provided', () => {
+      const filter: AzureAISearchVectorFilter = {
+        $filter: "category eq 'electronics' and price lt 100",
+      };
+      
+      expect(translator.translate(filter)).toBe("category eq 'electronics' and price lt 100");
+    });
+
+    it('should translate equality filters', () => {
+      const filter: AzureAISearchVectorFilter = {
+        eq: { category: 'electronics', brand: 'Apple' },
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toContain("category eq 'electronics'");
+      expect(result).toContain("brand eq 'Apple'");
+      expect(result).toContain(' and ');
+    });
+
+    it('should translate comparison filters', () => {
+      const filter: AzureAISearchVectorFilter = {
+        gt: { price: 100 },
+        le: { rating: 4.5 },
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toContain('price gt 100');
+      expect(result).toContain('rating le 4.5');
+    });
+
+    it('should translate string operations', () => {
+      const filter: AzureAISearchVectorFilter = {
+        contains: { description: 'smartphone' },
+        startsWith: { name: 'iPhone' },
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toContain("search.ismatch('smartphone', 'description')");
+      expect(result).toContain("startswith(name, 'iPhone')");
+    });
+
+    it('should translate logical operations', () => {
+      const filter: AzureAISearchVectorFilter = {
+        and: [
+          { eq: { category: 'electronics' } },
+          { gt: { price: 100 } },
+        ],
+        or: [
+          { eq: { brand: 'Apple' } },
+          { eq: { brand: 'Samsung' } },
+        ],
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toContain("(category eq 'electronics' and price gt 100)");
+      expect(result).toContain("(brand eq 'Apple' or brand eq 'Samsung')");
+    });
+
+    it('should translate NOT operations', () => {
+      const filter: AzureAISearchVectorFilter = {
+        not: {
+          eq: { category: 'electronics' },
+        },
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toBe("not (category eq 'electronics')");
+    });
+
+    it('should handle complex nested filters', () => {
+      const filter: AzureAISearchVectorFilter = {
+        and: [
+          {
+            or: [
+              { eq: { category: 'electronics' } },
+              { eq: { category: 'books' } },
+            ],
+          },
+          { gt: { price: 50 } },
+          {
+            not: {
+              contains: { description: 'refurbished' },
+            },
+          },
+        ],
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toContain("(category eq 'electronics' or category eq 'books')");
+      expect(result).toContain('price gt 50');
+      expect(result).toContain("not (search.ismatch('refurbished', 'description'))");
+    });
+
+    it('should escape special characters in strings', () => {
+      const filter: AzureAISearchVectorFilter = {
+        eq: { description: "It's a test with 'quotes'" },
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toBe("description eq 'It''s a test with ''quotes'''");
+    });
+
+    it('should handle different value types', () => {
+      const filter: AzureAISearchVectorFilter = {
+        eq: {
+          stringField: 'text',
+          numberField: 42,
+          booleanField: true,
+          nullField: null,
+        },
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toContain("stringField eq 'text'");
+      expect(result).toContain('numberField eq 42');
+      expect(result).toContain('booleanField eq true');
+      expect(result).toContain('nullField eq null');
+    });
+
+    it('should handle date values', () => {
+      const testDate = new Date('2023-01-01T00:00:00.000Z');
+      const filter: AzureAISearchVectorFilter = {
+        ge: { createdAt: testDate },
+      };
+      
+      const result = translator.translate(filter);
+      expect(result).toBe('createdAt ge 2023-01-01T00:00:00.000Z');
+    });
+  });
+});
