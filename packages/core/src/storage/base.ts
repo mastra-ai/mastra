@@ -17,7 +17,14 @@ import {
   TABLE_SPANS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
+import type {
+  ScoresStorage,
+  StoreOperations,
+  WorkflowsStorage,
+  MemoryStorage,
+  ObservabilityStorage,
+  DatasetsStorage,
+} from './domains';
 import type {
   PaginationInfo,
   StorageColumn,
@@ -46,6 +53,7 @@ export type StorageDomains = {
   scores: ScoresStorage;
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
+  datasets?: DatasetsStorage;
 };
 
 export function ensureDate(date: Date | string | undefined): Date | undefined {

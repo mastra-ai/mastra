@@ -11,11 +11,6 @@ overrides:
   tmp: '>=0.2.5'
   jsondiffpatch: '>=0.7.3'
 
-patchedDependencies:
-  '@changesets/get-dependents-graph':
-    hash: 1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535
-    path: patches/@changesets__get-dependents-graph.patch
-
 importers:
 
   .:
@@ -367,7 +362,7 @@ importers:
         version: 5.0.4(vite@7.1.11(@types/node@20.19.23)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/coverage-v8':
         specifier: 3.2.3
-        version: 3.2.3(vitest@3.2.4)
+        version: 3.2.3(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/ui':
         specifier: ^3.2.4
         version: 3.2.4(vitest@3.2.4)
@@ -1012,6 +1007,22 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.37.0
         version: 1.37.0
+    optionalDependencies:
+      '@grpc/grpc-js':
+        specifier: ^1.14.0
+        version: 1.14.0
+      '@opentelemetry/exporter-trace-otlp-grpc':
+        specifier: ^0.205.0
+        version: 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-http':
+        specifier: ^0.205.0
+        version: 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: ^0.205.0
+        version: 0.205.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-zipkin':
+        specifier: ^2.1.0
+        version: 2.2.0(@opentelemetry/api@1.9.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1040,22 +1051,6 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
-    optionalDependencies:
-      '@grpc/grpc-js':
-        specifier: ^1.14.0
-        version: 1.14.0
-      '@opentelemetry/exporter-trace-otlp-grpc':
-        specifier: ^0.205.0
-        version: 0.205.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: ^0.205.0
-        version: 0.205.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-trace-otlp-proto':
-        specifier: ^0.205.0
-        version: 0.205.0(@opentelemetry/api@1.9.0)
-      '@opentelemetry/exporter-zipkin':
-        specifier: ^2.1.0
-        version: 2.2.0(@opentelemetry/api@1.9.0)
 
   packages/_ai-sdk-v4:
     dependencies:
@@ -1171,7 +1166,7 @@ importers:
     dependencies:
       '@vitest/eslint-plugin':
         specifier: ^1.3.20
-        version: 1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@3.2.4)
+        version: 1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1))
       eslint-plugin-import-x:
         specifier: ^4.16.1
         version: 4.16.1(@typescript-eslint/utils@8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3))(eslint@9.38.0(jiti@2.6.1))
@@ -1591,6 +1586,9 @@ importers:
       sift:
         specifier: ^17.1.3
         version: 17.1.3
+      ulid:
+        specifier: ^3.0.1
+        version: 3.0.1
       xstate:
         specifier: ^5.20.1
         version: 5.23.0
@@ -3160,7 +3158,7 @@ importers:
         version: 20.19.23
       '@vitest/coverage-v8':
         specifier: 3.2.3
-        version: 3.2.3(vitest@3.2.4)
+        version: 3.2.3(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.3)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/ui':
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
@@ -3212,7 +3210,7 @@ importers:
         version: 20.19.23
       '@vitest/coverage-v8':
         specifier: 3.2.3
-        version: 3.2.3(vitest@3.2.4)
+        version: 3.2.3(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.3)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1))
       '@vitest/ui':
         specifier: 3.2.3
         version: 3.2.3(vitest@3.2.4)
@@ -6978,7 +6976,6 @@ packages:
   '@lancedb/lancedb@0.22.2':
     resolution: {integrity: sha512-dpNgWqW0aBpAGSAxL/x3qDtvZ1XJFmseMGnAg3Ok4fZ7br+1q5M8qRMhaYpYNAy1iG5H74/pWGthkN9oFP2IDw==}
     engines: {node: '>= 18'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
@@ -12909,7 +12906,6 @@ packages:
 
   libsql@0.5.22:
     resolution: {integrity: sha512-NscWthMQt7fpU8lqd7LXMvT9pi+KhhmTHAJWUB/Lj6MWa0MKFv0F2V4C6WKKpjCVZl0VwcDz4nOI3CyaT1DDiA==}
-    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   lightningcss-android-arm64@1.30.2:
@@ -15714,6 +15710,10 @@ packages:
     resolution: {integrity: sha512-rvKSBiC5zqCCiDZ9kAOszZcDvdAHwwIKJG33Ykj43OKcWsnmcBRL09YTU4nOeHZ8Y2a7l1MgTd08SBe9A8Qj6A==}
     engines: {node: '>=18'}
 
+  ulid@3.0.1:
+    resolution: {integrity: sha512-dPJyqPzx8preQhqq24bBG1YNkvigm87K8kVEHCD+ruZg24t6IFEFv00xMWfxcC4djmFtiTLdFuADn4+DOz6R7Q==}
+    hasBin: true
+
   unbox-primitive@1.1.0:
     resolution: {integrity: sha512-nWJ91DjeOkej/TA8pXQ3myruKpKEYgqvpw9lz4OPHj/NWFNluYrjbz9j01CJ8yKQd2g4jFoOkINCTW2I5LEEyw==}
     engines: {node: '>= 0.4'}
@@ -18159,7 +18159,7 @@ snapshots:
   '@changesets/assemble-release-plan@6.0.9':
     dependencies:
       '@changesets/errors': 0.2.0
-      '@changesets/get-dependents-graph': 2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)
+      '@changesets/get-dependents-graph': 2.1.3
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
@@ -18176,7 +18176,7 @@ snapshots:
       '@changesets/changelog-git': 0.2.1
       '@changesets/config': 3.1.1
       '@changesets/errors': 0.2.0
-      '@changesets/get-dependents-graph': 2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)
+      '@changesets/get-dependents-graph': 2.1.3
       '@changesets/get-release-plan': 4.0.13
       '@changesets/git': 3.0.4
       '@changesets/logger': 0.1.1
@@ -18205,7 +18205,7 @@ snapshots:
   '@changesets/config@3.1.1':
     dependencies:
       '@changesets/errors': 0.2.0
-      '@changesets/get-dependents-graph': 2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)
+      '@changesets/get-dependents-graph': 2.1.3
       '@changesets/logger': 0.1.1
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
@@ -18216,7 +18216,7 @@ snapshots:
     dependencies:
       extendable-error: 0.1.7
 
-  '@changesets/get-dependents-graph@2.1.3(patch_hash=1cae443604ba49c27339705c703329dfcd79f6acd7fc822b1257a7d7c9da9535)':
+  '@changesets/get-dependents-graph@2.1.3':
     dependencies:
       '@changesets/types': 6.1.0
       '@manypkg/get-packages': 1.1.3
@@ -23208,7 +23208,26 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/coverage-v8@3.2.3(vitest@3.2.4)':
+  '@vitest/coverage-v8@3.2.3(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.3)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1))':
+    dependencies:
+      '@ampproject/remapping': 2.3.0
+      '@bcoe/v8-coverage': 1.0.2
+      ast-v8-to-istanbul: 0.3.7
+      debug: 4.4.3
+      istanbul-lib-coverage: 3.2.2
+      istanbul-lib-report: 3.0.1
+      istanbul-lib-source-maps: 5.0.6
+      istanbul-reports: 3.2.0
+      magic-string: 0.30.19
+      magicast: 0.3.5
+      std-env: 3.10.0
+      test-exclude: 7.0.1
+      tinyrainbow: 2.0.0
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.3)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@vitest/coverage-v8@3.2.3(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@bcoe/v8-coverage': 1.0.2
@@ -23227,7 +23246,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/eslint-plugin@1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@3.2.4)':
+  '@vitest/eslint-plugin@1.3.23(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)(vitest@3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1))':
     dependencies:
       '@typescript-eslint/scope-manager': 8.46.2
       '@typescript-eslint/utils': 8.46.2(eslint@9.38.0(jiti@2.6.1))(typescript@5.9.3)
@@ -30075,6 +30094,8 @@ snapshots:
   ufo@1.6.1: {}
 
   uint8array-extras@1.5.0: {}
+
+  ulid@3.0.1: {}
 
   unbox-primitive@1.1.0:
     dependencies:
