@@ -8,6 +8,7 @@ import type { API, FileInfo } from 'jscodeshift';
 import jscodeshift from 'jscodeshift';
 import ts from 'typescript';
 import { expect } from 'vitest';
+import { BUNDLE } from '../lib/bundle';
 
 /**
  * Applies a codemod transform to the input code.
@@ -209,6 +210,110 @@ export function testTransform(
 
   // Apply the transformer to the input code
   const actualOutput = applyTransform(transformer, input);
+
+  // Validate that output code is syntactically correct
+  validateSyntax(actualOutput, outputExt);
+
+  if (process.env.UPDATE_SNAPSHOT) {
+    // Update the expected output fixture if the environment variable is set
+    const outputPath = join(__dirname, '__fixtures__', `${fixtureName}.output${outputExt}`);
+    writeFileSync(outputPath, actualOutput, 'utf8');
+  } else {
+    // Compare actual output to expected output
+    expect(actualOutput).toBe(expectedOutput);
+  }
+}
+
+/**
+ * Tests the upgrade command by applying all codemods for a specific version sequentially to the input code.
+ * This simulates running the full upgrade process on a fixture.
+ *
+ * Use this helper to test the complete upgrade flow with all codemods from a specific version.
+ * The codemods are applied in the order defined in the BUNDLE array.
+ *
+ * @example
+ * ```typescript
+ * import { describe, it } from 'vitest';
+ * import { testUpgrade } from './test-utils';
+ *
+ * describe('v1 upgrade', () => {
+ *   it('transforms correctly with all v1 codemods', async () => {
+ *     await testUpgrade('v1', 'kitchen-sink-v1');
+ *   });
+ * });
+ * ```
+ *
+ * @param version - The version to upgrade (e.g., 'v1').
+ * @param fixtureName - The base name of the fixture to test.
+ */
+export async function testUpgrade(version: string, fixtureName: string) {
+  // Read input and output fixtures along with their extensions
+  const { content: input, extension: inputExt } = readFixture(fixtureName, 'input');
+  const { content: expectedOutput, extension: outputExt } = readFixture(fixtureName, 'output');
+
+  // Validate that input code is syntactically correct
+  validateSyntax(input, inputExt);
+
+  // Validate that expected output is syntactically correct
+  validateSyntax(expectedOutput, outputExt);
+
+  // Get all codemods for the specified version from the bundle
+  const versionCodemods = BUNDLE.filter(codemod => codemod.startsWith(`${version}/`));
+
+  if (versionCodemods.length === 0) {
+    throw new Error(`No codemods found for version: ${version}`);
+  }
+
+  // Load all transformers - vite requires explicit imports for nested paths
+  const transformers = await Promise.all(
+    versionCodemods.map(async codemodPath => {
+      // Extract the codemod name from the path (e.g., 'v1/mastra-core-imports' -> 'mastra-core-imports')
+      const codemodName = codemodPath.split('/').pop()!;
+
+      // Dynamic imports with nested paths need to be explicit for vite
+      const modules: Record<string, () => Promise<any>> = {
+        'mastra-core-imports': () => import('../codemods/v1/mastra-core-imports.js'),
+        'runtime-context': () => import('../codemods/v1/runtime-context.js'),
+        'experimental-auth': () => import('../codemods/v1/experimental-auth.js'),
+        'agent-property-access': () => import('../codemods/v1/agent-property-access.js'),
+        'agent-voice': () => import('../codemods/v1/agent-voice.js'),
+        'agent-processor-methods': () => import('../codemods/v1/agent-processor-methods.js'),
+        'agent-generate-stream-v-next': () => import('../codemods/v1/agent-generate-stream-v-next.js'),
+        'voice-property-names': () => import('../codemods/v1/voice-property-names.js'),
+        'agent-get-agents': () => import('../codemods/v1/agent-get-agents.js'),
+        'evals-get-scorers': () => import('../codemods/v1/evals-get-scorers.js'),
+        'mcp-get-mcp-servers': () => import('../codemods/v1/mcp-get-mcp-servers.js'),
+        'mcp-get-tools': () => import('../codemods/v1/mcp-get-tools.js'),
+        'mcp-get-toolsets': () => import('../codemods/v1/mcp-get-toolsets.js'),
+        'workflows-get-workflows': () => import('../codemods/v1/workflows-get-workflows.js'),
+        'agent-abort-signal': () => import('../codemods/v1/agent-abort-signal.js'),
+        'agent-format-parameter': () => import('../codemods/v1/agent-format-parameter.js'),
+        'agent-to-step': () => import('../codemods/v1/agent-to-step.js'),
+        'client-sdk-types': () => import('../codemods/v1/client-sdk-types.js'),
+        'client-to-ai-sdk-format': () => import('../codemods/v1/client-to-ai-sdk-format.js'),
+        'client-offset-limit': () => import('../codemods/v1/client-offset-limit.js'),
+        'client-get-memory-thread': () => import('../codemods/v1/client-get-memory-thread.js'),
+        'mastra-required-id': () => import('../codemods/v1/mastra-required-id.js'),
+        'mastra-memory': () => import('../codemods/v1/mastra-memory.js'),
+        'mastra-plural-apis': () => import('../codemods/v1/mastra-plural-apis.js'),
+      };
+
+      if (!modules[codemodName]) {
+        throw new Error(`Codemod not found in test mapping: ${codemodName}`);
+      }
+
+      const module = await modules[codemodName]();
+      return module.default;
+    }),
+  );
+
+  // Apply all transformers sequentially
+  let currentCode = input;
+  for (const transformer of transformers) {
+    currentCode = applyTransform(transformer, currentCode);
+  }
+
+  const actualOutput = currentCode;
 
   // Validate that output code is syntactically correct
   validateSyntax(actualOutput, outputExt);
