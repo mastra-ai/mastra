@@ -2,4 +2,4 @@
 '@mastra/braintrust': patch
 ---
 
-Add braintrustLogger as a parameter to BraintrustExporter
+Add braintrustLogger as an optional parameter to BraintrustExporter
