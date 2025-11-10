@@ -22,6 +22,7 @@ import { healthHandler } from './handlers/health';
 import { rootHandler } from './handlers/root';
 import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
 import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { datasetsRouter } from './handlers/routes/datasets/router';
 import { logsRouter } from './handlers/routes/logs/router';
 import { mcpRouter } from './handlers/routes/mcp/router';
 import { memoryRoutes } from './handlers/routes/memory/router';
@@ -431,6 +432,8 @@ export async function createHonoServer(
   app.route('/api/logs', logsRouter());
   // Scores routes
   app.route('/api/scores', scoresRouter(bodyLimitOptions));
+  // Datasets routes
+  app.route('/api/datasets', datasetsRouter(bodyLimitOptions));
   // Agent builder routes
   app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
   // Tool routes
