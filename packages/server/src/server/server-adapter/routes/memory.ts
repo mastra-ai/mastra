@@ -192,7 +192,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     method: 'DELETE',
     responseType: 'json',
     handler: deleteMessagesHandler as unknown as ServerRouteHandler,
-    path: '/api/memory/messages',
+    path: '/api/memory/messages/delete',
     queryParamSchema: deleteMessagesQuerySchema.extend(agentIdQuerySchema.shape),
     responseSchema: deleteMessagesResponseSchema,
     summary: 'Delete messages',
