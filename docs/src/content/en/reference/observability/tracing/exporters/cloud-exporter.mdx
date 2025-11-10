@@ -1,0 +1,183 @@
+---
+title: "Reference: CloudExporter | Observability | Mastra Docs"
+description: API reference for the CloudExporter
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# CloudExporter
+
+Sends traces to Mastra Cloud for online visualization and monitoring.
+
+## Constructor
+
+```typescript
+new CloudExporter(config?: CloudExporterConfig)
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "config",
+      type: "CloudExporterConfig",
+      description: "Configuration options",
+      required: false,
+    },
+  ]}
+/>
+
+## CloudExporterConfig
+
+```typescript
+interface CloudExporterConfig extends BaseExporterConfig {
+  /** Maximum number of spans per batch. Default: 1000 */
+  maxBatchSize?: number;
+
+  /** Maximum wait time before flushing in milliseconds. Default: 5000 */
+  maxBatchWaitMs?: number;
+
+  /** Maximum retry attempts. Default: 3 */
+  maxRetries?: number;
+
+  /** Cloud access token (from env or config) */
+  accessToken?: string;
+
+  /** Cloud observability endpoint */
+  endpoint?: string;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+## Environment Variables
+
+The exporter reads these environment variables if not provided in config:
+
+- `MASTRA_CLOUD_ACCESS_TOKEN` - Access token for authentication
+- `MASTRA_CLOUD_TRACES_ENDPOINT` - Custom endpoint (defaults to `https://api.mastra.ai/ai/spans/publish`)
+
+## Properties
+
+```typescript
+readonly name = 'mastra-cloud-observability-exporter';
+```
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Processes tracing events. Only exports SPAN_ENDED events to Cloud.
+
+<PropertiesTable
+  props={[
+    {
+      name: "event",
+      type: "TracingEvent",
+      description: "The tracing event to export",
+      required: true,
+    },
+  ]}
+/>
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes remaining events and performs cleanup.
+
+## Behavior
+
+### Authentication
+
+If no access token is provided via config or environment variable, the exporter:
+
+- Logs a warning with sign-up information
+- Operates as a no-op (discards all events)
+
+### Batching
+
+The exporter batches spans for efficient network usage:
+
+- Flushes when batch size reaches `maxBatchSize`
+- Flushes when `maxBatchWaitMs` elapsed since first span in batch
+- Flushes on `shutdown()`
+
+### Error Handling
+
+- Uses exponential backoff retry with `maxRetries` attempts
+- Drops batches after all retries fail
+- Logs errors but continues processing new events
+
+### Event Processing
+
+- Only processes `SPAN_ENDED` events
+- Ignores `SPAN_STARTED` and `SPAN_UPDATED` events
+- Formats spans to MastraCloudSpanRecord format
+
+## MastraCloudSpanRecord
+
+Internal format for cloud spans:
+
+```typescript
+interface MastraCloudSpanRecord {
+  traceId: string;
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  spanType: string;
+  attributes: Record<string, any> | null;
+  metadata: Record<string, any> | null;
+  startedAt: Date;
+  endedAt: Date | null;
+  input: any;
+  output: any;
+  error: any;
+  isEvent: boolean;
+  createdAt: Date;
+  updatedAt: Date | null;
+}
+```
+
+## Usage
+
+```typescript
+import { CloudExporter } from "@mastra/observability";
+
+// Uses environment variable for token
+const exporter = new CloudExporter();
+
+// Explicit configuration
+const customExporter = new CloudExporter({
+  accessToken: "your-token",
+  maxBatchSize: 500,
+  maxBatchWaitMs: 2000,
+  logLevel: 'debug'
+});
+```
+
+## See Also
+
+### Documentation
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - Complete guide
+- [Exporters](/docs/v1/observability/tracing/overview#exporters) - Exporter concepts
+
+### Other Exporters
+
+- [DefaultExporter](/reference/v1/observability/tracing/exporters/default-exporter) - Storage persistence
+- [ConsoleExporter](/reference/v1/observability/tracing/exporters/console-exporter) - Debug output
+- [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
+
+### Reference
+
+- [Configuration](/reference/v1/observability/tracing/configuration) - Configuration options
+- [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions

@@ -1,12 +1,11 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.22.2",
+  "version": "1.0.0-beta.1",
   "description": "",
   "type": "module",
   "files": [
     "dist",
     "CHANGELOG.md",
-    "templates",
     "versions.json"
   ],
   "main": "dist/index.js",
@@ -64,5 +63,8 @@
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
-  "homepage": "https://mastra.ai"
+  "homepage": "https://mastra.ai",
+  "engines": {
+    "node": ">=22.13.0"
+  }
 }

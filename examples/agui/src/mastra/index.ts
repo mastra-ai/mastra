@@ -18,6 +18,7 @@ export const mastra = new Mastra({
     myNetwork,
   },
   storage: new LibSQLStore({
+    id: 'agui-storage',
     // stores observability, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ':memory:',
   }),

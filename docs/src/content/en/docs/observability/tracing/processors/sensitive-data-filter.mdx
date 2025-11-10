@@ -1,0 +1,296 @@
+---
+title: "Sensitive Data Filter | Processors | Observability | Mastra Docs"
+description: "Protect sensitive information in your traces with automatic data redaction"
+---
+
+# Sensitive Data Filter
+
+The Sensitive Data Filter is a span processor that automatically redacts sensitive information from your traces before they're exported. This ensures that passwords, API keys, tokens, and other confidential data never leave your application or get stored in observability platforms.
+
+## Default Configuration
+
+By default, the Sensitive Data Filter is automatically enabled when you use the standard Mastra configuration:
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: new Observability({
+    default: { enabled: true }, // Automatically includes SensitiveDataFilter
+  }),
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+With the default configuration, the filter automatically redacts these common sensitive field names:
+
+- `password`
+- `token`
+- `secret`
+- `key`
+- `apikey`
+- `auth`
+- `authorization`
+- `bearer`
+- `bearertoken`
+- `jwt`
+- `credential`
+- `clientsecret`
+- `privatekey`
+- `refresh`
+- `ssn`
+
+:::note
+
+Field matching is case-insensitive and normalizes separators. For example, `api-key`, `api_key`, and `Api Key` are all treated as `apikey`.
+
+:::
+
+## How It Works
+
+The Sensitive Data Filter processes spans before they're sent to exporters, scanning through:
+
+- **Attributes** - Span metadata and properties
+- **Metadata** - Custom metadata attached to spans
+- **Input** - Data sent to agents, tools, and LLMs
+- **Output** - Responses and results
+- **Error Information** - Stack traces and error details
+
+When a sensitive field is detected, its value is replaced with `[REDACTED]` by default. The filter handles nested objects, arrays, and circular references safely.
+
+## Custom Configuration
+
+You can customize which fields are redacted and how redaction appears:
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+import { SensitiveDataFilter, DefaultExporter, Observability } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: "my-service",
+        exporters: [new DefaultExporter()],
+        spanOutputProcessors: [
+          new SensitiveDataFilter({
+            // Add custom sensitive fields
+            sensitiveFields: [
+              // Default fields
+              "password",
+              "token",
+              "secret",
+              "key",
+              "apikey",
+              // Custom fields for your application
+              "creditCard",
+              "bankAccount",
+              "routingNumber",
+              "email",
+              "phoneNumber",
+              "dateOfBirth",
+            ],
+            // Custom redaction token
+            redactionToken: "***SENSITIVE***",
+            // Redaction style
+            redactionStyle: "full", // or 'partial'
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Redaction Styles
+
+The filter supports two redaction styles:
+
+### Full Redaction (Default)
+
+Replaces the entire value with a fixed token:
+
+```json
+// Before
+{
+  "apiKey": "sk-abc123xyz789def456",
+  "userId": "user_12345"
+}
+
+// After
+{
+  "apiKey": "[REDACTED]",
+  "userId": "user_12345"
+}
+```
+
+### Partial Redaction
+
+Shows the first and last 3 characters, useful for debugging without exposing full values:
+
+```ts
+new SensitiveDataFilter({
+  redactionStyle: "partial",
+});
+```
+
+```json
+// Before
+{
+  "apiKey": "sk-abc123xyz789def456",
+  "creditCard": "4111111111111111"
+}
+
+// After
+{
+  "apiKey": "sk-…456",
+  "creditCard": "411…111"
+}
+```
+
+Values shorter than 7 characters are fully redacted to prevent information leakage.
+
+## Field Matching Rules
+
+The filter uses intelligent field matching:
+
+1. **Case-Insensitive**: `APIKey`, `apikey`, and `ApiKey` are all matched
+2. **Separator-Agnostic**: `api-key`, `api_key`, and `apiKey` are treated identically
+3. **Exact Matching**: After normalization, fields must match exactly
+   - `token` matches `token`, `Token`, `TOKEN`
+   - `token` does NOT match `promptTokens` or `tokenCount`
+
+## Nested Object Handling
+
+The filter recursively processes nested structures:
+
+```json
+// Before
+{
+  "user": {
+    "id": "12345",
+    "credentials": {
+      "password": "SuperSecret123!",
+      "apiKey": "sk-production-key"
+    }
+  },
+  "config": {
+    "auth": {
+      "jwt": "eyJhbGciOiJIUzI1NiIs..."
+    }
+  }
+}
+
+// After
+{
+  "user": {
+    "id": "12345",
+    "credentials": {
+      "password": "[REDACTED]",
+      "apiKey": "[REDACTED]"
+    }
+  },
+  "config": {
+    "auth": {
+      "jwt": "[REDACTED]"
+    }
+  }
+}
+```
+
+## Performance Considerations
+
+The Sensitive Data Filter is designed to be lightweight and efficient:
+
+- **Synchronous Processing**: No async operations, minimal latency impact
+- **Circular Reference Handling**: Safely handles complex object graphs
+- **Error Recovery**: If filtering fails, the field is replaced with an error marker rather than crashing
+
+## Disabling the Filter
+
+If you need to disable sensitive data filtering (not recommended for production):
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      debug: {
+        serviceName: "debug-service",
+        spanOutputProcessors: [], // No processors, including no SensitiveDataFilter
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+:::warning
+
+Only disable sensitive data filtering in controlled environments. Never disable it when sending traces to external services or shared storage.
+
+:::
+
+## Common Use Cases
+
+### Healthcare Applications
+
+```ts
+new SensitiveDataFilter({
+  sensitiveFields: [
+    // HIPAA-related fields
+    "ssn",
+    "socialSecurityNumber",
+    "medicalRecordNumber",
+    "mrn",
+    "healthInsuranceNumber",
+    "diagnosisCode",
+    "icd10",
+    "prescription",
+    "medication",
+  ],
+});
+```
+
+### Financial Services
+
+```ts
+new SensitiveDataFilter({
+  sensitiveFields: [
+    // PCI compliance fields
+    "creditCard",
+    "ccNumber",
+    "cardNumber",
+    "cvv",
+    "cvc",
+    "securityCode",
+    "expirationDate",
+    "expiry",
+    "bankAccount",
+    "accountNumber",
+    "routingNumber",
+    "iban",
+    "swift",
+  ],
+});
+```
+
+## Error Handling
+
+If the filter encounters an error while processing a field, it replaces the field with a safe error marker:
+
+```json
+{
+  "problematicField": {
+    "error": {
+      "processor": "sensitive-data-filter"
+    }
+  }
+}
+```
+
+This ensures that processing errors don't prevent traces from being exported or cause application crashes.
+
+## Related
+
+- [SensitiveDataFilter API](/reference/v1/observability/tracing/processors/sensitive-data-filter)
+- [Basic Tracing Example](/examples/v1/observability/basic-tracing)

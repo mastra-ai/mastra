@@ -25,6 +25,7 @@ export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
   logger: new PinoLogger({
@@ -120,7 +121,7 @@ export const mastra = new Mastra({
       type: "Record<string, MCPServerBase>",
       isOptional: true,
       description:
-        "An object where keys are unique server identifiers and values are instances of MCPServer or classes extending MCPServerBase. This allows Mastra to be aware of and potentially manage these MCP servers.",
+        "An object where keys are registry keys (used for getMCPServer()) and values are instances of MCPServer or classes extending MCPServerBase. Each MCPServer must have an id property. Servers can be retrieved by registry key using getMCPServer() or by their intrinsic id using getMCPServerById().",
     },
     {
       name: "bundler",

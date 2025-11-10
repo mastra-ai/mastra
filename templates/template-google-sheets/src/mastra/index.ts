@@ -10,10 +10,12 @@ import { MastraProvider } from '@composio/mastra';
 export const mastra = new Mastra({
   agents: { financialModelingAgent },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: 'file:../../mastra.db',
   }),
   vectors: {
     default: new LibSQLVector({
+      id: 'mastra-vector',
       connectionUrl: 'file:../../mastra.db',
     }),
   },

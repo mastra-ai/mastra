@@ -1,0 +1,573 @@
+---
+title: "Reference: Tool Call Accuracy Scorers | Evals | Mastra Docs"
+description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
+---
+
+# Tool Call Accuracy Scorers
+
+Mastra provides two tool call accuracy scorers for evaluating whether an LLM selects the correct tools from available options:
+
+1. **Code-based scorer** - Deterministic evaluation using exact tool matching
+2. **LLM-based scorer** - Semantic evaluation using AI to assess appropriateness
+
+## Choosing Between Scorers
+
+### Use the Code-Based Scorer When:
+
+- You need **deterministic, reproducible** results
+- You want to test **exact tool matching**
+- You need to validate **specific tool sequences**
+- Speed and cost are priorities (no LLM calls)
+- You're running automated tests
+
+### Use the LLM-Based Scorer When:
+
+- You need **semantic understanding** of appropriateness
+- Tool selection depends on **context and intent**
+- You want to handle **edge cases** like clarification requests
+- You need **explanations** for scoring decisions
+- You're evaluating **production agent behavior**
+
+## Code-Based Tool Call Accuracy Scorer
+
+The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/prebuilt` provides deterministic binary scoring based on exact tool matching and supports both strict and lenient evaluation modes, as well as tool calling order validation.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "expectedTool",
+      type: "string",
+      description:
+        "The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.",
+      required: false,
+    },
+    {
+      name: "strictMode",
+      type: "boolean",
+      description:
+        "Controls evaluation strictness. For single tool mode: only exact single tool calls accepted. For order checking mode: tools must match exactly with no extra tools allowed.",
+      required: false,
+      default: "false",
+    },
+    {
+      name: "expectedToolOrder",
+      type: "string[]",
+      description:
+        "Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.",
+      required: false,
+    },
+  ]}
+/>
+
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
+
+### Evaluation Modes
+
+The code-based scorer operates in two distinct modes:
+
+#### Single Tool Mode
+
+When `expectedToolOrder` is not provided, the scorer evaluates single tool selection:
+
+- **Standard Mode (strictMode: false)**: Returns `1` if the expected tool is called, regardless of other tools
+- **Strict Mode (strictMode: true)**: Returns `1` only if exactly one tool is called and it matches the expected tool
+
+#### Order Checking Mode
+
+When `expectedToolOrder` is provided, the scorer validates tool calling sequence:
+
+- **Strict Order (strictMode: true)**: Tools must be called in exactly the specified order with no extra tools
+- **Flexible Order (strictMode: false)**: Expected tools must appear in correct relative order (extra tools allowed)
+
+## Code-Based Scoring Details
+
+- **Binary scores**: Always returns 0 or 1
+- **Deterministic**: Same input always produces same output
+- **Fast**: No external API calls
+
+### Code-Based Scorer Options
+
+```typescript showLineNumbers copy
+// Standard mode - passes if expected tool is called
+const lenientScorer = createCodeScorer({
+  expectedTool: "search-tool",
+  strictMode: false,
+});
+
+// Strict mode - only passes if exactly one tool is called
+const strictScorer = createCodeScorer({
+  expectedTool: "search-tool",
+  strictMode: true,
+});
+
+// Order checking with strict mode
+const strictOrderScorer = createCodeScorer({
+  expectedTool: "step1-tool",
+  expectedToolOrder: ["step1-tool", "step2-tool", "step3-tool"],
+  strictMode: true, // no extra tools allowed
+});
+```
+
+### Code-Based Scorer Results
+
+```typescript
+{
+  runId: string,
+  preprocessStepResult: {
+    expectedTool: string,
+    actualTools: string[],
+    strictMode: boolean,
+    expectedToolOrder?: string[],
+    hasToolCalls: boolean,
+    correctToolCalled: boolean,
+    correctOrderCalled: boolean | null,
+    toolCallInfos: ToolCallInfo[]
+  },
+  score: number // Always 0 or 1
+}
+```
+
+## Code-Based Scorer Examples
+
+The code-based scorer provides deterministic, binary scoring (0 or 1) based on exact tool matching.
+
+### Correct tool selection
+
+```typescript title="src/example-correct-tool.ts" showLineNumbers copy
+const scorer = createToolCallAccuracyScorerCode({
+  expectedTool: "weather-tool",
+});
+
+// Simulate LLM input and output with tool call
+const inputMessages = [
+  createUIMessage({
+    content: "What is the weather like in New York today?",
+    role: "user",
+    id: "input-1",
+  }),
+];
+
+const output = [
+  createUIMessage({
+    content: "Let me check the weather for you.",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-123",
+        toolName: "weather-tool",
+        args: { location: "New York" },
+        result: { temperature: "72°F", condition: "sunny" },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await scorer.run(run);
+
+console.log(result.score); // 1
+console.log(result.preprocessStepResult?.correctToolCalled); // true
+```
+
+### Strict mode evaluation
+
+Only passes if exactly one tool is called:
+
+```typescript title="src/example-strict-mode.ts" showLineNumbers copy
+const strictScorer = createToolCallAccuracyScorerCode({
+  expectedTool: "weather-tool",
+  strictMode: true,
+});
+
+// Multiple tools called - fails in strict mode
+const output = [
+  createUIMessage({
+    content: "Let me help you with that.",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-1",
+        toolName: "search-tool",
+        args: {},
+        result: {},
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-2",
+        toolName: "weather-tool",
+        args: { location: "New York" },
+        result: { temperature: "20°C" },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const result = await strictScorer.run(run);
+console.log(result.score); // 0 - fails because multiple tools were called
+```
+
+### Tool order validation
+
+Validates that tools are called in a specific sequence:
+
+```typescript title="src/example-order-validation.ts" showLineNumbers copy
+const orderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: "auth-tool", // ignored when order is specified
+  expectedToolOrder: ["auth-tool", "fetch-tool"],
+  strictMode: true, // no extra tools allowed
+});
+
+const output = [
+  createUIMessage({
+    content: "I will authenticate and fetch the data.",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-1",
+        toolName: "auth-tool",
+        args: { token: "abc123" },
+        result: { authenticated: true },
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-2",
+        toolName: "fetch-tool",
+        args: { endpoint: "/data" },
+        result: { data: ["item1"] },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const result = await orderScorer.run(run);
+console.log(result.score); // 1 - correct order
+```
+
+### Flexible order mode
+
+Allows extra tools as long as expected tools maintain relative order:
+
+```typescript title="src/example-flexible-order.ts" showLineNumbers copy
+const flexibleOrderScorer = createToolCallAccuracyScorerCode({
+  expectedTool: "auth-tool",
+  expectedToolOrder: ["auth-tool", "fetch-tool"],
+  strictMode: false, // allows extra tools
+});
+
+const output = [
+  createUIMessage({
+    content: "Performing comprehensive operation.",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-1",
+        toolName: "auth-tool",
+        args: { token: "abc123" },
+        result: { authenticated: true },
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-2",
+        toolName: "log-tool", // Extra tool - OK in flexible mode
+        args: { message: "Starting fetch" },
+        result: { logged: true },
+        state: "result",
+      }),
+      createToolInvocation({
+        toolCallId: "call-3",
+        toolName: "fetch-tool",
+        args: { endpoint: "/data" },
+        result: { data: ["item1"] },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const result = await flexibleOrderScorer.run(run);
+console.log(result.score); // 1 - auth-tool comes before fetch-tool
+```
+
+## LLM-Based Tool Call Accuracy Scorer
+
+The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/prebuilt` uses an LLM to evaluate whether the tools called by an agent are appropriate for the given user request, providing semantic evaluation rather than exact matching.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "The LLM model to use for evaluating tool appropriateness",
+      required: true,
+    },
+    {
+      name: "availableTools",
+      type: "Array<{name: string, description: string}>",
+      description:
+        "List of available tools with their descriptions for context",
+      required: true,
+    },
+  ]}
+/>
+
+### Features
+
+The LLM-based scorer provides:
+
+- **Semantic Evaluation**: Understands context and user intent
+- **Appropriateness Assessment**: Distinguishes between "helpful" and "appropriate" tools
+- **Clarification Handling**: Recognizes when agents appropriately ask for clarification
+- **Missing Tool Detection**: Identifies tools that should have been called
+- **Reasoning Generation**: Provides explanations for scoring decisions
+
+### Evaluation Process
+
+1. **Extract Tool Calls**: Identifies tools mentioned in agent output
+2. **Analyze Appropriateness**: Evaluates each tool against user request
+3. **Generate Score**: Calculates score based on appropriate vs total tool calls
+4. **Generate Reasoning**: Provides human-readable explanation
+
+## LLM-Based Scoring Details
+
+- **Fractional scores**: Returns values between 0.0 and 1.0
+- **Context-aware**: Considers user intent and appropriateness
+- **Explanatory**: Provides reasoning for scores
+
+### LLM-Based Scorer Options
+
+```typescript showLineNumbers copy
+// Basic configuration
+const basicLLMScorer = createLLMScorer({
+  model: 'openai/gpt-4o-mini',
+  availableTools: [
+    { name: 'tool1', description: 'Description 1' },
+    { name: 'tool2', description: 'Description 2' }
+  ]
+});
+
+// With different model
+const customModelScorer = createLLMScorer({
+  model: openai('gpt-4'), // More powerful model for complex evaluations
+  availableTools: [...]
+});
+```
+
+### LLM-Based Scorer Results
+
+```typescript
+{
+  runId: string,
+  score: number,  // 0.0 to 1.0
+  reason: string, // Human-readable explanation
+  analyzeStepResult: {
+    evaluations: Array<{
+      toolCalled: string,
+      wasAppropriate: boolean,
+      reasoning: string
+    }>,
+    missingTools?: string[]
+  }
+}
+```
+
+## LLM-Based Scorer Examples
+
+The LLM-based scorer uses AI to evaluate whether tool selections are appropriate for the user's request.
+
+### Basic LLM evaluation
+
+```typescript title="src/example-llm-basic.ts" showLineNumbers copy
+const llmScorer = createToolCallAccuracyScorerLLM({
+  model: "openai/gpt-4o-mini",
+  availableTools: [
+    {
+      name: "weather-tool",
+      description: "Get current weather information for any location",
+    },
+    {
+      name: "calendar-tool",
+      description: "Check calendar events and scheduling",
+    },
+    {
+      name: "search-tool",
+      description: "Search the web for general information",
+    },
+  ],
+});
+
+const inputMessages = [
+  createUIMessage({
+    content: "What is the weather like in San Francisco today?",
+    role: "user",
+    id: "input-1",
+  }),
+];
+
+const output = [
+  createUIMessage({
+    content: "Let me check the current weather for you.",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-123",
+        toolName: "weather-tool",
+        args: { location: "San Francisco", date: "today" },
+        result: { temperature: "68°F", condition: "foggy" },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const run = createAgentTestRun({ inputMessages, output });
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 1.0 - appropriate tool usage
+console.log(result.reason); // "The agent correctly used the weather-tool to address the user's request for weather information."
+```
+
+### Handling inappropriate tool usage
+
+```typescript title="src/example-llm-inappropriate.ts" showLineNumbers copy
+const inputMessages = [
+  createUIMessage({
+    content: "What is the weather in Tokyo?",
+    role: "user",
+    id: "input-1",
+  }),
+];
+
+const inappropriateOutput = [
+  createUIMessage({
+    content: "Let me search for that information.",
+    role: "assistant",
+    id: "output-1",
+    toolInvocations: [
+      createToolInvocation({
+        toolCallId: "call-456",
+        toolName: "search-tool", // Less appropriate than weather-tool
+        args: { query: "Tokyo weather" },
+        result: { results: ["Tokyo weather data..."] },
+        state: "result",
+      }),
+    ],
+  }),
+];
+
+const run = createAgentTestRun({ inputMessages, output: inappropriateOutput });
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 0.5 - partially appropriate
+console.log(result.reason); // "The agent used search-tool when weather-tool would have been more appropriate for a direct weather query."
+```
+
+### Evaluating clarification requests
+
+The LLM scorer recognizes when agents appropriately ask for clarification:
+
+```typescript title="src/example-llm-clarification.ts" showLineNumbers copy
+const vagueInput = [
+  createUIMessage({
+    content: 'I need help with something',
+    role: 'user',
+    id: 'input-1'
+  })
+];
+
+const clarificationOutput = [
+  createUIMessage({
+    content: 'I'd be happy to help! Could you please provide more details about what you need assistance with?',
+    role: 'assistant',
+    id: 'output-1',
+    // No tools called - asking for clarification instead
+  })
+];
+
+const run = createAgentTestRun({
+  inputMessages: vagueInput,
+  output: clarificationOutput
+});
+const result = await llmScorer.run(run);
+
+console.log(result.score); // 1.0 - appropriate to ask for clarification
+console.log(result.reason); // "The agent appropriately asked for clarification rather than calling tools with insufficient information."
+```
+
+## Comparing Both Scorers
+
+Here's an example using both scorers on the same data:
+
+```typescript title="src/example-comparison.ts" showLineNumbers copy
+import { 
+  createToolCallAccuracyScorerCode as createCodeScorer, 
+  createToolCallAccuracyScorerLLM as createLLMScorer 
+} from "@mastra/evals/scorers/prebuilt";
+
+// Setup both scorers
+const codeScorer = createCodeScorer({
+  expectedTool: "weather-tool",
+  strictMode: false,
+});
+
+const llmScorer = createLLMScorer({
+  model: "openai/gpt-4o-mini",
+  availableTools: [
+    { name: "weather-tool", description: "Get weather information" },
+    { name: "search-tool", description: "Search the web" },
+  ],
+});
+
+// Test data
+const run = createAgentTestRun({
+  inputMessages: [
+    createUIMessage({
+      content: "What is the weather?",
+      role: "user",
+      id: "input-1",
+    }),
+  ],
+  output: [
+    createUIMessage({
+      content: "Let me find that information.",
+      role: "assistant",
+      id: "output-1",
+      toolInvocations: [
+        createToolInvocation({
+          toolCallId: "call-1",
+          toolName: "search-tool",
+          args: { query: "weather" },
+          result: { results: ["weather data"] },
+          state: "result",
+        }),
+      ],
+    }),
+  ],
+});
+
+// Run both scorers
+const codeResult = await codeScorer.run(run);
+const llmResult = await llmScorer.run(run);
+
+console.log("Code Scorer:", codeResult.score); // 0 - wrong tool
+console.log("LLM Scorer:", llmResult.score); // 0.3 - partially appropriate
+console.log("LLM Reason:", llmResult.reason); // Explains why search-tool is less appropriate
+```
+
+## Related
+
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Completeness Scorer](./completeness)
+- [Faithfulness Scorer](./faithfulness)
+- [Custom Scorers](/docs/v1/evals/custom-scorers)

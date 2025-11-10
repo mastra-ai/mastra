@@ -24,7 +24,7 @@ You can get your Upstash credentials by signing up at [upstash.com](https://upst
 And install the following package:
 
 ```bash copy
-npm install @mastra/upstash
+npm install @mastra/upstash@beta
 ```
 
 ## Adding memory to an agent
@@ -45,6 +45,7 @@ export const upstashAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new UpstashStore({
+      id: 'upstash-agent-storage',
       url: process.env.UPSTASH_REDIS_REST_URL!,
       token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     }),
@@ -62,7 +63,7 @@ Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve r
 Install `fastembed` to get started:
 
 ```bash copy
-npm install @mastra/fastembed
+npm install @mastra/fastembed@beta
 ```
 
 Add the following to your agent:
@@ -82,10 +83,12 @@ export const upstashAgent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new UpstashStore({
+      id: 'upstash-agent-storage',
       url: process.env.UPSTASH_REDIS_REST_URL!,
       token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     }),
     vector: new UpstashVector({
+      id: 'upstash-agent-vector',
       url: process.env.UPSTASH_VECTOR_REST_URL!,
       token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
     }),
@@ -145,4 +148,4 @@ for await (const chunk of stream.textStream) {
 
 ## Related
 
-- [Calling Agents](/examples/agents/calling-agents)
+- [Calling Agents](/examples/v1/agents/calling-agents)

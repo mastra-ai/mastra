@@ -176,6 +176,8 @@
   --prism-color-function: #9829c7;
   --prism-color-comment: #939393;
   --prism-color-variable: #0a0a0a;
+  --prism-color-inserted: #177326;
+  --prism-color-deleted: #d81717;
 
   /* Border radius */
   --ifm-global-radius: 0.5rem;
@@ -252,6 +254,8 @@
   --prism-color-function: #d06bee;
   --prism-color-comment: #939393;
   --prism-color-variable: #fff;
+  --prism-color-inserted: #62f69d;
+  --prism-color-deleted: #d81717;
 
   /* Override Docusaurus text colors for dark mode */
   --ifm-font-color-base: var(--mastra-text-secondary);
@@ -409,6 +413,23 @@ span[class*="categoryLinkLabel"] {
   position: relative;
 }
 
+h2:has(code) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+h1 code,
+h2 code,
+h3 code,
+h4 code,
+h5 code,
+h6 code {
+  font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
+  border-radius: 10px;
+}
+
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
@@ -508,22 +529,6 @@ span[class*="categoryLinkLabel"] {
     .markdown h3 {
       border-bottom-color: var(--border);
     }
-  }
-
-  h2:has(code) {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  h1 code,
-  h2 code,
-  h3 code,
-  h4 code,
-  h5 code,
-  h6 code {
-    font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
-    border-radius: 10px;
   }
 
   iframe,
@@ -1356,4 +1361,13 @@ p {
 /* Hide sidebar items with sidebar-hidden class */
 .sidebar-hidden {
   display: none !important;
+}
+
+/* Code block overrides */
+.language-diff .inserted {
+  color: var(--prism-color-inserted) !important;
+}
+
+.language-diff .deleted {
+  color: var(--prism-color-deleted) !important;
 }

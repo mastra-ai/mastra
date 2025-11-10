@@ -5,7 +5,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   WorkflowRuns,
   WorkflowRun,
@@ -23,6 +22,7 @@ import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
 
 export interface UpstashConfig {
+  id: string;
   url: string;
   token: string;
 }
@@ -32,7 +32,7 @@ export class UpstashStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: UpstashConfig) {
-    super({ name: 'Upstash' });
+    super({ id: config.id, name: 'Upstash' });
     this.redis = new Redis({
       url: config.url,
       token: config.token,
@@ -131,13 +131,6 @@ export class UpstashStore extends MastraStorage {
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
-  }
-
-  /**
-   * @deprecated use listMessages instead
-   */
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

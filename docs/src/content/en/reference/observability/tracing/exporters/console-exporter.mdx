@@ -1,0 +1,184 @@
+---
+title: "Reference: ConsoleExporter | Observability | Mastra Docs"
+description: API reference for the ConsoleExporter
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# ConsoleExporter
+
+Outputs trace events to the console for debugging and development.
+
+## Constructor
+
+```typescript
+new ConsoleExporter(config?: BaseExporterConfig)
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "config",
+      type: "BaseExporterConfig",
+      description: "Configuration options",
+      required: false,
+    },
+  ]}
+/>
+
+## BaseExporterConfig
+
+```typescript
+interface BaseExporterConfig {
+  logger?: IMastraLogger;
+  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error';
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "logger",
+      type: "IMastraLogger",
+      description: "Logger instance (falls back to ConsoleLogger with INFO level)",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+      description: "Log level for the exporter (default: INFO)",
+      required: false,
+    },
+  ]}
+/>
+
+## Properties
+
+```typescript
+readonly name = 'tracing-console-exporter';
+```
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to the console.
+
+<PropertiesTable
+  props={[
+    {
+      name: "event",
+      type: "TracingEvent",
+      description: "The tracing event to export",
+      required: true,
+    },
+  ]}
+/>
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Logs shutdown message.
+
+## Output Format
+
+The exporter outputs different formats based on event type:
+
+### SPAN_STARTED
+
+```
+🚀 SPAN_STARTED
+   Type: [span type]
+   Name: [span name]
+   ID: [span id]
+   Trace ID: [trace id]
+   Input: [formatted input]
+   Attributes: [formatted attributes]
+────────────────────────────────────────
+```
+
+### SPAN_ENDED
+
+```
+✅ SPAN_ENDED
+   Type: [span type]
+   Name: [span name]
+   ID: [span id]
+   Duration: [duration]ms
+   Trace ID: [trace id]
+   Input: [formatted input]
+   Output: [formatted output]
+   Error: [formatted error if present]
+   Attributes: [formatted attributes]
+────────────────────────────────────────
+```
+
+### SPAN_UPDATED
+
+```
+📝 SPAN_UPDATED
+   Type: [span type]
+   Name: [span name]
+   ID: [span id]
+   Trace ID: [trace id]
+   Input: [formatted input]
+   Output: [formatted output]
+   Error: [formatted error if present]
+   Updated Attributes: [formatted attributes]
+────────────────────────────────────────
+```
+
+## Usage
+
+```typescript
+import { ConsoleExporter } from "@mastra/observability";
+import { ConsoleLogger, LogLevel } from "@mastra/core/logger";
+
+// Use default logger (INFO level)
+const exporter = new ConsoleExporter();
+
+// Use custom log level
+const exporter = new ConsoleExporter({
+  logLevel: 'debug'
+});
+
+// Use custom logger instance
+const customLogger = new ConsoleLogger({ level: LogLevel.DEBUG });
+const exporterWithLogger = new ConsoleExporter({
+  logger: customLogger
+});
+```
+
+## Implementation Details
+
+- Formats attributes as JSON with 2-space indentation
+- Calculates and displays span duration in milliseconds
+- Handles serialization errors gracefully
+- Logs unimplemented event types as warnings
+- Uses 80-character separator lines between events
+
+## See Also
+
+### Documentation
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - Complete guide
+- [Exporters](/docs/v1/observability/tracing/overview#exporters) - Exporter concepts
+
+### Other Exporters
+
+- [DefaultExporter](/reference/v1/observability/tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/reference/v1/observability/tracing/exporters/cloud-exporter) - Mastra Cloud
+- [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
+- [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
+
+### Reference
+
+- [Configuration](/reference/v1/observability/tracing/configuration) - Configuration options
+- [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions

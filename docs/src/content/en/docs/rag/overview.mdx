@@ -43,6 +43,7 @@ const { embeddings } = await embedMany({
 
 // 4. Store in vector database
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 await pgVector.upsert({
@@ -70,18 +71,7 @@ The basic building block of RAG is document processing. Documents can be chunked
 
 Mastra supports multiple vector stores for embedding persistence and similarity search, including pgvector, Pinecone, Qdrant, and MongoDB. See the [vector database doc](./vector-databases).
 
-## Observability and Debugging
-
-Mastra's RAG system includes observability features to help you optimize your retrieval pipeline:
-
-- Track embedding generation performance and costs
-- Monitor chunk quality and retrieval relevance
-- Analyze query patterns and cache hit rates
-- Export metrics to your observability platform
-
-See the [OTEL Tracing](/docs/observability/otel-tracing) documentation for more details.
-
 ## More resources
 
-- [Chain of Thought RAG Example](/examples/rag/usage/cot-rag)
-- [All RAG Examples](../../examples/) (including different chunking strategies, embedding models, and vector stores)
+- [Chain of Thought RAG Example](/examples/v1/rag/usage/cot-rag)
+- [All RAG Examples](/examples/v1/) (including different chunking strategies, embedding models, and vector stores)

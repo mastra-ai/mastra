@@ -15,8 +15,8 @@ The `resource` is especially important for [resource-scoped memory](./working-me
 ```typescript {4} showLineNumbers
 const stream = await agent.stream("message for agent", {
   memory: {
-    thread: "user-123",
-    resource: "test-123",
+    thread: "conversation-123",
+    resource: "user-123",
   },
 });
 ```
@@ -43,7 +43,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> Title generation runs asynchronously after the agent responds and does not affect response time. See the [full configuration reference](/reference/memory/memory-class) for details and examples.
+> Title generation runs asynchronously after the agent responds and does not affect response time. See the [full configuration reference](/reference/v1/memory/memory-class) for details and examples.
 
 #### Optimizing title generation
 

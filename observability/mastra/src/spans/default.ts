@@ -1,20 +1,20 @@
 import { MastraError } from '@mastra/core/error';
 import type {
-  AISpanType,
-  AITracing,
+  SpanType,
+  ObservabilityInstance,
   EndSpanOptions,
   ErrorSpanOptions,
   UpdateSpanOptions,
   CreateSpanOptions,
 } from '@mastra/core/observability';
-import { BaseAISpan, deepClean } from './base';
+import { BaseSpan, deepClean } from './base';
 
-export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
+export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
 
-  constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
-    super(options, aiTracing);
+  constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
+    super(options, observabilityInstance);
     this.id = generateSpanId();
 
     // Set trace ID based on context:

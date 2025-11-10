@@ -4,6 +4,7 @@ import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
+import { MastraError } from '@mastra/core/error';
 import type { MastraScorer } from '@mastra/core/evals';
 import { createScorer, runEvals } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
@@ -88,6 +89,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -177,6 +179,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -255,6 +258,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -352,6 +356,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -464,6 +469,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -545,6 +551,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -625,6 +632,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -720,6 +728,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -794,6 +803,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -888,6 +898,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -980,6 +991,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1074,6 +1086,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1125,7 +1138,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     }, 50_000);
 
-    it('should execute a a waitForEvent step', async ctx => {
+    it('should throw error if waitForEvent is used', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -1160,153 +1173,16 @@ describe('MastraInngestWorkflow', () => {
         steps: [step1],
       });
 
-      workflow.then(step1).waitForEvent('hello-event', step2).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      const run = await workflow.createRun();
-      const startTime = Date.now();
-      setTimeout(() => {
-        run.sendEvent('hello-event', { data: 'hello' });
-      }, 1000);
-      const result = await run.start({ inputData: {} });
-      const endTime = Date.now();
-
-      expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toMatchObject({
-        status: 'success',
-        output: { result: 'success' },
-        // payload: {},
-        // startedAt: expect.any(Number),
-        // endedAt: expect.any(Number),
-      });
-
-      expect(result.steps['step2']).toMatchObject({
-        status: 'success',
-        output: { result: 'success', resumed: { data: 'hello' } },
-        payload: { result: 'success' },
-        // resumePayload: { data: 'hello' },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-
-      expect(endTime - startTime).toBeGreaterThan(1000);
-
-      srv.close();
-    });
-
-    it('should execute a a waitForEvent step after timeout', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
-      const step1 = createStep({
-        id: 'step1',
-        execute,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ result: z.string() }),
-      });
-      const step2 = createStep({
-        id: 'step2',
-        execute: async ({ inputData, resumeData }) => {
-          return { result: inputData.result, resumed: resumeData };
-        },
-        inputSchema: z.object({ result: z.string() }),
-        outputSchema: z.object({ result: z.string(), resumed: z.any() }),
-        resumeSchema: z.any(),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({
-          result: z.string(),
-          resumed: z.any(),
-        }),
-        steps: [step1],
-      });
-
-      workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      const run = await workflow.createRun();
-      const startTime = Date.now();
-      const result = await run.start({ inputData: {} });
-      const endTime = Date.now();
-
-      expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toMatchObject({
-        status: 'success',
-        output: { result: 'success' },
-        // payload: {},
-        // startedAt: expect.any(Number),
-        // endedAt: expect.any(Number),
-      });
-
-      expect(result.steps['step2']).toMatchObject({
-        status: 'failed',
-        error: expect.any(String),
-        payload: { result: 'success' },
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-
-      expect(endTime - startTime).toBeGreaterThan(1000);
-
-      srv.close();
+      try {
+        // @ts-expect-error - we expect this to throw an error
+        workflow.then(step1).waitForEvent('hello-event', step2).commit();
+      } catch (error) {
+        expect(error).toBeInstanceOf(MastraError);
+        expect(error).toHaveProperty(
+          'message',
+          'waitForEvent has been removed. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
+        );
+      }
     });
 
     it('should persist a workflow run with resourceId', async ctx => {
@@ -1336,6 +1212,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1416,6 +1293,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1518,6 +1396,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1607,6 +1486,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1696,6 +1576,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1764,6 +1645,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1840,6 +1722,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -1923,6 +1806,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2027,6 +1911,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2147,6 +2032,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2226,6 +2112,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2332,6 +2219,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2416,6 +2304,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2484,6 +2373,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2568,6 +2458,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2662,6 +2553,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2790,6 +2682,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2893,6 +2786,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -2998,6 +2892,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3087,6 +2982,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3240,6 +3136,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3389,6 +3286,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3561,6 +3459,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3627,6 +3526,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3697,6 +3597,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3776,6 +3677,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -3932,6 +3834,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -4126,6 +4029,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -4360,6 +4264,7 @@ describe('MastraInngestWorkflow', () => {
       const mastra = new Mastra({
         logger: false,
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: { mainWorkflow },
@@ -4441,8 +4346,7 @@ describe('MastraInngestWorkflow', () => {
         resumeSchema: z.object({ multiplier: z.number() }),
         execute: async ({ inputData, suspend, resumeData }) => {
           if (!resumeData) {
-            await suspend({});
-            return { result: 0 };
+            return suspend({});
           }
           return { result: inputData.value * resumeData.multiplier };
         },
@@ -4464,6 +4368,7 @@ describe('MastraInngestWorkflow', () => {
 
       // Create a new storage instance for initial run
       const initialStorage = new DefaultStorage({
+        id: 'test-storage',
         url: 'file::memory:',
       });
       const mastra = new Mastra({
@@ -4498,6 +4403,8 @@ describe('MastraInngestWorkflow', () => {
       expect(initialResult.status).toBe('suspended');
       expect(initialResult.steps['branch-step-1'].status).toBe('suspended');
       expect(initialResult.steps['branch-step-2'].status).toBe('suspended');
+      expect(initialResult.steps['branch-step-1'].suspendOutput).toMatchObject({ result: 0 });
+      expect(initialResult.steps['branch-step-2'].suspendOutput).toBeUndefined();
       if (initialResult.status === 'suspended') {
         expect(initialResult.suspended).toHaveLength(2);
         expect(initialResult.suspended[0]).toContain('branch-step-1');
@@ -4611,6 +4518,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -4754,6 +4662,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -4897,6 +4806,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -5049,6 +4959,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -5206,6 +5117,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
+            id: 'test-storage',
             url: ':memory:',
           }),
           workflows: {
@@ -5366,6 +5278,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
+            id: 'test-storage',
             url: ':memory:',
           }),
           workflows: {
@@ -5564,6 +5477,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
+            id: 'test-storage',
             url: ':memory:',
           }),
           workflows: {
@@ -5721,6 +5635,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
+            id: 'test-storage',
             url: ':memory:',
           }),
           workflows: {
@@ -5869,6 +5784,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
+            id: 'test-storage',
             url: ':memory:',
           }),
           workflows: {
@@ -6054,6 +5970,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -6216,6 +6133,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -6294,6 +6212,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -6336,6 +6255,7 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const initialStorage = new DefaultStorage({
+        id: 'test-storage',
         url: 'file::memory:',
       });
 
@@ -6590,6 +6510,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -6660,6 +6581,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -6832,6 +6754,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -7040,6 +6963,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -7207,185 +7131,6 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
-    it('should handle waitForEvent waiting flow', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        middleware: [realtimeMiddleware()],
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
-
-      const step1 = createStep({
-        id: 'step1',
-        execute: step1Action,
-        inputSchema: z.object({}),
-        outputSchema: z.object({ value: z.string() }),
-      });
-      const step2 = createStep({
-        id: 'step2',
-        execute: step2Action,
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({}),
-      });
-
-      const workflow = createWorkflow({
-        id: 'test-workflow',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        steps: [step1, step2],
-      });
-      workflow.then(step1).waitForEvent('user-event-test', step2).commit();
-
-      const mastra = new Mastra({
-        storage: new DefaultStorage({
-          url: ':memory:',
-        }),
-        workflows: {
-          'test-workflow': workflow,
-        },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      const runId = 'test-run-id';
-      let watchData: StreamEvent[] = [];
-      const run = await workflow.createRun({
-        runId,
-      });
-
-      await resetInngest();
-
-      const { stream, getWorkflowState } = run.streamLegacy({ inputData: {} });
-
-      setTimeout(() => {
-        run.sendEvent('user-event-test', {
-          value: 'eventdata',
-        });
-      }, 3000);
-
-      // Start watching the workflow
-      const collectedStreamData: StreamEvent[] = [];
-      for await (const data of stream) {
-        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
-      }
-      watchData = collectedStreamData;
-      console.dir({ watchData }, { depth: null });
-
-      const executionResult = await getWorkflowState();
-
-      await resetInngest();
-
-      srv.close();
-
-      expect(watchData.length).toBe(9);
-      expect(watchData).toMatchObject([
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'start',
-        },
-        {
-          payload: {
-            id: 'step1',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step1',
-            output: {
-              result: 'success1',
-            },
-            status: 'success',
-          },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step1',
-            metadata: {},
-          },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            id: 'step2',
-          },
-          type: 'step-waiting',
-        },
-        {
-          payload: {
-            id: 'step2',
-          },
-          type: 'step-start',
-        },
-        {
-          payload: {
-            id: 'step2',
-            output: {
-              result: 'success2',
-            },
-            status: 'success',
-          },
-          type: 'step-result',
-        },
-        {
-          payload: {
-            id: 'step2',
-            metadata: {},
-          },
-          type: 'step-finish',
-        },
-        {
-          payload: {
-            runId: 'test-run-id',
-          },
-          type: 'finish',
-        },
-      ]);
-      // Verify execution completed successfully
-      expect(executionResult.steps.step1).toMatchObject({
-        status: 'success',
-        output: { result: 'success1' },
-        payload: {},
-        startedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-      expect(executionResult.steps.step2).toMatchObject({
-        status: 'success',
-        output: { result: 'success2' },
-        payload: {
-          result: 'success1',
-        },
-        resumePayload: {
-          value: 'eventdata',
-        },
-        startedAt: expect.any(Number),
-        resumedAt: expect.any(Number),
-        endedAt: expect.any(Number),
-      });
-    });
-
     it('should handle basic suspend and resume flow', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
@@ -7468,6 +7213,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -7659,6 +7405,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -7939,6 +7686,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
+            id: 'test-storage',
             url: ':memory:',
           }),
           workflows: {
@@ -8015,6 +7763,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -8200,6 +7949,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -8398,6 +8148,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -8643,6 +8394,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -8828,6 +8580,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
         workflows: {
@@ -9122,6 +8875,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
+            id: 'test-storage',
             url: ':memory:',
           }),
           workflows: {
@@ -9583,6 +9337,7 @@ describe('MastraInngestWorkflow', () => {
           ],
         },
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
       });
@@ -9657,6 +9412,7 @@ describe('MastraInngestWorkflow', () => {
           ],
         },
         storage: new DefaultStorage({
+          id: 'test-storage',
           url: ':memory:',
         }),
       });

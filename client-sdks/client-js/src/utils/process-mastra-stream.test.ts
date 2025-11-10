@@ -103,8 +103,6 @@ describe('processMastraStream', () => {
     const sseData = `data: ${JSON.stringify(testChunk)}\n\ndata: [DONE]\n\n`;
     const stream = createMockStream(sseData);
 
-    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
-
     await processMastraStream({
       stream,
       onChunk: mockOnChunk,
@@ -112,9 +110,7 @@ describe('processMastraStream', () => {
 
     expect(mockOnChunk).toHaveBeenCalledTimes(1);
     expect(mockOnChunk).toHaveBeenCalledWith(testChunk);
-    expect(consoleSpy).toHaveBeenCalledWith('🏁 Stream finished');
-
-    consoleSpy.mockRestore();
+    // [DONE] marker is now filtered out during streaming to prevent premature termination
   });
 
   it('should handle JSON parsing errors gracefully', async () => {
@@ -299,7 +295,6 @@ describe('processMastraStream', () => {
 
     const stream = createMockStream(sseData);
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     await processMastraStream({
       stream,
@@ -316,10 +311,9 @@ describe('processMastraStream', () => {
       'Data:',
       '{invalid json}',
     );
-    expect(consoleSpy).toHaveBeenCalledWith('🏁 Stream finished');
+    // [DONE] marker is now filtered out during streaming to prevent premature termination
 
     consoleErrorSpy.mockRestore();
-    consoleSpy.mockRestore();
   });
 
   it('should handle data lines without "data: " prefix', async () => {

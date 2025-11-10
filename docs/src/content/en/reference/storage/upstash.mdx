@@ -16,7 +16,7 @@ The Upstash storage implementation provides a serverless-friendly storage soluti
 ## Installation
 
 ```bash copy
-npm install @mastra/upstash@latest
+npm install @mastra/upstash@beta
 ```
 
 ## Usage
@@ -25,6 +25,7 @@ npm install @mastra/upstash@latest
 import { UpstashStore } from "@mastra/upstash";
 
 const storage = new UpstashStore({
+  id: 'upstash-storage',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });

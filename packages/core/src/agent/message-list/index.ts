@@ -1,15 +1,15 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
-import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4/message';
+import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4';
 import type {
   LanguageModelV1Message,
   IdGenerator,
   LanguageModelV1Prompt,
   CoreMessage as CoreMessageV4,
   UIMessage as UIMessageV4,
-} from '@internal/ai-sdk-v4/message';
-import type * as AIV4Type from '@internal/ai-sdk-v4/message';
-import type { ToolInvocation as ToolInvocationV4 } from '@internal/ai-sdk-v4/tool';
+  ToolInvocation as ToolInvocationV4,
+} from '@internal/ai-sdk-v4';
+import type * as AIV4Type from '@internal/ai-sdk-v4';
 import { v4 as randomUUID } from '@lukeed/uuid';
 import * as AIV5 from 'ai-v5';
 
@@ -276,7 +276,8 @@ export class MessageList {
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
         );
-        const modelMessages = this.all.aiV5.model();
+        // Filter incomplete tool calls when sending messages TO the LLM
+        const modelMessages = this.aiV5UIMessagesToAIV5ModelMessages(this.all.aiV5.ui(), true);
 
         const messages = [...systemMessages, ...modelMessages];
 
@@ -294,7 +295,8 @@ export class MessageList {
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
-        const modelMessages = this.all.aiV5.model();
+        // Filter incomplete tool calls when sending messages TO the LLM
+        const modelMessages = this.aiV5UIMessagesToAIV5ModelMessages(this.all.aiV5.ui(), true);
         const systemMessages = this.aiV4CoreMessagesToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
@@ -2767,8 +2769,11 @@ export class MessageList {
     );
   }
 
-  private aiV5UIMessagesToAIV5ModelMessages(messages: AIV5Type.UIMessage[]): AIV5Type.ModelMessage[] {
-    const sanitized = this.sanitizeV5UIMessages(messages);
+  private aiV5UIMessagesToAIV5ModelMessages(
+    messages: AIV5Type.UIMessage[],
+    filterIncompleteToolCalls = false,
+  ): AIV5Type.ModelMessage[] {
+    const sanitized = this.sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
     const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
     return result;
@@ -2789,15 +2794,26 @@ export class MessageList {
     return messages;
   }
 
-  private sanitizeV5UIMessages(messages: AIV5Type.UIMessage[]): AIV5Type.UIMessage[] {
+  private sanitizeV5UIMessages(
+    messages: AIV5Type.UIMessage[],
+    filterIncompleteToolCalls = false,
+  ): AIV5Type.UIMessage[] {
     const msgs = messages
       .map(m => {
         if (m.parts.length === 0) return false;
-        // Filter out streaming states and input-available (which isn't supported by convertToModelMessages)
+        // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
         const safeParts = m.parts.filter(p => {
           if (!AIV5.isToolUIPart(p)) return true;
-          // Only keep tool parts with output states for model messages
-          return p.state === 'output-available' || p.state === 'output-error';
+
+          // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
+          // This filters out input-available (incomplete client-side tool calls) and input-streaming
+          if (filterIncompleteToolCalls) {
+            return p.state === 'output-available' || p.state === 'output-error';
+          }
+
+          // When processing response messages FROM the LLM: keep input-available states
+          // (tool calls waiting for client-side execution) but filter out input-streaming
+          return p.state !== 'input-streaming';
         });
 
         if (!safeParts.length) return false;

@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { Observability } from '@mastra/observability';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -10,6 +11,7 @@ import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX } from './workflows/other';
 
 const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: 'file:./mastra.db',
 });
 
@@ -42,20 +44,10 @@ export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
   },
-  serverMiddleware: [
-    {
-      handler: (c, next) => {
-        console.log('Middleware called');
-        return next();
-      },
-    },
-  ],
   scorers: {
     testScorer,
   },
-  observability: {
-    default: {
-      enabled: true,
-    },
-  },
+  observability: new Observability({
+    default: { enabled: true },
+  }),
 });

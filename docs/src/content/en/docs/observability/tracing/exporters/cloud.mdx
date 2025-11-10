@@ -1,0 +1,115 @@
+---
+title: "Cloud Exporter | Tracing | Observability | Mastra Docs"
+description: "Send traces to Mastra Cloud for production monitoring"
+---
+
+# Cloud Exporter
+
+The `CloudExporter` sends traces to Mastra Cloud for centralized monitoring and team collaboration. It's automatically enabled when using the default observability configuration with a valid access token.
+
+## Configuration
+
+### Prerequisites
+
+1. **Mastra Cloud Account**: Sign up at [cloud.mastra.ai](https://cloud.mastra.ai)
+2. **Access Token**: Generate in Mastra Cloud → Settings → API Tokens
+3. **Environment Variables**: Set your credentials:
+
+```bash title=".env"
+MASTRA_CLOUD_ACCESS_TOKEN=mst_xxxxxxxxxxxxxxxx
+```
+
+### Basic Setup
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability, CloudExporter } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      production: {
+        serviceName: "my-service",
+        exporters: [
+          new CloudExporter(), // Uses MASTRA_CLOUD_ACCESS_TOKEN env var
+        ],
+      },
+    },
+  }),
+});
+```
+
+### Automatic Configuration
+
+When using the default observability configuration, CloudExporter is automatically included if the access token is set:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    default: { enabled: true }, // Automatically includes CloudExporter if token exists
+  }),
+});
+```
+
+### Complete Configuration
+
+```typescript
+new CloudExporter({
+  // Optional - defaults to env var
+  accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+
+  // Optional - for self-hosted Mastra Cloud
+  endpoint: "https://cloud.your-domain.com",
+
+  // Batching configuration
+  maxBatchSize: 1000, // Max spans per batch
+  maxBatchWaitMs: 5000, // Max wait before sending batch
+
+  // Diagnostic logging
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+## Viewing Traces
+
+### Mastra Cloud Dashboard
+
+1. Navigate to [cloud.mastra.ai](https://cloud.mastra.ai)
+2. Select your project
+3. Go to Observability → Traces
+4. Use filters to find specific traces:
+   - Service name
+   - Time range
+   - Trace ID
+   - Error status
+
+### Features
+
+- **Trace Timeline** - Visual execution flow
+- **Span Details** - Inputs, outputs, metadata
+- **Performance Metrics** - Latency, token usage
+- **Team Collaboration** - Share trace links
+
+## Performance
+
+:::info
+
+CloudExporter uses intelligent batching to optimize network usage. Traces are buffered and sent in batches, reducing overhead while maintaining near real-time visibility.
+
+:::
+
+### Batching Behavior
+
+- Traces are batched up to `maxBatchSize` (default: 1000)
+- Batches are sent when full or after `maxBatchWaitMs` (default: 5 seconds)
+- Failed batches are retried with exponential backoff
+- Graceful degradation if Mastra Cloud is unreachable
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [DefaultExporter](/docs/v1/observability/tracing/exporters/default)
+- [Mastra Cloud Documentation](https://cloud.mastra.ai/docs)

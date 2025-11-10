@@ -1,7 +1,7 @@
 {
   "name": "@mastra/braintrust",
-  "version": "0.1.9",
-  "description": "Braintrust observability provider for Mastra - includes AI tracing and future observability features",
+  "version": "1.0.0-beta.0",
+  "description": "Braintrust observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -56,5 +56,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

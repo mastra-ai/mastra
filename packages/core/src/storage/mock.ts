@@ -16,11 +16,10 @@ import { WorkflowsInMemory } from './domains/workflows';
 import type { InMemoryWorkflows } from './domains/workflows/inmemory';
 
 import type {
-  AISpanRecord,
-  AITraceRecord,
+  SpanRecord,
+  TraceRecord,
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StoragePagination,
   StorageResourceType,
   WorkflowRun,
@@ -29,8 +28,8 @@ import type {
 export class InMemoryStore extends MastraStorage {
   stores: StorageDomains;
 
-  constructor() {
-    super({ name: 'InMemoryStorage' });
+  constructor({ id = 'in-memory' }: { id?: string } = {}) {
+    super({ id, name: 'InMemoryStorage' });
     // MockStore doesn't need async initialization
     this.hasInitialized = Promise.resolve(true);
 
@@ -77,7 +76,7 @@ export class InMemoryStore extends MastraStorage {
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
-      aiTracing: true,
+      observabilityInstance: true,
       indexManagement: false,
       listScoresBySpan: true,
     };
@@ -227,14 +226,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
   }
 
-  async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy }).catch(() => ({ messages: [] }));
-  }
-
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
   }
@@ -319,34 +310,34 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
-    return this.stores.observability!.createAISpan(span);
+  async createSpan(span: SpanRecord): Promise<void> {
+    return this.stores.observability!.createSpan(span);
   }
 
-  async updateAISpan(params: {
+  async updateSpan(params: {
     spanId: string;
     traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
+    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
   }): Promise<void> {
-    return this.stores.observability!.updateAISpan(params);
+    return this.stores.observability!.updateSpan(params);
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    return this.stores.observability!.getAITrace(traceId);
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    return this.stores.observability!.getTrace(traceId);
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    return this.stores.observability!.batchCreateAISpans(args);
+  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
+    return this.stores.observability!.batchCreateSpans(args);
   }
 
-  async batchUpdateAISpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
+  async batchUpdateSpans(args: {
+    records: { traceId: string; spanId: string; updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>> }[];
   }): Promise<void> {
-    return this.stores.observability!.batchUpdateAISpans(args);
+    return this.stores.observability!.batchUpdateSpans(args);
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
-    return this.stores.observability!.batchDeleteAITraces(args);
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+    return this.stores.observability!.batchDeleteTraces(args);
   }
 }
 

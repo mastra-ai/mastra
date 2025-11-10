@@ -6,14 +6,12 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
-  resolveMessageLimit,
   safelyParseJSON,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
 import type {
-  StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -56,14 +54,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   private async _getIncludedMessages({
     threadId,
-    selectBy,
+    include,
   }: {
     threadId: string;
-    selectBy: StorageGetMessagesArg['selectBy'];
+    include: StorageListMessagesInput['include'];
   }) {
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const include = selectBy?.include;
     if (!include) return null;
 
     const collection = await this.operations.getCollection(TABLE_MESSAGES);
@@ -102,63 +99,6 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     });
 
     return dedupedMessages.map(row => this.parseRow(row));
-  }
-
-  /**
-   * @deprecated use listMessages instead for paginated results.
-   */
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const messages: MastraDBMessage[] = [];
-      const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      const excludeIds = messages.map(m => m.id);
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
-
-      const query: any = { thread_id: threadId };
-      if (resourceId) {
-        query.resourceId = resourceId;
-      }
-      if (excludeIds.length > 0) {
-        query.id = { $nin: excludeIds };
-      }
-
-      // Only fetch remaining messages if limit > 0
-      if (limit > 0) {
-        const remainingMessages = await collection.find(query).sort({ createdAt: -1 }).limit(limit).toArray();
-
-        messages.push(...remainingMessages.map((row: any) => this.parseRow(row)));
-      }
-
-      // Sort all messages by creation date ascending
-      messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
-      return { messages: list.get.all.db() };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MONGODB_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -220,7 +160,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     try {
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
@@ -274,8 +214,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
-        const selectBy = { include };
-        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
+        const includeMessages = await this._getIncludedMessages({ threadId, include });
         if (includeMessages) {
           // Deduplicate: only add messages that aren't already in the paginated results
           for (const includeMsg of includeMessages) {

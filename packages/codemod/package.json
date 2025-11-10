@@ -1,0 +1,57 @@
+{
+  "name": "@mastra/codemod",
+  "version": "0.1.0-beta.0",
+  "license": "Apache-2.0",
+  "description": "Codemod CLI for Mastra",
+  "bin": {
+    "codemod": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup --silent --config tsup.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "eslint .",
+    "scaffold": "npx tsx scripts/scaffold-codemod.ts"
+  },
+  "keywords": [
+    "mastra",
+    "cli",
+    "ai",
+    "codemod"
+  ],
+  "dependencies": {
+    "@clack/prompts": "1.0.0-alpha.6",
+    "commander": "^14.0.2",
+    "debug": "^4.4.3",
+    "jscodeshift": "^17.3.0"
+  },
+  "devDependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
+    "@internal/lint": "workspace:*",
+    "@types/debug": "^4.1.12",
+    "@types/jscodeshift": "^17.3.0",
+    "@types/node": "^24.9.2",
+    "eslint": "^9.37.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/codemod"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

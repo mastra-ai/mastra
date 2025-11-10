@@ -12,7 +12,7 @@ import {
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { AISpanType, wrapMastra } from '../../observability';
+import { SpanType, wrapMastra } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -172,7 +172,7 @@ export class CoreToolBuilder extends MastraBase {
 
       // Create tool span if we have a current span available
       const toolSpan = tracingContext?.currentSpan?.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
         attributes: {

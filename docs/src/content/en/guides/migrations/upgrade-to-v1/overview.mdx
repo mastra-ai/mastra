@@ -1,0 +1,83 @@
+---
+title: "Overview | v1 Migration Guide"
+description: "Overview of breaking changes when upgrading to Mastra v1."
+---
+
+# Upgrade to Mastra v1
+
+This guide provides a comprehensive overview of breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
+
+:::tip[Need help?]
+Need help with the migration? Join our [Discord community](https://discord.gg/BTYqqHKUrf) to ask questions.
+:::
+
+## Migration Strategy
+
+### Update all Mastra packages
+
+Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility.
+
+### Update Node.js version
+
+Mastra v1 requires Node.js 22.13.0 or higher. Update your development and production environments accordingly.
+
+## Breaking Changes by Area
+
+- **[Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra)** - Import restructuring and property access changes.
+- **[Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)** - Voice methods moved to namespace and streaming API updates.
+- **[Tools](/guides/v1/migrations/upgrade-to-v1/tools)** - CreateTool execute signature changed to separate input and context.
+- **[Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)** - Function name changes and legacy features removed.
+- **[Memory](/guides/v1/migrations/upgrade-to-v1/memory)** - Configuration now requires explicit parameters and defaults changed.
+- **[Storage](/guides/v1/migrations/upgrade-to-v1/storage)** - Pagination standardized and methods renamed to list pattern.
+- **[Vectors](/guides/v1/migrations/upgrade-to-v1/vectors)** - Vector store methods renamed to list pattern.
+- **[MCP](/guides/v1/migrations/upgrade-to-v1/mcp)** - Tool context reorganized and deprecated client classes removed.
+- **[Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)** - OTEL telemetry replaced with dedicated observability package and exporters.
+- **[Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)** - Scorers API consolidated with new naming conventions.
+- **[CLI](/guides/v1/migrations/upgrade-to-v1/cli)** - Commands and flags removed for simpler interface.
+- **[Client SDKs](/guides/v1/migrations/upgrade-to-v1/client)** - Types and utilities renamed for consistency.
+- **[Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)** - Packages renamed from speech to voice.
+
+## Migration Checklist
+
+Work through this checklist in order, starting with high-impact changes that affect most applications.
+
+:::info[Codemod]
+
+We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod) for you. Throughout the migration guide you'll find instructions on how to use them for specific changes.
+
+If you want, you can run all v1 codemods at once:
+
+```sh
+npx @mastra/codemod@beta v1
+```
+
+:::
+
+### High Impact Changes
+
+- Update `createTool` tool signatures to `(inputData, context)` format - [Tools](/guides/v1/migrations/upgrade-to-v1/tools)
+- Restructure `@mastra/core` imports to use subpath imports - [Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra)
+- Update pagination from `offset/limit` to `page/perPage` - [Storage](/guides/v1/migrations/upgrade-to-v1/storage)
+- Install `@mastra/observability` and wrap configuration with `new Observability()` - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)
+- Migrate from `telemetry:` to `observability:` configuration (if upgrading from 0.x OTEL) - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)
+
+### Medium Impact Changes
+
+- Rename `RuntimeContext` to `RequestContext` throughout codebase - [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent), [Tools](/guides/v1/migrations/upgrade-to-v1/tools), [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
+- Update storage methods from `get*` to `list*` pattern - [Storage](/guides/v1/migrations/upgrade-to-v1/storage)
+- Replace direct property access with getter methods - [Mastra Class](/guides/v1/migrations/upgrade-to-v1/mastra), [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)
+- Update memory scope if relying on default `thread` scope - [Memory](/guides/v1/migrations/upgrade-to-v1/memory)
+- Update vector store calls to use named arguments - [Storage](/guides/v1/migrations/upgrade-to-v1/storage)
+- Remove `format` parameter from agent methods - [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)
+- Update voice methods to use `agent.voice` namespace - [Agent Class](/guides/v1/migrations/upgrade-to-v1/agent)
+- Rename configuration property `processors` to `spanOutputProcessors` (if using custom processors) - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)
+
+### Low Impact Changes
+
+- Rename `createRunAsync` to `createRun` - [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
+- Update voice package names from `@mastra/speech-*` to `@mastra/voice-*` - [Voice Packages](/guides/v1/migrations/upgrade-to-v1/voice)
+- Update scorer methods: `runExperiment` → `runEvals`, `getScorerByName` → `getScorerById` - [Evals & Scorers](/guides/v1/migrations/upgrade-to-v1/evals)
+- Remove deprecated CLI flags - [CLI](/guides/v1/migrations/upgrade-to-v1/cli)
+- Update client SDK types from `Get*` to `List*` - [Client SDKs](/guides/v1/migrations/upgrade-to-v1/client)
+- Replace `runCount` with `retryCount` - [Workflows](/guides/v1/migrations/upgrade-to-v1/workflows)
+- Update custom exporter method `exportEvent` to `exportTracingEvent` (if using custom exporters) - [Tracing](/guides/v1/migrations/upgrade-to-v1/tracing)

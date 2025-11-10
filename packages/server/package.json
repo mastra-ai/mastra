@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "0.22.2",
+  "version": "1.0.0-beta.1",
   "description": "",
   "type": "module",
   "files": [
@@ -91,5 +91,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

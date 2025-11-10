@@ -37,6 +37,7 @@ export class PostgresPerformanceTest {
   constructor(config: PerformanceTestConfig) {
     this.config = config;
     this.store = new PostgresStore({
+      id: 'perf-test-store',
       connectionString: config.connectionString,
     });
   }
@@ -372,10 +373,7 @@ export class PostgresPerformanceTest {
       ),
     );
 
-    // Test getMessages
     const threadId = 'thread_0';
-    results.push(await this.measureOperation('getMessages', () => this.store.getMessages({ threadId }), scenario));
-
     // Test listMessages
     results.push(
       await this.measureOperation(
@@ -445,7 +443,7 @@ export class PostgresPerformanceTest {
       console.info('listThreadsByResourceId plan:');
       threadPlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
 
-      // Analyze getMessages query
+      // Analyze listMessages query
       const messagePlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
@@ -453,7 +451,7 @@ export class PostgresPerformanceTest {
         WHERE thread_id = 'thread_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('\ngetMessages plan:');
+      console.info('\nlistMessages plan:');
       messagePlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
     } catch (error) {
       console.warn('Could not analyze query plans:', error);
