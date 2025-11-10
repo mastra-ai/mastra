@@ -25,11 +25,15 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
     request: TRequest,
   ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }>;
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
-  abstract registerRoute(app: TApp, route: ServerRoute): Promise<void>;
+  abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
 
-  async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}): Promise<void> {
-    const { title = 'Mastra API', version = '1.0.0', description = 'Mastra Server API', path = '/openapi.json' } =
-      config;
+  async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
+    const {
+      title = 'Mastra API',
+      version = '1.0.0',
+      description = 'Mastra Server API',
+      path = '/openapi.json',
+    } = config;
 
     const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, {
       title,
@@ -44,17 +48,33 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
       handler: async () => openApiSpec,
     };
 
-    await this.registerRoute(app, openApiRoute);
+    await this.registerRoute(app, openApiRoute, { prefix });
   }
 
-  async registerRoutes(app: TApp): Promise<void> {
-    await Promise.all(SERVER_ROUTES.map(route => this.registerRoute(app, route)));
-    await this.registerOpenAPIRoute(app, {
-      title: 'Mastra API',
-      version: '1.0.0',
-      description: 'Mastra Server API',
-      path: '/openapi.json',
-    });
+  async registerRoutes(
+    app: TApp,
+    {
+      prefix = '',
+      openapiPath = '',
+    }: {
+      prefix?: string;
+      openapiPath?: string;
+    } = {},
+  ): Promise<void> {
+    await Promise.all(SERVER_ROUTES.map(route => this.registerRoute(app, route, { prefix })));
+
+    if (openapiPath) {
+      await this.registerOpenAPIRoute(
+        app,
+        {
+          title: 'Mastra API',
+          version: '1.0.0',
+          description: 'Mastra Server API',
+          path: `${prefix}${openapiPath}`,
+        },
+        { prefix },
+      );
+    }
   }
 
   async parsePathParams(route: ServerRoute, params: Record<string, string>): Promise<Record<string, any>> {

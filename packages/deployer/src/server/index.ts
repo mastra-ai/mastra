@@ -242,7 +242,7 @@ export async function createHonoServer(
   const honoServerAdapter = new HonoServerAdapter({ mastra });
   // TODO: fix generic args on hono
   // @ts-ignore
-  await honoServerAdapter.registerRoutes(app);
+  await honoServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(
