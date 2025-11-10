@@ -1286,6 +1286,11 @@
       "permanent": true
     },
     {
+      "source": "/:path(ja)?/docs/deployment/serverless-platforms",
+      "destination": "/:path/docs/deployment/cloud-providers",
+      "permanent": true
+    },
+    {
       "source": "/:path(ja)?/docs/deployment/serverless-platforms/netlify-deployer",
       "destination": "/:path/docs/deployment/cloud-providers/netlify-deployer",
       "permanent": true
