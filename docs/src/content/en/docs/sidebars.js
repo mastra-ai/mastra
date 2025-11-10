@@ -274,8 +274,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "server-db/production-server",
-          label: "Production Server",
+          id: "server-db/mastra-server",
+          label: "Mastra Server",
         },
         {
           type: "doc",
@@ -316,8 +316,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/server-deployment",
-          label: "Server deployment",
+          id: "deployment/building-mastra",
+          label: "Building Mastra",
         },
         {
           type: "doc",
@@ -331,28 +331,27 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Serverless Platforms",
+          label: "Mastra Cloud",
           items: [
             {
               type: "doc",
-              id: "deployment/serverless-platforms/index",
-              key: "deployment.serverless-platforms.overview",
+              id: "deployment/mastra-cloud/overview",
               label: "Overview",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/cloudflare-deployer",
-              label: "Cloudflare",
+              id: "deployment/mastra-cloud/setting-up",
+              label: "Setup & Deploy",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/netlify-deployer",
-              label: "Netlify",
+              id: "deployment/mastra-cloud/dashboard",
+              label: "Dashboard",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/vercel-deployer",
-              label: "Vercel",
+              id: "deployment/mastra-cloud/observability",
+              label: "Observability",
             },
           ],
         },
@@ -378,45 +377,30 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "deployment/cloud-providers/azure-app-services",
+              label: "Azure App Services",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/cloudflare-deployer",
+              label: "Cloudflare",
+            },
+            {
+              type: "doc",
               id: "deployment/cloud-providers/digital-ocean",
               label: "Digital Ocean",
             },
             {
               type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
+              id: "deployment/cloud-providers/netlify-deployer",
+              label: "Netlify",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/vercel-deployer",
+              label: "Vercel",
             },
           ],
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Mastra Cloud",
-      items: [
-        {
-          type: "doc",
-          id: "mastra-cloud/overview",
-          key: "mastra.cloud.overview",
-          label: "Overview",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/setting-up",
-          key: "mastra.cloud.setting-up",
-          label: "Setup & Deploy",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/dashboard",
-          key: "mastra.cloud.dashboard",
-          label: "Dashboard",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/observability",
-          key: "mastra.cloud.observability",
-          label: "Observability",
         },
       ],
     },

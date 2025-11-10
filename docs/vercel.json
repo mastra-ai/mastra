@@ -1269,6 +1269,56 @@
       "source": "/:path(ja)?/docs/server-db/request-context",
       "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/deployment/server-deployment",
+      "destination": "/:path/docs/deployment/building-mastra",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/deployment/serverless-platforms/cloudflare-deployer",
+      "destination": "/:path/docs/deployment/cloud-providers/cloudflare-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/deployment/serverless-platforms/index",
+      "destination": "/:path/docs/deployment/cloud-providers",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/deployment/serverless-platforms/netlify-deployer",
+      "destination": "/:path/docs/deployment/cloud-providers/netlify-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/deployment/serverless-platforms/vercel-deployer",
+      "destination": "/:path/docs/deployment/cloud-providers/vercel-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mastra-cloud/dashboard",
+      "destination": "/:path/docs/deployment/mastra-cloud/dashboard",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mastra-cloud/observability",
+      "destination": "/:path/docs/deployment/mastra-cloud/observability",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mastra-cloud/overview",
+      "destination": "/:path/docs/deployment/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mastra-cloud/setting-up",
+      "destination": "/:path/docs/deployment/mastra-cloud/setting-up",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/server-db/production-server",
+      "destination": "/:path/docs/server-db/mastra-server",
+      "permanent": true
     }
   ]
 }
