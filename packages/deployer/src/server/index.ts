@@ -5,9 +5,9 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
 import { Tool } from '@mastra/core/tools';
 import { HonoServerAdapter } from '@mastra/hono';
+import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
@@ -21,17 +21,11 @@ import { errorHandler } from './handlers/error';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
-type Bindings = {};
+// Use adapter type definitions
+type Bindings = HonoBindings;
 
-type Variables = {
-  mastra: Mastra;
-  requestContext: RequestContext;
+type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
-  tools: Record<string, Tool>;
-  taskStore: InMemoryTaskStore;
-  playground: boolean;
-  isDev: boolean;
-  customRouteAuthConfig?: Map<string, boolean>;
 };
 
 export function getToolExports(tools: Record<string, Function>[]) {
@@ -81,65 +75,25 @@ export async function createHonoServer(
 
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
-  // Configure hono context
-  // Configure hono context
-  app.use('*', async function setContext(c, next) {
-    // Parse request context from request body and add to context
-    let requestContext = new RequestContext();
-    // Parse request context from request body and add to context
-    if (c.req.method === 'POST' || c.req.method === 'PUT') {
-      const contentType = c.req.header('content-type');
-      if (contentType?.includes('application/json')) {
-        try {
-          const clonedReq = c.req.raw.clone();
-          const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
-          if (body.requestContext) {
-            requestContext = new RequestContext(Object.entries(body.requestContext));
-          }
-        } catch {
-          // Body parsing failed, continue without body
-        }
-      }
-    }
+  // Define body limit options
+  const bodyLimitOptions = {
+    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
+    onError: () => ({ error: 'Request body too large' }),
+  };
 
-    // Parse request context from query params and add to context
-    if (c.req.method === 'GET') {
-      try {
-        const encodedRequestContext = c.req.query('requestContext');
-        if (encodedRequestContext) {
-          let parsedRequestContext: Record<string, any> | undefined;
-          // Try JSON first
-          try {
-            parsedRequestContext = JSON.parse(encodedRequestContext);
-          } catch {
-            // Fallback to base64(JSON)
-            try {
-              const json = Buffer.from(encodedRequestContext, 'base64').toString('utf-8');
-              parsedRequestContext = JSON.parse(json);
-            } catch {
-              // ignore if still invalid
-            }
-          }
-
-          if (parsedRequestContext && typeof parsedRequestContext === 'object') {
-            requestContext = new RequestContext([...requestContext.entries(), ...Object.entries(parsedRequestContext)]);
-          }
-        }
-      } catch {
-        // ignore query parsing errors
-      }
-    }
-
-    // Add relevant contexts to hono context
-    c.set('requestContext', requestContext);
-    c.set('mastra', mastra);
-    c.set('tools', options.tools);
-    c.set('taskStore', a2aTaskStore);
-    c.set('playground', options.playground === true);
-    c.set('isDev', options.isDev === true);
-    c.set('customRouteAuthConfig', customRouteAuthConfig);
-    return next();
+  // Create server adapter with all configuration
+  const honoServerAdapter = new HonoServerAdapter({
+    mastra,
+    tools: options.tools,
+    taskStore: a2aTaskStore,
+    customRouteAuthConfig,
+    playground: options.playground,
+    isDev: options.isDev,
+    bodyLimitOptions,
   });
+
+  // Configure hono context - using adapter middleware
+  app.use('*', honoServerAdapter.createContextMiddleware());
 
   // Apply custom server middleware from Mastra instance
   const serverMiddleware = mastra.getServerMiddleware?.();
@@ -169,11 +123,6 @@ export async function createHonoServer(
   // Run AUTH middlewares after CORS middleware
   app.use('*', authenticationMiddleware);
   app.use('*', authorizationMiddleware);
-
-  const bodyLimitOptions = {
-    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
-    onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
-  };
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
@@ -226,23 +175,9 @@ export async function createHonoServer(
     app.use(logger());
   }
 
-  // TODO: add option to exclude openapi route from server adapter
-  if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
-    // app.get(
-    //   '/openapi.json',
-    //   openAPISpecs(app, {
-    //     includeEmptyPaths: true,
-    //     documentation: {
-    //       info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-    //     },
-    //   }),
-    // );
-  }
-
-  const honoServerAdapter = new HonoServerAdapter({ mastra });
-  // TODO: fix generic args on hono
-  // @ts-ignore
-  await honoServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
+  // Register adapter routes (adapter was created earlier with configuration)
+  // Cast needed due to Hono type variance - safe because registerRoutes is generic
+  await honoServerAdapter.registerRoutes(app as any, { openapiPath: '/openapi.json' });
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(

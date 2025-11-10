@@ -1,17 +1,17 @@
 import type { Mastra } from '@mastra/core';
 import type { ApiRoute } from '@mastra/core/server';
 import type z from 'zod';
+import { A2A_ROUTES } from './a2a';
+import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
+import { LEGACY_ROUTES } from './legacy';
+import { LOGS_ROUTES } from './logs';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
 import { TOOLS_ROUTES } from './tools';
-import { WORKFLOWS_ROUTES } from './workflows';
-import { LOGS_ROUTES } from './logs';
 import { VECTORS_ROUTES } from './vectors';
-import { A2A_ROUTES } from './a2a';
-import { AGENT_BUILDER_ROUTES } from './agent-builder';
-import { LEGACY_ROUTES } from './legacy';
+import { WORKFLOWS_ROUTES } from './workflows';
 
 export type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
   params: TParams & { mastra: Mastra },
@@ -28,6 +28,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   bodySchema?: z.ZodSchema;
   responseSchema?: z.ZodSchema;
   openapi?: any; // Auto-generated OpenAPI spec for this route
+  maxBodySize?: number; // Optional route-specific body size limit in bytes
 };
 
 export const SERVER_ROUTES: ServerRoute[] = [

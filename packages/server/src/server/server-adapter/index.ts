@@ -12,11 +12,18 @@ export interface OpenAPIConfig {
   path?: string;
 }
 
+export interface BodyLimitOptions {
+  maxSize: number;
+  onError: (error: unknown) => unknown;
+}
+
 export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
   protected mastra: Mastra;
+  protected bodyLimitOptions?: BodyLimitOptions;
 
-  constructor({ mastra }: { mastra: Mastra }) {
+  constructor({ mastra, bodyLimitOptions }: { mastra: Mastra; bodyLimitOptions?: BodyLimitOptions }) {
     this.mastra = mastra;
+    this.bodyLimitOptions = bodyLimitOptions;
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;

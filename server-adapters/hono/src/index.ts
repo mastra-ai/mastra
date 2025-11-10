@@ -1,9 +1,122 @@
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import type { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
+import type { Tool } from '@mastra/core/tools';
+import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { MastraServerAdapter, type BodyLimitOptions } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-import type { Context, Hono, HonoRequest } from 'hono';
+import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 
+// Export type definitions for Hono app configuration
+export type HonoVariables = {
+  mastra: Mastra;
+  requestContext: RequestContext;
+  tools: Record<string, Tool>;
+  taskStore: InMemoryTaskStore;
+  customRouteAuthConfig?: Map<string, boolean>;
+  playground?: boolean;
+  isDev?: boolean;
+};
+
+export type HonoBindings = {};
+
 export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, HonoRequest, Context> {
+  private tools?: Record<string, Tool>;
+  private taskStore: InMemoryTaskStore;
+  private customRouteAuthConfig?: Map<string, boolean>;
+  private playground?: boolean;
+  private isDev?: boolean;
+
+  constructor({
+    mastra,
+    tools,
+    taskStore,
+    customRouteAuthConfig,
+    playground,
+    isDev,
+    bodyLimitOptions,
+  }: {
+    mastra: Mastra;
+    tools?: Record<string, Tool>;
+    taskStore?: InMemoryTaskStore;
+    customRouteAuthConfig?: Map<string, boolean>;
+    playground?: boolean;
+    isDev?: boolean;
+    bodyLimitOptions?: BodyLimitOptions;
+  }) {
+    super({ mastra, bodyLimitOptions });
+    this.tools = tools;
+    this.taskStore = taskStore || new InMemoryTaskStore();
+    this.customRouteAuthConfig = customRouteAuthConfig;
+    this.playground = playground;
+    this.isDev = isDev;
+  }
+
+  createContextMiddleware(): MiddlewareHandler {
+    return async (c, next) => {
+      // Parse request context from request body and add to context
+      let requestContext = new RequestContext();
+
+      // Parse request context from request body (POST/PUT)
+      if (c.req.method === 'POST' || c.req.method === 'PUT') {
+        const contentType = c.req.header('content-type');
+        if (contentType?.includes('application/json')) {
+          try {
+            const clonedReq = c.req.raw.clone();
+            const body = (await clonedReq.json()) as { requestContext?: Record<string, any> };
+            if (body.requestContext) {
+              requestContext = new RequestContext(Object.entries(body.requestContext));
+            }
+          } catch {
+            // Body parsing failed, continue without body
+          }
+        }
+      }
+
+      // Parse request context from query params (GET)
+      if (c.req.method === 'GET') {
+        try {
+          const encodedRequestContext = c.req.query('requestContext');
+          if (encodedRequestContext) {
+            let parsedRequestContext: Record<string, any> | undefined;
+            // Try JSON first
+            try {
+              parsedRequestContext = JSON.parse(encodedRequestContext);
+            } catch {
+              // Fallback to base64(JSON)
+              try {
+                const json = Buffer.from(encodedRequestContext, 'base64').toString('utf-8');
+                parsedRequestContext = JSON.parse(json);
+              } catch {
+                // ignore if still invalid
+              }
+            }
+
+            if (parsedRequestContext && typeof parsedRequestContext === 'object') {
+              requestContext = new RequestContext([
+                ...requestContext.entries(),
+                ...Object.entries(parsedRequestContext),
+              ]);
+            }
+          }
+        } catch {
+          // ignore query parsing errors
+        }
+      }
+
+      // Add relevant contexts to hono context
+      c.set('requestContext', requestContext);
+      c.set('mastra', this.mastra);
+      c.set('tools', this.tools || {});
+      c.set('taskStore', this.taskStore);
+      c.set('playground', this.playground === true);
+      c.set('isDev', this.isDev === true);
+      c.set('customRouteAuthConfig', this.customRouteAuthConfig);
+
+      return next();
+    };
+  }
   async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
     res.header('Content-Type', 'text/plain');
     res.header('Transfer-Encoding', 'chunked');
@@ -72,9 +185,32 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     }
   }
 
-  async registerRoute(app: Hono<any, any, any>, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute<E extends Env = any>(
+    app: Hono<E, any, any>,
+    route: ServerRoute,
+    { prefix }: { prefix?: string },
+  ): Promise<void> {
+    // Determine if body limits should be applied
+    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+
+    // Get the body size limit for this route (route-specific or default)
+    const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+
+    // Build middleware array
+    const middlewares: MiddlewareHandler[] = [];
+
+    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+      middlewares.push(
+        bodyLimit({
+          maxSize,
+          onError: this.bodyLimitOptions.onError as any,
+        }),
+      );
+    }
+
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
       `${prefix}${route.path}`,
+      ...middlewares,
       async (c: Context) => {
         const params = await this.getParams(route, c.req);
 
@@ -118,11 +254,11 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     );
   }
 
-  async registerRoutes(
-    app: Hono<any, any, any>,
+  async registerRoutes<E extends Env = any>(
+    app: Hono<E, any, any>,
     { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
   ): Promise<void> {
-    // TODO: move mastra variable bindings here from dev?
-    await super.registerRoutes(app, { prefix, openapiPath });
+    // Cast to base type for super call - safe because registerRoute is generic
+    await super.registerRoutes(app as any, { prefix, openapiPath });
   }
 }
