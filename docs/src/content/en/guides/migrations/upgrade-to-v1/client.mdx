@@ -71,9 +71,19 @@ The `getMemoryThread` method parameter structure has been updated. This change p
 To migrate, update the method call with the new parameter structure. Check the updated API documentation for the specific changes.
 
 ```diff
-- const thread = await client.memory.getMemoryThread(threadId, agentId);
-+ const thread = await client.memory.getMemoryThread({ threadId, agentId });
+- const thread = await client.getMemoryThread(threadId, agentId);
++ const thread = await client.getMemoryThread({ threadId, agentId });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-get-memory-thread .
+```
+
+:::
 
 ## Removed
 
