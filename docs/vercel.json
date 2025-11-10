@@ -1,6 +1,11 @@
 {
   "redirects": [
     {
+      "source": "/examples/v1/memory/memory-with-mongodb",
+      "destination": "/docs/v1/memory/storage/memory-with-mongodb",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/workflows/agents-and-tools",
       "destination": "/docs/v1/workflows/overview",
       "permanent": true
