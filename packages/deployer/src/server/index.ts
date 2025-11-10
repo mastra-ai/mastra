@@ -75,6 +75,12 @@ export async function createHonoServer(
 
   app.onError((err, c) => errorHandler(err, c, options.isDev));
 
+  // Define body limit options
+  const bodyLimitOptions = {
+    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
+    onError: () => ({ error: 'Request body too large' }),
+  };
+
   // Create server adapter with all configuration
   const honoServerAdapter = new HonoServerAdapter({
     mastra,
@@ -83,6 +89,7 @@ export async function createHonoServer(
     customRouteAuthConfig,
     playground: options.playground,
     isDev: options.isDev,
+    bodyLimitOptions,
   });
 
   // Configure hono context - using adapter middleware
@@ -116,11 +123,6 @@ export async function createHonoServer(
   // Run AUTH middlewares after CORS middleware
   app.use('*', authenticationMiddleware);
   app.use('*', authorizationMiddleware);
-
-  const bodyLimitOptions = {
-    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
-    onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
-  };
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];

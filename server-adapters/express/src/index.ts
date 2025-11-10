@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import { MastraServerAdapter, type BodyLimitOptions } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 
@@ -35,6 +35,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     customRouteAuthConfig,
     playground,
     isDev,
+    bodyLimitOptions,
   }: {
     mastra: Mastra;
     tools?: Record<string, Tool>;
@@ -42,8 +43,9 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     customRouteAuthConfig?: Map<string, boolean>;
     playground?: boolean;
     isDev?: boolean;
+    bodyLimitOptions?: BodyLimitOptions;
   }) {
-    super({ mastra });
+    super({ mastra, bodyLimitOptions });
     this.tools = tools;
     this.taskStore = taskStore || new InMemoryTaskStore();
     this.customRouteAuthConfig = customRouteAuthConfig;
@@ -159,8 +161,35 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
   }
 
   async registerRoute(app: Application, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+    // Determine if body limits should be applied
+    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+
+    // Get the body size limit for this route (route-specific or default)
+    const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+
+    // Create middleware array
+    const middlewares: Array<(req: Request, res: Response, next: NextFunction) => void> = [];
+
+    // Add body limit middleware if needed
+    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+      const bodyLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
+        const contentLength = req.headers['content-length'];
+        if (contentLength && parseInt(contentLength, 10) > maxSize) {
+          try {
+            const errorResponse = this.bodyLimitOptions!.onError({ error: 'Request body too large' });
+            return res.status(413).json(errorResponse);
+          } catch (error) {
+            return res.status(413).json({ error: 'Request body too large' });
+          }
+        }
+        next();
+      };
+      middlewares.push(bodyLimitMiddleware);
+    }
+
     app[route.method.toLowerCase() as keyof Application](
       `${prefix}${route.path}`,
+      ...middlewares,
       async (req: Request, res: Response) => {
         console.log('got request', req.method, req.url);
         const params = await this.getParams(route, req);

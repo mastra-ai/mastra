@@ -28,6 +28,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   bodySchema?: z.ZodSchema;
   responseSchema?: z.ZodSchema;
   openapi?: any; // Auto-generated OpenAPI spec for this route
+  maxBodySize?: number; // Optional route-specific body size limit in bytes
 };
 
 export const SERVER_ROUTES: ServerRoute[] = [

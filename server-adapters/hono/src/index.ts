@@ -2,9 +2,10 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import { MastraServerAdapter, type BodyLimitOptions } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
 
 // Export type definitions for Hono app configuration
@@ -34,6 +35,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     customRouteAuthConfig,
     playground,
     isDev,
+    bodyLimitOptions,
   }: {
     mastra: Mastra;
     tools?: Record<string, Tool>;
@@ -41,8 +43,9 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     customRouteAuthConfig?: Map<string, boolean>;
     playground?: boolean;
     isDev?: boolean;
+    bodyLimitOptions?: BodyLimitOptions;
   }) {
-    super({ mastra });
+    super({ mastra, bodyLimitOptions });
     this.tools = tools;
     this.taskStore = taskStore || new InMemoryTaskStore();
     this.customRouteAuthConfig = customRouteAuthConfig;
@@ -187,8 +190,27 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     route: ServerRoute,
     { prefix }: { prefix?: string },
   ): Promise<void> {
+    // Determine if body limits should be applied
+    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+
+    // Get the body size limit for this route (route-specific or default)
+    const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+
+    // Build middleware array
+    const middlewares: MiddlewareHandler[] = [];
+
+    if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+      middlewares.push(
+        bodyLimit({
+          maxSize,
+          onError: this.bodyLimitOptions.onError as any,
+        }),
+      );
+    }
+
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
       `${prefix}${route.path}`,
+      ...middlewares,
       async (c: Context) => {
         const params = await this.getParams(route, c.req);
 
