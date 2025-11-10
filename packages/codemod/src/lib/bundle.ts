@@ -21,4 +21,5 @@ export const BUNDLE = [
   'v1/client-to-ai-sdk-format',
   'v1/client-offset-limit',
   'v1/client-get-memory-thread',
+  'v1/mastra-required-id',
 ];

@@ -60,9 +60,9 @@ npx @mastra/codemod@beta v1/experimental-auth .
 
 ### Required `id` parameter for all mastra primitives
 
-All storage, vector stores, agents, workflows, mcpServers, processors, scorers, tools now require an `id` parameter during initialization. This enables the standardized Mastra API and prevents ID conflicts.
+All storages, vector stores, agents, workflows, mcpServers, processors, scorers, and tools now require an `id` parameter during initialization. This enables the standardized Mastra API and prevents ID conflicts.
 
-All these primitives also now have a `get`, `list`, and `add` functions.
+All these primitives also now have `get`, `list`, and `add` functions.
 
 To migrate, add an `id` parameter to all storage and vector store instantiations. When using the same storage/vector class multiple times, ensure each instance has a unique ID.
 
