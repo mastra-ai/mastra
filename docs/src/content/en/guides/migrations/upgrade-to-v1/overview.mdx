@@ -19,7 +19,21 @@ Use your package manager to update your project's versions. Be sure to update **
 
 ### Update Node.js version
 
-Mastra v1 requires Node.js 22.13.0 or higher. Update your development and production environments accordingly.
+Mastra v1 requires Node.js **22.13.0** or higher. Update your development and production environments accordingly.
+
+### Go through migration checklist
+
+Work through the [migration checklist](#migration-checklist) below to update your codebase. Each item links to a detailed guide for that specific change.
+
+:::info[Codemods]
+
+We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod) for you. If you want, you can run all v1 codemods at once:
+
+```sh
+npx @mastra/codemod@beta v1
+```
+
+:::
 
 ## Breaking Changes by Area
 
@@ -41,7 +55,7 @@ Mastra v1 requires Node.js 22.13.0 or higher. Update your development and produc
 
 Work through this checklist in order, starting with high-impact changes that affect most applications.
 
-:::info[Codemod]
+:::info[Codemods]
 
 We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod) for you. Throughout the migration guide you'll find instructions on how to use them for specific changes.
 
