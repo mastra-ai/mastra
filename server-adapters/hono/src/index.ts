@@ -72,9 +72,9 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     }
   }
 
-  async registerRoute(app: Hono<any, any, any>, route: ServerRoute): Promise<void> {
+  async registerRoute(app: Hono<any, any, any>, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
-      route.path,
+      `${prefix}${route.path}`,
       async (c: Context) => {
         const params = await this.getParams(route, c.req);
 
@@ -118,8 +118,11 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     );
   }
 
-  async registerRoutes(app: Hono<any, any, any>): Promise<void> {
+  async registerRoutes(
+    app: Hono<any, any, any>,
+    { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
+  ): Promise<void> {
     // TODO: move mastra variable bindings here from dev?
-    await super.registerRoutes(app);
+    await super.registerRoutes(app, { prefix, openapiPath });
   }
 }

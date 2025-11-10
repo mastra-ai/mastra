@@ -417,7 +417,7 @@ const app = new Hono();
 app.use('*', cors());
 
 const honoServerAdapter = new HonoServerAdapter({ mastra });
-await honoServerAdapter.registerRoutes(app);
+await honoServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
 
 // Add Swagger UI
 app.use('/swagger-ui/*', swaggerUI({ url: '/openapi.json' }));

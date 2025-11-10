@@ -417,7 +417,7 @@ app.use(express.json());
 app.use(cors());
 
 const expressServerAdapter = new ExpressServerAdapter({ mastra });
-await expressServerAdapter.registerRoutes(app);
+await expressServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
 
 // Add Swagger UI
 app.use('/swagger-ui', swaggerUi.serve, swaggerUi.setup(undefined, { swaggerUrl: '/openapi.json' }));

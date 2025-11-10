@@ -53,52 +53,58 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     }
   }
 
-  async registerRoute(app: Application, route: ServerRoute): Promise<void> {
-    app[route.method.toLowerCase() as keyof Application](route.path, async (req: Request, res: Response) => {
-      console.log('got request', req.method, req.url);
-      const params = await this.getParams(route, req);
+  async registerRoute(app: Application, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+    app[route.method.toLowerCase() as keyof Application](
+      `${prefix}${route.path}`,
+      async (req: Request, res: Response) => {
+        console.log('got request', req.method, req.url);
+        const params = await this.getParams(route, req);
 
-      if (params.queryParams) {
-        try {
-          params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
-        } catch (error) {
-          console.error('Error parsing query params', error);
-          return res.status(500).json({ error: 'Internal server error' });
+        if (params.queryParams) {
+          try {
+            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+          } catch (error) {
+            console.error('Error parsing query params', error);
+            return res.status(500).json({ error: 'Internal server error' });
+          }
         }
-      }
 
-      if (params.body) {
-        try {
-          params.body = await this.parseBody(route, params.body);
-        } catch (error) {
-          console.error('Error parsing body', error);
-          return res.status(500).json({ error: 'Internal server error' });
+        if (params.body) {
+          try {
+            params.body = await this.parseBody(route, params.body);
+          } catch (error) {
+            console.error('Error parsing body', error);
+            return res.status(500).json({ error: 'Internal server error' });
+          }
         }
-      }
 
-      const handlerParams = {
-        ...params.urlParams,
-        ...params.queryParams,
-        body: params.body,
-        ...(typeof params.body === 'object' ? params.body : {}),
-        requestContext: res.locals.requestContext,
-        mastra: this.mastra,
-        tools: res.locals.tools,
-        taskStore: res.locals.taskStore,
-      };
+        const handlerParams = {
+          ...params.urlParams,
+          ...params.queryParams,
+          body: params.body,
+          ...(typeof params.body === 'object' ? params.body : {}),
+          requestContext: res.locals.requestContext,
+          mastra: this.mastra,
+          tools: res.locals.tools,
+          taskStore: res.locals.taskStore,
+        };
 
-      console.dir({ params }, { depth: null });
-      const result = await route.handler(handlerParams);
-      console.dir({ result }, { depth: null });
-      await this.sendResponse(route, res, result);
-    });
+        console.dir({ params }, { depth: null });
+        const result = await route.handler(handlerParams);
+        console.dir({ result }, { depth: null });
+        await this.sendResponse(route, res, result);
+      },
+    );
   }
 
-  async registerRoutes(app: Application): Promise<void> {
+  async registerRoutes(
+    app: Application,
+    { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
+  ): Promise<void> {
     app.use(async (req: Request, res: Response, next: NextFunction) => {
       res.locals.requestContext = new RequestContext();
       next();
     });
-    await super.registerRoutes(app);
+    await super.registerRoutes(app, { prefix, openapiPath });
   }
 }
