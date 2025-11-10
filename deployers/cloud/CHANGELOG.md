@@ -1,5 +1,15 @@
 # @mastra/deployer-cloud
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Do not initialize local storage ([#9840](https://github.com/mastra-ai/mastra/pull/9840))
+
+- Updated dependencies [[`ac32ca9`](https://github.com/mastra-ai/mastra/commit/ac32ca968fb906f6c61fd7b4a194323bcb2f3daa), [`910db9e`](https://github.com/mastra-ai/mastra/commit/910db9e0312888495eb5617b567f247d03303814), [`e7266a2`](https://github.com/mastra-ai/mastra/commit/e7266a278db02035c97a5e9cd9d1669a6b7a535d)]:
+  - @mastra/deployer@1.0.0-beta.1
+  - @mastra/core@1.0.0-beta.1
+
 ## 1.0.0-beta.0
 
 ### Major Changes
