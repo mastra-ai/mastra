@@ -130,6 +130,16 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method
   vi.spyOn(agent, 'stream').mockResolvedValue(createMockStream() as any);
 
+  // Mock legacy generate - returns a stream
+  vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
+
+  // Mock streamLegacy - needs to return an object with toDataStreamResponse method
+  const mockStreamResult = {
+    ...createMockStream(),
+    toDataStreamResponse: vi.fn().mockReturnValue(createMockStream()),
+  };
+  vi.spyOn(agent, 'streamLegacy').mockResolvedValue(mockStreamResult as any);
+
   // Mock approveToolCall method
   vi.spyOn(agent, 'approveToolCall').mockResolvedValue(createMockStream() as any);
 
@@ -289,6 +299,91 @@ export function setupMemoryTests() {
   });
 
   return { memory, mastra };
+}
+
+/**
+ * Complete setup for legacy routes testing
+ * Legacy routes span agents, workflows, and agent-builder
+ * Returns configured agent, workflow, and mastra instance with agent-builder support
+ */
+export async function setupLegacyTests() {
+  // Create agent with all mocks configured
+  const agent = createTestAgent();
+  mockAgentMethods(agent);
+
+  // Create a workflow with suspending enabled
+  const workflow = createTestWorkflow();
+
+  // Create agent-builder workflows (legacy agent-builder routes use these IDs)
+  const mergeTemplateWorkflow = createTestWorkflow({ id: 'merge-template' });
+  const workflowBuilderWorkflow = createTestWorkflow({ id: 'workflow-builder' });
+
+  // Mock legacy workflow stream methods
+  const createMockWorkflowStream = () => {
+    return new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"type":"step-result","result":"test"}\n\n'));
+        controller.close();
+      },
+    });
+  };
+
+  const mastra = createTestMastra({
+    agents: { 'test-agent': agent },
+    workflows: {
+      'test-workflow': workflow,
+      'merge-template': mergeTemplateWorkflow,
+      'workflow-builder': workflowBuilderWorkflow,
+    },
+  });
+
+  // Create and start a workflow run - it will suspend at step1
+  const run = await workflow.createRun({
+    runId: 'test-run',
+  });
+  // Mock streamLegacy and observeStreamLegacy on the run
+  vi.spyOn(run, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+  // observeStreamLegacy returns an object with a stream property
+  vi.spyOn(run, 'observeStreamLegacy').mockReturnValue({
+    stream: createMockWorkflowStream(),
+  } as any);
+
+  await run.start({ inputData: {} }).catch(() => {});
+
+  // Create and start agent-builder workflow runs
+  const mergeTemplateRun = await mergeTemplateWorkflow.createRun({
+    runId: 'test-run',
+  });
+  vi.spyOn(mergeTemplateRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+  // observeStreamLegacy returns an object with a stream property
+  vi.spyOn(mergeTemplateRun, 'observeStreamLegacy').mockReturnValue({
+    stream: createMockWorkflowStream(),
+  } as any);
+  await mergeTemplateRun.start({ inputData: {} }).catch(() => {});
+
+  const workflowBuilderRun = await workflowBuilderWorkflow.createRun({
+    runId: 'test-run',
+  });
+  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+  // observeStreamLegacy returns an object with a stream property
+  vi.spyOn(workflowBuilderRun, 'observeStreamLegacy').mockReturnValue({
+    stream: createMockWorkflowStream(),
+  } as any);
+  await workflowBuilderRun.start({ inputData: {} }).catch(() => {});
+
+  // Return a function to setup WorkflowRegistry mocks (for agent-builder routes)
+  const setupMocks = () => {
+    vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {});
+    vi.spyOn(WorkflowRegistry, 'cleanup').mockImplementation(() => {});
+    vi.spyOn(WorkflowRegistry, 'isAgentBuilderWorkflow').mockReturnValue(true);
+    vi.spyOn(WorkflowRegistry, 'getAllWorkflows').mockReturnValue({
+      'test-workflow': workflow,
+      'merge-template': mergeTemplateWorkflow,
+      'workflow-builder': workflowBuilderWorkflow,
+    });
+  };
+
+  return { agent, workflow, mastra, run, setupMocks };
 }
 
 /**
