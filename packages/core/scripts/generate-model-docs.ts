@@ -253,7 +253,7 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 
 ${getGeneratedComment()}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
+
 
 ${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import Tabs from "@theme/Tabs";\nimport TabItem from "@theme/TabItem";' : ''}
 
@@ -853,10 +853,7 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
   const hasNetlify = gatewaysList.includes('netlify');
-  const logoImport = hasNetlify
-    ? '\
-import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";'
-    : '';
+  const logoImport = hasNetlify ? 'import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
 
   return `---
 title: "Gateways"
@@ -865,7 +862,8 @@ description: "Access AI models through gateway providers with caching, rate limi
 
 ${getGeneratedComment()}
 
-import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";${logoImport}
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+${logoImport}
 
 # Gateway Providers
 
