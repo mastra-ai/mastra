@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.1",
   "description": "",
   "type": "module",
   "files": [
@@ -103,7 +103,7 @@
     "@rollup/plugin-commonjs": "28.0.6",
     "@rollup/plugin-esm-shim": "0.1.8",
     "@rollup/plugin-json": "6.1.0",
-    "@rollup/plugin-node-resolve": "16.0.2",
+    "@rollup/plugin-node-resolve": "16.0.3",
     "@rollup/plugin-virtual": "3.0.2",
     "@sindresorhus/slugify": "^2.2.1",
     "builtins": "^5.1.0",
