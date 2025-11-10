@@ -5,9 +5,9 @@ description: "Get started with Mastra, Next.js, and AS SDK UI. Quickly."
 
 # Next.js Quickstart
 
-In this quickstart, you'll build an AI agent with tool-calling capabilities using [Mastra](/docs/v1), then connect it to Next.js by importing and calling the agent directly within your routes. 
+In this quickstart, you'll build an AI agent with tool-calling capabilities using [Mastra](/docs/v1), then connect it to Next.js by importing and calling the agent directly within your routes.
 
-You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience. 
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
 In ~5 minutes, you'll have a functional AI-powered app ready to extend with your own tools and logic.
 
@@ -41,7 +41,7 @@ npx create-next-app \
 This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
 
 ## Initialize Mastra
-`cd` and run [`mastra init`](/reference/v1/cli/create-mastra). 
+`cd` and run [`mastra init`](/reference/v1/cli/create-mastra).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
@@ -65,7 +65,7 @@ Install AI SDK UI along with the Mastra adapter:
 ```bash
 npm install \
     @mastra/ai-sdk \
-    @ai-sdk/react 
+    @ai-sdk/react
 ```
 
 Next, initialize AI Elements. When prompted, choose the default options:
@@ -112,7 +112,7 @@ export async function GET() {
     resourceId: "weather-chat",
   });
 
-  const uiMessages = 
+  const uiMessages =
     convertMessages(response?.uiMessages ?? []).to("AIV5.UI");
   return NextResponse.json(uiMessages);
 }
@@ -190,8 +190,8 @@ function Chat() {
                 {message.parts?.map((part: any, i: number) => {
                   if (part.type === 'text') {
                     return (
-                      <Message 
-                        key={`${message.id}-${i}`} 
+                      <Message
+                        key={`${message.id}-${i}`}
                         from={message.role}>
                           <MessageContent>
                             <MessageResponse>{part.text}</MessageResponse>
@@ -251,7 +251,7 @@ This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-u
 It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
 
 
-## Test your agent 
+## Test your agent
 1. Run your Next.js app with `npm run dev`
 
 2. Open the chat at http://localhost:3000/chat
@@ -260,7 +260,7 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 ## Next steps
 
-Congratulations on building your Mastra agent with Next.js! 🎉 
+Congratulations on building your Mastra agent with Next.js! 🎉
 
 From here, you can extend the project with your own tools and logic:
 
@@ -272,4 +272,4 @@ When you're ready, read more about how Mastra integrates with AI SDK and Next.js
 
 - Integrate Mastra with [AI SDK](/docs/v1/frameworks/agentic-uis/ai-sdk)
 - Use Mastra in your [Next.js app](/docs/v1/frameworks/web-frameworks/next-js)
-- Deploy your agent to [Vercel](/docs/v1/deployment/serverless-platforms/vercel-deployer)
+- Deploy your agent to [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
