@@ -1162,5 +1162,9 @@
   "sidebar.referenceSidebar.doc.Overview": {
     "message": "Overview",
     "description": "The label for the doc item 'Overview' in sidebar 'referenceSidebar', linking to the doc templates/overview"
+  },
+  "sidebar.referenceSidebar.category.Run Methods": {
+    "message": "Run Methods",
+    "description": "The label for category 'Run Methods' in sidebar 'referenceSidebar'"
   }
 }

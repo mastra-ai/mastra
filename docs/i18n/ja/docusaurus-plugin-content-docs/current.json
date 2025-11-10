@@ -239,6 +239,10 @@
     "message": "LibSQL によるメモリ管理",
     "description": "サイドバー「docsSidebar」にあるドキュメント項目「Memory with LibSQL」のラベルで、ドキュメント memory/storage/memory-with-libsql へのリンクです"
   },
+  "sidebar.docsSidebar.doc.Memory with MongoDB": {
+    "message": "MongoDB を使ったメモリー",
+    "description": "サイドバー「docsSidebar」にあるドキュメント項目「Memory with MongoDB」のラベルで、ドキュメント memory/storage/memory-with-mongodb へのリンクです"
+  },
   "sidebar.docsSidebar.doc.Memory with PostgreSQL": {
     "message": "PostgreSQL のメモリ",
     "description": "サイドバー「docsSidebar」にあるドキュメント項目「Memory with PostgreSQL」のラベル。リンク先はドキュメント memory/storage/memory-with-pg。"

@@ -229,6 +229,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "memory/storage/memory-with-mongodb",
+              label: "Memory with MongoDB",
+            },
+            {
+              type: "doc",
               id: "memory/storage/memory-with-pg",
               label: "Memory with PostgreSQL",
             },

@@ -127,10 +127,6 @@
     "message": "スキーマ対応メモリ",
     "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Memory with Schema」のラベルで、ドキュメント memory/working-memory-schema へのリンクです"
   },
-  "sidebar.examplesSidebar.doc.Memory with MongoDB": {
-    "message": "MongoDB を使ったメモリー",
-    "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Memory with MongoDB」のラベルで、ドキュメント memory/memory-with-mongodb へのリンクです"
-  },
   "sidebar.examplesSidebar.doc.Creating a Workflow": {
     "message": "ワークフローの作成",
     "description": "サイドバー「examplesSidebar」にあるドキュメント項目「Creating a Workflow」のラベル。ドキュメント workflows_legacy/creating-a-workflow へのリンク"
