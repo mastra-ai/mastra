@@ -110,8 +110,13 @@ export class CoreToolBuilder extends MastraBase {
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
-        ...(outputSchema
+        parameters:
+          typeof parameters === 'object' && parameters && 'jsonSchema' in parameters
+            ? parameters
+            : parameters !== undefined
+              ? convertZodSchemaToAISDKSchema(parameters)
+              : z.object({}).passthrough().optional(),
+        ...(outputSchema !== undefined && outputSchema !== null && 'jsonSchema' in outputSchema
           ? { outputSchema: outputSchema.jsonSchema ? outputSchema : convertZodSchemaToAISDKSchema(outputSchema) }
           : {}),
         execute: this.originalTool.execute
@@ -433,7 +438,7 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
-    } else {
+    } else if (originalSchema) {
       // No compatibility layer applies, use original schema
       processedZodSchema = originalSchema;
       processedSchema = applyCompatLayer({
@@ -441,6 +446,10 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
+    } else {
+      // No schema to process, set to undefined
+      processedZodSchema = undefined;
+      processedSchema = undefined;
     }
 
     let processedOutputSchema;
@@ -456,8 +465,6 @@ export class CoreToolBuilder extends MastraBase {
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
-      parameters: this.getParameters(),
-      outputSchema: this.getOutputSchema(),
       requireApproval: this.options.requireApproval,
       execute: this.originalTool.execute
         ? this.createExecute(
