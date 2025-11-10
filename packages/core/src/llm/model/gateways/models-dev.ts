@@ -11,6 +11,7 @@ import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import z from 'zod';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -132,27 +133,6 @@ export class ModelsDevGateway extends MastraModelGateway {
       }
     }
 
-    // Manually inject Azure provider since it's not in models.dev API
-    providerConfigs['azure'] = {
-      url: undefined, // SDK manages URL construction from resource name
-      apiKeyEnvVar: 'AZURE_API_KEY',
-      apiKeyHeader: 'api-key',
-      name: 'Azure OpenAI',
-      models: [
-        'gpt-4',
-        'gpt-4-32k',
-        'gpt-4o',
-        'gpt-4o-mini',
-        'gpt-4.1',
-        'gpt-4.1-mini',
-        'o1',
-        'o1-mini',
-        'o1-preview',
-      ].sort(),
-      docUrl: 'https://learn.microsoft.com/azure/ai-services/openai/',
-      gateway: 'models.dev',
-    };
-
     // Store for later use in buildUrl and buildHeaders
     this.providerConfigs = providerConfigs;
 
@@ -255,13 +235,15 @@ export class ModelsDevGateway extends MastraModelGateway {
           resourceName,
           apiKey,
           apiVersion,
+          useDeploymentBasedUrls: true,
         });
 
-        return azure(modelId, { apiVersion });
+        return azure(modelId);
       }
 
       default:
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+        z;
         return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
           modelId,
         );

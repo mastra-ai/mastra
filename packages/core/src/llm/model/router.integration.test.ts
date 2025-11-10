@@ -41,6 +41,8 @@ const weatherTool = {
   },
 };
 
+const hasAzureEnv = () => Boolean(process.env.AZURE_API_KEY && process.env.AZURE_RESOURCE_NAME);
+
 describe('ModelRouter Integration Tests', () => {
   let availableProviders: string[] = [];
 
@@ -232,5 +234,92 @@ describe('ModelRouter Integration Tests', () => {
         ).not.toThrow();
       });
     });
+  });
+
+  // Azure uses deployment names encoded in the model ID (e.g. "azure/gpt-4.1-mini"), so
+  // only AZURE_API_KEY and AZURE_RESOURCE_NAME are required. We gate all tests on those.
+  describe('azure/gpt-4.1-mini', () => {
+    const modelId = 'azure/gpt-4.1-mini' as const;
+    const skipAzure = !hasAzureEnv();
+
+    it.skipIf(skipAzure)('should generate text response', async () => {
+      const agent = new Agent({
+        id: 'azure-test-agent',
+        name: 'azure-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: modelId,
+      });
+
+      const response = await agent.generate('Say "Hello from Azure!" and nothing else.');
+
+      expect(response).toBeDefined();
+      expect(response.text).toBeDefined();
+      expect(response.text?.toLowerCase()).toContain('hello');
+    });
+
+    it.skipIf(skipAzure)('should handle tool calling', async () => {
+      const agent = new Agent({
+        id: 'azure-test-agent',
+        name: 'azure-test-agent',
+        instructions: 'You are a helpful assistant.',
+        model: modelId,
+        tools: {
+          get_weather: weatherTool,
+        },
+      });
+
+      const response = await agent.generate('What is the weather in Seattle?', {
+        toolChoice: 'required',
+        maxSteps: 1,
+      });
+
+      const toolCalls = await response.toolCalls;
+
+      expect(toolCalls).toBeDefined();
+      expect(toolCalls.length).toBeGreaterThan(0);
+      expect(toolCalls[0].payload.toolName).toBe('get_weather');
+    });
+
+    it.skipIf(skipAzure)('should support system messages via instructions', async () => {
+      const agent = new Agent({
+        id: 'azure-test-agent',
+        name: 'azure-test-agent',
+        instructions: 'You are a pirate. Always respond like a pirate.',
+        model: modelId,
+      });
+
+      const response = await agent.generate('Say hello');
+
+      expect(response.text).toBeDefined();
+      expect(typeof response.text).toBe('string');
+      const pirateWords = ['ahoy', 'matey', 'arr', 'ye', 'aye'];
+      const hasPirateWord = pirateWords.some(word => response.text?.toLowerCase().includes(word));
+      expect(hasPirateWord).toBe(true);
+    });
+
+    it.skipIf(skipAzure)(
+      'should support streaming',
+      async () => {
+        const agent = new Agent({
+          id: 'azure-test-agent',
+          name: 'azure-test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: modelId,
+        });
+
+        const { textStream } = await agent.stream('Count from 1 to 3');
+
+        const chunks: string[] = [];
+        for await (const chunk of textStream) {
+          chunks.push(chunk);
+        }
+
+        expect(chunks.length).toBeGreaterThan(0);
+        const fullText = chunks.join('');
+        expect(fullText).toBeDefined();
+        expect(typeof fullText).toBe('string');
+      },
+      { timeout: 30000 },
+    );
   });
 });
