@@ -11,12 +11,21 @@ import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
-import { initLogger } from 'braintrust';
+import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { normalizeUsageMetrics } from './metrics';
 
 export interface BraintrustExporterConfig extends BaseExporterConfig {
-  /** Braintrust API key */
+  /**
+   * Optional Braintrust logger instance.
+   * When provided, enables integration with Braintrust contexts such as:
+   * - Evals: Agent traces nest inside eval task spans
+   * - logger.traced(): Agent traces nest inside traced spans
+   * - Parent spans: Auto-detects and attaches to external Braintrust spans
+   */
+  braintrustLogger?: Logger<true>;
+
+  /** Braintrust API key. Required if logger is not provided. */
   apiKey?: string;
   /** Optional custom endpoint */
   endpoint?: string;
@@ -27,9 +36,10 @@ export interface BraintrustExporterConfig extends BaseExporterConfig {
 }
 
 type SpanData = {
-  logger: Logger<true>; // Braintrust logger (for root spans)
+  logger: Logger<true> | Span; // Braintrust logger (for root spans) or external span
   spans: Map<string, Span>; // Maps span.id to Braintrust span
   activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
+  isExternal: boolean; // True if logger is an external span from logger.traced() or Eval()
 };
 
 // Default span type for all spans
@@ -55,16 +65,29 @@ export class BraintrustExporter extends BaseExporter {
   private traceMap = new Map<string, SpanData>();
   private config: BraintrustExporterConfig;
 
+  // Flags and logger for context-aware mode
+  private useProvidedLogger: boolean;
+  private providedLogger?: Logger<true>;
+
   constructor(config: BraintrustExporterConfig) {
     super(config);
 
-    if (!config.apiKey) {
-      this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
-      this.config = null as any;
-      return;
+    if (config.braintrustLogger) {
+      // Use provided logger - enables Braintrust context integration
+      this.useProvidedLogger = true;
+      this.providedLogger = config.braintrustLogger;
+      this.config = config;
+    } else {
+      // Validate apiKey for creating loggers per trace
+      if (!config.apiKey) {
+        this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
+        this.config = null as any;
+        this.useProvidedLogger = false;
+        return;
+      }
+      this.useProvidedLogger = false;
+      this.config = config;
     }
-
-    this.config = config;
   }
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
@@ -88,7 +111,13 @@ export class BraintrustExporter extends BaseExporter {
 
   private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
     if (span.isRootSpan) {
-      await this.initLogger(span);
+      if (this.useProvidedLogger) {
+        // Use provided logger, detect external Braintrust spans
+        await this.initLoggerOrUseContext(span);
+      } else {
+        // Create new logger per trace
+        await this.initLoggerPerTrace(span);
+      }
     }
 
     const method = 'handleSpanStarted';
@@ -109,13 +138,21 @@ export class BraintrustExporter extends BaseExporter {
 
     const payload = this.buildSpanPayload(span);
 
+    // When attaching to an external parent (eval/logger span), don't pass Mastra's internal
+    // parentSpanIds. Let Braintrust auto-handle the parent-child relationship.
+    const shouldOmitParentIds = spanData.isExternal && !span.parentSpanId;
+
     const braintrustSpan = braintrustParent.startSpan({
       spanId: span.id,
       name: span.name,
       type: mapSpanType(span.type),
-      parentSpanIds: span.parentSpanId
-        ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
-        : { spanId: span.traceId, rootSpanId: span.traceId },
+      ...(shouldOmitParentIds
+        ? {} // Let Braintrust auto-link to parent
+        : {
+            parentSpanIds: span.parentSpanId
+              ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
+              : { spanId: span.traceId, rootSpanId: span.traceId },
+          }),
       ...payload,
     });
 
@@ -160,7 +197,8 @@ export class BraintrustExporter extends BaseExporter {
       }
 
       // If no more active spans remain for this trace, clean up the trace entry
-      if (spanData.activeIds.size === 0) {
+      // Don't clean up if using external spans (they're managed by Braintrust)
+      if (spanData.activeIds.size === 0 && !spanData.isExternal) {
         this.traceMap.delete(span.traceId);
       }
     }
@@ -174,7 +212,14 @@ export class BraintrustExporter extends BaseExporter {
         spanName: span.name,
         method: 'handleEventSpan',
       });
-      await this.initLogger(span);
+
+      if (this.useProvidedLogger) {
+        // Use provided logger, detect external Braintrust spans
+        await this.initLoggerOrUseContext(span);
+      } else {
+        // Create new logger per trace
+        await this.initLoggerPerTrace(span);
+      }
     }
 
     const method = 'handleEventSpan';
@@ -205,7 +250,10 @@ export class BraintrustExporter extends BaseExporter {
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
   }
 
-  private async initLogger(span: AnyExportedSpan): Promise<void> {
+  /**
+   * Creates a new logger per trace using config credentials
+   */
+  private async initLoggerPerTrace(span: AnyExportedSpan): Promise<void> {
     const logger = await initLogger({
       projectName: this.config.projectName ?? 'mastra-tracing',
       apiKey: this.config.apiKey,
@@ -213,7 +261,43 @@ export class BraintrustExporter extends BaseExporter {
       ...this.config.tuningParameters,
     });
 
-    this.traceMap.set(span.traceId, { logger, spans: new Map(), activeIds: new Set() });
+    this.traceMap.set(span.traceId, {
+      logger,
+      spans: new Map(),
+      activeIds: new Set(),
+      isExternal: false,
+    });
+  }
+
+  /**
+   * Uses provided logger and detects external Braintrust spans.
+   * If a Braintrust span is detected (from logger.traced() or Eval()), attaches to it.
+   * Otherwise, uses the provided logger instance.
+   */
+  private async initLoggerOrUseContext(span: AnyExportedSpan): Promise<void> {
+    // Try to find a Braintrust span to attach to:
+    // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
+    // 2. Fall back to the configured logger
+    const braintrustSpan = currentSpan();
+
+    // Check if it's a valid span (not the NOOP_SPAN)
+    if (braintrustSpan && braintrustSpan.id) {
+      // External span detected - attach Mastra traces to it
+      this.traceMap.set(span.traceId, {
+        logger: braintrustSpan,
+        spans: new Map(),
+        activeIds: new Set(),
+        isExternal: true,
+      });
+    } else {
+      // No external span - use provided logger
+      this.traceMap.set(span.traceId, {
+        logger: this.providedLogger!,
+        spans: new Map(),
+        activeIds: new Set(),
+        isExternal: false,
+      });
+    }
   }
 
   private getSpanData(options: { span: AnyExportedSpan; method: string }): SpanData | undefined {
