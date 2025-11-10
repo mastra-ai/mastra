@@ -1,21 +1,21 @@
 import path from 'path';
-import { pathToFileURL } from 'url';
+import { readFileSync } from 'fs';
 import process from 'process';
 
 const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'localhost:3000';
 
+// Strip locale pattern from URL for validation
+const stripLocalePattern = url => {
+  return url.replace(/^\/:[^/]+\//, '/');
+};
+
 const loadRedirects = async () => {
   process.chdir('docs');
 
-  const configPath = path.resolve('next.config.mjs');
-  const configUrl = pathToFileURL(configPath).href;
-  const configModule = await import(configUrl);
+  const vercelJsonPath = path.resolve('vercel.json');
+  const vercelJson = JSON.parse(readFileSync(vercelJsonPath, 'utf-8'));
 
-  const resolvedConfig =
-    typeof configModule.default === 'function' ? await configModule.default() : configModule.default;
-
-  const redirectsFn = resolvedConfig?.redirects;
-  const redirects = typeof redirectsFn === 'function' ? await redirectsFn() : redirectsFn;
+  const redirects = vercelJson.redirects || [];
 
   return redirects;
 };
@@ -26,18 +26,12 @@ const checkRedirects = async () => {
   const redirects = await loadRedirects();
   const sourceMap = new Map();
   const duplicateSourceGroups = new Map();
-  const nonLocaleAwareRedirects = [];
 
   for (const redirect of redirects) {
     if (!redirect || typeof redirect !== 'object') continue;
 
-    const { source, destination } = redirect;
+    const { source } = redirect;
     if (!source) continue;
-
-    // Check if redirect is locale aware
-    if (!source.includes('/:locale')) {
-      nonLocaleAwareRedirects.push(redirect);
-    }
 
     if (sourceMap.has(source)) {
       if (!duplicateSourceGroups.has(source)) {
@@ -64,7 +58,8 @@ const checkRedirects = async () => {
       continue;
     }
 
-    const destinationUrl = `${baseUrl}${destination}`;
+    const cleanDestination = stripLocalePattern(destination);
+    const destinationUrl = `${baseUrl}${cleanDestination}`;
     let destinationOk = false;
 
     try {
@@ -99,17 +94,6 @@ const checkRedirects = async () => {
     }
   }
 
-  if (nonLocaleAwareRedirects.length > 0) {
-    console.log('\n' + '='.repeat(40));
-    console.log('Non-locale aware redirects found:\n');
-    for (const redirect of nonLocaleAwareRedirects) {
-      console.log('├──NON-LOCALE AWARE──', `${baseUrl}${redirect.source}`);
-      console.log('⚠️  Redirect source should include /:locale parameter:');
-      console.dir(redirect, { depth: null });
-      console.log(' ');
-    }
-  }
-
   const elapsed = Math.floor((Date.now() - start) / 1000);
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
@@ -120,11 +104,10 @@ const checkRedirects = async () => {
   console.log(`Redirects OK: ${successful}`);
   console.log(`Broken destinations: ${brokenDestination}`);
   console.log(`Duplicate sources: ${duplicateSourceGroups.size}`);
-  console.log(`Non-locale aware redirects: ${nonLocaleAwareRedirects.length}`);
   console.log(`Time elapsed: ${minutes} minutes, ${seconds} seconds`);
   console.log('='.repeat(40));
 
-  process.exit(brokenDestination > 0 || duplicateSourceGroups.size > 0 || nonLocaleAwareRedirects.length > 0 ? 1 : 0);
+  process.exit(brokenDestination > 0 || duplicateSourceGroups.size > 0 ? 1 : 0);
 };
 
 checkRedirects().catch(console.error);

@@ -12,7 +12,7 @@ import "dotenv/config";
 const config = {
   title: "Mastra Documentation",
   tagline: "TypeScript agent framework",
-  favicon: "favicon.ico",
+  favicon: "/favicon.ico",
 
   // Set the production url of your site here
   url: "https://mastra.ai",
@@ -28,8 +28,20 @@ const config = {
       onBrokenMarkdownLinks: "warn",
     },
   },
-  // Enable v4 features in prod
 
+  // Internationalization
+  // By default, Docusuarus will look for translations in:
+  //
+  //    i18n/{locale}/docusaurus-plugin-content-{name}/current/*.{filetype}
+  //
+  // We fetch all source files and store them there using the "transform" option
+  // in gt.config.json
+  i18n: {
+    defaultLocale: "en",
+    locales: ["en", "ja"],
+  },
+
+  // Enable v4 features in prod
   ...(process.env.NODE_ENV === "production" && {
     future: {
       v4: {
@@ -54,21 +66,13 @@ const config = {
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
   },
 
-  // Preconnect to Google Fonts
   headTags: [
+    // Block Google Fonts using Content Security Policy
     {
-      tagName: "link",
+      tagName: "meta",
       attributes: {
-        rel: "preconnect",
-        href: "https://fonts.googleapis.com",
-      },
-    },
-    {
-      tagName: "link",
-      attributes: {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossorigin: "anonymous",
+        "http-equiv": "Content-Security-Policy",
+        content: "font-src 'self' data:;",
       },
     },
   ],
@@ -144,6 +148,7 @@ const config = {
       ({
         docs: {
           path: "src/content/en/docs",
+          routeBasePath: "docs",
           sidebarPath: "./src/content/en/docs/sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.

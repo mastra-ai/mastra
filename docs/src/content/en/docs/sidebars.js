@@ -29,7 +29,7 @@ const sidebars = {
         {
           type: "doc",
           id: "getting-started/studio",
-          label: "Playground",
+          label: "Studio",
         },
         {
           type: "doc",
@@ -55,6 +55,7 @@ const sidebars = {
         {
           type: "doc",
           id: "agents/overview",
+          key: "agents.overview",
           label: "Overview",
         },
         {
@@ -91,6 +92,7 @@ const sidebars = {
         {
           type: "doc",
           id: "workflows/overview",
+          key: "workflows.overview",
           label: "Overview",
         },
         {
@@ -112,11 +114,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/error-handling",
           label: "Error Handling",
-        },
-        {
-          type: "doc",
-          id: "workflows/input-data-mapping",
-          label: "Input Data Mapping",
         },
         {
           type: "doc",
@@ -142,6 +139,7 @@ const sidebars = {
         {
           type: "doc",
           id: "streaming/overview",
+          key: "streaming.overview",
           label: "Overview",
         },
         {
@@ -169,6 +167,7 @@ const sidebars = {
         {
           type: "doc",
           id: "tools-mcp/overview",
+          key: "tools-mcp.overview",
           label: "Overview",
         },
         {
@@ -191,6 +190,7 @@ const sidebars = {
         {
           type: "doc",
           id: "memory/overview",
+          key: "memory.overview",
           label: "Overview",
         },
         {
@@ -248,6 +248,7 @@ const sidebars = {
         {
           type: "doc",
           id: "rag/overview",
+          key: "rag.overview",
           label: "Overview",
         },
         {
@@ -310,6 +311,7 @@ const sidebars = {
         {
           type: "doc",
           id: "deployment/overview",
+          key: "deployment.overview",
           label: "Overview",
         },
         {
@@ -334,6 +336,7 @@ const sidebars = {
             {
               type: "doc",
               id: "deployment/serverless-platforms/index",
+              key: "deployment.serverless-platforms.overview",
               label: "Overview",
             },
             {
@@ -360,6 +363,7 @@ const sidebars = {
             {
               type: "doc",
               id: "deployment/cloud-providers/index",
+              key: "deployment.cloud-providers.overview",
               label: "Overview",
             },
             {
@@ -393,21 +397,25 @@ const sidebars = {
         {
           type: "doc",
           id: "mastra-cloud/overview",
+          key: "mastra.cloud.overview",
           label: "Overview",
         },
         {
           type: "doc",
           id: "mastra-cloud/setting-up",
+          key: "mastra.cloud.setting-up",
           label: "Setup & Deploy",
         },
         {
           type: "doc",
           id: "mastra-cloud/dashboard",
+          key: "mastra.cloud.dashboard",
           label: "Dashboard",
         },
         {
           type: "doc",
           id: "mastra-cloud/observability",
+          key: "mastra.cloud.observability",
           label: "Observability",
         },
       ],
@@ -419,6 +427,7 @@ const sidebars = {
         {
           type: "doc",
           id: "observability/overview",
+          key: "observability.overview",
           label: "Overview",
         },
         {
@@ -443,6 +452,7 @@ const sidebars = {
             {
               type: "doc",
               id: "observability/ai-tracing/overview",
+              key: "observability.ai-tracing.overview",
               label: "Overview",
             },
             {
@@ -508,6 +518,7 @@ const sidebars = {
         {
           type: "doc",
           id: "scorers/overview",
+          key: "scorers.overview",
           label: "Overview",
         },
         {
@@ -527,6 +538,7 @@ const sidebars = {
             {
               type: "doc",
               id: "scorers/evals-old-api/overview",
+              key: "scorers.evals-old-api.overview",
               label: "Overview",
             },
             {
@@ -555,6 +567,7 @@ const sidebars = {
         {
           type: "doc",
           id: "auth/index",
+          key: "auth.overview",
           label: "Overview",
         },
         {
@@ -596,6 +609,7 @@ const sidebars = {
         {
           type: "doc",
           id: "voice/overview",
+          key: "voice.overview",
           label: "Overview",
         },
         {

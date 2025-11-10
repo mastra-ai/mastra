@@ -1,0 +1,126 @@
+---
+title: "Evals を使ったエージェントのテスト | Scorers | Mastra ドキュメント"
+description: "Mastra の Evals を使って AI エージェントの品質を評価・測定する方法を解説します。"
+---
+
+<div id="testing-your-agents-with-evals">
+  # evals を使ったエージェントのテスト
+</div>
+
+:::info Scorers
+このドキュメントは旧来の evals API を参照しています。最新の Scorers 機能については [Scorers](/docs/scorers/overview) をご覧ください。
+:::
+
+従来のソフトウェアテストには明確な合否条件がありますが、AI の出力は非決定的で、同じ入力でも変動します。evals は、このギャップを埋めるために、エージェントの品質を測定できる定量指標を提供します。
+
+evals は、モデル採点、ルールベース、統計的手法を用いてエージェントの出力を評価する自動テストです。各 eval は、記録・比較可能な 0〜1 の正規化スコアを返します。evals は独自のプロンプトや採点関数でカスタマイズできます。
+
+evals はクラウド上で実行でき、リアルタイムに結果を取得できます。また、CI/CD パイプラインに組み込んで、エージェントを継続的にテストおよび監視することも可能です。
+
+<div id="types-of-evals">
+  ## Evals の種類
+</div>
+
+Evals には、目的に応じたさまざまな種類があります。一般的なタイプは次のとおりです。
+
+1. **Textual Evals**: エージェントの応答の正確性・信頼性・文脈理解を評価する
+2. **Classification Evals**: 事前に定義されたカテゴリに基づくデータ分類の正確性を測定する
+3. **Prompt Engineering Evals**: さまざまな指示や入力形式が与える影響を検証する
+
+<div id="installation">
+  ## インストール
+</div>
+
+Mastra の evals 機能を利用するには、`@mastra/evals` パッケージをインストールしてください。
+
+```bash copy
+npm install @mastra/evals@latest
+```
+
+
+<div id="getting-started">
+  ## はじめに
+</div>
+
+Evals はエージェントに追加して使用します。以下は、要約、内容の類似度、トーンの一貫性といった指標を使った例です。
+
+```typescript copy showLineNumbers title="src/mastra/agents/index.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
+import {
+  ContentSimilarityMetric,
+  ToneConsistencyMetric,
+} from "@mastra/evals/nlp";
+
+const model = openai("gpt-4o");
+
+export const myAgent = new Agent({
+  name: "ContentWriter",
+  instructions: "正確な要約を作成するコンテンツライターです",
+  model,
+  evals: {
+    summarization: new SummarizationMetric(model),
+    contentSimilarity: new ContentSimilarityMetric(),
+    tone: new ToneConsistencyMetric(),
+  },
+});
+```
+
+`mastra dev` を使用中は、Mastra のダッシュボードで eval の結果を確認できます。
+
+
+<div id="beyond-automated-testing">
+  ## 自動テストのその先へ
+</div>
+
+自動評価（eval）は有用ですが、ハイパフォーマンスな AI チームはしばしば次を組み合わせて活用します:
+
+1. **A/B テスト**: 実ユーザーを対象に異なるバージョンを比較する
+2. **人手によるレビュー**: 本番データやトレースを定期的に見直す
+3. **継続的なモニタリング**: リグレッションを検知するため、時間経過に沿って評価指標を追跡する
+
+<div id="understanding-eval-results">
+  ## Eval 結果の理解
+</div>
+
+各 eval 指標は、エージェントの出力の特定の側面を測定します。結果の読み解き方と改善のポイントは次のとおりです。
+
+<div id="understanding-scores">
+  ### スコアを理解する
+</div>
+
+任意の指標について:
+
+1. スコアの算出方法を把握するため、指標のドキュメントを確認する
+2. スコアが変動するタイミングにどんな傾向があるか見極める
+3. 入力やコンテキストが異なる場合のスコアを比較する
+4. 時系列で変化を追ってトレンドを把握する
+
+<div id="improving-results">
+  ### 結果の向上
+</div>
+
+スコアが目標に達していない場合：
+
+1. 指示を見直す — 明確ですか？ さらに具体的にしてみましょう
+2. コンテキストを確認する — エージェントに必要な情報を提供できていますか？
+3. プロンプトを簡潔にする — 複雑なタスクは小さなステップに分解しましょう
+4. ガードレールを設ける — 難しいケースに備えて具体的なルールを盛り込みましょう
+
+<div id="maintaining-quality">
+  ### 品質の維持
+</div>
+
+目標を達成できるようになったら:
+
+1. 安定性を監視する - スコアは一貫しているか？
+2. 有効な手法を記録する - 成功したアプローチをメモしておく
+3. エッジケースをテストする - 異例のシナリオをカバーする例を追加する
+4. 微調整する - 効率を高める方法を探す
+
+evals で何ができるかの詳細は [Textual Evals](/docs/scorers/evals-old-api/textual-evals) を参照してください。
+
+独自の evals を作成する方法の詳細は、[Custom Evals](/docs/scorers/evals-old-api/custom-eval) ガイドを参照してください。
+
+CI パイプラインで evals を実行する方法は、[Running in CI](/docs/scorers/evals-old-api/running-in-ci) ガイドを参照してください。

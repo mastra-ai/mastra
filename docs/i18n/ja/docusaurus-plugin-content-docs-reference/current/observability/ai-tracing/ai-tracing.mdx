@@ -1,0 +1,233 @@
+---
+title: "リファレンス: AITracing | オブザーバビリティ | Mastra ドキュメント"
+description: AI トレーシングの主要なクラスとメソッド
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+<div id="aitracing">
+  # AIトレーシング
+</div>
+
+<div id="defaultaitracing">
+  ## DefaultAITracing
+</div>
+
+AITracing インターフェースの標準実装。
+
+<div id="constructor">
+  ### コンストラクタ
+</div>
+
+```typescript
+new DefaultAITracing(config: TracingConfig)
+```
+
+指定された設定で新しい DefaultAITracing インスタンスを作成します。
+
+
+<div id="properties">
+  ### プロパティ
+</div>
+
+すべてのプロパティとメソッドを BaseAITracing から継承します。
+
+<div id="baseaitracing">
+  ## BaseAITracing
+</div>
+
+カスタム AI トレーシング実装向けの基底クラス。
+
+<div id="methods">
+  ### メソッド
+</div>
+
+<div id="getconfig">
+  #### getConfig
+</div>
+
+```typescript
+getConfig(): Readonly<Required<TracingConfig>>
+```
+
+現在のトレース設定を返します。
+
+
+<div id="getexporters">
+  #### getExporters
+</div>
+
+```typescript
+getExporters(): readonly AITracingExporter[]
+```
+
+構成済みのすべてのエクスポーターを返します。
+
+
+<div id="getprocessors">
+  #### getProcessors
+</div>
+
+```typescript
+getProcessors(): readonly AISpanProcessor[]
+```
+
+構成済みのすべてのプロセッサーを返します。
+
+
+<div id="getlogger">
+  #### getLogger
+</div>
+
+```typescript
+getLogger(): IMastraLogger
+```
+
+エクスポーターやその他のコンポーネント用のロガーインスタンスを返します。
+
+
+<div id="startspan">
+  #### startSpan
+</div>
+
+```typescript
+startSpan<TType extends AISpanType>(
+  options: StartSpanOptions<TType>
+): AISpan<TType>
+```
+
+特定の AISpanType の新しいスパンを開始します。親が指定されていない場合は、トレースのルートスパンを作成します。
+
+<PropertiesTable
+  props={[
+{
+  name: "type",
+  type: "AISpanType",
+  description: "作成するスパンの種類",
+  required: true,
+},
+{
+  name: "name",
+  type: "string",
+  description: "スパン名",
+  required: true,
+},
+{
+  name: "parent",
+  type: "AnyAISpan",
+  description: "親スパン（ルートでない場合）",
+  required: false,
+},
+{
+  name: "attributes",
+  type: "AISpanTypeMap[TType]",
+  description: "種類固有の属性",
+  required: false,
+},
+{
+  name: "metadata",
+  type: "Record<string, any>",
+  description: "ユーザー定義メタデータ",
+  required: false,
+},
+{
+  name: "input",
+  type: "any",
+  description: "初期入力データ",
+  required: false,
+},
+{
+  name: "customSamplerOptions",
+  type: "CustomSamplerOptions",
+  description: "カスタムサンプラーのオプション",
+  required: false,
+},
+]}
+/>
+
+
+<div id="shutdown">
+  #### シャットダウン
+</div>
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+すべてのエクスポーターとプロセッサーをシャットダウンし、リソースを解放します。
+
+
+<div id="custom-implementation">
+  ## カスタム実装
+</div>
+
+独自の AI トレーシング実装を作成するには、BaseAITracing を継承します:
+
+```typescript
+class CustomAITracing extends BaseAITracing {
+  constructor(config: TracingConfig) {
+    super(config);
+    // カスタム初期化
+  }
+
+  // 必要に応じてメソッドをオーバーライドする
+  startSpan<TType extends AISpanType>(
+    options: StartSpanOptions<TType>,
+  ): AISpan<TType> {
+    // カスタムスパン作成ロジック
+    return super.startSpan(options);
+  }
+}
+```
+
+
+<div id="no-op-spans">
+  ## NO-OP スパン
+</div>
+
+トレーシングが無効（サンプリングが false を返す）な場合、NO-OP スパンが返されます。
+
+<div id="noopaispan">
+  ### NoOpAISpan
+</div>
+
+```typescript
+class NoOpAISpan<TType extends AISpanType> extends BaseAISpan<TType>
+```
+
+何も処理を行わないスパン。すべてのメソッドはノーオペレーション（no-op）です:
+
+* `id` は `'no-op'` を返す
+* `traceId` は `'no-op-trace'` を返す
+* `isValid` は `false` を返す
+* `end()`, `error()`, `update()` は何もしない
+* `createChildSpan()` は別の no-op スパンを返す
+
+
+<div id="see-also">
+  ## 関連情報
+</div>
+
+<div id="documentation">
+  ### ドキュメント
+</div>
+
+- [AI Tracing 概要](/docs/observability/ai-tracing/overview) - 概念と使用ガイド
+- [設定リファレンス](/reference/observability/ai-tracing/configuration) - 設定項目
+- [インターフェースリファレンス](/reference/observability/ai-tracing/interfaces) - 型定義
+- [Span リファレンス](/reference/observability/ai-tracing/span) - Span のライフサイクルとメソッド
+
+<div id="examples">
+  ### 例
+</div>
+
+- [Basic AI Tracing](/examples/observability/basic-ai-tracing) - 入門例
+
+<div id="exporters">
+  ### エクスポーター
+</div>
+
+- [DefaultExporter](/reference/observability/ai-tracing/exporters/default-exporter) - ストレージへの永続保存
+- [CloudExporter](/reference/observability/ai-tracing/exporters/cloud-exporter) - Mastra Cloud との連携
+- [ConsoleExporter](/reference/observability/ai-tracing/exporters/console-exporter) - デバッグ出力

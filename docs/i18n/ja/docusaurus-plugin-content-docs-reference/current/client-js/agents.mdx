@@ -1,0 +1,255 @@
+---
+title: "リファレンス: Agents API | Client SDK | Mastra ドキュメント"
+description: client-js SDK を使って、応答生成、ストリーミングでの対話、エージェントツールの管理など、Mastra の AI エージェントとの連携方法を学びます。
+---
+
+<div id="agents-api">
+  # Agents API
+</div>
+
+Agents API は、Mastra の AI エージェントとの対話に用いるメソッドを提供し、応答生成、ストリーミングでのやり取り、エージェントツールの管理を行えます。
+
+<div id="getting-all-agents">
+  ## すべてのエージェントの取得
+</div>
+
+利用可能なエージェントの一覧を取得します:
+
+```typescript
+const agents = await mastraClient.listAgents();
+```
+
+
+<div id="working-with-a-specific-agent">
+  ## 特定のエージェントを操作する
+</div>
+
+特定のエージェントのインスタンスを取得するには:
+
+```typescript
+const agent = mastraClient.getAgent("agent-id");
+```
+
+
+<div id="agent-methods">
+  ## エージェントのメソッド
+</div>
+
+<div id="get-agent-details">
+  ### エージェントの詳細を取得
+</div>
+
+エージェントの詳細情報を取得します:
+
+```typescript
+const details = await agent.details();
+```
+
+
+<div id="generate-response">
+  ### 応答を生成
+</div>
+
+エージェントから応答を生成します:
+
+```typescript
+const response = await agent.generate({
+  messages: [
+    {
+      role: "user",
+      content: "こんにちは。お元気ですか？",
+    },
+  ],
+  threadId: "thread-1", // 任意: 会話コンテキスト用のスレッドID
+  resourceId: "resource-1", // 任意: リソースID
+  output: {}, // 任意: 出力設定
+});
+```
+
+
+<div id="stream-response">
+  ### ストリーミング応答
+</div>
+
+リアルタイムの対話に向けて、エージェントからの応答をストリーミング配信します：
+
+```typescript
+const response = await agent.stream({
+  messages: [
+    {
+      role: "user",
+      content: "物語を聞かせて",
+    },
+  ],
+});
+
+// processDataStream ユーティリティでデータストリームを処理
+response.processDataStream({
+  onChunk: async (chunk) => {
+    console.log(chunk);
+  },
+});
+
+// レスポンスボディから直接読み取ることも可能です
+const reader = response.body.getReader();
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  console.log(new TextDecoder().decode(value));
+}
+```
+
+
+<div id="client-tools">
+  ### クライアントツール
+</div>
+
+クライアント側ツールを使うと、エージェントからの要求に応じてクライアント側でカスタム関数を実行できます。
+
+<div id="basic-usage">
+  #### 基本的な使い方
+</div>
+
+```typescript
+import { createTool } from "@mastra/client-js";
+import { z } from "zod";
+
+const colorChangeTool = createTool({
+  id: "changeColor",
+  description: "背景色を変更します",
+  inputSchema: z.object({
+    color: z.string(),
+  }),
+  execute: async ({ context }) => {
+    document.body.style.backgroundColor = context.color;
+    return { success: true };
+  },
+});
+
+// generateで使用
+const response = await agent.generate({
+  messages: "背景を青に変更して",
+  clientTools: { colorChangeTool },
+});
+
+// streamで使用
+const response = await agent.stream({
+  messages: "背景を緑に変更して",
+  clientTools: { colorChangeTool },
+});
+
+response.processDataStream({
+  onChunk: async (chunk) => {
+    if (chunk.type === "text-delta") {
+      console.log(chunk.payload.text);
+    } else if (chunk.type === "tool-call") {
+      console.log(
+        `ツール ${chunk.payload.toolName} を引数 ${JSON.stringify(chunk.payload.args, null, 2)} で呼び出し中`,
+      );
+    }
+  },
+});
+```
+
+
+<div id="get-agent-tool">
+  ### エージェントのツールを取得
+</div>
+
+エージェントで利用可能な特定のツールの情報を取得します：
+
+```typescript
+const tool = await agent.getTool("tool-id");
+```
+
+
+<div id="get-agent-evaluations">
+  ### エージェントの評価を取得
+</div>
+
+エージェントの評価結果を取得します。
+
+```typescript
+// CI 評価を取得
+const evals = await agent.evals();
+
+// ライブ評価を取得
+const liveEvals = await agent.liveEvals();
+```
+
+
+<div id="stream">
+  ### Stream
+</div>
+
+拡張されたメソッドシグネチャを備えた強化APIでレスポンスをストリーミングします。このメソッドは、Mastraのネイティブフォーマットに対応しつつ、機能強化と柔軟なフォーマット指定を提供します。
+
+```typescript
+const response = await agent.stream("Tell me a story", {
+  threadId: "thread-1",
+  clientTools: { colorChangeTool },
+});
+
+// ストリームを処理する
+response.processDataStream({
+  onChunk: async (chunk) => {
+    if (chunk.type === "text-delta") {
+      console.log(chunk.payload.text);
+    }
+  },
+});
+```
+
+
+<div id="ai-sdk-compatible-format">
+  #### AI SDK 互換フォーマット
+</div>
+
+クライアント側で `agent.stream(...)` のレスポンスから AI SDK 形式のパーツをストリーミングするには、`response.processDataStream` を `ReadableStream<ChunkType>` でラップし、`toAISdkFormat` を使用します。
+
+```typescript title="client-ai-sdk-transform.ts" copy
+import { createUIMessageStream } from "ai";
+import { toAISdkFormat } from "@mastra/ai-sdk";
+import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
+
+const response = await agent.stream({ messages: "物語を聞かせて" });
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response
+      .processDataStream({
+        onChunk: async (chunk) => controller.enqueue(chunk as ChunkType),
+      })
+      .finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkFormat(
+      chunkStream as unknown as MastraModelOutput,
+      { from: "agent" },
+    )) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
+
+
+<div id="generate">
+  ### 生成
+</div>
+
+改良されたメソッドシグネチャと AI SDK v5 との互換性を備えた拡張 API を用いて、レスポンスを生成します。
+
+```typescript
+const response = await agent.generate("こんにちは、お元気ですか?", {
+  threadId: "thread-1",
+  resourceId: "resource-1",
+});
+```

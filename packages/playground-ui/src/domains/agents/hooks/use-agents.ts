@@ -14,15 +14,6 @@ export const useAgents = () => {
   });
 };
 
-export const useModelProviders = () => {
-  const client = useMastraClient();
-
-  return useQuery({
-    queryKey: ['model-providers'],
-    queryFn: () => client.getModelProviders(),
-  });
-};
-
 export const useUpdateAgentModel = (agentId: string) => {
   const client = useMastraClient();
   const queryClient = useQueryClient();

@@ -1,0 +1,133 @@
+---
+title: "リファレンス: Memory.createThread() | Memory | Mastra ドキュメント"
+description: "Mastra における `Memory.createThread()` メソッドのリファレンス。メモリシステムで新しい会話スレッドを作成します。"
+---
+
+<div id="memorycreatethread">
+  # Memory.createThread()
+</div>
+
+`.createThread()` メソッドは、メモリシステム内に新たな会話スレッドを作成します。各スレッドは個別の会話またはコンテキストを表し、複数のメッセージを含められます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await memory?.createThread({ resourceId: "user-123" });
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "このスレッドが属するリソースの識別子（例：ユーザーID、プロジェクトID）",
+      isOptional: false,
+    },
+    {
+      name: "threadId",
+      type: "string",
+      description:
+        "スレッドのカスタムID（任意）。指定しない場合は自動生成されます。",
+      isOptional: true,
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "スレッドのタイトル（任意）",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "スレッドに関連付けるメタデータ（任意）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "作成されたスレッドの一意の識別子",
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "スレッドに関連付けられたリソース ID",
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "スレッドのタイトル（指定されている場合）",
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "スレッドの作成時刻のタイムスタンプ",
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "スレッドの最終更新時刻のタイムスタンプ",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "スレッドに関連付けられた追加メタデータ",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用的な使用例
+</div>
+
+```typescript title="src/test-memory.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+const thread = await memory?.createThread({
+  resourceId: "user-123",
+    title: "メモリーテストスレッド",
+  metadata: {
+    source: "test-script",
+    purpose: "memory-testing",
+  },
+});
+
+const response = await agent.generate("エージェント用のメッセージ", {
+  memory: {
+    thread: thread!.id,
+    resource: thread!.resourceId,
+  },
+});
+
+console.log(response.text);
+```
+
+
+<div id="related">
+  ### 関連
+</div>
+
+- [Memory クラスリファレンス](/reference/memory/memory-class)
+- [Memory 入門](/docs/memory/overview)（スレッドの概念を扱います）
+- [getThreadById](/reference/memory/getThreadById)
+- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId)
+- [query](/reference/memory/query)

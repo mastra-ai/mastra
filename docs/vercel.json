@@ -1,1173 +1,1273 @@
 {
   "redirects": [
     {
-      "source": "/docs/getting-started/model-providers",
-      "destination": "/models",
+      "source": "/:path(ja)?/docs/getting-started/model-providers",
+      "destination": "/:path/models",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/using-with-agents-and-tools",
-      "destination": "/docs/workflows/agents-and-tools",
+      "source": "/:path(ja)?/docs/workflows/using-with-agents-and-tools",
+      "destination": "/:path/docs/workflows/agents-and-tools",
       "permanent": true
     },
     {
-      "source": "/docs/getting-started/model-capability",
-      "destination": "/models",
+      "source": "/:path(ja)?/docs/getting-started/model-capability",
+      "destination": "/:path/models",
       "permanent": true
     },
     {
-      "source": "/docs/agents/runtime-variables",
-      "destination": "/docs/agents/runtime-context",
+      "source": "/:path(ja)?/docs/agents/runtime-variables",
+      "destination": "/:path/docs/agents/runtime-context",
       "permanent": true
     },
     {
-      "source": "/docs/08-running-evals",
-      "destination": "/docs/evals/overview",
+      "source": "/:path(ja)?/docs/08-running-evals",
+      "destination": "/:path/docs/evals/overview",
       "permanent": true
     },
     {
-      "source": "/docs/agents/00-overview",
-      "destination": "/docs/agents/overview",
+      "source": "/:path(ja)?/docs/agents/00-overview",
+      "destination": "/:path/docs/agents/overview",
       "permanent": true
     },
     {
-      "source": "/docs/agents/01-agent-memory",
-      "destination": "/docs/agents/agent-memory",
+      "source": "/:path(ja)?/docs/agents/01-agent-memory",
+      "destination": "/:path/docs/agents/agent-memory",
       "permanent": true
     },
     {
-      "source": "/docs/agents/adding-tools",
-      "destination": "/docs/agents/using-tools-and-mcp",
+      "source": "/:path(ja)?/docs/agents/adding-tools",
+      "destination": "/:path/docs/agents/using-tools-and-mcp",
       "permanent": true
     },
     {
-      "source": "/docs/agents/mcp-guide",
-      "destination": "/docs/agents/using-tools-and-mcp",
+      "source": "/:path(ja)?/docs/agents/mcp-guide",
+      "destination": "/:path/docs/agents/using-tools-and-mcp",
       "permanent": true
     },
     {
-      "source": "/docs/agents/03-adding-voice",
-      "destination": "/docs/agents/adding-voice",
+      "source": "/:path(ja)?/docs/agents/03-adding-voice",
+      "destination": "/:path/docs/agents/adding-voice",
       "permanent": true
     },
     {
-      "source": "/docs/evals/00-overview",
-      "destination": "/docs/evals/overview",
+      "source": "/:path(ja)?/docs/evals/00-overview",
+      "destination": "/:path/docs/evals/overview",
       "permanent": true
     },
     {
-      "source": "/docs/evals/01-textual-evals",
-      "destination": "/docs/evals/textual-evals",
+      "source": "/:path(ja)?/docs/evals/01-textual-evals",
+      "destination": "/:path/docs/evals/textual-evals",
       "permanent": true
     },
     {
-      "source": "/docs/evals/02-custom-eval",
-      "destination": "/docs/evals/custom-eval",
+      "source": "/:path(ja)?/docs/evals/02-custom-eval",
+      "destination": "/:path/docs/evals/custom-eval",
       "permanent": true
     },
     {
-      "source": "/docs/evals/03-running-in-ci",
-      "destination": "/docs/evals/running-in-ci",
+      "source": "/:path(ja)?/docs/evals/03-running-in-ci",
+      "destination": "/:path/docs/evals/running-in-ci",
       "permanent": true
     },
     {
-      "source": "/docs/local-dev/creating-a-new-project",
-      "destination": "/docs/getting-started/installation",
+      "source": "/:path(ja)?/docs/local-dev/creating-a-new-project",
+      "destination": "/:path/docs/getting-started/installation",
       "permanent": true
     },
     {
-      "source": "/docs/local-dev/add-to-existing-project",
-      "destination": "/docs/getting-started/installation#add-to-an-existing-project",
+      "source": "/:path(ja)?/docs/local-dev/add-to-existing-project",
+      "destination": "/:path/docs/getting-started/installation#add-to-an-existing-project",
       "permanent": true
     },
     {
-      "source": "/docs/deployment/deployment",
-      "destination": "/docs/deployment/serverless-platforms",
+      "source": "/:path(ja)?/docs/deployment/deployment",
+      "destination": "/:path/docs/deployment/serverless-platforms",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/ai-sdk-v5",
-      "destination": "/docs/frameworks/agentic-uis/ai-sdk#vercel-ai-sdk-v5",
+      "source": "/:path(ja)?/docs/frameworks/ai-sdk-v5",
+      "destination": "/:path/docs/frameworks/agentic-uis/ai-sdk#vercel-ai-sdk-v5",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/express",
-      "destination": "/docs/frameworks/servers/express",
+      "source": "/:path(ja)?/docs/frameworks/express",
+      "destination": "/:path/docs/frameworks/servers/express",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/vite-react",
-      "destination": "/docs/frameworks/web-frameworks/vite-react",
+      "source": "/:path(ja)?/docs/frameworks/vite-react",
+      "destination": "/:path/docs/frameworks/web-frameworks/vite-react",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/next-js",
-      "destination": "/docs/frameworks/web-frameworks/next-js",
+      "source": "/:path(ja)?/docs/frameworks/next-js",
+      "destination": "/:path/docs/frameworks/web-frameworks/next-js",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/astro",
-      "destination": "/docs/frameworks/web-frameworks/astro",
+      "source": "/:path(ja)?/docs/frameworks/astro",
+      "destination": "/:path/docs/frameworks/web-frameworks/astro",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/ai-sdk",
-      "destination": "/docs/frameworks/agentic-uis/ai-sdk",
+      "source": "/:path(ja)?/docs/frameworks/ai-sdk",
+      "destination": "/:path/docs/frameworks/agentic-uis/ai-sdk",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/copilotkit",
-      "destination": "/docs/frameworks/agentic-uis/copilotkit",
+      "source": "/:path(ja)?/docs/frameworks/copilotkit",
+      "destination": "/:path/docs/frameworks/agentic-uis/copilotkit",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/assistant-ui",
-      "destination": "/docs/frameworks/agentic-uis/assistant-ui",
+      "source": "/:path(ja)?/docs/frameworks/assistant-ui",
+      "destination": "/:path/docs/frameworks/agentic-uis/assistant-ui",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/openrouter",
-      "destination": "/docs/frameworks/agentic-uis/openrouter",
+      "source": "/:path(ja)?/docs/frameworks/openrouter",
+      "destination": "/:path/docs/frameworks/agentic-uis/openrouter",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/01-next-js",
-      "destination": "/docs/frameworks/next-js",
+      "source": "/:path(ja)?/docs/frameworks/01-next-js",
+      "destination": "/:path/docs/frameworks/next-js",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/02-ai-sdk",
-      "destination": "/docs/frameworks/ai-sdk",
+      "source": "/:path(ja)?/docs/frameworks/02-ai-sdk",
+      "destination": "/:path/docs/frameworks/ai-sdk",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/flow-control",
-      "destination": "/docs/workflows/control-flow",
+      "source": "/:path(ja)?/docs/workflows/flow-control",
+      "destination": "/:path/docs/workflows/control-flow",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/index",
-      "destination": "/docs/workflows/overview",
+      "source": "/:path(ja)?/docs/workflows/index",
+      "destination": "/:path/docs/workflows/overview",
       "permanent": true
     },
     {
-      "source": "/docs/voice",
-      "destination": "/docs/voice/overview",
+      "source": "/:path(ja)?/docs/voice",
+      "destination": "/:path/docs/voice/overview",
       "permanent": true
     },
     {
-      "source": "/docs/reference/memory/memory-processors",
-      "destination": "/docs/memory/memory-processors",
+      "source": "/:path(ja)?/docs/reference/memory/memory-processors",
+      "destination": "/:path/docs/memory/memory-processors",
       "permanent": false
     },
     {
-      "source": "/reference/memory/memory-processors",
-      "destination": "/docs/memory/memory-processors",
+      "source": "/:path(ja)?/reference/memory/memory-processors",
+      "destination": "/:path/docs/memory/memory-processors",
       "permanent": true
     },
     {
-      "source": "/docs/memory/getting-started",
-      "destination": "/docs/memory/overview",
+      "source": "/:path(ja)?/docs/memory/getting-started",
+      "destination": "/:path/docs/memory/overview",
       "permanent": true
     },
     {
-      "source": "/docs/memory/getting-started#conversation-history-last-messages",
-      "destination": "/docs/memory/overview",
+      "source": "/:path(ja)?/docs/memory/getting-started#conversation-history-last-messages",
+      "destination": "/:path/docs/memory/overview",
       "permanent": true
     },
     {
-      "source": "/docs/deployment/logging-and-tracing",
-      "destination": "/docs/observability/logging",
+      "source": "/:path(ja)?/docs/deployment/logging-and-tracing",
+      "destination": "/:path/docs/observability/logging",
       "permanent": true
     },
     {
-      "source": "/examples/memory",
-      "destination": "/examples/memory/memory-with-libsql",
+      "source": "/:path(ja)?/examples/memory",
+      "destination": "/:path/docs/memory/storage/memory-with-libsql",
       "permanent": true
     },
     {
-      "source": "/examples/rag/rerank",
-      "destination": "/examples/rag/rerank/rerank",
+      "source": "/:path(ja)?/examples/rag/rerank",
+      "destination": "/:path/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
-      "source": "/docs/local-dev/mastra-init",
-      "destination": "/docs/getting-started/installation",
+      "source": "/:path(ja)?/docs/local-dev/mastra-init",
+      "destination": "/:path/docs/getting-started/installation",
       "permanent": true
     },
     {
-      "source": "/examples/rag/embed-chunk-array",
-      "destination": "/examples/rag/embedding/embed-chunk-array",
+      "source": "/:path(ja)?/examples/rag/embed-chunk-array",
+      "destination": "/:path/examples/rag/embedding/embed-chunk-array",
       "permanent": true
     },
     {
-      "source": "/examples/rag/embed-text-chunk",
-      "destination": "/examples/rag/embedding/embed-text-chunk",
+      "source": "/:path(ja)?/examples/rag/embed-text-chunk",
+      "destination": "/:path/examples/rag/embedding/embed-text-chunk",
       "permanent": true
     },
     {
-      "source": "/examples/rag/filter-rag",
-      "destination": "/examples/rag/usage/filter-rag",
+      "source": "/:path(ja)?/examples/rag/filter-rag",
+      "destination": "/:path/examples/rag/usage/filter-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-astra",
-      "destination": "/examples/rag/upsert/upsert-embeddings#astra-db",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-astra",
+      "destination": "/:path/examples/rag/upsert/upsert-embeddings#astra-db",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-pgvector",
-      "destination": "/examples/rag/upsert/upsert-embeddings#pgvector",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-pgvector",
+      "destination": "/:path/examples/rag/upsert/upsert-embeddings#pgvector",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-chroma",
-      "destination": "/examples/rag/upsert/upsert-embeddings#chroma",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-chroma",
+      "destination": "/:path/examples/rag/upsert/upsert-embeddings#chroma",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-pinecone",
-      "destination": "/examples/rag/upsert/upsert-embeddings#pinecone",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-pinecone",
+      "destination": "/:path/examples/rag/upsert/upsert-embeddings#pinecone",
       "permanent": true
     },
     {
-      "source": "/examples/memory/short-term-working-memory",
-      "destination": "/examples/memory/memory-with-libsql",
+      "source": "/:path(ja)?/examples/memory/short-term-working-memory",
+      "destination": "/:path/docs/memory/storage/memory-with-libsql",
       "permanent": true
     },
     {
-      "source": "/docs/integrations",
-      "destination": "/docs/tools-mcp/mcp-overview",
+      "source": "/:path(ja)?/docs/integrations",
+      "destination": "/:path/docs/tools-mcp/mcp-overview",
       "permanent": true
     },
     {
-      "source": "/docs/evals/01-supported-evals",
-      "destination": "/docs/evals/overview",
+      "source": "/:path(ja)?/docs/evals/01-supported-evals",
+      "destination": "/:path/docs/evals/overview",
       "permanent": true
     },
     {
-      "source": "/docs/api/memory",
-      "destination": "/docs/agents/agent-memory",
+      "source": "/:path(ja)?/docs/api/memory",
+      "destination": "/:path/docs/agents/agent-memory",
       "permanent": true
     },
     {
-      "source": "/docs/guide/deployment/deployment",
-      "destination": "/docs/deployment/serverless-platforms",
+      "source": "/:path(ja)?/docs/guide/deployment/deployment",
+      "destination": "/:path/docs/deployment/serverless-platforms",
       "permanent": true
     },
     {
-      "source": "/docs/guide/deployment/logging-and-tracing",
-      "destination": "/docs/observability/logging",
+      "source": "/:path(ja)?/docs/guide/deployment/logging-and-tracing",
+      "destination": "/:path/docs/observability/logging",
       "permanent": true
     },
     {
-      "source": "/docs/guide/engine/:path*",
-      "destination": "/docs",
+      "source": "/:locale(ja)?/docs/guide/engine/:path*",
+      "destination": "/:locale/docs",
       "permanent": true
     },
     {
-      "source": "/docs/guide/guides/01-harry-potter",
+      "source": "/:path(ja)?/docs/guide/guides/01-harry-potter",
       "destination": "/guides",
       "permanent": true
     },
     {
-      "source": "/docs/guide/guides/02-chef-michel",
-      "destination": "/guides/guide/chef-michel",
+      "source": "/:path(ja)?/docs/guide/guides/02-chef-michel",
+      "destination": "/:path/guides/guide/chef-michel",
       "permanent": true
     },
     {
-      "source": "/docs/guides/chef-michel",
-      "destination": "/guides/guide/chef-michel",
+      "source": "/:path(ja)?/docs/guides/chef-michel",
+      "destination": "/:path/guides/guide/chef-michel",
       "permanent": true
     },
     {
-      "source": "/docs/guide/guides/03-stock-agent",
-      "destination": "/guides/guide/stock-agent",
+      "source": "/:path(ja)?/docs/guide/guides/03-stock-agent",
+      "destination": "/:path/guides/guide/stock-agent",
       "permanent": true
     },
     {
-      "source": "/docs/guide/local-dev/integrations",
-      "destination": "/docs/server-db/local-dev-playground",
+      "source": "/:path(ja)?/docs/guide/local-dev/integrations",
+      "destination": "/:path/docs/getting-started/studio",
       "permanent": true
     },
     {
-      "source": "/docs/guide/rag/vector-databases",
-      "destination": "/docs/rag/vector-databases",
+      "source": "/:path(ja)?/docs/guide/rag/vector-databases",
+      "destination": "/:path/docs/rag/vector-databases",
       "permanent": true
     },
     {
-      "source": "/docs/guide/rag/retrieval",
-      "destination": "/docs/rag/retrieval",
+      "source": "/:path(ja)?/docs/guide/rag/retrieval",
+      "destination": "/:path/docs/rag/retrieval",
       "permanent": true
     },
     {
-      "source": "/docs/reference/cli/engine",
+      "source": "/:path(ja)?/docs/reference/cli/engine",
       "destination": "/reference",
       "permanent": true
     },
     {
-      "source": "/docs/reference/workflows/step-retries",
-      "destination": "/reference/workflows/workflow",
+      "source": "/:path(ja)?/docs/reference/workflows/step-retries",
+      "destination": "/:path/reference/workflows/workflow",
       "permanent": true
     },
     {
-      "source": "/docs/reference/observability/otel-config",
-      "destination": "/reference/observability/otel-config",
+      "source": "/:path(ja)?/docs/reference/observability/otel-config",
+      "destination": "/:path/reference/observability/otel-config",
       "permanent": true
     },
     {
-      "source": "/docs/reference/client-js",
-      "destination": "/reference/client-js/agents",
+      "source": "/:path(ja)?/docs/reference/client-js",
+      "destination": "/:path/reference/client-js/agents",
       "permanent": true
     },
     {
-      "source": "/docs/reference/memory/addMessage",
-      "destination": "/reference/memory/createThread",
+      "source": "/:path(ja)?/docs/reference/memory/addMessage",
+      "destination": "/:path/reference/memory/createThread",
       "permanent": true
     },
     {
-      "source": "/docs/reference/memory/rememberMessages",
-      "destination": "/reference/memory/createThread",
+      "source": "/:path(ja)?/docs/reference/memory/rememberMessages",
+      "destination": "/:path/reference/memory/createThread",
       "permanent": true
     },
     {
-      "source": "/docs/reference/observability/combine-loggers",
-      "destination": "/reference/observability/logger",
+      "source": "/:path(ja)?/docs/reference/observability/combine-loggers",
+      "destination": "/:path/reference/observability/logger",
       "permanent": true
     },
     {
-      "source": "/reference/rag/retrieval",
-      "destination": "/examples/rag/query/retrieve-results",
+      "source": "/:path(ja)?/reference/rag/retrieval",
+      "destination": "/:path/examples/rag/query/retrieve-results",
       "permanent": true
     },
     {
-      "source": "/docs/reference/rag/pgstore",
-      "destination": "/reference/rag/pg",
+      "source": "/:path(ja)?/docs/reference/rag/pgstore",
+      "destination": "/:path/reference/rag/pg",
       "permanent": true
     },
     {
-      "source": "/docs/reference/rag/reranker",
-      "destination": "/reference/rag/rerank",
+      "source": "/:path(ja)?/docs/reference/rag/reranker",
+      "destination": "/:path/reference/rag/rerank",
       "permanent": true
     },
     {
-      "source": "/docs/reference/storage/mastra-storage",
-      "destination": "/reference/storage/libsql",
+      "source": "/:path(ja)?/docs/reference/storage/mastra-storage",
+      "destination": "/:path/reference/storage/libsql",
       "permanent": true
     },
     {
-      "source": "/docs/reference/tts/generate",
-      "destination": "/reference/voice/mastra-voice",
+      "source": "/:path(ja)?/docs/reference/tts/generate",
+      "destination": "/:path/reference/voice/mastra-voice",
       "permanent": true
     },
     {
-      "source": "/docs/reference/tts/providers-and-models",
-      "destination": "/reference/voice/mastra-voice",
+      "source": "/:path(ja)?/docs/reference/tts/providers-and-models",
+      "destination": "/:path/reference/voice/mastra-voice",
       "permanent": true
     },
     {
-      "source": "/docs/reference/tts/provider-and-models",
-      "destination": "/reference/voice/mastra-voice",
+      "source": "/:path(ja)?/docs/reference/tts/provider-and-models",
+      "destination": "/:path/reference/voice/mastra-voice",
       "permanent": true
     },
     {
-      "source": "/docs/reference/voice/voice.close",
-      "destination": "/reference/voice/mastra-voice",
+      "source": "/:path(ja)?/docs/reference/voice/voice.close",
+      "destination": "/:path/reference/voice/mastra-voice",
       "permanent": true
     },
     {
-      "source": "/docs/reference/voice/voice.off",
-      "destination": "/reference/voice/mastra-voice",
+      "source": "/:path(ja)?/docs/reference/voice/voice.off",
+      "destination": "/:path/reference/voice/mastra-voice",
       "permanent": true
     },
     {
-      "source": "/docs/reference/tts/stream",
-      "destination": "/reference/voice/mastra-voice",
+      "source": "/:path(ja)?/docs/reference/tts/stream",
+      "destination": "/:path/reference/voice/mastra-voice",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/data-flow",
-      "destination": "/docs/workflows/control-flow",
+      "source": "/:path(ja)?/docs/workflows/data-flow",
+      "destination": "/:path/docs/workflows/control-flow",
       "permanent": true
     },
     {
-      "source": "/docs/local-dev/creating-projects",
-      "destination": "/docs/local-dev/creating-a-new-project",
+      "source": "/:path(ja)?/docs/local-dev/creating-projects",
+      "destination": "/:path/docs/local-dev/creating-a-new-project",
       "permanent": true
     },
     {
-      "source": "/docs/local-dev/sync",
-      "destination": "/docs/getting-started/studio",
+      "source": "/:path(ja)?/docs/local-dev/sync",
+      "destination": "/:path/docs/getting-started/studio",
       "permanent": true
     },
     {
-      "source": "/docs/client-js/overview",
-      "destination": "/docs/server-db/mastra-client",
+      "source": "/:path(ja)?/docs/client-js/overview",
+      "destination": "/:path/docs/server-db/mastra-client",
       "permanent": true
     },
     {
-      "source": "/docs/deployment/custom-api-routes",
-      "destination": "/docs/server-db/custom-api-routes",
+      "source": "/:path(ja)?/docs/deployment/custom-api-routes",
+      "destination": "/:path/docs/server-db/custom-api-routes",
       "permanent": true
     },
     {
-      "source": "/docs/deployment/middleware",
-      "destination": "/docs/server-db/middleware",
+      "source": "/:path(ja)?/docs/deployment/middleware",
+      "destination": "/:path/docs/server-db/middleware",
       "permanent": true
     },
     {
-      "source": "/docs/deployment/server",
-      "destination": "/docs/deployment/server-deployment",
+      "source": "/:path(ja)?/docs/deployment/server",
+      "destination": "/:path/docs/deployment/server-deployment",
       "permanent": true
     },
     {
-      "source": "/docs/local-dev/mastra-dev",
-      "destination": "/docs/server-db/local-dev-playground",
+      "source": "/:path(ja)?/docs/local-dev/mastra-dev",
+      "destination": "/:path/docs/getting-started/studio",
       "permanent": true
     },
     {
-      "source": "/docs/storage/overview",
-      "destination": "/docs/server-db/storage",
+      "source": "/:path(ja)?/docs/storage/overview",
+      "destination": "/:path/docs/server-db/storage",
       "permanent": true
     },
     {
-      "source": "/examples/rag/adjust-chunk-delimiters",
-      "destination": "/examples/rag/chunking/adjust-chunk-delimiters",
+      "source": "/:path(ja)?/examples/rag/adjust-chunk-delimiters",
+      "destination": "/:path/examples/rag/chunking/adjust-chunk-delimiters",
       "permanent": true
     },
     {
-      "source": "/examples/rag/adjust-chunk-size",
-      "destination": "/examples/rag/chunking/adjust-chunk-size",
+      "source": "/:path(ja)?/examples/rag/adjust-chunk-size",
+      "destination": "/:path/examples/rag/chunking/adjust-chunk-size",
       "permanent": true
     },
     {
-      "source": "/examples/rag/basic-rag",
-      "destination": "/examples/rag/usage/basic-rag",
+      "source": "/:path(ja)?/examples/rag/basic-rag",
+      "destination": "/:path/examples/rag/usage/basic-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/chunk-html",
-      "destination": "/examples/rag/chunking/chunk-html",
+      "source": "/:path(ja)?/examples/rag/chunk-html",
+      "destination": "/:path/examples/rag/chunking/chunk-html",
       "permanent": true
     },
     {
-      "source": "/examples/rag/chunk-json",
-      "destination": "/examples/rag/chunking/chunk-json",
+      "source": "/:path(ja)?/examples/rag/chunk-json",
+      "destination": "/:path/examples/rag/chunking/chunk-json",
       "permanent": true
     },
     {
-      "source": "/examples/rag/chunk-markdown",
-      "destination": "/examples/rag/chunking/chunk-markdown",
+      "source": "/:path(ja)?/examples/rag/chunk-markdown",
+      "destination": "/:path/examples/rag/chunking/chunk-markdown",
       "permanent": true
     },
     {
-      "source": "/examples/rag/chunk-text",
-      "destination": "/examples/rag/chunking/chunk-text",
+      "source": "/:path(ja)?/examples/rag/chunk-text",
+      "destination": "/:path/examples/rag/chunking/chunk-text",
       "permanent": true
     },
     {
-      "source": "/examples/rag/chunking",
-      "destination": "/examples/rag/chunking/chunk-text",
+      "source": "/:path(ja)?/examples/rag/chunking",
+      "destination": "/:path/examples/rag/chunking/chunk-text",
       "permanent": true
     },
     {
-      "source": "/examples/rag/cleanup-rag",
-      "destination": "/examples/rag/usage/cleanup-rag",
+      "source": "/:path(ja)?/examples/rag/cleanup-rag",
+      "destination": "/:path/examples/rag/usage/cleanup-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/cot-rag",
-      "destination": "/examples/rag/usage/cot-rag",
+      "source": "/:path(ja)?/examples/rag/cot-rag",
+      "destination": "/:path/examples/rag/usage/cot-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/cot-workflow-rag",
-      "destination": "/examples/rag/usage/cot-workflow-rag",
+      "source": "/:path(ja)?/examples/rag/cot-workflow-rag",
+      "destination": "/:path/examples/rag/usage/cot-workflow-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/embed-text-with-cohere",
-      "destination": "/examples/rag/embedding/embed-text-with-cohere",
+      "source": "/:path(ja)?/examples/rag/embed-text-with-cohere",
+      "destination": "/:path/examples/rag/embedding/embed-text-with-cohere",
       "permanent": true
     },
     {
-      "source": "/examples/rag/graph-rag",
-      "destination": "/examples/rag/usage/graph-rag",
+      "source": "/:path(ja)?/examples/rag/graph-rag",
+      "destination": "/:path/examples/rag/usage/graph-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/hybrid-vector-search",
-      "destination": "/examples/rag/query/hybrid-vector-search",
+      "source": "/:path(ja)?/examples/rag/hybrid-vector-search",
+      "destination": "/:path/examples/rag/query/hybrid-vector-search",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-libsql",
-      "destination": "/reference/rag/libsql",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-libsql",
+      "destination": "/:path/reference/rag/libsql",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-qdrant",
-      "destination": "/reference/rag/qdrant",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-qdrant",
+      "destination": "/:path/reference/rag/qdrant",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-upstash",
-      "destination": "/reference/rag/upstash",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-upstash",
+      "destination": "/:path/reference/rag/upstash",
       "permanent": true
     },
     {
-      "source": "/examples/rag/insert-embedding-in-vectorize",
-      "destination": "/reference/rag/pg",
+      "source": "/:path(ja)?/examples/rag/insert-embedding-in-vectorize",
+      "destination": "/:path/reference/rag/pg",
       "permanent": true
     },
     {
-      "source": "/examples/rag/metadata-extraction",
-      "destination": "/examples/rag/embedding/metadata-extraction",
+      "source": "/:path(ja)?/examples/rag/metadata-extraction",
+      "destination": "/:path/examples/rag/embedding/metadata-extraction",
       "permanent": true
     },
     {
-      "source": "/examples/rag/query/metadata-extraction",
-      "destination": "/examples/rag/embedding/metadata-extraction",
+      "source": "/:path(ja)?/examples/rag/query/metadata-extraction",
+      "destination": "/:path/examples/rag/embedding/metadata-extraction",
       "permanent": true
     },
     {
-      "source": "/examples/rag/rerank-rag",
-      "destination": "/examples/rag/rerank/rerank",
+      "source": "/:path(ja)?/examples/rag/rerank-rag",
+      "destination": "/:path/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/reranking-with-cohere",
-      "destination": "/examples/rag/rerank/reranking-with-cohere",
+      "source": "/:path(ja)?/examples/rag/reranking-with-cohere",
+      "destination": "/:path/examples/rag/rerank/reranking-with-cohere",
       "permanent": true
     },
     {
-      "source": "/examples/rag/usage/rerank-rag",
-      "destination": "/examples/rag/rerank/rerank",
+      "source": "/:path(ja)?/examples/rag/usage/rerank-rag",
+      "destination": "/:path/examples/rag/rerank/rerank-rag",
       "permanent": true
     },
     {
-      "source": "/examples/rag/retrieve-results",
-      "destination": "/examples/rag/query/retrieve-results",
+      "source": "/:path(ja)?/examples/rag/retrieve-results",
+      "destination": "/:path/examples/rag/query/retrieve-results",
       "permanent": true
     },
     {
-      "source": "/examples/voice",
-      "destination": "/examples/voice/text-to-speech",
+      "source": "/:path(ja)?/examples/voice",
+      "destination": "/:path/examples/voice/text-to-speech",
       "permanent": true
     },
     {
-      "source": "/examples/workflows/subscribed-steps",
-      "destination": "/examples/workflows/agent-and-tool-interop",
+      "source": "/:path(ja)?/examples/workflows/subscribed-steps",
+      "destination": "/:path/docs/workflows/agents-and-tools",
       "permanent": true
     },
     {
-      "source": "/docs/voice/voice-to-voice",
-      "destination": "/docs/voice/speech-to-speech",
+      "source": "/:path(ja)?/docs/voice/voice-to-voice",
+      "destination": "/:path/docs/voice/speech-to-speech",
       "permanent": true
     },
     {
-      "source": "/reference/tools/mcp-configuration",
-      "destination": "/reference/tools/mcp-client",
+      "source": "/:path(ja)?/reference/tools/mcp-configuration",
+      "destination": "/:path/reference/tools/mcp-client",
       "permanent": true
     },
     {
-      "source": "/reference/observability/create-logger",
-      "destination": "/reference/observability/logger",
+      "source": "/:path(ja)?/reference/observability/create-logger",
+      "destination": "/:path/reference/observability/logger",
       "permanent": true
     },
     {
-      "source": "/docs/workflows-vnext/overview",
-      "destination": "/docs/workflows/overview",
+      "source": "/:path(ja)?/docs/workflows-vnext/overview",
+      "destination": "/:path/docs/workflows/overview",
       "permanent": true
     },
     {
-      "source": "/reference/rag/vector-search",
-      "destination": "/examples/rag/query/hybrid-vector-search",
+      "source": "/:path(ja)?/reference/rag/vector-search",
+      "destination": "/:path/examples/rag/query/hybrid-vector-search",
       "permanent": true
     },
     {
-      "source": "/docs/frameworks/agentic-uis",
-      "destination": "/docs/frameworks/agentic-uis/ai-sdk",
+      "source": "/:path(ja)?/docs/frameworks/agentic-uis",
+      "destination": "/:path/docs/frameworks/agentic-uis/ai-sdk",
       "permanent": true
     },
     {
-      "source": "/examples/evals/word-inclusion",
-      "destination": "/examples/evals/custom-native-javascript-eval",
+      "source": "/:path(ja)?/examples/evals/word-inclusion",
+      "destination": "/:path/examples/evals/custom-native-javascript-eval",
       "permanent": true
     },
     {
-      "source": "/examples/evals/custom-eval",
-      "destination": "/examples/evals/custom-llm-judge-eval",
+      "source": "/:path(ja)?/examples/evals/custom-eval",
+      "destination": "/:path/examples/evals/custom-llm-judge-eval",
       "permanent": true
     },
     {
-      "source": "/examples/workflows/agent-and-tool-interop",
-      "destination": "/examples/workflows/agent-as-step",
+      "source": "/:path(ja)?/examples/workflows/agent-and-tool-interop",
+      "destination": "/:path/docs/workflows/agents-and-tools",
       "permanent": true
     },
     {
-      "source": "/reference/agents/createTool",
-      "destination": "/reference/tools/create-tool",
+      "source": "/:path(ja)?/reference/agents/createTool",
+      "destination": "/:path/reference/tools/create-tool",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/start",
-      "destination": "/reference/workflows/run-methods/start",
+      "source": "/:path(ja)?/reference/workflows/start",
+      "destination": "/:path/reference/workflows/run-methods/start",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/resume",
-      "destination": "/reference/workflows/run-methods/resume",
+      "source": "/:path(ja)?/reference/workflows/resume",
+      "destination": "/:path/reference/workflows/run-methods/resume",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/watch",
-      "destination": "/reference/workflows/run-methods/watch",
+      "source": "/:path(ja)?/reference/workflows/watch",
+      "destination": "/:path/reference/workflows/run-methods/watch",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/snapshots",
-      "destination": "/docs/server-db/snapshots",
+      "source": "/:path(ja)?/reference/workflows/snapshots",
+      "destination": "/:path/docs/server-db/snapshots",
       "permanent": true
     },
     {
-      "source": "/examples/agents/hierarchical-multi-agent",
-      "destination": "/examples/agents/supervisor-agent",
+      "source": "/:path(ja)?/examples/agents/hierarchical-multi-agent",
+      "destination": "/:path/examples/agents/supervisor-agent",
       "permanent": true
     },
     {
-      "source": "/docs/agents/streaming",
-      "destination": "/docs/streaming/overview",
+      "source": "/:path(ja)?/docs/agents/streaming",
+      "destination": "/:path/docs/streaming/overview",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/streaming",
-      "destination": "/docs/streaming/overview",
+      "source": "/:path(ja)?/docs/workflows/streaming",
+      "destination": "/:path/docs/streaming/overview",
       "permanent": true
     },
     {
-      "source": "/reference/agents/getAgent",
-      "destination": "/reference/core/getAgent",
+      "source": "/:path(ja)?/reference/agents/getAgent",
+      "destination": "/:path/reference/core/getAgent",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/branch",
-      "destination": "/reference/workflows/workflow-methods/branch",
+      "source": "/:path(ja)?/reference/workflows/branch",
+      "destination": "/:path/reference/workflows/workflow-methods/branch",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/commit",
-      "destination": "/reference/workflows/workflow-methods/commit",
+      "source": "/:path(ja)?/reference/workflows/commit",
+      "destination": "/:path/reference/workflows/workflow-methods/commit",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/create-run",
-      "destination": "/reference/workflows/workflow-methods/create-run",
+      "source": "/:path(ja)?/reference/workflows/create-run",
+      "destination": "/:path/reference/workflows/workflow-methods/create-run",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/dountil",
-      "destination": "/reference/workflows/workflow-methods/dountil",
+      "source": "/:path(ja)?/reference/workflows/dountil",
+      "destination": "/:path/reference/workflows/workflow-methods/dountil",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/dowhile",
-      "destination": "/reference/workflows/workflow-methods/dowhile",
+      "source": "/:path(ja)?/reference/workflows/dowhile",
+      "destination": "/:path/reference/workflows/workflow-methods/dowhile",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/foreach",
-      "destination": "/reference/workflows/workflow-methods/foreach",
+      "source": "/:path(ja)?/reference/workflows/foreach",
+      "destination": "/:path/reference/workflows/workflow-methods/foreach",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/map",
-      "destination": "/reference/workflows/workflow-methods/map",
+      "source": "/:path(ja)?/reference/workflows/map",
+      "destination": "/:path/reference/workflows/workflow-methods/map",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/parallel",
-      "destination": "/reference/workflows/workflow-methods/parallel",
+      "source": "/:path(ja)?/reference/workflows/parallel",
+      "destination": "/:path/reference/workflows/workflow-methods/parallel",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/sendEvent",
-      "destination": "/reference/workflows/workflow-methods/sendEvent",
+      "source": "/:path(ja)?/reference/workflows/sendEvent",
+      "destination": "/:path/reference/workflows/workflow-methods/sendEvent",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/sleep",
-      "destination": "/reference/workflows/workflow-methods/sleep",
+      "source": "/:path(ja)?/reference/workflows/sleep",
+      "destination": "/:path/reference/workflows/workflow-methods/sleep",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/sleepUntil",
-      "destination": "/reference/workflows/workflow-methods/sleepUntil",
+      "source": "/:path(ja)?/reference/workflows/sleepUntil",
+      "destination": "/:path/reference/workflows/workflow-methods/sleepUntil",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/then",
-      "destination": "/reference/workflows/workflow-methods/then",
+      "source": "/:path(ja)?/reference/workflows/then",
+      "destination": "/:path/reference/workflows/workflow-methods/then",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/waitForEvent",
-      "destination": "/reference/workflows/workflow-methods/waitForEvent",
+      "source": "/:path(ja)?/reference/workflows/waitForEvent",
+      "destination": "/:path/reference/workflows/workflow-methods/waitForEvent",
       "permanent": true
     },
     {
-      "source": "/reference/templates",
-      "destination": "/reference/templates/overview",
+      "source": "/:path(ja)?/reference/templates",
+      "destination": "/:path/reference/templates/overview",
       "permanent": true
     },
     {
-      "source": "/reference/agents/stream",
-      "destination": "/reference/streaming/agents/stream",
+      "source": "/:path(ja)?/reference/agents/stream",
+      "destination": "/:path/reference/streaming/agents/stream",
       "permanent": true
     },
     {
-      "source": "/reference/streaming/agents",
-      "destination": "/reference/streaming/agents/stream",
+      "source": "/:path(ja)?/reference/streaming/agents",
+      "destination": "/:path/reference/streaming/agents/stream",
       "permanent": true
     },
     {
-      "source": "/reference/agents/streamVNext",
-      "destination": "/reference/streaming/agents/streamVNext",
+      "source": "/:path(ja)?/reference/agents/streamVNext",
+      "destination": "/:path/reference/streaming/agents/streamVNext",
       "permanent": true
     },
     {
-      "source": "/reference/agents/ChunkType",
-      "destination": "/reference/streaming/ChunkType",
+      "source": "/:path(ja)?/reference/agents/ChunkType",
+      "destination": "/:path/reference/streaming/ChunkType",
       "permanent": true
     },
     {
-      "source": "/reference/agents/MastraModelOutput",
-      "destination": "/reference/streaming/agents/MastraModelOutput",
+      "source": "/:path(ja)?/reference/agents/MastraModelOutput",
+      "destination": "/:path/reference/streaming/agents/MastraModelOutput",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/run-methods/stream",
-      "destination": "/reference/streaming/workflows/stream",
+      "source": "/:path(ja)?/reference/workflows/run-methods/stream",
+      "destination": "/:path/reference/streaming/workflows/stream",
       "permanent": true
     },
     {
-      "source": "/reference/workflows/run-methods/streamVNext",
-      "destination": "/reference/streaming/workflows/streamVNext",
+      "source": "/:path(ja)?/reference/workflows/run-methods/streamVNext",
+      "destination": "/:path/reference/streaming/workflows/streamVNext",
       "permanent": true
     },
     {
-      "source": "/reference/networks/agent-network",
-      "destination": "/reference/agents/network",
+      "source": "/:path(ja)?/reference/networks/agent-network",
+      "destination": "/:path/reference/agents/network",
       "permanent": true
     },
     {
-      "source": "/reference/agents/generateVNext",
-      "destination": "/reference/agents/generate",
+      "source": "/:path(ja)?/reference/agents/generateVNext",
+      "destination": "/:path/reference/agents/generate",
       "permanent": true
     },
     {
-      "source": "/reference/streaming/agents/streamVNext",
-      "destination": "/reference/streaming/agents/stream",
+      "source": "/:path(ja)?/reference/streaming/agents/streamVNext",
+      "destination": "/:path/reference/streaming/agents/stream",
       "permanent": true
     },
     {
-      "source": "/docs/observability/tracing",
-      "destination": "/docs/observability/otel-tracing",
+      "source": "/:path(ja)?/docs/observability/tracing",
+      "destination": "/:path/docs/observability/otel-tracing",
       "permanent": true
     },
     {
-      "source": "/docs/observability/ai-tracing",
-      "destination": "/docs/observability/ai-tracing/overview",
+      "source": "/:path(ja)?/docs/observability/ai-tracing",
+      "destination": "/:path/docs/observability/ai-tracing/overview",
       "permanent": true
     },
     {
-      "source": "/reference/observability/ai-tracing",
-      "destination": "/reference/observability/ai-tracing/ai-tracing",
+      "source": "/:path(ja)?/reference/observability/ai-tracing",
+      "destination": "/:path/docs/observability/ai-tracing/overview",
       "permanent": true
     },
     {
-      "source": "/reference/observability/logger",
-      "destination": "/reference/observability/logging/pino-logger",
+      "source": "/:path(ja)?/reference/observability/logger",
+      "destination": "/:path/reference/observability/logging/pino-logger",
       "permanent": true
     },
     {
-      "source": "/reference/observability/otel-config",
-      "destination": "/reference/observability/otel-tracing/otel-config",
+      "source": "/:path(ja)?/reference/observability/otel-config",
+      "destination": "/:path/reference/observability/otel-tracing/otel-config",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/arize-ax",
-      "destination": "/reference/observability/otel-tracing/providers/arize-ax",
+      "source": "/:path(ja)?/reference/observability/providers/arize-ax",
+      "destination": "/:path/reference/observability/otel-tracing/providers/arize-ax",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/arize-phoenix",
-      "destination": "/reference/observability/otel-tracing/providers/arize-phoenix",
+      "source": "/:path(ja)?/reference/observability/providers/arize-phoenix",
+      "destination": "/:path/reference/observability/otel-tracing/providers/arize-phoenix",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/braintrust",
-      "destination": "/reference/observability/otel-tracing/providers/braintrust",
+      "source": "/:path(ja)?/reference/observability/providers/braintrust",
+      "destination": "/:path/reference/observability/otel-tracing/providers/braintrust",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/dash0",
-      "destination": "/reference/observability/otel-tracing/providers/dash0",
+      "source": "/:path(ja)?/reference/observability/providers/dash0",
+      "destination": "/:path/reference/observability/otel-tracing/providers/dash0",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/keywordsai",
-      "destination": "/reference/observability/otel-tracing/providers/keywordsai",
+      "source": "/:path(ja)?/reference/observability/providers/keywordsai",
+      "destination": "/:path/reference/observability/otel-tracing/providers/keywordsai",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/laminar",
-      "destination": "/reference/observability/otel-tracing/providers/laminar",
+      "source": "/:path(ja)?/reference/observability/providers/laminar",
+      "destination": "/:path/reference/observability/otel-tracing/providers/laminar",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/langfuse",
-      "destination": "/reference/observability/otel-tracing/providers/langfuse",
+      "source": "/:path(ja)?/reference/observability/providers/langfuse",
+      "destination": "/:path/reference/observability/otel-tracing/providers/langfuse",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/langsmith",
-      "destination": "/reference/observability/otel-tracing/providers/langsmith",
+      "source": "/:path(ja)?/reference/observability/providers/langsmith",
+      "destination": "/:path/reference/observability/otel-tracing/providers/langsmith",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/langwatch",
-      "destination": "/reference/observability/otel-tracing/providers/langwatch",
+      "source": "/:path(ja)?/reference/observability/providers/langwatch",
+      "destination": "/:path/reference/observability/otel-tracing/providers/langwatch",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/new-relic",
-      "destination": "/reference/observability/otel-tracing/providers/new-relic",
+      "source": "/:path(ja)?/reference/observability/providers/new-relic",
+      "destination": "/:path/reference/observability/otel-tracing/providers/new-relic",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/signoz",
-      "destination": "/reference/observability/otel-tracing/providers/signoz",
+      "source": "/:path(ja)?/reference/observability/providers/signoz",
+      "destination": "/:path/reference/observability/otel-tracing/providers/signoz",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/traceloop",
-      "destination": "/reference/observability/otel-tracing/providers/traceloop",
+      "source": "/:path(ja)?/reference/observability/providers/traceloop",
+      "destination": "/:path/reference/observability/otel-tracing/providers/traceloop",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers",
-      "destination": "/reference/observability/otel-tracing/providers",
+      "source": "/:path(ja)?/reference/observability/providers",
+      "destination": "/:path/reference/observability/otel-tracing/providers",
       "permanent": true
     },
     {
-      "source": "/reference/observability/providers/index",
-      "destination": "/reference/observability/otel-tracing/providers",
+      "source": "/:path(ja)?/reference/observability/providers/index",
+      "destination": "/:path/reference/observability/otel-tracing/providers",
       "permanent": true
     },
     {
-      "source": "/docs/agents/input-processors",
-      "destination": "/docs/agents/guardrails",
+      "source": "/:path(ja)?/docs/agents/input-processors",
+      "destination": "/:path/docs/agents/guardrails",
       "permanent": true
     },
     {
-      "source": "/docs/agents/output-processors",
-      "destination": "/docs/agents/guardrails",
+      "source": "/:path(ja)?/docs/agents/output-processors",
+      "destination": "/:path/docs/agents/guardrails",
       "permanent": true
     },
     {
-      "source": "/reference/rag/astra",
-      "destination": "/reference/vectors/astra",
+      "source": "/:path(ja)?/reference/rag/astra",
+      "destination": "/:path/reference/vectors/astra",
       "permanent": true
     },
     {
-      "source": "/reference/rag/chroma",
-      "destination": "/reference/vectors/chroma",
+      "source": "/:path(ja)?/reference/rag/chroma",
+      "destination": "/:path/reference/vectors/chroma",
       "permanent": true
     },
     {
-      "source": "/reference/rag/vectorize",
-      "destination": "/reference/vectors/vectorize",
+      "source": "/:path(ja)?/reference/rag/vectorize",
+      "destination": "/:path/reference/vectors/vectorize",
       "permanent": true
     },
     {
-      "source": "/reference/rag/couchbase",
-      "destination": "/reference/vectors/couchbase",
+      "source": "/:path(ja)?/reference/rag/couchbase",
+      "destination": "/:path/reference/vectors/couchbase",
       "permanent": true
     },
     {
-      "source": "/reference/rag/lance",
-      "destination": "/reference/vectors/lance",
+      "source": "/:path(ja)?/reference/rag/lance",
+      "destination": "/:path/reference/vectors/lance",
       "permanent": true
     },
     {
-      "source": "/reference/rag/libsql",
-      "destination": "/reference/vectors/libsql",
+      "source": "/:path(ja)?/reference/rag/libsql",
+      "destination": "/:path/reference/vectors/libsql",
       "permanent": true
     },
     {
-      "source": "/reference/rag/mongodb",
-      "destination": "/reference/vectors/mongodb",
+      "source": "/:path(ja)?/reference/rag/mongodb",
+      "destination": "/:path/reference/vectors/mongodb",
       "permanent": true
     },
     {
-      "source": "/reference/rag/opensearch",
-      "destination": "/reference/vectors/opensearch",
+      "source": "/:path(ja)?/reference/rag/opensearch",
+      "destination": "/:path/reference/vectors/opensearch",
       "permanent": true
     },
     {
-      "source": "/reference/rag/pg",
-      "destination": "/reference/vectors/pg",
+      "source": "/:path(ja)?/reference/rag/pg",
+      "destination": "/:path/reference/vectors/pg",
       "permanent": true
     },
     {
-      "source": "/reference/rag/pinecone",
-      "destination": "/reference/vectors/pinecone",
+      "source": "/:path(ja)?/reference/rag/pinecone",
+      "destination": "/:path/reference/vectors/pinecone",
       "permanent": true
     },
     {
-      "source": "/reference/rag/qdrant",
-      "destination": "/reference/vectors/qdrant",
+      "source": "/:path(ja)?/reference/rag/qdrant",
+      "destination": "/:path/reference/vectors/qdrant",
       "permanent": true
     },
     {
-      "source": "/reference/rag/s3vectors",
-      "destination": "/reference/vectors/s3vectors",
+      "source": "/:path(ja)?/reference/rag/s3vectors",
+      "destination": "/:path/reference/vectors/s3vectors",
       "permanent": true
     },
     {
-      "source": "/reference/rag/turbopuffer",
-      "destination": "/reference/vectors/turbopuffer",
+      "source": "/:path(ja)?/reference/rag/turbopuffer",
+      "destination": "/:path/reference/vectors/turbopuffer",
       "permanent": true
     },
     {
-      "source": "/reference/rag/upstash",
-      "destination": "/reference/vectors/upstash",
+      "source": "/:path(ja)?/reference/rag/upstash",
+      "destination": "/:path/reference/vectors/upstash",
       "permanent": true
     },
     {
-      "source": "/docs/agents/dynamic-agents",
-      "destination": "/docs/agents/runtime-context",
+      "source": "/:path(ja)?/docs/agents/dynamic-agents",
+      "destination": "/:path/docs/agents/runtime-context",
       "permanent": true
     },
     {
-      "source": "/reference/cli/mcp-docs-server",
-      "destination": "/docs/getting-started/mcp-docs-server",
+      "source": "/:path(ja)?/reference/cli/mcp-docs-server",
+      "destination": "/:path/docs/getting-started/mcp-docs-server",
       "permanent": true
     },
     {
-      "source": "/reference/cli/init",
-      "destination": "/reference/cli/mastra",
+      "source": "/:path(ja)?/reference/cli/init",
+      "destination": "/:path/reference/cli/mastra",
       "permanent": true
     },
     {
-      "source": "/reference/cli/dev",
-      "destination": "/reference/cli/mastra",
+      "source": "/:path(ja)?/reference/cli/dev",
+      "destination": "/:path/reference/cli/mastra",
       "permanent": true
     },
     {
-      "source": "/reference/cli/build",
-      "destination": "/reference/cli/mastra",
+      "source": "/:path(ja)?/reference/cli/build",
+      "destination": "/:path/reference/cli/mastra",
       "permanent": true
     },
     {
-      "source": "/reference/cli/start",
-      "destination": "/reference/cli/mastra",
+      "source": "/:path(ja)?/reference/cli/start",
+      "destination": "/:path/reference/cli/mastra",
       "permanent": true
     },
     {
-      "source": "/reference/cli/lint",
-      "destination": "/reference/cli/mastra",
+      "source": "/:path(ja)?/reference/cli/lint",
+      "destination": "/:path/reference/cli/mastra",
       "permanent": true
     },
     {
-      "source": "/reference/cli/scorers",
-      "destination": "/reference/cli/mastra",
+      "source": "/:path(ja)?/reference/cli/scorers",
+      "destination": "/:path/reference/cli/mastra",
       "permanent": true
     },
     {
-      "source": "/docs/agents/using-tools-and-mcp",
-      "destination": "/docs/agents/using-tools",
+      "source": "/:path(ja)?/docs/agents/using-tools-and-mcp",
+      "destination": "/:path/docs/agents/using-tools",
       "permanent": true
     },
     {
-      "source": "/reference/agents/migration-guide",
-      "destination": "/guides/migrations/vnext-to-standard-apis",
+      "source": "/:path(ja)?/reference/agents/migration-guide",
+      "destination": "/:path/guides/migrations/vnext-to-standard-apis",
       "permanent": true
     },
     {
-      "source": "/docs/agents/runtime-context",
-      "destination": "/docs/server-db/runtime-context",
+      "source": "/:path(ja)?/docs/agents/runtime-context",
+      "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
     },
     {
-      "source": "/examples/agents/adding-voice-capabilities",
-      "destination": "/docs/agents/adding-voice",
+      "source": "/:path(ja)?/examples/agents/adding-voice-capabilities",
+      "destination": "/:path/docs/agents/adding-voice",
       "permanent": true
     },
     {
-      "source": "/examples/deployment",
-      "destination": "/docs/deployment/overview",
+      "source": "/:path(ja)?/examples/deployment",
+      "destination": "/:path/docs/deployment/overview",
       "permanent": true
     },
     {
-      "source": "/examples/deployment/index",
-      "destination": "/docs/deployment/overview",
+      "source": "/:path(ja)?/examples/deployment/index",
+      "destination": "/:path/docs/deployment/overview",
       "permanent": true
     },
     {
-      "source": "/examples/deployment/deploying-mastra-server",
-      "destination": "/docs/deployment/overview",
+      "source": "/:path(ja)?/examples/deployment/deploying-mastra-server",
+      "destination": "/:path/docs/deployment/overview",
       "permanent": true
     },
     {
-      "source": "/examples/deployment/auth-middleware",
-      "destination": "/docs/server-db/middleware",
+      "source": "/:path(ja)?/examples/deployment/auth-middleware",
+      "destination": "/:path/docs/server-db/middleware",
       "permanent": true
     },
     {
-      "source": "/examples/deployment/cors-middleware",
-      "destination": "/docs/server-db/middleware",
+      "source": "/:path(ja)?/examples/deployment/cors-middleware",
+      "destination": "/:path/docs/server-db/middleware",
       "permanent": true
     },
     {
-      "source": "/examples/deployment/custom-api-route",
-      "destination": "/docs/server-db/middleware",
+      "source": "/:path(ja)?/examples/deployment/custom-api-route",
+      "destination": "/:path/docs/server-db/middleware",
       "permanent": true
     },
     {
-      "source": "/examples/deployment/logging-middleware",
-      "destination": "/docs/server-db/middleware",
+      "source": "/:path(ja)?/examples/deployment/logging-middleware",
+      "destination": "/:path/docs/server-db/middleware",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/answer-relevancy",
-      "destination": "/reference/scorers/answer-relevancy",
+      "source": "/:path(ja)?/examples/scorers/answer-relevancy",
+      "destination": "/:path/reference/scorers/answer-relevancy",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/answer-similarity",
-      "destination": "/reference/scorers/answer-similarity",
+      "source": "/:path(ja)?/examples/scorers/answer-similarity",
+      "destination": "/:path/reference/scorers/answer-similarity",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/bias",
-      "destination": "/reference/scorers/bias",
+      "source": "/:path(ja)?/examples/scorers/bias",
+      "destination": "/:path/reference/scorers/bias",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/completeness",
-      "destination": "/reference/scorers/completeness",
+      "source": "/:path(ja)?/examples/scorers/completeness",
+      "destination": "/:path/reference/scorers/completeness",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/content-similarity",
-      "destination": "/reference/scorers/content-similarity",
+      "source": "/:path(ja)?/examples/scorers/content-similarity",
+      "destination": "/:path/reference/scorers/content-similarity",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/context-precision",
-      "destination": "/reference/scorers/context-precision",
+      "source": "/:path(ja)?/examples/scorers/context-precision",
+      "destination": "/:path/reference/scorers/context-precision",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/context-relevance",
-      "destination": "/reference/scorers/context-relevance",
+      "source": "/:path(ja)?/examples/scorers/context-relevance",
+      "destination": "/:path/reference/scorers/context-relevance",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/faithfulness",
-      "destination": "/reference/scorers/faithfulness",
+      "source": "/:path(ja)?/examples/scorers/faithfulness",
+      "destination": "/:path/reference/scorers/faithfulness",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/hallucination",
-      "destination": "/reference/scorers/hallucination",
+      "source": "/:path(ja)?/examples/scorers/hallucination",
+      "destination": "/:path/reference/scorers/hallucination",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/keyword-coverage",
-      "destination": "/reference/scorers/keyword-coverage",
+      "source": "/:path(ja)?/examples/scorers/keyword-coverage",
+      "destination": "/:path/reference/scorers/keyword-coverage",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/textual-difference",
-      "destination": "/reference/scorers/textual-difference",
+      "source": "/:path(ja)?/examples/scorers/textual-difference",
+      "destination": "/:path/reference/scorers/textual-difference",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/tone-consistency",
-      "destination": "/reference/scorers/tone-consistency",
+      "source": "/:path(ja)?/examples/scorers/tone-consistency",
+      "destination": "/:path/reference/scorers/tone-consistency",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/tool-call-accuracy",
-      "destination": "/reference/scorers/tool-call-accuracy",
+      "source": "/:path(ja)?/examples/scorers/tool-call-accuracy",
+      "destination": "/:path/reference/scorers/tool-call-accuracy",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/prompt-alignment",
-      "destination": "/reference/scorers/prompt-alignment",
+      "source": "/:path(ja)?/examples/scorers/prompt-alignment",
+      "destination": "/:path/reference/scorers/prompt-alignment",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/noise-sensitivity",
-      "destination": "/reference/scorers/noise-sensitivity",
+      "source": "/:path(ja)?/examples/scorers/noise-sensitivity",
+      "destination": "/:path/reference/scorers/noise-sensitivity",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/toxicity",
-      "destination": "/reference/scorers/toxicity",
+      "source": "/:path(ja)?/examples/scorers/toxicity",
+      "destination": "/:path/reference/scorers/toxicity",
       "permanent": true
     },
     {
-      "source": "/examples/scorers/custom-scorer",
-      "destination": "/docs/scorers/custom-scorers",
+      "source": "/:path(ja)?/examples/scorers/custom-scorer",
+      "destination": "/:path/docs/scorers/custom-scorers",
       "permanent": true
     },
     {
-      "source": "/docs/tools-mcp/runtime-context",
-      "destination": "/docs/server-db/runtime-context",
+      "source": "/:path(ja)?/docs/tools-mcp/runtime-context",
+      "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
     },
     {
-      "source": "/docs/evals",
-      "destination": "/docs/scorers/evals-old-api",
+      "source": "/:path(ja)?/docs/evals",
+      "destination": "/:path/docs/scorers/evals-old-api/overview",
       "permanent": true
     },
     {
-      "source": "/docs/evals/overview",
-      "destination": "/docs/scorers/evals-old-api/overview",
+      "source": "/:path(ja)?/docs/evals/overview",
+      "destination": "/:path/docs/scorers/evals-old-api/overview",
       "permanent": true
     },
     {
-      "source": "/docs/evals/custom-eval",
-      "destination": "/docs/scorers/evals-old-api/custom-eval",
+      "source": "/:path(ja)?/docs/evals/custom-eval",
+      "destination": "/:path/docs/scorers/evals-old-api/custom-eval",
       "permanent": true
     },
     {
-      "source": "/docs/evals/running-in-ci",
-      "destination": "/docs/scorers/evals-old-api/running-in-ci",
+      "source": "/:path(ja)?/docs/evals/running-in-ci",
+      "destination": "/:path/docs/scorers/evals-old-api/running-in-ci",
       "permanent": true
     },
     {
-      "source": "/docs/evals/textual-evals",
-      "destination": "/docs/scorers/evals-old-api/textual-evals",
+      "source": "/:path(ja)?/docs/evals/textual-evals",
+      "destination": "/:path/docs/scorers/evals-old-api/textual-evals",
       "permanent": true
     },
     {
-      "source": "/examples/agents/using-a-tool",
-      "destination": "/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent",
+      "source": "/:path(ja)?/examples/agents/using-a-tool",
+      "destination": "/:path/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent",
       "permanent": true
     },
     {
-      "source": "/docs/server-db/snapshots",
-      "destination": "/docs/workflows/snapshots",
+      "source": "/:path(ja)?/docs/server-db/snapshots",
+      "destination": "/:path/docs/workflows/snapshots",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/pausing-execution",
-      "destination": "/docs/workflows/suspend-and-resume",
+      "source": "/:path(ja)?/docs/workflows/pausing-execution",
+      "destination": "/:path/docs/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/agents",
+      "destination": "/:path/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/memory",
+      "destination": "/:path/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/memory/agents/calling-agents",
+      "destination": "/:path/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/networks-vnext/overview",
+      "destination": "/:path/docs/agents/networks",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/quickstart",
+      "destination": "/:path/docs/getting-started/installation",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools",
+      "destination": "/:path/docs/tools-mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/workflows/00-overview",
+      "destination": "/:path/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/workflows/nested-workflows",
+      "destination": "/:path/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/workflows/running-workflows",
+      "destination": "/:path/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/agents/dynamic-agents",
+      "destination": "/:path/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/rocessors/response-length-limiter",
+      "destination": "/:path/examples/processors/message-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/guides/guide/02-stock-agent",
+      "destination": "/:path/guides/guide/stock-agent",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/core",
+      "destination": "/:path/reference/core/mastra-class",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/CONTRIBUTING.md",
+      "destination": "/:path/docs/community/contributing-templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/EVALS.md",
+      "destination": "/:path/docs/community/contributing-templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/LICENSE",
+      "destination": "/:path/docs/community/licensing",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/docs",
+      "destination": "/:path/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/templates/olde-maps-ai-directions-assistant",
+      "destination": "/:path/docs/getting-started/templates",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/workflows/input-data-mapping",
+      "destination": "/:path/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/server-db/request-context",
+      "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
     }
   ]

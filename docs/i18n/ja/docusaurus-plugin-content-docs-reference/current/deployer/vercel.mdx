@@ -1,0 +1,55 @@
+---
+title: "リファレンス: VercelDeployer | Deployer | Mastra ドキュメント"
+description: "Mastra アプリケーションを Vercel にデプロイする VercelDeployer クラスのドキュメント。"
+---
+
+<div id="verceldeployer">
+  # VercelDeployer
+</div>
+
+`VercelDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Vercel にデプロイする役割を担います。設定やデプロイの管理を行い、Vercel 固有の機能を追加してベースの [Deployer](/reference/deployer/) クラスを拡張します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer(),
+});
+```
+
+
+<div id="constructor-options">
+  ## コンストラクターのオプション
+</div>
+
+deployer は、Vercel Output API の function config（`.vc-config.json`）に書き込まれる、価値の高い少数の上書き設定をサポートします:
+
+- `maxDuration?: number` — 関数の実行タイムアウト（秒）
+- `memory?: number` — 関数のメモリ（MB）
+- `regions?: string[]` — 関数をデプロイするリージョン（例: `['sfo1','iad1']`）
+
+これらのオプションは、デフォルトのフィールド（`handler`、`launcherType`、`runtime`、`shouldAddHelpers`）を保持したまま、`.vercel/output/functions/index.func/.vc-config.json` にマージされます。
+
+<div id="example-with-overrides">
+  ### オーバーライドの例
+</div>
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer({
+    maxDuration: 600,
+    memory: 1536,
+    regions: ["sfo1", "iad1"],
+  }),
+});
+```

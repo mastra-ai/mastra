@@ -1,0 +1,85 @@
+---
+title: "リファレンス: Agent.listScorers() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.listScorers()` メソッドのドキュメント。スコアリングの設定を取得します。"
+---
+
+<div id="agentlistscorers">
+  # Agent.listScorers()
+</div>
+
+`.listScorers()` メソッドは、エージェントに設定されたスコアリング設定を取得し、それが関数である場合は評価して解決します。このメソッドにより、エージェントの応答やパフォーマンスを評価するために用いられるスコアリングシステムにアクセスできます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.listScorers();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "リクエストコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorers",
+      type: "MastraScorers | Promise<MastraScorers>",
+      description:
+        "エージェントに設定されたスコアリング構成。MastraScorers のオブジェクト、または scorers に解決される Promise のいずれかです。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## さらに発展的な使用例
+</div>
+
+```typescript copy
+await agent.listScorers({
+  requestContext: new RequestContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションパラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "依存性の注入やコンテキスト情報に用いるリクエストコンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [Agents の概要](/docs/agents/overview)
+- [リクエストコンテキスト](/docs/server-db/request-context)

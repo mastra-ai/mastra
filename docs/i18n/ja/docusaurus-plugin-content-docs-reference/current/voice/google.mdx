@@ -1,0 +1,222 @@
+---
+title: "リファレンス: Google | Voice | Mastra ドキュメント"
+description: "Google Voice 実装のドキュメント。テキスト読み上げ（Text-to-Speech）と音声認識（Speech-to-Text）機能を提供します。"
+---
+
+<div id="google">
+  # Google
+</div>
+
+Mastra の Google Voice 実装は、Google Cloud サービスを利用して、テキスト読み上げ（TTS）と音声文字起こし（STT）の両方に対応しています。複数の音声、言語、および高度なオーディオ設定オプションをサポートします。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { GoogleVoice } from "@mastra/voice-google";
+
+// 既定の設定で初期化（GOOGLE_API_KEY 環境変数を使用）
+const voice = new GoogleVoice();
+
+// カスタム設定で初期化
+const voice = new GoogleVoice({
+  speechModel: {
+    apiKey: "your-speech-api-key",
+  },
+  listeningModel: {
+    apiKey: "your-listening-api-key",
+  },
+  speaker: "en-US-Casual-K",
+});
+
+// テキスト読み上げ（Text-to-Speech）
+const audioStream = await voice.speak("Hello, world!", {
+  languageCode: "en-US",
+  audioConfig: {
+    audioEncoding: "LINEAR16",
+  },
+});
+
+// 音声認識（Speech-to-Text）
+const transcript = await voice.listen(audioStream, {
+  config: {
+    encoding: "LINEAR16",
+    languageCode: "en-US",
+  },
+});
+
+// 指定した言語で利用可能な話者一覧を取得
+const voices = await voice.getSpeakers({ languageCode: "en-US" });
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "GoogleModelConfig",
+      description: "テキスト読み上げ（TTS）機能の設定",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "listeningModel",
+      type: "GoogleModelConfig",
+      description: "音声認識（STT）機能の設定",
+      isOptional: true,
+      defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+    },
+    {
+      name: "speaker",
+      type: "string",
+      description: "テキスト読み上げに使用する既定の音声ID",
+      isOptional: true,
+      defaultValue: "'en-US-Casual-K'",
+    },
+  ]}
+/>
+
+<div id="googlemodelconfig">
+  ### GoogleModelConfig
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Google Cloud API キー。未指定の場合は、環境変数 GOOGLE_API_KEY が使用されます",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="methods">
+  ## 手法
+</div>
+
+<div id="speak">
+  ### speak()
+</div>
+
+Google Cloud Text-to-Speech サービスを使用して、テキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "音声に変換するテキスト。ストリームが渡された場合は、先にテキストへ変換されます。",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "音声合成のオプション",
+      isOptional: true,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "このリクエストで使用するボイス ID",
+      isOptional: true,
+    },
+    {
+      name: "options.languageCode",
+      type: "string",
+      description:
+        "ボイスの言語コード（例: 'en-US'）。デフォルトはボイス ID からの言語コード、または 'en-US' です",
+      isOptional: true,
+    },
+    {
+      name: "options.audioConfig",
+      type: "ISynthesizeSpeechRequest['audioConfig']",
+      description:
+        "Google Cloud Text-to-Speech API の音声（オーディオ）設定オプション",
+      isOptional: true,
+      defaultValue: "{ audioEncoding: 'LINEAR16' }",
+    },
+  ]}
+/>
+
+戻り値: `Promise<NodeJS.ReadableStream>`
+
+<div id="listen">
+  ### listen()
+</div>
+
+Google Cloud Speech-to-Text を使用して音声をテキストに変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "audioStream",
+      type: "NodeJS.ReadableStream",
+      description: "書き起こし対象の音声ストリーム",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "object",
+      description: "認識オプション",
+      isOptional: true,
+    },
+    {
+      name: "options.stream",
+      type: "boolean",
+      description: "ストリーミング認識を使用するかどうか",
+      isOptional: true,
+    },
+    {
+      name: "options.config",
+      type: "IRecognitionConfig",
+      description:
+        "Google Cloud Speech-to-Text API の認識設定",
+      isOptional: true,
+      defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    },
+  ]}
+/>
+
+戻り値: `Promise<string>`
+
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
+
+利用可能な音声オプションの配列を返します。各項目には次が含まれます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の固有識別子",
+      isOptional: false,
+    },
+    {
+      name: "languageCodes",
+      type: "string[]",
+      description: "この音声が対応する言語コードの一覧",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="important-notes">
+  ## 重要な注意事項
+</div>
+
+1. Google Cloud の API キーが必要です。`GOOGLE_API_KEY` 環境変数で設定するか、コンストラクターに渡してください。
+2. 既定の音声は「en-US-Casual-K」に設定されています。
+3. テキスト読み上げ（text-to-speech）と音声認識（speech-to-text）の両サービスは、既定のオーディオエンコーディングとして LINEAR16 を使用します。
+4. `speak()` メソッドは、Google Cloud Text-to-Speech API を通じて高度な音声設定をサポートします。
+5. `listen()` メソッドは、Google Cloud Speech-to-Text API を通じて多様な認識設定をサポートします。
+6. 利用可能な音声は、`getSpeakers()` メソッドで言語コードによる絞り込みが可能です。

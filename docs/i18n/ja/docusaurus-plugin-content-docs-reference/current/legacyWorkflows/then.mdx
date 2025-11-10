@@ -1,0 +1,88 @@
+---
+title: "リファレンス: Workflow.then() | レガシー ワークフロー | Mastra ドキュメント"
+description: ワークフローにおける`.then()`メソッドのリファレンス。ステップ間に順次的な依存関係を作成します。
+---
+
+<div id="workflowthen">
+  # Workflow.then()
+</div>
+
+`.then()` メソッドはワークフローのステップ間に順序的な依存関係を作り、ステップが所定の順序で実行されるようにします。
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript
+workflow.step(stepOne).then(stepTwo).then(stepThree);
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step | string",
+      description:
+        "前のステップの完了後に実行されるべきステップインスタンスまたはステップID",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "LegacyWorkflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>
+
+<div id="validation">
+  ## 検証
+</div>
+
+`then` を使用する場合:
+
+- 前のステップがワークフロー内に存在している必要があります
+- ステップ同士で循環依存を作ってはいけません
+- 各ステップは直列のチェーン内で一度しか登場できません
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+```typescript
+try {
+  workflow
+    .step(stepA)
+    .then(stepB)
+    .then(stepA) // エラーをスローします - 循環依存
+    .commit();
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(error.type); // 'circular_dependency'
+    console.log(error.details);
+  }
+}
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [step リファレンス](./step-class)
+- [after リファレンス](./after)
+- [逐次ステップの例](/examples/workflows_legacy/sequential-steps)
+- [制御フロー ガイド](/docs/workflows-legacy/control-flow)

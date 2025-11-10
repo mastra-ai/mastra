@@ -1,0 +1,218 @@
+---
+title: "例: スキーマを用いたワーキングメモリ | Memory | Mastra Docs"
+description: Zod スキーマを使ってワーキングメモリのデータを構造化・検証する方法を示す例。
+---
+
+# スキーマを用いたワーキングメモリ
+
+ワーキングメモリに保存する情報の構造を定義するために Zod スキーマを使用します。スキーマは、エージェントが会話をまたいで抽出・保持するデータに対して型安全性とバリデーションを提供します。
+
+これは `.stream()` によるストリーミング応答と `.generate()` による生成応答の両方で動作し、セッション間でデータを保持するには PostgreSQL、LibSQL、Redis などのストレージプロバイダが必要です。
+
+この例では、ワーキングメモリ用スキーマを使って ToDo リストを管理する方法を示します。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+この例では `openai` モデルを使用します。`OPENAI_API_KEY` を `.env` ファイルに追加してください。
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+```
+
+次のパッケージをインストールします：
+
+```bash copy
+npm install @mastra/libsql
+```
+
+
+<div id="adding-memory-to-an-agent">
+  ## エージェントにメモリを追加する
+</div>
+
+エージェントに LibSQL のメモリを追加するには、`Memory` クラスを使用し、`LibSQLStore` を用いて `storage` インスタンスを渡します。`url` はリモートの場所またはローカルファイルを指すことができます。
+
+<div id="working-memory-with-schema">
+  ### `schema` を用いたワーキングメモリ
+</div>
+
+`workingMemory.enabled` を `true` に設定してワーキングメモリを有効にします。これにより、エージェントはやり取りの合間でも構造化された情報を記憶できるようになります。
+
+`schema` を指定すると、エージェントが情報を記憶する形を定義できます。この例では、タスクを「進行中」と「完了」のリストに分けています。
+
+スレッドは関連するメッセージを会話としてまとめます。`generateTitle` が有効な場合、各スレッドには内容に基づく説明的な名前が自動的に付けられます。
+
+```typescript title="src/mastra/agents/example-working-memory-schema-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+import { z } from "zod";
+
+export const workingMemorySchemaAgent = new Agent({
+  name: "working-memory-schema-agent",
+  instructions: `
+    あなたはToDoリストAIエージェントです。
+    会話開始時には、必ず現在のリストを表示してください。
+    各タスクには、インデックス番号付きのタイトル、期限、説明、ステータス、所要時間の見積もりを含めてください。
+    各項目には絵文字を使用してください。
+    サブタスクは箇条書きで表示してください。
+    タイムボクシングに役立てるため、所要時間の見積もりを確認してください。
+  `,
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:working-memory-schema.db",
+    }),
+    options: {
+      workingMemory: {
+        enabled: true,
+        schema: z.object({
+          items: z.array(
+            z.object({
+              title: z.string(),
+              due: z.string().optional(),
+              description: z.string(),
+              status: z.enum(["active", "completed"]).default("active"),
+              estimatedTime: z.string().optional(),
+            }),
+          ),
+        }),
+      },
+      threads: {
+        generateTitle: true,
+      },
+    },
+  }),
+});
+```
+
+
+<div id="usage-examples">
+  ## 使用例
+</div>
+
+この例では、構造化情報を管理するためにワーキングメモリのスキーマを用いるエージェントとのやり取り方法を示します。エージェントは、同一スレッド内での複数回の対話にわたり、ToDo リストを更新し、永続化します。
+
+<div id="streaming-a-response-using-stream">
+  ### `.stream()` を使ったレスポンスのストリーミング
+</div>
+
+この例では、新しいタスクを含むメッセージをエージェントに送信します。レスポンスはストリーミングされ、更新された To-Do リストが含まれます。
+
+```typescript title="src/test-working-memory-schema-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemorySchemaAgent");
+
+const stream = await agent.stream(
+  "タスクを追加: アプリの新機能を構築する。所要時間は約2時間で、来週の金曜日までに完了する必要がある。",
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+
+<div id="generating-a-response-using-generate">
+  ### `.generate()` を使ってレスポンスを生成する
+</div>
+
+この例では、新しいタスクを含むメッセージをエージェントに送信します。レスポンスは1つのメッセージとして返され、更新済みのToDoリストが含まれます。
+
+```typescript title="src/test-working-memory-schema-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("workingMemorySchemaAgent");
+
+const response = await agent.generate(
+  "タスクを追加: アプリの新機能を構築する。所要時間は約2時間で、来週の金曜日までに完了する必要がある。",
+  {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+    },
+  },
+);
+
+console.log(response.text);
+```
+
+
+<div id="example-output">
+  ## 出力例
+</div>
+
+この出力は、zod スキーマで定義された構造に従って、エージェントが更新済みの todo リストをどのように整形して返すかを示しています。
+
+```text
+# タスクリスト
+## 進行中の項目
+1. 🛠️ **タスク:** アプリの新機能を実装する
+   - 📅 **期限:** 来週の金曜日
+   - 📝 **説明:** 既存のアプリケーションに新機能を開発して統合する。
+   - ⏳ **ステータス:** 未着手
+   - ⏲️ **見積時間:** 2時間
+
+## 完了済みの項目
+- まだありません
+```
+
+
+<div id="example-storage-object">
+  ## ストレージオブジェクトの例
+</div>
+
+Working memory はデータを `.json` 形式で保存します。以下のような内容になります：
+
+```json
+{
+  // ...
+  "toolInvocations": [
+    {
+      // ...
+      "args": {
+        "memory": {
+          "items": [
+            {
+              "title": "アプリの新機能を構築する",
+              "due": "来週の金曜日",
+              "description": "",
+              "status": "active",
+              "estimatedTime": "2時間"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [エージェントの参照](/docs/agents/overview#referencing-an-agent)
+- [エージェントのメモリ](/docs/agents/agent-memory)
+- [サーバーレスデプロイ](/reference/storage/libsql)

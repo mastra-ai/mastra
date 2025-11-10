@@ -11,19 +11,42 @@ const sidebars = {
       type: "doc",
       id: "index",
       label: "Overview",
+      key: "reference.index",
     },
     {
       type: "category",
       label: "Core",
+      key: "reference.core.index",
       collapsed: true,
       items: [
+        { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
         { type: "doc", id: "core/getAgent", label: ".getAgent()" },
         { type: "doc", id: "core/getAgents", label: ".getAgents()" },
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
-        { type: "doc", id: "core/getWorkflow", label: ".getWorkflow()" },
-        { type: "doc", id: "core/getWorkflows", label: ".getWorkflows()" },
-        { type: "doc", id: "core/getMemory", label: ".getMemory()" },
-        { type: "doc", id: "core/setStorage", label: ".setStorage()" },
+        {
+          type: "doc",
+          id: "core/getWorkflow",
+          key: "reference.core.getWorkflow",
+          label: ".getWorkflow()",
+        },
+        {
+          type: "doc",
+          id: "core/getWorkflows",
+          key: "reference.core.getWorkflows",
+          label: ".getWorkflows()",
+        },
+        {
+          type: "doc",
+          id: "core/getMemory",
+          key: "reference.core.getMemory",
+          label: ".getMemory()",
+        },
+        {
+          type: "doc",
+          id: "core/setStorage",
+          key: "reference.core.setStorage",
+          label: ".setStorage()",
+        },
         { type: "doc", id: "core/getServer", label: ".getServer()" },
         { type: "doc", id: "core/getMCPServer", label: ".getMCPServer()" },
         { type: "doc", id: "core/getVector", label: ".getVector()" },
@@ -37,14 +60,23 @@ const sidebars = {
         { type: "doc", id: "core/getLogsByRunId", label: ".getLogsByRunId()" },
         { type: "doc", id: "core/getLogger", label: ".getLogger()" },
         { type: "doc", id: "core/setLogger", label: ".setLogger()" },
-        { type: "doc", id: "core/getScorers", label: ".getScorers()" },
-        { type: "doc", id: "core/getScorer", label: ".getScorer()" },
+        {
+          type: "doc",
+          id: "core/getScorers",
+          key: "reference.core.getScorers",
+          label: ".getScorers()",
+        },
+        {
+          type: "doc",
+          id: "core/getScorer",
+          key: "reference.core.getScorer",
+          label: ".getScorer()",
+        },
         {
           type: "doc",
           id: "core/getScorerByName",
           label: ".getScorerByName()",
         },
-        { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
       ],
     },
     {
@@ -59,10 +91,21 @@ const sidebars = {
     {
       type: "category",
       label: "Agents",
+      key: "reference.agents",
       collapsed: true,
       items: [
-        { type: "doc", id: "agents/agent", label: "Agent" },
-        { type: "doc", id: "agents/generate", label: ".generate()" },
+        {
+          type: "doc",
+          id: "agents/agent",
+          key: "references.agents.agent",
+          label: "Agent",
+        },
+        {
+          type: "doc",
+          id: "agents/generate",
+          key: "references.agents.generate",
+          label: ".generate()",
+        },
         {
           type: "doc",
           id: "agents/generateLegacy",
@@ -102,17 +145,25 @@ const sidebars = {
     {
       type: "category",
       label: "Workflows",
+      key: "reference.workflows",
       collapsed: true,
       items: [
-        { type: "doc", id: "workflows/workflow", label: "Workflow Class" },
+        {
+          type: "doc",
+          id: "workflows/workflow",
+          key: "reference.workflows.workflow",
+          label: "Workflow Class",
+        },
         {
           type: "category",
+          key: "reference.workflows.methods",
           label: "Methods",
           items: [
             {
               type: "doc",
               id: "workflows/workflow-methods/then",
               label: ".then()",
+              key: "reference.workflows.methods.then",
             },
             {
               type: "doc",
@@ -127,11 +178,13 @@ const sidebars = {
             {
               type: "doc",
               id: "workflows/workflow-methods/commit",
+              key: "reference.workflows.methods.commit",
               label: ".commit()",
             },
             {
               type: "doc",
               id: "workflows/workflow-methods/dowhile",
+              key: "reference.workflows.methods.dowhile",
               label: ".dowhile()",
             },
             {
@@ -180,21 +233,24 @@ const sidebars = {
         { type: "doc", id: "workflows/run", label: "Run Class" },
         {
           type: "category",
-          label: "Methods",
+          label: "Run Methods",
           items: [
             {
               type: "doc",
               id: "workflows/run-methods/start",
+              key: "reference.workflows.run-methods.start",
               label: ".start()",
             },
             {
               type: "doc",
               id: "workflows/run-methods/resume",
+              key: "reference.workflows.run-methods.resume",
               label: ".resume()",
             },
             {
               type: "doc",
               id: "workflows/run-methods/watch",
+              key: "reference.workflows.run-methods.watch",
               label: ".watch()",
             },
             {
@@ -280,6 +336,7 @@ const sidebars = {
             {
               type: "doc",
               id: "streaming/agents/stream",
+              key: "reference.streaming.agents.stream",
               label: ".stream()",
             },
             {
@@ -468,10 +525,30 @@ const sidebars = {
       label: "Deployer",
       collapsed: true,
       items: [
-        { type: "doc", id: "deployer/deployer", label: "Deployer" },
-        { type: "doc", id: "deployer/cloudflare", label: "Cloudflare" },
-        { type: "doc", id: "deployer/netlify", label: "Netlify" },
-        { type: "doc", id: "deployer/vercel", label: "Vercel" },
+        {
+          type: "doc",
+          id: "deployer/deployer",
+          key: "reference.deployer.deployer",
+          label: "Deployer",
+        },
+        {
+          type: "doc",
+          id: "deployer/cloudflare",
+          key: "reference.deployer.cloudflare",
+          label: "Cloudflare",
+        },
+        {
+          type: "doc",
+          id: "deployer/netlify",
+          key: "reference.deployer.netlify",
+          label: "Netlify",
+        },
+        {
+          type: "doc",
+          id: "deployer/vercel",
+          key: "reference.deployer.vercel",
+          label: "Vercel",
+        },
       ],
     },
     {
@@ -696,12 +773,42 @@ const sidebars = {
       label: "Evals",
       collapsed: true,
       items: [
-        { type: "doc", id: "evals/bias", label: "Bias" },
-        { type: "doc", id: "evals/completeness", label: "Completeness" },
-        { type: "doc", id: "evals/faithfulness", label: "Faithfulness" },
-        { type: "doc", id: "evals/hallucination", label: "Hallucination" },
-        { type: "doc", id: "evals/summarization", label: "Summarization" },
-        { type: "doc", id: "evals/toxicity", label: "Toxicity" },
+        {
+          type: "doc",
+          id: "evals/bias",
+          key: "reference.evals.bias",
+          label: "Bias",
+        },
+        {
+          type: "doc",
+          id: "evals/completeness",
+          key: "reference.evals.completeness",
+          label: "Completeness",
+        },
+        {
+          type: "doc",
+          id: "evals/faithfulness",
+          key: "reference.evals.faithfulness",
+          label: "Faithfulness",
+        },
+        {
+          type: "doc",
+          id: "evals/hallucination",
+          key: "reference.evals.hallucination",
+          label: "Hallucination",
+        },
+        {
+          type: "doc",
+          id: "evals/summarization",
+          key: "reference.evals.summarization",
+          label: "Summarization",
+        },
+        {
+          type: "doc",
+          id: "evals/toxicity",
+          key: "reference.evals.toxicity",
+          label: "Toxicity",
+        },
         {
           type: "doc",
           id: "evals/keyword-coverage",
@@ -827,6 +934,7 @@ const sidebars = {
     {
       type: "category",
       label: "Processors",
+      key: "reference.processors",
       collapsed: true,
       items: [
         {

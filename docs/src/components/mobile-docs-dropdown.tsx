@@ -10,41 +10,42 @@ import {
 } from "./ui/dropdown";
 import { Button } from "./ui/button";
 import { cn } from "@site/src/css/utils";
+import { msg, useMessages } from "gt-react";
 
 const docsTabs = [
   {
     id: "Docs",
-    label: "Docs",
+    label: msg("Docs"),
     href: "/docs",
     basePath: "/docs",
   },
   {
     id: "Models",
-    label: "Models",
+    label: msg("Models"),
     href: "/models",
     basePath: "/models",
   },
   {
     id: "Examples",
-    label: "Examples",
+    label: msg("Examples"),
     href: "/examples",
     basePath: "/examples",
   },
   {
     id: "Guides",
-    label: "Guides & Migrations",
+    label: msg("Guides & Migrations"),
     href: "/guides",
     basePath: "/guides",
   },
   {
     id: "Reference",
-    label: "Reference",
+    label: msg("Reference"),
     href: "/reference",
     basePath: "/reference",
   },
   {
     id: "Showcase",
-    label: "Showcase",
+    label: msg("Showcase"),
     href: "/showcase",
     basePath: "/showcase",
   },
@@ -54,7 +55,7 @@ export function MobileDocsDropdown() {
   const location = useLocation();
   const pathname = location.pathname;
   const [open, setOpen] = React.useState(false);
-
+  const m = useMessages();
   const activeTab =
     docsTabs.find((tab) => {
       if (
@@ -79,9 +80,9 @@ export function MobileDocsDropdown() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="secondary"
-          className="w-full shadow-none justify-between bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
+          className="w-full shadow-none justify-between bg-(--mastra-surface-4) dark:bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
         >
-          <span>{activeTab.label}</span>
+          <span>{m(activeTab.label)}</span>
           <ChevronDown
             className={cn(
               "size-4 text-(--mastra-text-quaternary) transition-transform duration-200",
@@ -106,7 +107,7 @@ export function MobileDocsDropdown() {
                   isActive && "text-(--mastra-text-primary) font-medium",
                 )}
               >
-                <span>{tab.label}</span>
+                <span>{m(tab.label)}</span>
                 {isActive && (
                   <Check className="size-4 text-(--mastra-green-accent-2)" />
                 )}

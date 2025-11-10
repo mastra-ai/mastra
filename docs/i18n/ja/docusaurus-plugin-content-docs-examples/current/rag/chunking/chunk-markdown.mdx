@@ -1,0 +1,37 @@
+---
+title: "例: Markdown の分割 | RAG | Mastra ドキュメント"
+description: 検索や取得を目的として、Mastra を使って Markdown ドキュメントを分割する例です。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="chunk-markdown">
+  # Markdown のチャンク化
+</div>
+
+Markdown は生の HTML より情報が凝縮されており、RAG パイプラインで扱いやすい形式です。Markdown を扱う際は、見出しや書式を保ったまま小さな単位に分割する必要があります。`chunk` メソッドは、見出し、リスト、コードブロックなどの Markdown 特有の要素を賢く処理します。以下の例では、検索や検索結果の取得を目的として Markdown ドキュメントをチャンク化する方法を示します。
+
+```tsx copy
+import { MDocument } from "@mastra/rag";
+
+const doc = MDocument.fromMarkdown("# Markdown コンテンツ…");
+
+const chunks = await doc.chunk();
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/chunk-markdown"
+}
+/>

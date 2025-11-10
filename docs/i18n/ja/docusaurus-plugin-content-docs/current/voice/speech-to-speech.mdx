@@ -1,0 +1,119 @@
+---
+title: "Mastra の音声対話機能 | Voice | Mastra ドキュメント"
+description: リアルタイム対話やイベント駆動型アーキテクチャを含む、Mastra の音声対話機能の概要です。
+---
+
+<div id="speech-to-speech-capabilities-in-mastra">
+  # Mastra の音声対話機能
+</div>
+
+<div id="introduction">
+  ## はじめに
+</div>
+
+Mastra の Speech-to-Speech (STS) は、複数のプロバイダー間でのリアルタイム対話に対応する標準化インターフェースを提供します。
+STS は Realtime モデルからのイベントを受け取りながら、継続的な双方向の音声コミュニケーションを実現します。個別の TTS と STT を組み合わせる方式とは異なり、STS は常時開いた接続を維持し、音声を両方向に連続的に処理します。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+* **`apiKey`**: OpenAI API キー。指定がない場合は `OPENAI_API_KEY` 環境変数が使用されます。
+* **`model`**: リアルタイム音声対話に使用するモデル ID（例：`gpt-4o-mini-realtime`）。
+* **`speaker`**: 音声合成のデフォルトの音声 ID。音声出力に使う声を指定できます。
+
+```typescript
+const voice = new OpenAIRealtimeVoice({
+  apiKey: "your-openai-api-key",
+  model: "gpt-4o-mini-realtime",
+  speaker: "alloy", // デフォルトの音声
+});
+
+// デフォルト設定を使用する場合、設定は次のように簡略化できます:
+const voice = new OpenAIRealtimeVoice();
+```
+
+
+<div id="using-sts">
+  ## STS の使い方
+</div>
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+const agent = new Agent({
+  name: "Agent",
+  instructions: `あなたはリアルタイム音声機能を備えた親切なアシスタントです。`,
+  model: openai("gpt-4o"),
+  voice: new OpenAIRealtimeVoice(),
+});
+
+// 音声サービスに接続
+await agent.voice.connect();
+
+// エージェントの音声応答を受信
+agent.voice.on("speaker", ({ audio }) => {
+  playAudio(audio);
+});
+
+// 会話を開始
+await agent.voice.speak("今日はどのようにお手伝いできますか?");
+
+// マイクから連続的に音声を送信
+const micStream = getMicrophoneStream();
+await agent.voice.send(micStream);
+```
+
+エージェントに音声対音声（Speech-to-Speech）機能を統合する方法については、[Adding Voice to Agents](/docs/agents/adding-voice) のドキュメントを参照してください。
+
+
+<div id="google-gemini-live-realtime">
+  ## Google Gemini Live（ライブ）
+</div>
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { GeminiLiveVoice } from "@mastra/voice-google-gemini-live";
+import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
+
+const agent = new Agent({
+  name: "Agent",
+  instructions:
+    "リアルタイム音声機能を持つ親切なアシスタントです。",
+  // テキスト生成に使用するモデル。音声プロバイダーがリアルタイム音声を処理します
+  model: openai("gpt-4o"),
+  voice: new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: "gemini-2.0-flash-exp",
+    speaker: "Puck",
+    debug: true,
+    // Vertex AI オプション:
+    // vertexAI: true,
+    // project: 'your-gcp-project',
+    // location: 'us-central1',
+    // serviceAccountKeyFile: '/path/to/service-account.json',
+  }),
+});
+
+await agent.voice.connect();
+
+agent.voice.on("speaker", ({ audio }) => {
+  playAudio(audio);
+});
+
+agent.voice.on("writing", ({ role, text }) => {
+  console.log(`${role}: ${text}`);
+});
+
+await agent.voice.speak("本日はどのようなご用件でしょうか?");
+
+const micStream = getMicrophoneStream();
+await agent.voice.send(micStream);
+```
+
+Note:
+
+* Live API には `GOOGLE_API_KEY` が必要です。Vertex AI にはプロジェクト/ロケーションとサービス アカウントの認証情報が必要です。
+* イベント: `speaker`（音声ストリーム）、`writing`（テキスト）、`turnComplete`、`usage`、`error`。

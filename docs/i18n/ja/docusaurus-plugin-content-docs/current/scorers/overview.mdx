@@ -1,0 +1,165 @@
+---
+title: "Scorers の概要 | Scorers | Mastra ドキュメント"
+description: Mastra における Scorers の概要。AI の出力を評価し、パフォーマンスを測定するための機能について解説します。
+---
+
+<div id="scorers-overview">
+  # Scorers の概要
+</div>
+
+従来のソフトウェアテストには明確な合否条件がありますが、AI の出力は非決定的で、同じ入力でも変わり得ます。**Scorers** は、エージェントの品質を定量的に測る指標を提供することで、このギャップを埋めます。
+
+Scorers は、モデル採点・ルールベース・統計的手法を用いて Agent の出力を評価する自動テストです。Scorers は **scores**（スコア）を返します。これは数値（通常は 0〜1）で、出力が評価基準をどの程度満たしているかを定量化します。これらのスコアにより、パフォーマンスを客観的に追跡し、さまざまなアプローチを比較し、AI システムの改善点を特定できます。Scorers は、独自のプロンプトやスコアリング関数でカスタマイズ可能です。
+
+Scorers はクラウド上で実行でき、リアルタイムに結果を取得できます。さらに、Scorers を CI/CD パイプラインに組み込むことで、エージェントを継続的にテストおよび監視できます。
+
+<div id="types-of-scorers">
+  ## スコアラーの種類
+</div>
+
+スコアラーには目的ごとにさまざまな種類があります。一般的なタイプは次のとおりです。
+
+1. **テキストスコアラー**: エージェントの応答について、正確性、信頼性、文脈理解を評価する
+2. **分類スコアラー**: 事前に定義されたカテゴリに基づいてデータを分類する際の精度を測定する
+3. **プロンプトエンジニアリング用スコアラー**: さまざまな指示や入力形式が与える影響を検証する
+
+<div id="installation">
+  ## インストール
+</div>
+
+Mastra のスコアラー機能にアクセスするには、`@mastra/evals` パッケージをインストールしてください。
+
+```bash copy
+npm install @mastra/evals@latest
+```
+
+
+<div id="live-evaluations">
+  ## ライブ評価
+</div>
+
+**ライブ評価**では、エージェントやワークフローの稼働中に、AIの出力をリアルタイムで自動採点できます。評価を手動やバッチで実行するのではなく、スコアラーがAIシステムと並行して非同期に動作し、継続的に品質を監視します。
+
+<div id="adding-scorers-to-agents">
+  ### エージェントにスコアラーを追加する
+</div>
+
+エージェントに組み込みのスコアラーを追加して、出力を自動評価できます。利用可能なオプションは、[組み込みスコアラーの一覧](/docs/scorers/off-the-shelf-scorers)をご覧ください。
+
+```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import {
+  createAnswerRelevancyScorer,
+  createToxicityScorer,
+} from "@mastra/evals/scorers/llm";
+
+export const evaluatedAgent = new Agent({
+  // ...
+  scorers: {
+    relevancy: {
+      scorer: createAnswerRelevancyScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 0.5 },
+    },
+    safety: {
+      scorer: createToxicityScorer({ model: openai("gpt-4o-mini") }),
+      sampling: { type: "ratio", rate: 1 },
+    },
+  },
+});
+```
+
+
+<div id="adding-scorers-to-workflow-steps">
+  ### ワークフローのステップにスコアラーを追加する
+</div>
+
+プロセス内の特定のポイントで出力を評価できるよう、各ワークフローのステップにスコアラーを追加することもできます。
+
+```typescript title="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+import { customStepScorer } from "../scorers/custom-step-scorer";
+
+const contentStep = createStep({
+  // ...
+  scorers: {
+    customStepScorer: {
+      scorer: customStepScorer(),
+      sampling: {
+        type: "ratio",
+        rate: 1, // すべてのステップ実行をスコア付け
+      }
+    }
+  },
+});
+
+export const contentWorkflow = createWorkflow({ ... })
+  .then(contentStep)
+  .commit();
+```
+
+
+<div id="how-live-evaluations-work">
+  ### ライブ評価の仕組み
+</div>
+
+**非同期実行**: ライブ評価はバックグラウンドで実行され、エージェントの応答やワークフローの実行を妨げません。これにより、監視しながらもAIシステムのパフォーマンスを維持できます。
+
+**サンプリング制御**: `sampling.rate` パラメータ（0〜1）は、採点対象となる出力の割合を制御します。
+
+- `1.0`: すべての応答を採点（100%）
+- `0.5`: 応答の半分を採点（50%）
+- `0.1`: 応答の10%を採点
+- `0.0`: 採点を無効化
+
+**自動保存**: すべての採点結果は、設定済みデータベース内の `mastra_scorers` テーブルに自動的に保存され、経時的なパフォーマンスの傾向を分析できます。
+
+<div id="trace-evaluations">
+  ## トレースの評価
+</div>
+
+ライブ評価に加え、スコアラーを使ってエージェントの対話やワークフローから得られた過去のトレースを評価できます。これは、過去のパフォーマンスの分析、問題のデバッグ、バッチ評価の実行に特に有用です。
+
+:::info
+
+**オブザーバビリティが必要です**
+
+トレースにスコアを付けるには、まず Mastra インスタンスでオブザーバビリティを構成し、トレースデータを収集する必要があります。セットアップ手順は [AI Tracing ドキュメント](../observability/ai-tracing/overview) を参照してください。
+
+:::
+
+<div id="scoring-traces-with-the-playground">
+  ### Playground でトレースを採点する
+</div>
+
+トレースを採点するには、まず Mastra インスタンスにスコアラーを登録する必要があります。
+
+```typescript
+const mastra = new Mastra({
+  // ...
+  scorers: {
+    answerRelevancy: myAnswerRelevancyScorer,
+    responseQuality: myResponseQualityScorer,
+  },
+});
+```
+
+登録が完了すると、Observability セクションの Mastra Playground でトレースに対して対話的にスコアを付けられます。これにより、過去のトレースにスコアラーを実行するための使いやすいインターフェースが提供されます。
+
+
+<div id="testing-scorers-locally">
+  ## スコアラーをローカルでテストする
+</div>
+
+Mastra にはスコアラーをテストできる CLI コマンド `mastra dev` が用意されています。Playground にはスコアラー用のセクションがあり、個々のスコアラーをテスト入力に対して実行し、結果の詳細を確認できます。
+
+詳しくは、[ローカル開発用 Playground](/docs/getting-started/studio) のドキュメントをご覧ください。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+- [Creating Custom Scorers](/docs/scorers/custom-scorers) ガイドで独自のスコアラーの作成方法を学ぶ
+- [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) セクションで組み込みスコアラーを確認する
+- [Local Dev Playground](/docs/getting-started/studio) でスコアラーをテストする

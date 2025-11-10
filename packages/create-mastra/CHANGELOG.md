@@ -1,5 +1,17 @@
 # create-mastra
 
+## 0.18.0
+
+### Patch Changes
+
+- update peerdeps ([`5ca1cca`](https://github.com/mastra-ai/mastra/commit/5ca1ccac61ffa7141e6d9fa8f22d3ad4d03bf5dc))
+
+## 0.18.0-alpha.0
+
+### Patch Changes
+
+- update peerdeps ([`5ca1cca`](https://github.com/mastra-ai/mastra/commit/5ca1ccac61ffa7141e6d9fa8f22d3ad4d03bf5dc))
+
 ## 0.17.7
 
 ## 0.17.7-alpha.0

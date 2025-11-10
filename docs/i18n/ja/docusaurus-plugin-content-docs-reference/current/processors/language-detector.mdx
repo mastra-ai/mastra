@@ -1,0 +1,168 @@
+---
+title: "リファレンス: Language Detector | プロセッサー | Mastra ドキュメント"
+description: "Mastra の LanguageDetector に関するドキュメント。AI の応答内の言語を検出し、コンテンツを翻訳します。"
+---
+
+<div id="languagedetector">
+  # LanguageDetector
+</div>
+
+`LanguageDetector` は、入力テキストの言語を判別し、必要に応じてターゲット言語へ翻訳して処理を統一するための **入力プロセッサ** です。このプロセッサは、受信メッセージの言語を検出し、ターゲット言語への自動翻訳を含む多言語コンテンツの柔軟な取り扱い戦略を提供することで、言語の一貫性を維持するのに役立ちます。
+
+<div id="usage-example">
+  ## 使用例
+</div>
+
+```typescript copy
+import { LanguageDetector } from "@mastra/core/processors";
+
+const processor = new LanguageDetector({
+  model: "openai/gpt-4.1-nano",
+  targetLanguages: ["Japanese", "ja"],
+  threshold: 0.8,
+  strategy: "translate"
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "言語検出および翻訳用の設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="options">
+  ### オプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "検出／翻訳エージェントのモデル設定",
+      isOptional: false,
+    },
+    {
+      name: "targetLanguages",
+      type: "string[]",
+      description: "プロジェクトの対象言語。コンテンツが別の言語と検出された場合は翻訳されることがあります。言語名（'English'）またはISOコード（'en'）を指定可能",
+      isOptional: true,
+      default: "['English', 'en']",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "言語検出の信頼度閾値（0〜1）。検出信頼度がこの閾値を超えた場合のみ処理を実行",
+      isOptional: true,
+      default: "0.7",
+    },
+    {
+      name: "strategy",
+      type: "'detect' | 'translate' | 'block' | 'warn'",
+      description: "非対象言語が検出された場合の方針：'detect' は検出のみ、'translate' は対象言語へ自動翻訳、'block' は対象言語以外のコンテンツを拒否、'warn' は警告を記録して許可",
+      isOptional: true,
+      default: "'detect'",
+    },
+    {
+      name: "preserveOriginal",
+      type: "boolean",
+      description: "元のコンテンツをメッセージのメタデータに保持するかどうか。監査やデバッグに有用",
+      isOptional: true,
+      default: "true",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "エージェント向けのカスタム検出指示。未指定の場合はデフォルトの指示を使用",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "minTextLength",
+      type: "number",
+      description: "検出を行う最小テキスト長。短いテキストは言語検出の信頼性が低いことが多い",
+      isOptional: true,
+      default: "10",
+    },
+    {
+      name: "includeDetectionDetails",
+      type: "boolean",
+      description: "詳細な検出情報をログに含めるかどうか",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "translationQuality",
+      type: "'speed' | 'quality' | 'balanced'",
+      description: "翻訳品質の優先度：'speed' は速度を優先、'quality' は精度を優先、'balanced' は速度と品質のバランスを取る",
+      isOptional: true,
+      default: "'quality'",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名は 'language-detector' に設定されます",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      description: "入力メッセージを処理して言語を検出し、必要に応じて LLM に送信する前にコンテンツを翻訳します",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 拡張的な使用例
+</div>
+
+```typescript title="src/mastra/agents/multilingual-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { LanguageDetector } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "multilingual-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o-mini",
+  inputProcessors: [
+    new LanguageDetector({
+      model: "openai/gpt-4.1-nano",
+      targetLanguages: ["English", "en"],
+      threshold: 0.8,
+      strategy: "translate",
+      preserveOriginal: true,
+      instructions: "言語を検出し、元の意図を保持しながら英語以外のコンテンツを英語に翻訳します",
+      minTextLength: 10,
+      includeDetectionDetails: true,
+      translationQuality: "quality"
+    })
+  ]
+});
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [ガードレール](/docs/agents/guardrails)

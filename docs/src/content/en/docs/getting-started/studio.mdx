@@ -1,53 +1,63 @@
 ---
-title: "Playground | Getting Started | Mastra Docs"
+title: "Studio | Getting Started | Mastra Docs"
 description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 ---
 
-import Youtube from "@site/src/components/YouTube-player";
+import YouTube from "@site/src/components/YouTube-player";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import { VideoPlayer } from "@site/src/components/video-player";
 
-# Playground
+# Studio
 
-Playground provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+Studio provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
 
-As your project evolves, Playground's development environment helps you iterate on your agent quickly. Meanwhile, Observability and Scorer features give you visibility into performance at every stage.
+As your project evolves, Studio's development environment helps you iterate on your agent quickly. Meanwhile, Observability and Scorer features give you visibility into performance at every stage.
 
-To get started, run Playground locally using the instructions below, or [deploy to Mastra Cloud](https://mastra.ai/docs/mastra-cloud/setting-up) to collaborate with your team.
+To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](https://mastra.ai/docs/mastra-cloud/setting-up) to collaborate with your team.
 
-<YouTube id="spGlcTEjuXY" startTime={126} />
+<YouTube id="ojGu6Bi4wYk" />
 
-## Start Playground
+## Start Studio
 
 If you created your application with `create mastra`, start the local development server using the `dev` script. You can also run it directly with `mastra dev`.
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm run dev ```
+    ```bash copy
+    npm run dev
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm run dev ```
+    ```bash copy
+    pnpm run dev
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn run dev ```
+    ```bash copy
+    yarn run dev
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun run dev ```
+    ```bash copy
+    bun run dev
+    ```
   </TabItem>
   <TabItem value="mastra" label="mastra">
-    ```bash copy mastra dev ```
+    ```bash copy
+    mastra dev
+    ```
   </TabItem>
 </Tabs>
 
 Once the server's running, you can:
 
-- Open the Playground UI at http://localhost:4111/ to test your agent interactively.
+- Open the Studio UI at http://localhost:4111/ to test your agent interactively.
 - Visit http://localhost:4111/swagger-ui to discover and interact with the underlying REST API.
 
-## Playground UI
+## Studio UI
 
-The Playground UI provides an interactive development environment for you to test your agents, workflows, and tools, observe exactly what happens under the hood with each interaction, and tweak things as you go.
+The Studio UI provides an interactive development environment for you to test your agents, workflows, and tools, observe exactly what happens under the hood with each interaction, and tweak things as you go.
 
 ### Agents
 
@@ -73,7 +83,7 @@ Run tools in isolation to observe their behavior. Test them before assigning the
 ### MCP List the MCP servers attached to your Mastra instance and explore their
 available tools.
 
-![MCP Servers Playground](/img/local-dev/local-dev-mcp-server-playground.jpg)
+![MCP Servers Studio](/img/local-dev/local-dev-mcp-server-playground.jpg)
 
 ### Observability
 

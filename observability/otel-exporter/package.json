@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-exporter",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "OpenTelemetry observability exporter for Mastra - supports OTLP, Zipkin, and multiple cloud providers",
   "type": "module",
   "main": "dist/index.js",
@@ -58,7 +58,7 @@
   },
   "peerDependencies": {
     "@grpc/grpc-js": "^1.13.4",
-    "@mastra/core": ">=0.21.0-0 <0.24.0-0",
+    "@mastra/core": ">=0.21.0-0 <0.25.0-0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",

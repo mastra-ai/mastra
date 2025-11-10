@@ -1,0 +1,46 @@
+---
+title: "リファレンス: Mastra.listAgents() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.listAgents()` メソッドのリファレンス。設定済みのすべてのエージェントを取得します。"
+---
+
+<div id="mastralistagents">
+  # Mastra.listAgents()
+</div>
+
+`.listAgents()` メソッドは、Mastra インスタンスで構成されたすべてのエージェントを取得するために使用します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+mastra.listAgents();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドはパラメータを受け取りません。
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "TAgents",
+      description:
+        "設定済みのすべてのエージェントを収めたレコード。キーはエージェント名、値はエージェントのインスタンスです。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [エージェントの概要](/docs/agents/overview)

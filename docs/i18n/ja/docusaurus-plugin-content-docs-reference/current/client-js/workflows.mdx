@@ -1,0 +1,208 @@
+---
+title: "リファレンス: Workflows API | Client SDK | Mastra ドキュメント"
+description: client-js SDK を使って、Mastra の自動化ワークフローと連携し、実行する方法を学びます。
+---
+
+<div id="workflows-api">
+  # Workflows API
+</div>
+
+Workflows API は、Mastra の自動化ワークフローと連携し、それらを実行するためのメソッドを提供します。
+
+<div id="getting-all-workflows">
+  ## すべてのワークフローの取得
+</div>
+
+利用可能なワークフローの一覧を取得します。
+
+```typescript
+const workflows = await mastraClient.listWorkflows();
+```
+
+
+<div id="working-with-a-specific-workflow">
+  ## 特定のワークフローを扱う
+</div>
+
+const 名で定義された特定のワークフローのインスタンスを取得します:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+export const testWorkflow = createWorkflow({
+  id: "city-workflow",
+});
+```
+
+```typescript
+const workflow = mastraClient.getWorkflow("testWorkflow");
+```
+
+
+<div id="workflow-methods">
+  ## ワークフローの方法
+</div>
+
+<div id="get-workflow-details">
+  ### ワークフローの詳細を取得
+</div>
+
+ワークフローの詳細情報を取得します。
+
+```typescript
+const details = await workflow.details();
+```
+
+
+<div id="start-workflow-run-asynchronously">
+  ### ワークフロー実行を非同期で開始する
+</div>
+
+inputData を使ってワークフローを起動し、実行の完了結果を待ちます:
+
+```typescript
+const run = await workflow.createRunAsync();
+
+const result = await run.startAsync({
+  inputData: {
+    city: "ニューヨーク",
+  },
+});
+```
+
+
+<div id="resume-workflow-run-asynchronously">
+  ### 非同期でワークフローの実行を再開する
+</div>
+
+中断されたワークフローステップを再開し、処理が完了して結果が得られるまで待機します:
+
+```typescript
+const run = await workflow.createRunAsync();
+
+const result = await run.resumeAsync({
+  step: "step-id",
+  resumeData: { key: "value" },
+});
+```
+
+
+<div id="watch-workflow">
+  ### ウォッチワークフロー
+</div>
+
+ウォッチワークフローの遷移:
+
+```typescript
+try {
+  const workflow = mastraClient.getWorkflow("testWorkflow");
+
+  const run = await workflow.createRunAsync();
+
+  run.watch((record) => {
+    console.log(record);
+  });
+
+  const result = await run.start({
+    inputData: {
+      city: "ニューヨーク",
+    },
+  });
+} catch (e) {
+  console.error(e);
+}
+```
+
+
+<div id="resume-workflow">
+  ### ワークフローの再開
+</div>
+
+ワークフローの実行を再開し、ステップの遷移を監視します：
+
+```typescript
+try {
+  const workflow = mastraClient.getWorkflow("testWorkflow");
+
+  const run = await workflow.createRunAsync({ runId: prevRunId });
+
+  run.watch((record) => {
+    console.log(record);
+  });
+
+  run.resume({
+    step: "step-id",
+    resumeData: { key: "value" },
+  });
+} catch (e) {
+  console.error(e);
+}
+```
+
+
+<div id="stream-workflow">
+  ### ワークフローのストリーミング
+</div>
+
+リアルタイム更新のために、ワークフローの実行をストリーミングします:
+
+```typescript
+try {
+  const workflow = mastraClient.getWorkflow("testWorkflow");
+
+  const run = await workflow.createRunAsync();
+
+  const stream = await run.stream({
+    inputData: {
+      city: "New York",
+    },
+  });
+
+  for await (const chunk of stream) {
+    console.log(JSON.stringify(chunk, null, 2));
+  }
+} catch (e) {
+  console.error("ワークフローエラー:", e);
+}
+```
+
+
+<div id="get-workflow-run-result">
+  ### ワークフロー実行結果を取得
+</div>
+
+ワークフロー実行の結果を取得します:
+
+```typescript
+try {
+  const workflow = mastraClient.getWorkflow("testWorkflow");
+
+  const run = await workflow.createRunAsync();
+
+  // ワークフローの実行を開始
+  const startResult = await run.start({
+    inputData: {
+      city: "New York",
+    },
+  });
+
+  const result = await workflow.runExecutionResult(run.runId);
+
+  console.log(result);
+} catch (e) {
+  console.error(e);
+}
+```
+
+これは、長時間実行されるワークフローを扱う際に便利です。これを使って、ワークフロー実行の結果をポーリングできます。
+
+
+<div id="workflow-run-result">
+  ### ワークフロー実行結果
+</div>
+
+ワークフローの実行結果は次のとおりです。
+
+| フィールド       | 型                                                                                                                                                                                                                                                  | 説明                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `payload`        | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | 実行の現在のステップとワークフローの状態     |
+| `eventTimestamp` | `Date`                                                                                                                                                                                                                                              | イベントのタイムスタンプ                     |
+| `runId`          | `string`                                                                                                                                                                                                                                            | このワークフロー実行インスタンスの一意識別子 |

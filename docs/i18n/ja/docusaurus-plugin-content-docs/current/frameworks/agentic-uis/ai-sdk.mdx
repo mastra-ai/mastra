@@ -1,0 +1,744 @@
+---
+title: "Vercel AI SDK の活用 | フレームワーク | Mastra ドキュメント"
+description: "Mastra が Vercel AI SDK ライブラリをどのように活用しているか、さらに Mastra と組み合わせてどのように活用できるかを学びましょう"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+
+<div id="using-vercel-ai-sdk">
+  # Vercel AI SDK の使用
+</div>
+
+Mastra は [Vercel AI SDK](https://sdk.vercel.ai) と統合されており、モデルのルーティング、React Hooks、データのストリーミングをサポートします。
+
+<div id="model-routing">
+  ## モデルのルーティング
+</div>
+
+Mastra でエージェントを作成する際は、AI SDK がサポートする任意のモデルを指定できます。
+
+```typescript {6} title="agents/weather-agent.ts" copy
+import { Agent } from "@mastra/core/agent";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: "エージェントへの指示...",
+  model: "openai/gpt-4-turbo",
+});
+```
+
+> 詳細は、[Mastra での AI SDK の使用](/models#use-ai-sdk-with-mastra) をご覧ください。
+
+
+<div id="streaming">
+  ## ストリーミング
+</div>
+
+Mastra と AI SDK を併用する推奨方法は、`@mastra/ai-sdk` パッケージをインストールすることです。`@mastra/ai-sdk` は、AI SDK 互換の形式で Mastra エージェントをストリーミングするためのカスタム API ルートとユーティリティを提供します。チャット、ワークフロー、ネットワークのルートハンドラーに加え、UI 統合向けのユーティリティやエクスポート型も含まれます。
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ```bash copy
+    npm install @mastra/ai-sdk
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm add @mastra/ai-sdk
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn add @mastra/ai-sdk
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun add @mastra/ai-sdk
+    ```
+  </TabItem>
+</Tabs>
+
+<div id="chatroute">
+  ### `chatRoute()`
+</div>
+
+[カスタム API ルート](/docs/server-db/custom-api-routes) を設定する際は、`chatRoute()` ユーティリティを使って、エージェントのストリームを AI SDK 互換形式に自動整形するルートハンドラーを作成します。
+
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { chatRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      chatRoute({
+        path: "/chat",
+        agent: "weatherAgent",
+      }),
+    ],
+  },
+});
+```
+
+`/chat` API ルートを設定したら、アプリケーションで `useChat()` フックを呼び出せるようになります。
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/chat",
+  }),
+});
+```
+
+追加のエージェント・ストリーム実行オプションを渡す：
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/chat",
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          messages,
+          // メモリ設定を渡す
+          memory: {
+            thread: "user-1",
+            resource: "user-1",
+          },
+        },
+      };
+    },
+  }),
+});
+```
+
+
+<div id="workflowroute">
+  ### `workflowRoute()`
+</div>
+
+`workflowRoute()` ユーティリティを使って、ワークフローのストリームを AI SDK 互換の形式に自動的にフォーマットするルートハンドラーを作成します。
+
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { workflowRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      workflowRoute({
+        path: "/workflow",
+        agent: "weatherAgent",
+      }),
+    ],
+  },
+});
+```
+
+`/workflow` API ルートを設定したら、アプリケーションで `useChat()` フックを呼び出せます。
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/workflow",
+    prepareSendMessagesRequest({ messages }) {
+      return {
+        body: {
+          inputData: {
+            city: messages[messages.length - 1].parts[0].text,
+          },
+        },
+      };
+    },
+  }),
+});
+```
+
+
+<div id="networkroute">
+  ### `networkRoute()`
+</div>
+
+`networkRoute()` ユーティリティを使って、エージェントネットワークのストリームを AI SDK 互換の形式に自動整形するルートハンドラーを作成します。
+
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+import { networkRoute } from "@mastra/ai-sdk";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      networkRoute({
+        path: "/network",
+        agent: "weatherAgent",
+      }),
+    ],
+  },
+});
+```
+
+`/network` API ルートの設定が完了したら、アプリケーション内で `useChat()` フックを呼び出せます。
+
+```typescript
+const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+  transport: new DefaultChatTransport({
+    api: "http://localhost:4111/network",
+  }),
+});
+```
+
+
+<div id="custom-ui">
+  ### カスタム UI
+</div>
+
+`@mastra/ai-sdk` パッケージは、Mastra のストリーム（例: ワークフロー、ネットワークストリーム）を AI SDK 互換の [uiMessages DataParts](https://ai-sdk.dev/docs/reference/ai-sdk-core/ui-message#datauipart) 形式に変換して出力します。
+
+* **トップレベルのパーツ**: これらはワークフローおよびネットワークストリームの直接変換を通じてストリーミングされます（例: `workflowRoute()` や `networkRoute()`）。
+  * `data-workflow`: ステップの入出力と最終的な使用量を含むワークフロー実行を集約します。
+  * `data-network`: 順序付けされたステップ（エージェント／ワークフロー／ツールの実行）と出力を含むルーティング／ネットワーク実行を集約します。
+
+* **ネストされたパーツ**: これらはツールの `execute()` メソッド内から、ネストされたストリームやマージされたストリームとしてストリーミングされます。
+  * `data-tool-workflow`: ツールのストリーム内から出力されるネストされたワークフロー。
+  * `data-tool-network`: ツールのストリーム内から出力されるネストされたネットワーク。
+  * `data-tool-agent`: ツールのストリーム内から出力されるネストされたエージェント。
+
+例: [ツール内のネストされたエージェントストリーム](/docs/streaming/tool-streaming#tool-using-an-agent) の場合、`data-tool-agent` の UI メッセージパーツが出力され、以下のとおりクライアント側で利用できます。
+
+```typescript title="app/page.tsx" copy
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+import { AgentTool } from '../ui/agent-tool';
+import { DefaultChatTransport } from 'ai';
+import type { AgentDataPart } from "@mastra/ai-sdk";
+
+export default function Page() {
+  const { messages } = useChat({
+    transport: new DefaultChatTransport({
+    api: 'http://localhost:4111/chat',
+    }),
+  });
+
+  return (
+    <div>
+      {messages.map((message) => (
+        <div key={message.id}>
+          {message.parts.map((part, i) => {
+            switch (part.type) {
+              case 'data-tool-agent':
+                return (
+                  <AgentTool {...part.data as AgentDataPart} key={`${message.id}-${i}`} />
+                );
+              default:
+                return null;
+            }
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+```typescript title="ui/agent-tool.ts" copy
+import { Tool, ToolContent, ToolHeader, ToolOutput } from "../ai-elements/tool";
+import type { AgentDataPart } from "@mastra/ai-sdk";
+
+export const AgentTool = ({ id, text, status }: AgentDataPart) => {
+  return (
+    <Tool>
+      <ToolHeader
+        type={`${id}`}
+        state={status === 'finished' ? 'output-available' : 'input-available'}
+      />
+      <ToolContent>
+        <ToolOutput output={text} />
+      </ToolContent>
+    </Tool>
+  );
+};
+```
+
+
+<div id="custom-tool-streaming">
+  ### カスタムツールのストリーミング
+</div>
+
+ツールの実行関数内からカスタムデータの一部をストリーミングするには、
+`writer.custom()` メソッドを使用します。
+
+```typescript {5,8,15} showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+
+export const testTool = createTool({
+  // ...
+  execute: async ({ context, writer }) => {
+    const { value } = context;
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+   await writer?.custom({
+      type: "data-tool-progress",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  }
+});
+```
+
+ツール ストリーミングの詳細は、[ツール ストリーミングのドキュメント](/docs/streaming/tool-streaming)をご覧ください
+
+
+<div id="stream-transformations">
+  ### ストリームの変換
+</div>
+
+Mastra のストリームを AI SDK 互換のフォーマットに手動で変換するには、`toAISdkFormat()` ユーティリティを使用します。
+
+```typescript title="app/api/chat/route.ts" copy {3,13}
+import { mastra } from "../../mastra";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import { toAISdkFormat } from "@mastra/ai-sdk";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages);
+
+  // ストリームをAI SDK形式に変換し、UIメッセージストリームを作成する
+  const uiMessageStream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkFormat(stream, { from: "agent" })!) {
+        writer.write(part);
+      }
+    },
+  });
+
+  // UIメッセージストリームをクライアントにストリーミングするレスポンスを作成する
+  return createUIMessageStreamResponse({
+    stream: uiMessageStream,
+  });
+}
+```
+
+
+<div id="client-side-stream-transformations">
+  ### クライアント側のストリーム変換
+</div>
+
+クライアント側で `agent.stream(...)` による `response` があり、SSE を独自にパースせずに AI SDK 形式のパーツを得たい場合は、`response.processDataStream` を `ReadableStream<ChunkType>` で包み、`toAISdkFormat` にパイプします。
+
+```typescript title="client-stream-to-ai-sdk.ts" copy
+import { createUIMessageStream } from "ai";
+import { toAISdkFormat } from "@mastra/ai-sdk";
+import type { ChunkType, MastraModelOutput } from "@mastra/core/stream";
+
+// クライアントSDKエージェントストリーム
+const response = await agent.stream({
+  messages: "東京の天気は",
+});
+
+const chunkStream: ReadableStream<ChunkType> = new ReadableStream<ChunkType>({
+  start(controller) {
+    response
+      .processDataStream({
+        onChunk: async (chunk) => {
+          controller.enqueue(chunk as ChunkType);
+        },
+      })
+      .finally(() => controller.close());
+  },
+});
+
+const uiMessageStream = createUIMessageStream({
+  execute: async ({ writer }) => {
+    for await (const part of toAISdkFormat(
+      chunkStream as unknown as MastraModelOutput,
+      { from: "agent" },
+    )) {
+      writer.write(part);
+    }
+  },
+});
+
+for await (const part of uiMessageStream) {
+  console.log(part);
+}
+```
+
+
+<div id="ui-hooks">
+  ## UI Hooks
+</div>
+
+Mastra は、HTTP ストリーミングを使ってフロントエンドコンポーネントをエージェントに直接接続できる AI SDK の UI フックをサポートしています。
+
+必要な AI SDK の React パッケージをインストールします:
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ```bash copy
+    npm install @ai-sdk/react
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm add @ai-sdk/react
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn add @ai-sdk/react
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun add @ai-sdk/react
+    ```
+  </TabItem>
+</Tabs>
+
+<div id="using-usechat">
+  ### `useChat()` を使用する
+</div>
+
+`useChat()` フックは、フロントエンドと Mastra エージェント間のリアルタイムなチャットを処理し、HTTP 経由でプロンプトの送信とストリーミング応答の受信を可能にします。
+
+```typescript {8-12} title="app/test/chat.tsx" copy
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
+import { DefaultChatTransport } from 'ai';
+
+export function Chat() {
+  const [inputValue, setInputValue] = useState('')
+  const { messages, sendMessage} = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
+  });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage({ text: inputValue });
+  };
+
+  return (
+    <div>
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleFormSubmit}>
+        <input value={inputValue} onChange={e=>setInputValue(e.target.value)} placeholder="都市名" />
+      </form>
+    </div>
+  );
+}
+```
+
+`useChat()` フックで送信されたリクエストは、標準的なサーバールートで処理されます。次の例では、Next.js の Route Handler を使って POST ルートを定義する方法を示します。
+
+```typescript title="app/api/chat/route.ts" copy
+import { mastra } from "../../mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream(messages, { format: "aisdk" });
+
+  return stream.toUIMessageStreamResponse();
+}
+```
+
+> `useChat()` をエージェントのメモリと併用する場合は、実装の要点については [Agent Memory セクション](/docs/agents/agent-memory) を参照してください。
+
+
+<div id="using-usecompletion">
+  ### `useCompletion()` の使用
+</div>
+
+`useCompletion()` フックは、フロントエンドと Mastra エージェント間での単発のコンプリーションを扱い、プロンプトを送信して、HTTP 経由でストリーミングされるレスポンスを受け取れるようにします。
+
+```typescript {6-8} title="app/test/completion.tsx" copy
+"use client";
+
+import { useCompletion } from "@ai-sdk/react";
+
+export function Completion() {
+  const { completion, input, handleInputChange, handleSubmit } = useCompletion({
+    api: "api/completion"
+  });
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input value={input} onChange={handleInputChange} placeholder="都市名" />
+      </form>
+      <p>入力補完結果: {completion}</p>
+    </div>
+  );
+}
+```
+
+`useCompletion()` フックで送信されたリクエストは、標準のサーバー ルートで処理されます。以下の例では、Next.js の Route Handler を使って POST ルートを定義する方法を示します。
+
+```typescript title="app/api/completion/route.ts" copy
+import { mastra } from "../../../mastra";
+
+export async function POST(req: Request) {
+  const { prompt } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+  const stream = await myAgent.stream([{ role: "user", content: prompt }], {
+    format: "aisdk",
+  });
+
+  return stream.toUIMessageStreamResponse();
+}
+```
+
+
+<div id="passing-additional-data">
+  ### 追加データの受け渡し
+</div>
+
+`sendMessage()` を使うと、フロントエンドから Mastra に追加のデータを渡せます。このデータはサーバー側で `RuntimeContext` として利用できます。
+
+```typescript {16-26} title="app/test/chat-extra.tsx" copy
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
+import { DefaultChatTransport } from 'ai';
+
+export function ChatExtra() {
+  const [inputValue, setInputValue] = useState('')
+  const { messages, sendMessage } = useChat({
+    transport: new DefaultChatTransport({
+      api: 'http://localhost:4111/chat',
+    }),
+  });
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage({ text: inputValue }, {
+      body: {
+        data: {
+          userId: "user123",
+          preferences: {
+            language: "en",
+            temperature: "celsius"
+          }
+        }
+      }
+    });
+  };
+
+  return (
+    <div>
+      <pre>{JSON.stringify(messages, null, 2)}</pre>
+      <form onSubmit={handleFormSubmit}>
+        <input value={inputValue} onChange={e=>setInputValue(e.target.value)} placeholder="都市名" />
+      </form>
+    </div>
+  );
+}
+```
+
+```typescript {8,12} title="app/api/chat-extra/route.ts" copy
+import { mastra } from "../../../mastra";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+export async function POST(req: Request) {
+  const { messages, data } = await req.json();
+  const myAgent = mastra.getAgent("weatherAgent");
+
+  const runtimeContext = new RuntimeContext();
+
+  if (data) {
+    for (const [key, value] of Object.entries(data)) {
+      runtimeContext.set(key, value);
+    }
+  }
+
+  const stream = await myAgent.stream(messages, {
+    runtimeContext,
+    format: "aisdk",
+  });
+  return stream.toUIMessageStreamResponse();
+}
+```
+
+
+<div id="handling-runtimecontext-with-servermiddleware">
+  ### `server.middleware` での `runtimeContext` の取り扱い
+</div>
+
+サーバーミドルウェアでカスタムデータを読み取り、`RuntimeContext` を設定することもできます。
+
+```typescript {8,17} title="mastra/index.ts" copy
+import { Mastra } from "@mastra/core/mastra";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const runtimeContext = c.get("runtimeContext");
+
+        if (c.req.method === "POST") {
+          try {
+            const clonedReq = c.req.raw.clone();
+            const body = await clonedReq.json();
+
+            if (body?.data) {
+              for (const [key, value] of Object.entries(body.data)) {
+                runtimeContext.set(key, value);
+              }
+            }
+          } catch {}
+        }
+        await next();
+      },
+    ],
+  },
+});
+```
+
+> その後、ツールで `runtimeContext` パラメータを通じてこのデータにアクセスできます。詳しくは [Runtime Context のドキュメント](/docs/server-db/runtime-context)をご覧ください。
+
+
+<div id="migrating-from-ai-sdk-v4-to-v5">
+  ## AI SDK v4 から v5 への移行
+</div>
+
+AI SDK のコアにおける破壊的変更、パッケージの更新、API の変更については、公式の [AI SDK v5 移行ガイド](https://v5.ai-sdk.dev/docs/migration-guides/migration-guide-5-0) に従ってください。
+
+本ガイドでは、移行における Mastra 固有の事項のみを扱います。
+
+- **データ互換性**: v5 形式で保存された新しいデータは、v5 から v4 へダウングレードすると動作しません
+- **バックアップの推奨**: v5 にアップグレードする前の DB バックアップを保持してください
+
+<div id="memory-and-storage">
+  ### メモリとストレージ
+</div>
+
+Mastra は内部の `MessageList` クラスで AI SDK v4 のデータを自動的に扱い、フォーマット変換（v4 から v5 を含む）を管理します。データベースのマイグレーションは不要で、既存のメッセージはその場で変換され、アップグレード後もそのまま動作します。
+
+<div id="message-format-conversion">
+  ### メッセージ形式の変換
+</div>
+
+AI SDK と Mastra の形式間でメッセージを手動で変換する必要がある場合は、`convertMessages()` ユーティリティを使用してください。
+
+```typescript
+import { convertMessages } from "@mastra/core/agent";
+
+// AI SDK v4 のメッセージを v5 に変換
+const aiv5Messages = convertMessages(aiv4Messages).to("AIV5.UI");
+
+// Mastra のメッセージを AI SDK v5 に変換
+const aiv5Messages = convertMessages(mastraMessages).to("AIV5.Core");
+
+// サポートされる出力形式:
+// 'Mastra.V2', 'AIV4.UI', 'AIV5.UI', 'AIV5.Core', 'AIV5.Model'
+```
+
+このユーティリティは、ストレージDBからメッセージを直接取得し、AI SDKで使用できる形式に変換する際に役立ちます。
+
+
+<div id="type-inference-for-tools">
+  ### ツール向けの型推論
+</div>
+
+AI SDK v5でTypeScriptとともにツールを使用する場合、Mastraはツールの入出力の型安全性を担保するための型推論用ヘルパーを提供します。
+
+<div id="inferuitool">
+  #### `InferUITool`
+</div>
+
+`InferUITool` 型ヘルパーは、単一の Mastra ツールの入力型と出力型を推論します。
+
+```typescript title="app/types.ts" copy
+import { InferUITool, createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const weatherTool = createTool({
+  id: "get-weather",
+  description: "現在の天気を取得する",
+  inputSchema: z.object({
+    location: z.string().describe("都市名と州名"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return {
+      temperature: 72,
+      conditions: "sunny",
+    };
+  },
+});
+
+// ツールから型を推論する
+type WeatherUITool = InferUITool<typeof weatherTool>;
+// 以下の型が作成されます:
+// {
+//   input: { location: string };
+//   output: { temperature: number; conditions: string };
+// }
+```
+
+
+<div id="inferuitools">
+  #### `InferUITools`
+</div>
+
+`InferUITools` 型ヘルパーは、複数のツールの入出力型を推論します。
+
+```typescript title="app/mastra/tools.ts" copy
+import { InferUITools, createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+// 前の例のweatherToolを使用
+const tools = {
+  weather: weatherTool,
+    description: "基本的な算術演算を実行",
+    id: "calculator",
+    description: "Perform basic arithmetic",
+    inputSchema: z.object({
+      operation: z.enum(["add", "subtract", "multiply", "divide"]),
+      a: z.number(),
+      b: z.number(),
+    }),
+    outputSchema: z.object({
+      result: z.number(),
+    }),
+    execute: async ({ context }) => {
+      // 実装...
+      return { result: 0 };
+    },
+  }),
+};
+
+// ツールセットから型を推論
+export type MyUITools = InferUITools<typeof tools>;
+// これにより以下が作成されます:
+// {
+//   weather: { input: { location: string }; output: { temperature: number; conditions: string } };
+//   calculator: { input: { operation: "add" | "subtract" | "multiply" | "divide"; a: number; b: number }; output: { result: number } };
+// }
+```
+
+これらの型ヘルパーは、Mastra のツールを AI SDK v5 の UI コンポーネントと組み合わせて使用する際に TypeScript を完全にサポートし、アプリケーション全体で型安全性を確保します。
