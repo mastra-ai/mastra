@@ -8,6 +8,8 @@
 
 - Add visual styles and labels for more workflow node types ([#9777](https://github.com/mastra-ai/mastra/pull/9777))
 
+- `registerApiRoute` now accepts a `requiresAuth` option, so custom endpoints can opt in/out of Mastra auth without mutating the returned route object.
+
 ## 1.0.0-beta.0
 
 ### Major Changes

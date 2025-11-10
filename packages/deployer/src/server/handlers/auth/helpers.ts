@@ -18,7 +18,7 @@ export const isCustomRoutePublic = (
   // Check exact match first
   const routeKey = `${method}:${path}`;
   if (customRouteAuthConfig.has(routeKey)) {
-    return !customRouteAuthConfig.get(routeKey); // Return true if requiresAuth is false
+    return !customRouteAuthConfig.get(routeKey); // True when route opts out of auth
   }
 
   // Check ALL method

@@ -9,6 +9,7 @@
 - Updated dependencies [[`910db9e`](https://github.com/mastra-ai/mastra/commit/910db9e0312888495eb5617b567f247d03303814), [`e7266a2`](https://github.com/mastra-ai/mastra/commit/e7266a278db02035c97a5e9cd9d1669a6b7a535d)]:
   - @mastra/core@1.0.0-beta.1
   - @mastra/server@1.0.0-beta.1
+- Custom route handling now respects the `requiresAuth` flag emitted directly from `registerApiRoute`, so you can mark endpoints as public without mutating the returned object.
 
 ## 1.0.0-beta.0
 

@@ -41,6 +41,10 @@ type RegisterApiRouteOptions<P extends string> = {
     >
   >;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
+  /**
+   * When false, skips Mastra auth for this route (defaults to true)
+   */
+  requiresAuth?: boolean;
 };
 
 function validateOptions<P extends string>(
@@ -99,6 +103,7 @@ export function registerApiRoute<P extends string>(
     createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
+    requiresAuth: options.requiresAuth,
   } as unknown as ValidatePath<P, ApiRoute>;
 }
 
