@@ -541,3 +541,135 @@ export interface Provider {
   docUrl?: string;
   models: string[];
 }
+
+// Dataset types
+export interface DatasetRecord {
+  id: string;
+  name: string;
+  description?: string;
+  metadata?: Record<string, any>;
+  createdAt: string;
+  updatedAt?: string;
+  currentVersion: DatasetVersion;
+}
+
+export interface DatasetVersion {
+  id: string;
+  datasetId: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface DatasetRow {
+  rowId: string;
+  versionId: string;
+  input: any;
+  groundTruth?: any;
+  requestContext?: Record<string, any>;
+  traceId?: string;
+  spanId?: string;
+  deleted: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateDatasetParams {
+  name: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface UpdateDatasetParams {
+  name?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ListDatasetsParams {
+  name?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListDatasetsResponse {
+  datasets: DatasetRecord[];
+  pagination: PaginationInfo;
+}
+
+export interface ListDatasetVersionsParams {
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListDatasetVersionsResponse {
+  versions: DatasetVersion[];
+  pagination: PaginationInfo;
+}
+
+export interface AddDatasetRowInput {
+  input: any;
+  groundTruth?: any;
+  requestContext?: Record<string, any>;
+  traceId?: string;
+  spanId?: string;
+}
+
+export interface AddDatasetRowsParams {
+  rows: AddDatasetRowInput[];
+}
+
+export interface AddDatasetRowsResponse {
+  rows: DatasetRow[];
+  versionId: string;
+}
+
+export interface ListDatasetRowsParams {
+  versionId?: string;
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListDatasetRowsResponse {
+  rows: DatasetRow[];
+  pagination: PaginationInfo;
+}
+
+export interface UpdateDatasetRowInput {
+  rowId: string;
+  input?: any;
+  groundTruth?: any;
+  requestContext?: Record<string, any>;
+  traceId?: string;
+  spanId?: string;
+}
+
+export interface UpdateDatasetRowsParams {
+  rows: UpdateDatasetRowInput[];
+}
+
+export interface UpdateDatasetRowsResponse {
+  rows: DatasetRow[];
+  versionId: string;
+}
+
+export interface DeleteDatasetRowsParams {
+  rowIds: string[];
+}
+
+export interface DeleteDatasetRowsResponse {
+  versionId: string;
+}
+
+export interface GetDatasetRowByIdParams {
+  versionId?: string;
+}
+
+export interface ListDatasetRowVersionsParams {
+  page?: number;
+  perPage?: number;
+}
+
+export interface ListDatasetRowVersionsResponse {
+  rows: DatasetRow[];
+  pagination: PaginationInfo;
+}

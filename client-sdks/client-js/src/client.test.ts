@@ -108,6 +108,196 @@ describe('MastraClient', () => {
     });
   });
 
+  describe('Dataset Operations', () => {
+    const mockFetchResponse = (data: any) => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => data,
+        headers: new Headers({
+          'content-type': 'application/json',
+        }),
+      });
+    };
+
+    describe('createDataset', () => {
+      it('should create a new dataset', async () => {
+        const createParams = {
+          name: 'Test Dataset',
+          description: 'A test dataset',
+          metadata: { type: 'test' },
+        };
+
+        const mockDataset = {
+          id: 'dataset-123',
+          ...createParams,
+          createdAt: new Date().toISOString(),
+          currentVersion: {
+            id: 'version-1',
+            datasetId: 'dataset-123',
+            createdAt: new Date().toISOString(),
+          },
+        };
+
+        mockFetchResponse(mockDataset);
+
+        const result = await client.createDataset(createParams);
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/datasets',
+          expect.objectContaining({
+            method: 'POST',
+            headers: expect.objectContaining({
+              'content-type': 'application/json',
+              Authorization: 'Bearer test-key',
+            }),
+            body: JSON.stringify(createParams),
+          }),
+        );
+        expect(result).toEqual(mockDataset);
+      });
+    });
+
+    describe('listDatasets', () => {
+      it('should list datasets without filters', async () => {
+        const mockResponse = {
+          datasets: [
+            {
+              id: 'dataset-1',
+              name: 'Dataset 1',
+              createdAt: new Date().toISOString(),
+              currentVersion: {
+                id: 'version-1',
+                datasetId: 'dataset-1',
+                createdAt: new Date().toISOString(),
+              },
+            },
+          ],
+          pagination: {
+            total: 1,
+            page: 0,
+            perPage: 10,
+            hasMore: false,
+          },
+        };
+
+        mockFetchResponse(mockResponse);
+
+        const result = await client.listDatasets();
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/datasets',
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: 'Bearer test-key',
+            }),
+          }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should list datasets with name filter', async () => {
+        const mockResponse = {
+          datasets: [],
+          pagination: {
+            total: 0,
+            page: 0,
+            perPage: 10,
+            hasMore: false,
+          },
+        };
+
+        mockFetchResponse(mockResponse);
+
+        const result = await client.listDatasets({ name: 'Test' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/datasets?name=Test',
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: 'Bearer test-key',
+            }),
+          }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should list datasets with pagination', async () => {
+        const mockResponse = {
+          datasets: [],
+          pagination: {
+            total: 100,
+            page: 2,
+            perPage: 25,
+            hasMore: true,
+          },
+        };
+
+        mockFetchResponse(mockResponse);
+
+        const result = await client.listDatasets({ page: 2, perPage: 25 });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/datasets?page=2&perPage=25',
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: 'Bearer test-key',
+            }),
+          }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should list datasets with all parameters', async () => {
+        const mockResponse = {
+          datasets: [],
+          pagination: {
+            total: 5,
+            page: 1,
+            perPage: 20,
+            hasMore: false,
+          },
+        };
+
+        mockFetchResponse(mockResponse);
+
+        const result = await client.listDatasets({
+          name: 'Production',
+          page: 1,
+          perPage: 20,
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/datasets?name=Production&page=1&perPage=20',
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: 'Bearer test-key',
+            }),
+          }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+    });
+
+    describe('getDataset', () => {
+      it('should return a Dataset instance', () => {
+        const dataset = client.getDataset('dataset-123');
+
+        expect(dataset).toBeDefined();
+        expect(dataset.get).toBeDefined();
+        expect(dataset.update).toBeDefined();
+        expect(dataset.delete).toBeDefined();
+        expect(dataset.listVersions).toBeDefined();
+        expect(dataset.addRows).toBeDefined();
+        expect(dataset.listRows).toBeDefined();
+        expect(dataset.updateRows).toBeDefined();
+        expect(dataset.deleteRows).toBeDefined();
+        expect(dataset.getRowById).toBeDefined();
+        expect(dataset.listRowVersions).toBeDefined();
+      });
+    });
+  });
+
   describe('Integration Tests', () => {
     it('should be imported from client module', async () => {
       const { MastraClient } = await import('./client');
@@ -125,6 +315,9 @@ describe('MastraClient', () => {
       expect(client.getTool).toBeDefined();
       expect(client.getVector).toBeDefined();
       expect(client.getWorkflow).toBeDefined();
+      expect(client.getDataset).toBeDefined();
+      expect(client.createDataset).toBeDefined();
+      expect(client.listDatasets).toBeDefined();
     });
   });
 });

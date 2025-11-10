@@ -13,6 +13,7 @@ import {
   MCPTool,
   AgentBuilder,
   Observability,
+  Dataset,
 } from './resources';
 import type {
   ClientOptions,
@@ -44,6 +45,10 @@ import type {
   ListAgentsModelProvidersResponse,
   ListMemoryThreadsParams,
   ListMemoryThreadsResponse,
+  CreateDatasetParams,
+  DatasetRecord,
+  ListDatasetsParams,
+  ListDatasetsResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -649,5 +654,47 @@ export class MastraClient extends BaseResource {
     targets: Array<{ traceId: string; spanId?: string }>;
   }): Promise<{ status: string; message: string }> {
     return this.observability.score(params);
+  }
+
+  /**
+   * Creates a new dataset
+   * @param params - Parameters for creating the dataset including name, description, and metadata
+   * @returns Promise containing the created dataset record
+   */
+  public createDataset(params: CreateDatasetParams): Promise<DatasetRecord> {
+    return this.request('/api/datasets', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Retrieves all datasets with optional filtering and pagination
+   * @param params - Optional parameters for filtering by name and pagination (page, perPage)
+   * @returns Promise containing datasets array and pagination info
+   */
+  public listDatasets(params?: ListDatasetsParams): Promise<ListDatasetsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.name) {
+      queryParams.set('name', params.name);
+    }
+    if (params?.page !== undefined) {
+      queryParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      queryParams.set('perPage', String(params.perPage));
+    }
+
+    const queryString = queryParams.toString();
+    return this.request(`/api/datasets${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Gets a dataset instance by ID
+   * @param datasetId - ID of the dataset to retrieve
+   * @returns Dataset instance
+   */
+  public getDataset(datasetId: string) {
+    return new Dataset(this.options, datasetId);
   }
 }
