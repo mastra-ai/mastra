@@ -21,6 +21,7 @@ const d1Database = await mf.getD1Database('TEST_DB');
 
 createTestSuite(
   new D1Store({
+    id: 'd1-test-store',
     binding: d1Database,
     tablePrefix: 'test_',
   }),

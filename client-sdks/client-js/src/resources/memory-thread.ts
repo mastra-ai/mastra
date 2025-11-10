@@ -2,12 +2,10 @@ import type { RequestContext } from '@mastra/core/di';
 import type { StorageThreadType } from '@mastra/core/memory';
 
 import type {
-  GetMemoryThreadMessagesResponse,
   ClientOptions,
   UpdateMemoryThreadParams,
-  GetMemoryThreadMessagesParams,
-  GetMemoryThreadMessagesPaginatedParams,
-  GetMemoryThreadMessagesPaginatedResponse,
+  ListMemoryThreadMessagesParams,
+  ListMemoryThreadMessagesResponse,
 } from '../types';
 
 import { requestContextQueryString } from '../utils';
@@ -63,41 +61,29 @@ export class MemoryThread extends BaseResource {
   }
 
   /**
-   * Retrieves messages associated with the thread (always returns mastra-db format)
-   * @param params - Optional parameters including limit for number of messages to retrieve and request context
-   * @returns Promise containing thread messages in mastra-db format
-   */
-  getMessages(
-    params?: GetMemoryThreadMessagesParams & { requestContext?: RequestContext | Record<string, any> },
-  ): Promise<GetMemoryThreadMessagesResponse> {
-    const query = new URLSearchParams({
-      agentId: this.agentId,
-      ...(params?.limit ? { limit: params.limit.toString() } : {}),
-    });
-    return this.request(
-      `/api/memory/threads/${this.threadId}/messages?${query.toString()}${requestContextQueryString(params?.requestContext, '&')}`,
-    );
-  }
-
-  /**
-   * Retrieves paginated messages associated with the thread with advanced filtering and selection options
-   * @param params - Pagination parameters including selectBy criteria, page, perPage, date ranges, message inclusion options, and request context
+   * Retrieves paginated messages associated with the thread with filtering and ordering options
+   * @param params - Pagination parameters including page, perPage, orderBy, filter, include options, and request context
    * @returns Promise containing paginated thread messages with pagination metadata (total, page, perPage, hasMore)
    */
-  getMessagesPaginated({
-    selectBy,
-    requestContext,
-    ...rest
-  }: GetMemoryThreadMessagesPaginatedParams & {
-    requestContext?: RequestContext | Record<string, any>;
-  }): Promise<GetMemoryThreadMessagesPaginatedResponse> {
-    const query = new URLSearchParams({
-      ...rest,
-      ...(selectBy ? { selectBy: JSON.stringify(selectBy) } : {}),
-    });
-    return this.request(
-      `/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}${requestContextQueryString(requestContext, '&')}`,
-    );
+  listMessages(
+    params: ListMemoryThreadMessagesParams & {
+      requestContext?: RequestContext | Record<string, any>;
+    } = {},
+  ): Promise<ListMemoryThreadMessagesResponse> {
+    const { page, perPage, orderBy, filter, include, resourceId, requestContext } = params;
+    const queryParams: Record<string, string> = {};
+
+    if (resourceId) queryParams.resourceId = resourceId;
+    if (page !== undefined) queryParams.page = String(page);
+    if (perPage !== undefined) queryParams.perPage = String(perPage);
+    if (orderBy) queryParams.orderBy = JSON.stringify(orderBy);
+    if (filter) queryParams.filter = JSON.stringify(filter);
+    if (include) queryParams.include = JSON.stringify(include);
+
+    const query = new URLSearchParams(queryParams);
+    const queryString = query.toString();
+    const url = `/api/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
+    return this.request(url);
   }
 
   /**

@@ -1,10 +1,10 @@
 import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
+import type { Span, SpanType } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
@@ -42,7 +42,7 @@ interface PrepareMemoryStepOptions<
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
+  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
@@ -172,7 +172,13 @@ export function createPrepareMemoryStep<
               requestContext,
             })
           : { messages: [] },
-        memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+        memory.getSystemMessage({
+          threadId: threadObject.id,
+          resourceId,
+          memoryConfig: capabilities._agentNetworkAppend
+            ? { ...memoryConfig, workingMemory: { enabled: false } }
+            : memoryConfig,
+        }),
       ]);
 
       const memoryMessages = memoryResult.messages;

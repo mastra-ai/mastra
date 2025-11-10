@@ -1,4 +1,4 @@
-import type { TracingOptions } from '@mastra/core/ai-tracing';
+import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
   ClientOptions,
@@ -53,11 +53,15 @@ export class Workflow extends BaseResource {
     if (params?.toDate) {
       searchParams.set('toDate', params.toDate.toISOString());
     }
-    if (params?.limit !== null && params?.limit !== undefined && !isNaN(Number(params?.limit))) {
-      searchParams.set('limit', String(params.limit));
+    if (params?.perPage !== null && params?.perPage !== undefined) {
+      if (params.perPage === false) {
+        searchParams.set('perPage', 'false');
+      } else if (typeof params.perPage === 'number' && params.perPage > 0 && Number.isInteger(params.perPage)) {
+        searchParams.set('perPage', String(params.perPage));
+      }
     }
-    if (params?.offset !== null && params?.offset !== undefined && !isNaN(Number(params?.offset))) {
-      searchParams.set('offset', String(params.offset));
+    if (params?.page !== null && params?.page !== undefined && !isNaN(Number(params?.page))) {
+      searchParams.set('page', String(params.page));
     }
     if (params?.resourceId) {
       searchParams.set('resourceId', params.resourceId);
@@ -110,62 +114,11 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Sends an event to a specific workflow run by its ID
-   * @param params - Object containing the runId, event and data
-   * @returns Promise containing a success message
-   */
-  sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${params.runId}/send-event`, {
-      method: 'POST',
-      body: { event: params.event, data: params.data },
-    });
-  }
-
-  /**
-   * @deprecated Use createRunAsync() instead.
-   * @throws {Error} Always throws an error directing users to use createRunAsync()
-   */
-  async createRun(_params?: { runId?: string }): Promise<{
-    runId: string;
-    start: (params: {
-      inputData: Record<string, any>;
-      requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<{ message: string }>;
-    resume: (params: {
-      step: string | string[];
-      resumeData?: Record<string, any>;
-      requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<{ message: string }>;
-    stream: (params: {
-      inputData: Record<string, any>;
-      requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<ReadableStream>;
-    startAsync: (params: {
-      inputData: Record<string, any>;
-      requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<WorkflowRunResult>;
-    resumeAsync: (params: {
-      step: string | string[];
-      resumeData?: Record<string, any>;
-      requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<WorkflowRunResult>;
-  }> {
-    throw new Error(
-      'createRun() has been deprecated. ' +
-        'Please use createRunAsync() instead.\n\n' +
-        'Migration guide:\n' +
-        '  Before: const run = workflow.createRun();\n' +
-        '  After:  const run = await workflow.createRunAsync();\n\n' +
-        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
-    );
-  }
-
-  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run with methods to control execution
    */
-  async createRunAsync(params?: { runId?: string }): Promise<{
+  async createRun(params?: { runId?: string }): Promise<{
     runId: string;
     start: (params: {
       inputData: Record<string, any>;

@@ -5,7 +5,7 @@ description: "API reference for the MastraAuthSupabase class, which authenticate
 
 # MastraAuthSupabase Class
 
-The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthSupabase` class provides authentication for Mastra using Supabase Auth. It verifies incoming requests using Supabase's authentication system and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -16,7 +16,7 @@ import { MastraAuthSupabase } from "@mastra/auth-supabase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthSupabase({
+    auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
       anonKey: process.env.SUPABASE_ANON_KEY,
     }),
@@ -62,4 +62,4 @@ export const mastra = new Mastra({
 
 ## Related
 
-[MastraAuthSupabase](/docs/auth/supabase)
+[MastraAuthSupabase](/docs/v1/auth/supabase)

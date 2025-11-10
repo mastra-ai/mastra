@@ -6,32 +6,32 @@ const docsTabs = [
   {
     id: "Docs",
     label: "Docs",
-    href: "/docs",
-    basePath: "/docs",
+    href: "/docs/v1",
+    basePath: "/docs/v1",
   },
   {
     id: "Models",
     label: "Models",
-    href: "/models",
-    basePath: "/models",
+    href: "/models/v1",
+    basePath: "/models/v1",
   },
   {
     id: "Examples",
     label: "Examples",
-    href: "/examples",
-    basePath: "/examples",
+    href: "/examples/v1",
+    basePath: "/examples/v1",
   },
   {
     id: "Guides",
     label: "Guides & Migrations",
-    href: "/guides",
-    basePath: "/guides",
+    href: "/guides/v1",
+    basePath: "/guides/v1",
   },
   {
     id: "Reference",
     label: "Reference",
-    href: "/reference",
-    basePath: "/reference",
+    href: "/reference/v1",
+    basePath: "/reference/v1",
   },
   {
     id: "Showcase",
@@ -66,7 +66,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 pathname === tab.basePath
               ) {
                 // For the general "Docs" tab, exclude paths that belong to other specific tabs
-                if (tab.basePath === "/docs") {
+                if (tab.basePath === "/docs/v1") {
                   const otherTabPaths = docsTabs
                     .filter((t) => t.id !== "Docs")
                     .map((t) => t.basePath);

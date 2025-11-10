@@ -1,0 +1,241 @@
+---
+title: "Reference: Faithfulness Scorer | Evals | Mastra Docs"
+description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
+---
+
+# Faithfulness Scorer
+
+The `createFaithfulnessScorer()` function evaluates how factually accurate an LLM's output is compared to the provided context. It extracts claims from the output and verifies them against the context, making it essential to measure RAG pipeline responses' reliability.
+
+## Parameters
+
+The `createFaithfulnessScorer()` function accepts a single options object with the following properties:
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "Configuration for the model used to evaluate faithfulness.",
+    },
+    {
+      name: "context",
+      type: "string[]",
+      required: true,
+      description:
+        "Array of context chunks against which the output's claims will be verified.",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description:
+        "The maximum score value. The final score will be normalized to this scale.",
+    },
+  ]}
+/>
+
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
+
+## .run() Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "string[]",
+      description: "Array of extracted claims from the output.",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the preprocess step (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "Object with verdicts: { verdicts: Array<{ verdict: 'yes' | 'no' | 'unsure', reason: string }> }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the analyze step (optional).",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description:
+        "A detailed explanation of the score, including which claims were supported, contradicted, or marked as unsure.",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the generateReason step (optional).",
+    },
+  ]}
+/>
+
+## Scoring Details
+
+The scorer evaluates faithfulness through claim verification against provided context.
+
+### Scoring Process
+
+1. Analyzes claims and context:
+   - Extracts all claims (factual and speculative)
+   - Verifies each claim against context
+   - Assigns one of three verdicts:
+     - "yes" - claim supported by context
+     - "no" - claim contradicts context
+     - "unsure" - claim unverifiable
+2. Calculates faithfulness score:
+   - Counts supported claims
+   - Divides by total claims
+   - Scales to configured range
+
+Final score: `(supported_claims / total_claims) * scale`
+
+### Score interpretation
+
+A faithfulness score between 0 and 1:
+
+- **1.0**: All claims are accurate and directly supported by the context.
+- **0.7–0.9**: Most claims are correct, with minor additions or omissions.
+- **0.4–0.6**: Some claims are supported, but others are unverifiable.
+- **0.1–0.3**: Most of the content is inaccurate or unsupported.
+- **0.0**: All claims are false or contradict the context.
+
+## Examples
+
+### High faithfulness example
+
+In this example, the response closely aligns with the context. Each statement in the output is verifiable and supported by the provided context entries, resulting in a high score.
+
+```typescript title="src/example-high-faithfulness.ts" showLineNumbers copy
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "The Tesla Model 3 was launched in 2017.",
+    "It has a range of up to 358 miles.",
+    "The base model accelerates 0-60 mph in 5.8 seconds."
+  ]
+});
+
+const query = "Tell me about the Tesla Model 3.";
+const response = "The Tesla Model 3 was introduced in 2017. It can travel up to 358 miles on a single charge and the base version goes from 0 to 60 mph in 5.8 seconds.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+#### High faithfulness output
+
+The output receives a score of 1 because all the information it provides can be directly traced to the context. There are no missing or contradictory facts.
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1 because all claims made in the output are supported by the provided context.'
+}
+```
+
+### Mixed faithfulness example
+
+In this example, there are a mix of supported and unsupported claims. Some parts of the response are backed by the context, while others introduce new information not found in the source material.
+
+```typescript title="src/example-mixed-faithfulness.ts" showLineNumbers copy
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "Python was created by Guido van Rossum.",
+    "The first version was released in 1991.",
+    "Python emphasizes code readability."
+  ]
+});
+
+const query = "What can you tell me about Python?";
+const response = "Python was created by Guido van Rossum and released in 1991. It is the most popular programming language today and is used by millions of developers worldwide.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+#### Mixed faithfulness output
+
+The score is lower because only a portion of the response is verifiable. While some claims match the context, others are unconfirmed or out of scope, reducing the overall faithfulness.
+
+```typescript
+{
+  score: 0.5,
+  reason: "The score is 0.5 because while two claims are supported by the context (Python was created by Guido van Rossum and Python was released in 1991), the other two claims regarding Python's popularity and usage cannot be verified as they are not mentioned in the context."
+}
+```
+
+### Low faithfulness example
+
+In this example, the response directly contradicts the context. None of the claims are supported, and several conflict with the facts provided.
+
+```typescript title="src/example-low-faithfulness.ts" showLineNumbers copy
+import { createFaithfulnessScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createFaithfulnessScorer({ model: 'openai/gpt-4o-mini', options: {
+  context: [
+    "Mars is the fourth planet from the Sun.",
+    "It has a thin atmosphere of mostly carbon dioxide.",
+    "Two small moons orbit Mars: Phobos and Deimos."
+  ]
+});
+
+const query = "What do we know about Mars?";
+const response = "Mars is the third planet from the Sun. It has a thick atmosphere rich in oxygen and nitrogen, and is orbited by three large moons.";
+
+const result = await scorer.run({
+  input: [{ role: 'user', content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+#### Low faithfulness output
+
+Each claim is inaccurate or conflicts with the context, resulting in a score of 0.
+
+```typescript
+{
+  score: 0,
+  reason: "The score is 0 because all claims made in the output contradict the provided context. The output states that Mars is the third planet from the Sun, while the context clearly states it is the fourth. Additionally, it claims that Mars has a thick atmosphere rich in oxygen and nitrogen, contradicting the context's description of a thin atmosphere mostly composed of carbon dioxide. Finally, the output mentions that Mars is orbited by three large moons, while the context specifies that it has only two small moons, Phobos and Deimos. Therefore, there are no supported claims, leading to a score of 0."
+}
+```
+
+## Related
+
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Hallucination Scorer](./hallucination)

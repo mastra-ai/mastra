@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-elevenlabs",
-  "version": "0.11.10",
+  "version": "0.12.0-beta.0",
   "description": "Mastra ElevenLabs voice integration",
   "type": "module",
   "files": [
@@ -55,5 +55,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

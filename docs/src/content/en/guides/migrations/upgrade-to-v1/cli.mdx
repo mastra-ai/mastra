@@ -1,0 +1,48 @@
+---
+title: "CLI | v1 Migration Guide"
+description: "Learn how to migrate CLI changes when upgrading to v1."
+---
+
+# CLI
+
+The CLI has been simplified by removing deployment commands, configuration flags, and starter files.
+
+## Removed
+
+### `mastra deploy` command
+
+The `mastra deploy` command has been removed from the CLI. This change simplifies the CLI by removing vendor-specific deployment logic.
+
+To migrate, choose one of the [deployment platforms](/docs/v1/deployment/overview) of your choice.
+
+### `--env` flag from `mastra build`
+
+The `--env` flag has been removed from the `mastra build` command. This change simplifies the build command.
+
+To migrate, use `mastra start --env <env>` to start the build output with a custom environment.
+
+```diff
+- mastra build --env production
++ mastra build
++ mastra start --env production
+```
+
+### `--port` flag from `mastra dev`
+
+The `--port` flag has been removed from the `mastra dev` command. Port configuration is now handled through the Mastra instance configuration. This change centralizes port configuration.
+
+To migrate, use `server.port` on the Mastra instance instead of the CLI flag.
+
+```ts
+const mastra = new Mastra({
+  server: {
+    port: 3001,
+  },
+});
+```
+
+### Telemetry options from CLI
+
+The `telemetry` option has been removed from CLI commands including the `--no-telemetry` / `-nt` flag. Telemetry configuration has been removed from the CLI. This change reflects the move of telemetry features to the observability package.
+
+To migrate, remove telemetry flags from CLI commands. Use `@mastra/observability` for tracing features.

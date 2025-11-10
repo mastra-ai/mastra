@@ -1,4 +1,3 @@
-import type { ReadableStream } from 'stream/web';
 import { parsePartialJson, processDataStream } from '@ai-sdk/ui-utils';
 import type {
   JSONValue,
@@ -40,7 +39,6 @@ import { BaseResource } from './base';
 async function executeToolCallAndRespond({
   response,
   params,
-  runId,
   resourceId,
   threadId,
   requestContext,
@@ -48,7 +46,6 @@ async function executeToolCallAndRespond({
 }: {
   params: StreamParams<any>;
   response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
-  runId?: string;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -57,7 +54,7 @@ async function executeToolCallAndRespond({
   if (response.finishReason === 'tool-calls') {
     const toolCalls = (
       response as unknown as {
-        toolCalls: { toolName: string; args: any; toolCallId: string }[];
+        toolCalls: { payload: { toolName: string; args: any; toolCallId: string } }[];
         messages: CoreMessage[];
       }
     ).toolCalls;
@@ -67,24 +64,20 @@ async function executeToolCallAndRespond({
     }
 
     for (const toolCall of toolCalls) {
-      const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
+      const clientTool = params.clientTools?.[toolCall.payload.toolName] as Tool;
 
       if (clientTool && clientTool.execute) {
-        const result = await clientTool.execute(
-          {
-            context: toolCall?.args,
-            runId,
-            resourceId,
-            threadId,
-            requestContext: requestContext as RequestContext,
-            tracingContext: { currentSpan: undefined },
-            suspend: async () => {},
-          },
-          {
+        const result = await clientTool.execute(toolCall?.payload.args, {
+          requestContext: requestContext as RequestContext,
+          tracingContext: { currentSpan: undefined },
+          agent: {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
-            toolCallId: toolCall?.toolCallId,
+            toolCallId: toolCall?.payload.toolCallId,
+            suspend: async () => {},
+            threadId,
+            resourceId,
           },
-        );
+        });
 
         // Build updated messages from the response, adding the tool result
         // Do NOT re-include the original user message to avoid storage duplicates
@@ -95,8 +88,8 @@ async function executeToolCallAndRespond({
             content: [
               {
                 type: 'tool-result',
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
+                toolCallId: toolCall.payload.toolCallId,
+                toolName: toolCall.payload.toolName,
                 result,
               },
             ],
@@ -111,6 +104,9 @@ async function executeToolCallAndRespond({
       }
     }
   }
+
+  // If no client tool was executed, return the original response
+  return response;
 }
 
 export class AgentVoice extends BaseResource {
@@ -235,7 +231,7 @@ export class Agent extends BaseResource {
       clientTools: processClientTools(params.clientTools),
     };
 
-    const { runId, resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
+    const { resourceId, threadId, requestContext } = processedParams as GenerateLegacyParams;
 
     const response: GenerateReturn<any, Output, StructuredOutput> = await this.request(
       `/api/agents/${this.agentId}/generate-legacy`,
@@ -261,21 +257,17 @@ export class Agent extends BaseResource {
         const clientTool = params.clientTools?.[toolCall.toolName] as Tool;
 
         if (clientTool && clientTool.execute) {
-          const result = await clientTool.execute(
-            {
-              context: toolCall?.args,
-              runId,
-              resourceId,
-              threadId,
-              requestContext: requestContext as RequestContext,
-              tracingContext: { currentSpan: undefined },
-              suspend: async () => {},
-            },
-            {
+          const result = await clientTool.execute(toolCall?.args, {
+            requestContext: requestContext as RequestContext,
+            tracingContext: { currentSpan: undefined },
+            agent: {
               messages: (response as unknown as { messages: CoreMessage[] }).messages,
               toolCallId: toolCall?.toolCallId,
+              suspend: async () => {},
+              threadId,
+              resourceId,
             },
-          );
+          });
 
           // Build updated messages from the response, adding the tool result
           // Do NOT re-include the original user message to avoid storage duplicates
@@ -341,7 +333,7 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    const { runId, resourceId, threadId, requestContext } = processedParams as StreamParams;
+    const { resourceId, threadId, requestContext } = processedParams as StreamParams;
 
     const response = await this.request<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>(
       `/api/agents/${this.agentId}/generate`,
@@ -355,7 +347,6 @@ export class Agent extends BaseResource {
       return executeToolCallAndRespond({
         response,
         params,
-        runId,
         resourceId,
         threadId,
         requestContext: requestContext as RequestContext<any>,
@@ -1114,7 +1105,11 @@ export class Agent extends BaseResource {
     onFinish?.({ message, finishReason, usage });
   }
 
-  async processStreamResponse(processedParams: any, writable: any, route: string = 'stream') {
+  async processStreamResponse(
+    processedParams: any,
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    route: string = 'stream',
+  ) {
     const response: Response = await this.request(`/api/agents/${this.agentId}/${route}`, {
       method: 'POST',
       body: processedParams,
@@ -1130,37 +1125,38 @@ export class Agent extends BaseResource {
       let messages: UIMessage[] = [];
 
       // Use tee() to split the stream into two branches
-      const [streamForWritable, streamForProcessing] = response.body.tee();
+      const [streamForController, streamForProcessing] = response.body.tee();
 
-      // Pipe one branch to the writable stream without holding a persistent lock
-
-      streamForWritable
+      // Pipe one branch directly to the controller
+      const pipePromise = streamForController
         .pipeTo(
           new WritableStream<Uint8Array>({
             async write(chunk) {
-              let writer;
-
               // Filter out terminal markers so the client stream doesn't end before recursion
               try {
-                writer = writable.getWriter();
                 const text = new TextDecoder().decode(chunk);
                 const lines = text.split('\n\n');
-                const readableLines = lines.filter(line => line !== '[DONE]').join('\n\n');
-
-                await writer.write(new TextEncoder().encode(readableLines));
-              } catch {
-                await writer?.write(chunk);
-              } finally {
-                writer?.releaseLock();
+                const readableLines = lines
+                  .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
+                  .join('\n\n');
+                if (readableLines) {
+                  const encoded = new TextEncoder().encode(readableLines);
+                  controller.enqueue(encoded);
+                }
+              } catch (error) {
+                console.error('Error enqueueing to controller:', error);
+                controller.enqueue(chunk);
               }
             },
           }),
-          {
-            preventClose: true,
-          },
         )
         .catch(error => {
-          console.error('Error piping to writable stream:', error);
+          console.error('Error piping to controller:', error);
+          try {
+            controller.close();
+          } catch {
+            // Already closed
+          }
         });
 
       // Process the other branch for chat response handling
@@ -1190,22 +1186,18 @@ export class Agent extends BaseResource {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
                 shouldExecuteClientTool = true;
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    requestContext: processedParams.requestContext as RequestContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                    suspend: async () => {},
-                  },
-                  {
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessageRaw = messages[messages.length - 1];
                 const lastMessage: UIMessage | undefined =
@@ -1239,32 +1231,44 @@ export class Agent extends BaseResource {
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
 
                 // Recursively call stream with updated messages
-                this.processStreamResponse(
-                  {
-                    ...processedParams,
-                    messages: updatedMessages,
-                  },
-                  writable,
-                ).catch(error => {
-                  console.error('Error processing stream response:', error);
-                });
+                // This will wait for the recursive stream to complete before continuing
+                try {
+                  await this.processStreamResponse(
+                    {
+                      ...processedParams,
+                      messages: updatedMessages,
+                    },
+                    controller,
+                  );
+                } catch (error) {
+                  console.error('Error processing recursive stream response:', error);
+                }
               }
             }
 
+            // Close the controller after all processing is complete
+            // Wait for current pipe to finish before closing
             if (!shouldExecuteClientTool) {
-              setTimeout(() => {
-                writable.close();
-              }, 0);
+              await pipePromise;
+              controller.close();
             }
+            // If client tool was executed, the recursive call will handle closing the stream
           } else {
-            setTimeout(() => {
-              writable.close();
-            }, 0);
+            // No tool calls - wait for pipe to complete then close the stream
+            await pipePromise;
+            controller.close();
           }
         },
         lastMessage: undefined,
-      }).catch(error => {
+      }).catch(async error => {
         console.error('Error processing stream response:', error);
+        // On error, wait for pipe to complete then close the controller
+        try {
+          await pipePromise;
+          controller.close();
+        } catch {
+          // Already closed
+        }
       });
     } catch (error) {
       console.error('Error processing stream response:', error);
@@ -1377,11 +1381,17 @@ export class Agent extends BaseResource {
         : undefined,
     };
 
-    // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, writable);
+    // This returns immediately with response metadata and continues streaming in background
+    const response = await this.processStreamResponse(processedParams, readableController!);
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1420,11 +1430,16 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, writable, 'approve-tool-call');
+    const response = await this.processStreamResponse(params, readableController!, 'approve-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1463,11 +1478,16 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
-    // Create a readable stream that will handle the response processing
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    // Create a manually controlled readable stream
+    let readableController: ReadableStreamDefaultController<Uint8Array>;
+    const readable = new ReadableStream<Uint8Array>({
+      start(controller) {
+        readableController = controller;
+      },
+    });
 
     // Start processing the response in the background
-    const response = await this.processStreamResponse(params, writable, 'decline-tool-call');
+    const response = await this.processStreamResponse(params, readableController!, 'decline-tool-call');
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -1554,22 +1574,18 @@ export class Agent extends BaseResource {
             for (const toolCall of toolCalls) {
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               if (clientTool && clientTool.execute) {
-                const result = await clientTool.execute(
-                  {
-                    context: toolCall?.args,
-                    runId: processedParams.runId,
-                    resourceId: processedParams.resourceId,
-                    threadId: processedParams.threadId,
-                    requestContext: processedParams.requestContext as RequestContext,
-                    // TODO: Pass proper tracing context when client-js supports tracing
-                    tracingContext: { currentSpan: undefined },
-                    suspend: async () => {},
-                  },
-                  {
+                const result = await clientTool.execute(toolCall?.args, {
+                  requestContext: processedParams.requestContext as RequestContext,
+                  // TODO: Pass proper tracing context when client-js supports tracing
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
                     messages: (response as unknown as { messages: CoreMessage[] }).messages,
                     toolCallId: toolCall?.toolCallId,
+                    suspend: async () => {},
+                    threadId: processedParams.threadId,
+                    resourceId: processedParams.resourceId,
                   },
-                );
+                });
 
                 const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
 
@@ -1717,64 +1733,5 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: params,
     });
-  }
-
-  /**
-   * @deprecated generateVNext has been renamed to generate. Please use generate instead.
-   */
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>>;
-  async generateVNext<OUTPUT extends OutputSchema = undefined>(
-    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
-    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<ReturnType<MastraModelOutput['getFullOutput']>> {
-    throw new Error('generateVNext has been renamed to generate. Please use generate instead.');
-  }
-
-  /**
-   * @deprecated streamVNext has been renamed to stream. Please use stream instead.
-   */
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    messages: MessageListInput,
-    options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  >;
-  // Backward compatibility overload
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    params: StreamParams<OUTPUT>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  >;
-  async streamVNext<OUTPUT extends OutputSchema = undefined>(
-    _messagesOrParams: MessageListInput | StreamParams<OUTPUT>,
-    _options?: Omit<StreamParams<OUTPUT>, 'messages'>,
-  ): Promise<
-    Response & {
-      processDataStream: ({
-        onChunk,
-      }: {
-        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
-      }) => Promise<void>;
-    }
-  > {
-    throw new Error('streamVNext has been renamed to stream. Please use stream instead.');
   }
 }

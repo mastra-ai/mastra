@@ -1,6 +1,6 @@
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -107,7 +107,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithProcessor = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [processor],
@@ -140,7 +141,8 @@ describe('Input and Output Processors', () => {
       };
 
       const agentWithProcessors = new Agent({
-        name: 'test-agent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a helpful assistant',
         model: mockModel,
         inputProcessors: [processor1, processor2],
@@ -798,7 +800,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'mixed-processor-test-agent',
+        id: 'mixed-processor-test-agent',
+        name: 'Mixed Processor Test Agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -869,7 +872,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'output-processor-test-agent',
+        id: 'output-processor-test-agent',
+        name: 'Output Processor Test Agent',
         instructions: 'You are a helpful assistant. Respond with exactly: "This is a test response"',
         model: mockModel,
         outputProcessors: [new TestOutputProcessor()],
@@ -915,7 +919,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'blocking-processor-test-agent',
+        id: 'blocking-processor-test-agent',
+        name: 'Blocking Processor Test Agent',
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [new BlockingOutputProcessor()],
@@ -960,7 +965,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'aborting-processor-test-agent',
+        id: 'aborting-processor-test-agent',
+        name: 'Aborting Processor Test Agent',
         instructions: 'You are a helpful assistant.',
         model: mockModel,
         outputProcessors: [new AbortingOutputProcessor()],
@@ -1045,7 +1051,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'multi-processor-test-agent',
+        id: 'multi-processor-test-agent',
+        name: 'Multi Processor Test Agent',
         instructions: 'Respond with: "This is a test response"',
         model: mockModel,
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
@@ -1129,7 +1136,8 @@ describe('Input and Output Processors', () => {
       }
 
       const agent = new Agent({
-        name: 'stream-structured-processor-test-agent',
+        id: 'stream-structured-processor-test-agent',
+        name: 'Stream Structured Processor Test Agent',
         instructions: 'You know about US elections.',
         model: new MockLanguageModelV2({
           doGenerate: async () => ({
@@ -1226,7 +1234,8 @@ describe('Input and Output Processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
-          name: 'output-tripwire-test-agent',
+          id: 'output-tripwire-test-agent',
+          name: 'Output Tripwire Test Agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV2({
             doGenerate: async () => ({
@@ -1286,7 +1295,8 @@ describe('Input and Output Processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
-          name: 'stream-output-tripwire-test-agent',
+          id: 'stream-output-tripwire-test-agent',
+          name: 'Stream Output Tripwire Test Agent',
           instructions: 'You are a helpful assistant.',
           model: mockModel,
           outputProcessors: [abortProcessor],
@@ -1329,7 +1339,8 @@ describe('Input and Output Processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
-          name: 'custom-stream-output-tripwire-test-agent',
+          id: 'custom-stream-output-tripwire-test-agent',
+          name: 'Custom Stream Output Tripwire Test Agent',
           instructions: 'You are a helpful assistant.',
           model: mockModel,
           outputProcessors: [customAbortProcessor],
@@ -1376,6 +1387,7 @@ describe('Input and Output Processors', () => {
           });
 
           const agent = new Agent({
+            id: 'color-expert',
             name: 'Color Expert',
             instructions: `You are an expert on colors. 
               Analyze colors and describe their properties, psychological effects, and technical details.
@@ -1440,6 +1452,7 @@ describe('Input and Output Processors', () => {
           });
 
           const agent = new Agent({
+            id: 'content-analyzer',
             name: 'Content Analyzer',
             instructions: 'You are an expert content analyst. Read and analyze text content to extract key insights.',
             model,
@@ -1514,6 +1527,7 @@ describe('Input and Output Processors', () => {
           };
 
           const agent = new Agent({
+            id: 'test-agent',
             name: 'Test Agent',
             instructions: 'You are a helpful assistant.',
             model,
@@ -1551,6 +1565,7 @@ describe('Input and Output Processors', () => {
           });
 
           const agent = new Agent({
+            id: 'creative-thinker',
             name: 'Creative Thinker',
             instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
             model, // Use faster model for idea generation
@@ -1601,6 +1616,7 @@ describe('Input and Output Processors', () => {
         });
 
         const agent = new Agent({
+          id: 'creative-thinker',
           name: 'Creative Thinker',
           instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
           model: model,
@@ -1649,6 +1665,7 @@ describe('Input and Output Processors', () => {
         });
 
         const agent = new Agent({
+          id: 'creative-thinker',
           name: 'Creative Thinker',
           instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
           model: model,
@@ -1727,7 +1744,8 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
-        name: 'generate-output-processor-test-agent',
+        id: 'generate-output-processor-test-agent',
+        name: 'Generate Output Processor Test Agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -1795,7 +1813,8 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
-        name: 'multi-processor-generate-test-agent',
+        id: 'multi-processor-generate-test-agent',
+        name: 'Multi Processor Generate Test Agent',
         instructions: 'Respond with: "hello world"',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -1837,7 +1856,8 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
-        name: 'aborting-generate-test-agent',
+        id: 'aborting-generate-test-agent',
+        name: 'Aborting Generate Test Agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -1953,7 +1973,8 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
-        name: 'structured-output-processor-test-agent',
+        id: 'structured-output-processor-test-agent',
+        name: 'Structured Output Processor Test Agent',
         instructions: 'You know about US elections.',
         model: new MockLanguageModelV1({
           defaultObjectGenerationMode: 'json',
@@ -2048,7 +2069,8 @@ describe('v1 model - output processors', () => {
       }
 
       const agent = new Agent({
-        name: 'multi-processor-structured-test-agent',
+        id: 'multi-processor-structured-test-agent',
+        name: 'Multi Processor Structured Test Agent',
         instructions: 'You are a helpful assistant.',
         model: new MockLanguageModelV1({
           defaultObjectGenerationMode: 'json',
@@ -2099,7 +2121,8 @@ describe('v1 model - output processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
-          name: 'output-tripwire-test-agent',
+          id: 'output-tripwire-test-agent',
+          name: 'Output Tripwire Test Agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV1({
             doGenerate: async () => ({
@@ -2131,7 +2154,8 @@ describe('v1 model - output processors', () => {
         } satisfies Processor;
 
         const agent = new Agent({
-          name: 'custom-output-tripwire-test-agent',
+          id: 'custom-output-tripwire-test-agent',
+          name: 'Custom Output Tripwire Test Agent',
           instructions: 'You are a helpful assistant.',
           model: new MockLanguageModelV1({
             doGenerate: async () => ({

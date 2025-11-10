@@ -8,14 +8,14 @@ import TabItem from "@theme/TabItem";
 
 # MastraJwtAuth Class
 
-The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraJwtAuth` class provides a lightweight authentication mechanism for Mastra using JSON Web Tokens (JWTs). It verifies incoming requests based on a shared secret and integrates with the Mastra server using the `auth` option.
 
 ## Installation
 
 Before you can use the `MastraJwtAuth` class you have to install the `@mastra/auth` package.
 
 ```bash copy
-npm install @mastra/auth@latest
+npm install @mastra/auth@beta
 ```
 
 ## Usage example
@@ -27,18 +27,18 @@ import { MastraJwtAuth } from "@mastra/auth";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraJwtAuth({
+    auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
     }),
   },
 });
 ```
 
-> See the [MastraJwtAuth](/reference/auth/jwt) API reference for all available configuration options.
+> See the [MastraJwtAuth](/reference/v1/auth/jwt) API reference for all available configuration options.
 
 ## Configuring `MastraClient`
 
-When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
+When `auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -51,7 +51,7 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
+> See [Mastra Client SDK](/docs/v1/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 

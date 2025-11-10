@@ -1,0 +1,245 @@
+---
+title: "Reference: Configuration | Observability | Mastra Docs"
+description: Tracing configuration types and registry functions
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Configuration
+
+## ObservabilityRegistryConfig
+
+```typescript
+interface ObservabilityRegistryConfig {
+  default?: { enabled?: boolean };
+  configs?: Record<string, Omit<ObservabilityInstanceConfig, "name"> | ObservabilityInstance>;
+  configSelector?: ConfigSelector;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "default",
+      type: "{ enabled?: boolean }",
+      description: "Enable default configuration with DefaultExporter and CloudExporter",
+      required: false,
+    },
+    {
+      name: "configs",
+      type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
+      description: "Named observability instance configurations or pre-instantiated instances",
+      required: false,
+    },
+    {
+      name: "configSelector",
+      type: "ConfigSelector",
+      description: "Runtime configuration selector function",
+      required: false,
+    },
+  ]}
+/>
+
+## ObservabilityInstanceConfig
+
+```typescript
+interface ObservabilityInstanceConfig {
+  name: string;
+  serviceName: string;
+  sampling?: SamplingStrategy;
+  exporters?: ObservabilityExporter[];
+  spanOutputProcessors?: SpanOutputProcessor[];
+  includeInternalSpans?: boolean;
+  requestContextKeys?: string[];
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "name",
+      type: "string",
+      description: "Configuration identifier",
+      required: true,
+    },
+    {
+      name: "serviceName",
+      type: "string",
+      description: "Service name in traces",
+      required: true,
+    },
+    {
+      name: "sampling",
+      type: "SamplingStrategy",
+      description: "Sampling configuration (defaults to ALWAYS)",
+      required: false,
+    },
+    {
+      name: "exporters",
+      type: "ObservabilityExporter[]",
+      description: "Trace data exporters",
+      required: false,
+    },
+    {
+      name: "spanOutputProcessors",
+      type: "SpanOutputProcessor[]",
+      description: "Span output processors",
+      required: false,
+    },
+    {
+      name: "includeInternalSpans",
+      type: "boolean",
+      description: "Include spans internal to Mastra operations",
+      required: false,
+    },
+    {
+      name: "requestContextKeys",
+      type: "string[]",
+      description: "RequestContext keys to extract as metadata (supports dot notation)",
+      required: false,
+    },
+  ]}
+/>
+
+## SamplingStrategy
+
+```typescript
+type SamplingStrategy =
+  | { type: "always" }
+  | { type: "never" }
+  | { type: "ratio"; probability: number }
+  | { type: "custom"; sampler: (options?: TracingOptions) => boolean };
+```
+
+## ConfigSelector
+
+```typescript
+type ConfigSelector = (
+  options: ConfigSelectorOptions,
+  availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
+) => string | undefined;
+```
+
+## ConfigSelectorOptions
+
+```typescript
+interface ConfigSelectorOptions {
+  requestContext?: RequestContext;
+}
+```
+
+# Registry Methods
+
+The Observability class provides methods for managing observability instances:
+
+## registerInstance
+
+```typescript
+registerInstance(
+  name: string,
+  instance: ObservabilityInstance,
+  isDefault?: boolean
+): void;
+```
+
+Registers an observability instance in the registry.
+
+## getInstance
+
+```typescript
+getInstance(name: string): ObservabilityInstance | undefined;
+```
+
+Retrieves an observability instance by name.
+
+## getDefaultInstance
+
+```typescript
+getDefaultInstance(): ObservabilityInstance | undefined;
+```
+
+Returns the default observability instance.
+
+## getSelectedInstance
+
+```typescript
+getSelectedInstance(
+  options: ConfigSelectorOptions
+): ObservabilityInstance | undefined;
+```
+
+Returns the observability instance selected by the config selector or default.
+
+## listInstances
+
+```typescript
+listInstances(): ReadonlyMap<string, ObservabilityInstance>;
+```
+
+Returns all registered observability instances.
+
+## hasInstance
+
+```typescript
+hasInstance(name: string): boolean;
+```
+
+Checks if an observability instance exists.
+
+## setConfigSelector
+
+```typescript
+setConfigSelector(selector: ConfigSelector): void;
+```
+
+Sets the config selector function.
+
+## unregisterInstance
+
+```typescript
+unregisterInstance(name: string): boolean;
+```
+
+Removes an observability instance from the registry.
+
+## clear
+
+```typescript
+clear(): void;
+```
+
+Clears all instances without shutdown.
+
+## shutdown
+
+```typescript
+async shutdown(): Promise<void>;
+```
+
+Shuts down all observability instances and clears the registry.
+
+## See Also
+
+### Documentation
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - Concepts and usage guide
+- [Sampling Strategies](/docs/v1/observability/tracing/overview#sampling-strategies) - Sampling configuration details
+- [Multi-Config Setup](/docs/v1/observability/tracing/overview#multi-config-setup) - Using multiple configurations
+
+### Reference
+
+- [Tracing Classes](/reference/v1/observability/tracing/instances) - Core tracing classes
+- [Interfaces](/reference/v1/observability/tracing/interfaces) - Type definitions
+- [Spans Reference](/reference/v1/observability/tracing/spans) - Span lifecycle
+
+### Examples
+
+- [Basic Tracing](/examples/v1/observability/basic-tracing) - Getting started
+
+### Exporters
+
+- [DefaultExporter](/reference/v1/observability/tracing/exporters/default-exporter) - Storage configuration
+- [CloudExporter](/reference/v1/observability/tracing/exporters/cloud-exporter) - Cloud setup
+- [Braintrust](/reference/v1/observability/tracing/exporters/braintrust) - Braintrust integration
+- [Langfuse](/reference/v1/observability/tracing/exporters/langfuse) - Langfuse integration
+- [LangSmith](/reference/v1/observability/tracing/exporters/langsmith) - LangSmith integration

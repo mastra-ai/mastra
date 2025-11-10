@@ -5,13 +5,14 @@ import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentStreamOptions } from '../agent';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraScorers } from '../evals';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
+import { SpanType, getOrCreateSpan } from '../observability';
 import type { WorkflowRun } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
@@ -119,11 +120,11 @@ type ToolStep<
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 > = Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
   inputSchema: TSchemaIn;
   outputSchema: TSchemaOut;
-  execute: (context: TContext) => Promise<any>;
+  execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
 };
 
 /**
@@ -163,7 +164,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
@@ -300,15 +301,33 @@ export function createStep<
       description: params.description,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, requestContext, tracingContext, suspend, resumeData }) => {
-        return params.execute({
-          context: inputData,
+      execute: async ({
+        inputData,
+        mastra,
+        requestContext,
+        tracingContext,
+        suspend,
+        resumeData,
+        runId,
+        workflowId,
+        state,
+        setState,
+      }) => {
+        // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
+        const toolContext = {
           mastra,
           requestContext,
           tracingContext,
           suspend,
           resumeData,
-        });
+          workflow: {
+            runId,
+            workflowId,
+            state,
+            setState,
+          },
+        };
+        return params.execute(inputData, toolContext);
       },
       component: 'TOOL',
     };
@@ -522,6 +541,7 @@ export class Workflow<
         description: step.description,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
       },
     });
     this.steps[step.id] = step;
@@ -587,32 +607,27 @@ export class Workflow<
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema>;
   }
 
+  /**
+   * @deprecated waitForEvent has been removed. Please use suspend/resume instead.
+   */
   waitForEvent<
     TStepState extends z.ZodObject<any>,
     TStepInputSchema extends TPrevSchema,
     TStepId extends string,
     TSchemaOut extends z.ZodType<any>,
   >(
-    event: string,
-    step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
-    opts?: {
+    _event: string,
+    _step: Step<TStepId, SubsetOf<TStepState, TState>, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+    _opts?: {
       timeout?: number;
     },
   ) {
-    this.stepFlow.push({ type: 'waitForEvent', event, step: step as any, timeout: opts?.timeout });
-    this.serializedStepFlow.push({
-      type: 'waitForEvent',
-      event,
-      step: {
-        id: step.id,
-        description: step.description,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-      },
-      timeout: opts?.timeout,
+    throw new MastraError({
+      id: 'WORKFLOW_WAIT_FOR_EVENT_REMOVED',
+      domain: ErrorDomain.MASTRA_WORKFLOW,
+      category: ErrorCategory.USER,
+      text: 'waitForEvent has been removed. Please use suspend & resume flow instead. See https://mastra.ai/en/docs/workflows/suspend-and-resume for more details.',
     });
-    this.steps[step.id] = step;
-    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut>;
   }
 
   map(
@@ -772,6 +787,7 @@ export class Workflow<
           description: step.description,
           component: (step as SerializedStep).component,
           serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+          canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
         },
       })),
     });
@@ -821,6 +837,7 @@ export class Workflow<
           description: step.description,
           component: (step as SerializedStep).component,
           serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+          canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
         },
       })),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
@@ -877,6 +894,7 @@ export class Workflow<
         description: step.description,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
       },
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dowhile',
@@ -909,6 +927,7 @@ export class Workflow<
         description: step.description,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
       },
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dountil',
@@ -931,6 +950,7 @@ export class Workflow<
       concurrency: number;
     },
   ) {
+    const actualStep = step as Step<any, any, any, any, any, any>;
     this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
     this.serializedStepFlow.push({
       type: 'foreach',
@@ -939,6 +959,7 @@ export class Workflow<
         description: (step as SerializedStep).description,
         component: (step as SerializedStep).component,
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+        canSuspend: Boolean(actualStep.suspendSchema || actualStep.resumeSchema),
       },
       opts: opts ?? { concurrency: 1 },
     });
@@ -984,25 +1005,6 @@ export class Workflow<
   }
 
   /**
-   * @deprecated Use createRunAsync() instead.
-   * @throws {Error} Always throws an error directing users to use createRunAsync()
-   */
-  createRun(_options?: {
-    runId?: string;
-    resourceId?: string;
-    disableScorers?: boolean;
-  }): Run<TEngineType, TSteps, TState, TInput, TOutput> {
-    throw new Error(
-      'createRun() has been deprecated. ' +
-        'Please use createRunAsync() instead.\n\n' +
-        'Migration guide:\n' +
-        '  Before: const run = workflow.createRun();\n' +
-        '  After:  const run = await workflow.createRunAsync();\n\n' +
-        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
-    );
-  }
-
-  /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
    * @param options.runId Optional custom run ID, defaults to a random UUID
@@ -1010,7 +1012,7 @@ export class Workflow<
    * @param options.disableScorers Optional flag to disable scorers for this run
    * @returns A Run instance that can be used to execute the workflow
    */
-  async createRunAsync(options?: {
+  async createRun(options?: {
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
@@ -1109,7 +1111,7 @@ export class Workflow<
   }
 
   // This method should only be called internally for nested workflow execution, as well as from mastra server handlers
-  // To run a workflow use `.createRunAsync` and then `.start` or `.resume`
+  // To run a workflow use `.createRun` and then `.start` or `.resume`
   async execute({
     runId,
     inputData,
@@ -1177,7 +1179,7 @@ export class Workflow<
     // this check is for cases where you suspend/resume a nested workflow.
     // retryCount helps us know the step has been run at least once, which means it's running in a loop and should not be calling resume.
 
-    const run = isResume ? await this.createRunAsync({ runId: resume.runId }) : await this.createRunAsync({ runId });
+    const run = isResume ? await this.createRun({ runId: resume.runId }) : await this.createRun({ runId });
     const nestedAbortCb = () => {
       abort();
     };
@@ -1248,8 +1250,8 @@ export class Workflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    limit?: number;
-    offset?: number;
+    perPage?: number | false;
+    page?: number;
     resourceId?: string;
   }) {
     const storage = this.#mastra?.getStorage();
@@ -1525,10 +1527,6 @@ export class Run<
     this.abortController?.abort();
   }
 
-  async sendEvent(event: string, data: any) {
-    this.emitter.emit(`user-event-${event}`, data);
-  }
-
   protected async _validateInput(inputData: z.input<TInput>) {
     const firstEntry = this.executionGraph.steps[0];
     let inputDataToUse = inputData;
@@ -1632,8 +1630,8 @@ export class Run<
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
       attributes: {
@@ -1647,10 +1645,10 @@ export class Run<
       tracingOptions,
       tracingContext,
       requestContext,
+      mastra: this.#mastra,
     });
 
-    const traceId = getValidTraceId(workflowAISpan);
-
+    const traceId = workflowSpan?.externalTraceId;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
@@ -1685,7 +1683,7 @@ export class Run<
       requestContext: requestContext ?? new RequestContext(),
       abortController: this.abortController,
       writableStream,
-      workflowAISpan,
+      workflowSpan,
       format,
       outputOptions,
     });
@@ -2182,8 +2180,6 @@ export class Run<
       | string[];
     label?: string;
     requestContext?: RequestContext;
-    /** @deprecated This property will be removed on November 4th, 2025. Use `retryCount` instead. */
-    runCount?: number;
     retryCount?: number;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2194,7 +2190,7 @@ export class Run<
     };
     forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    return this._resume({ ...params, retryCount: params.retryCount ?? params.runCount });
+    return this._resume(params);
   }
 
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
@@ -2318,8 +2314,8 @@ export class Run<
     });
 
     // note: this span is ended inside this.executionEngine.execute()
-    const workflowAISpan = getOrCreateSpan({
-      type: AISpanType.WORKFLOW_RUN,
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: resumeDataToUse,
       attributes: {
@@ -2333,9 +2329,10 @@ export class Run<
       tracingOptions: params.tracingOptions,
       tracingContext: params.tracingContext,
       requestContext: requestContextToUse,
+      mastra: this.#mastra,
     });
 
-    const traceId = getValidTraceId(workflowAISpan);
+    const traceId = workflowSpan?.externalTraceId;
 
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -2373,7 +2370,7 @@ export class Run<
         },
         requestContext: requestContextToUse,
         abortController: this.abortController,
-        workflowAISpan,
+        workflowSpan,
         outputOptions: params.outputOptions,
         writableStream: params.writableStream,
       })

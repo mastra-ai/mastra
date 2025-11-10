@@ -1,20 +1,21 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraModelOutput } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-
 import { toAISdkV4Messages, toAISdkV5Messages } from '../convert-messages';
+import { toAISdkV5Stream } from '../convert-streams';
 
 describe('toAISdkFormat', () => {
   const sampleMessages: MastraDBMessage[] = [
     {
       id: 'msg-1',
       role: 'user',
-      content: [{ type: 'text', text: 'Hello' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
       createdAt: new Date(),
     },
     {
       id: 'msg-2',
       role: 'assistant',
-      content: [{ type: 'text', text: 'Hi there!' }],
+      content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
       createdAt: new Date(),
     },
   ];
@@ -50,6 +51,58 @@ describe('toAISdkFormat', () => {
     it('should handle empty array', () => {
       const result = toAISdkV4Messages([]);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('toAISdkV5Stream error handling', () => {
+    it('should preserve error message details when converting agent stream', async () => {
+      const errorMessage =
+        'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits';
+      const errorName = 'AI_APICallError';
+
+      // Create a mock stream with error chunk
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'error',
+            runId: 'test-run-id',
+            payload: {
+              error: {
+                message: errorMessage,
+                name: errorName,
+                stack: `${errorName}: ${errorMessage}\n    at someFunction (file.ts:10:5)`,
+              },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const errorChunks: any[] = [];
+
+      for await (const chunk of aiSdkStream) {
+        if (chunk.type === 'error') {
+          errorChunks.push(chunk);
+          break;
+        }
+      }
+
+      // Find the error chunk
+      const errorChunk = errorChunks[0];
+
+      expect(errorChunk).toBeDefined();
+      expect(errorChunk.errorText).toBeDefined();
+      expect(errorChunk.errorText).not.toBe('Error'); // Should not be the generic "Error" string
+      expect(errorChunk.errorText).toContain(errorMessage); // Should contain the actual error message
     });
   });
 });

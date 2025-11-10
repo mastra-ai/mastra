@@ -1,5 +1,23 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Patch Changes
+
+- Fix Zod v4 toJSONSchema bug with z.record() single-argument form ([#9265](https://github.com/mastra-ai/mastra/pull/9265))
+
+  Zod v4 has a bug in the single-argument form of `z.record(valueSchema)` where it incorrectly assigns the value schema to `keyType` instead of `valueType`, leaving `valueType` undefined. This causes `toJSONSchema()` to throw "Cannot read properties of undefined (reading '\_zod')" when processing schemas containing `z.record()` fields.
+
+  This fix patches affected schemas before conversion by detecting records with missing `valueType` and correctly assigning the schema to `valueType` while setting `keyType` to `z.string()` (the default). The patch recursively handles nested schemas including those wrapped in `.optional()`, `.nullable()`, arrays, unions, and objects.
+
+- Improved reliability of string field types in tool schema compatibility ([#9266](https://github.com/mastra-ai/mastra/pull/9266))
+
 ## 0.11.4
 
 ### Patch Changes

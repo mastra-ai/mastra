@@ -1,0 +1,113 @@
+---
+title: "Running Scorers in CI | Evals | Mastra Docs"
+description: "Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function."
+---
+
+# Running Scorers in CI
+
+Running scorers in your CI pipeline provides quantifiable metrics for measuring agent quality over time. The `runEvals` function processes multiple test cases through your agent or workflow and returns aggregate scores.
+
+## Basic Setup
+
+You can use any testing framework that supports ESM modules, such as [Vitest](https://vitest.dev/), [Jest](https://jestjs.io/), or [Mocha](https://mochajs.org/).
+
+## Creating Test Cases
+
+Use `runEvals` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
+
+```typescript copy showLineNumbers title="src/mastra/agents/weather-agent.test.ts"
+import { describe, it, expect } from 'vitest';
+import { createScorer, runEvals } from "@mastra/core/evals";
+import { weatherAgent } from "./weather-agent";
+import { locationScorer } from "../scorers/location-scorer";
+
+describe('Weather Agent Tests', () => {
+  it('should correctly extract locations from queries', async () => {
+    const result = await runEvals({
+      data: [
+        {
+          input: 'weather in Berlin',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' }
+        },
+        {
+          input: 'weather in Berlin, Maryland',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'US' }
+        },
+        {
+          input: 'weather in Berlin, Russia',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'RU' }
+        },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    // Assert aggregate score meets threshold
+    expect(result.scores['location-accuracy']).toBe(1);
+    expect(result.summary.totalItems).toBe(3);
+  });
+});
+```
+
+View the full example [here](/examples/v1/evals/running-in-ci)
+
+## Understanding Results
+
+The `runEvals` function returns an object with:
+
+- `scores`: Average scores for each scorer across all test cases
+- `summary.totalItems`: Total number of test cases processed
+
+```typescript
+{
+  scores: {
+    'location-accuracy': 1.0,  // Average score across all items
+    'another-scorer': 0.85
+  },
+  summary: {
+    totalItems: 3
+  }
+}
+```
+
+## Multiple Test Scenarios
+
+Create separate test cases for different evaluation scenarios:
+
+```typescript copy showLineNumbers title="src/mastra/agents/weather-agent.test.ts"
+describe('Weather Agent Tests', () => {
+  const locationScorer = createScorer({ /* ... */ });
+
+  it('should handle location disambiguation', async () => {
+    const result = await runEvals({
+      data: [
+        { input: 'weather in Berlin', groundTruth: { /* ... */ } },
+        { input: 'weather in Berlin, Maryland', groundTruth: { /* ... */ } },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    expect(result.scores['location-accuracy']).toBe(1);
+  });
+
+  it('should handle typos and misspellings', async () => {
+    const result = await runEvals({
+      data: [
+        { input: 'weather in Berln', groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' } },
+        { input: 'weather in Parris', groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' } },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer]
+    });
+
+    expect(result.scores['location-accuracy']).toBe(1);
+  });
+});
+```
+
+## Next Steps
+
+- Learn about [creating custom scorers](/docs/v1/evals/custom-scorers)
+- Explore [off-the-shelf scorers](/docs/v1/evals/off-the-shelf-scorers)
+- Read the [runEvals API reference](/reference/v1/evals/run-evals)

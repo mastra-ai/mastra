@@ -82,17 +82,22 @@ const store = new D1Store({
 ### Message Operations
 
 - `saveMessages({ messages })`: Save multiple messages in a batch operation (uses prepared statements).
-- `getMessages({ threadId, selectBy? })`: Retrieve messages for a thread, with optional filtering (e.g., last N, include surrounding messages).
+- `listMessages({ threadId, perPage?, page? })`: Retrieve messages for a thread with pagination.
+- `listMessagesById({ messageIds })`: Get specific messages by their IDs
+- `updateMessages({ messages })`: Update existing messages
 
 ### Workflow Operations
 
 - `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state for a given workflow/run.
 - `loadWorkflowSnapshot({ workflowName, runId })`: Load persisted workflow state.
+- `listWorkflowRuns({ workflowName, pagination })`: List workflow runs with pagination
+- `getWorkflowRunById({ workflowName, runId })`: Get a specific workflow run
 
-### Trace/Evaluation Operations
+### Operations Not Currently Supported
 
-- `getTraces({ name?, scope?, page, perPage, attributes? })`: Query trace records with optional filters and pagination.
-- `getEvalsByAgentName({ agentName, type? })`: Query evaluation results by agent name.
+- `deleteMessages(messageIds)`: Message deletion is not currently supported
+- AI Observability (traces/spans): Not currently supported
+- Evaluation/Scoring: Not currently supported
 
 ### Utility
 

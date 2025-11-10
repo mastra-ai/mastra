@@ -10,7 +10,7 @@ The PostgreSQL storage implementation provides a production-ready storage soluti
 ## Installation
 
 ```bash copy
-npm install @mastra/pg@latest
+npm install @mastra/pg@beta
 ```
 
 ## Usage
@@ -19,6 +19,7 @@ npm install @mastra/pg@latest
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 });
 ```
@@ -53,17 +54,20 @@ import { PostgresStore } from "@mastra/pg";
 
 // Using a connection string only
 const store1 = new PostgresStore({
+  id: 'pg-storage-1',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new PostgresStore({
+  id: 'pg-storage-2',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
   schemaName: "custom_schema", // optional
 });
 
 // Using individual connection parameters
 const store4 = new PostgresStore({
+  id: 'pg-storage-3',
   host: "localhost",
   port: 5432,
   database: "mydb",
@@ -73,6 +77,7 @@ const store4 = new PostgresStore({
 
 // Individual parameters with schemaName
 const store5 = new PostgresStore({
+  id: 'pg-storage-4',
   host: "localhost",
   port: 5432,
   database: "mydb",
@@ -281,6 +286,7 @@ When using custom schemas, indexes are created with schema prefixes:
 
 ```typescript copy
 const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
   schemaName: "custom_schema",
 });

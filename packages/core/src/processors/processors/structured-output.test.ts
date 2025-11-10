@@ -483,8 +483,8 @@ describe('Structured Output with Tool Execution', () => {
         },
         required: ['a', 'b'] as const,
       },
-      execute: vi.fn(async ({ a, b }: { a: number; b: number }) => {
-        return { sum: a + b };
+      execute: vi.fn(async (input: { a: number; b: number }, _context: any) => {
+        return { sum: input.a + input.b };
       }),
     };
 
@@ -625,8 +625,8 @@ describe('Structured Output with Tool Execution', () => {
       inputSchema: z.object({
         location: z.string(),
       }),
-      execute: async context => {
-        const { location } = context.context;
+      execute: async (inputData, _context) => {
+        const { location } = inputData;
         return {
           temperature: 70,
           feelsLike: 65,

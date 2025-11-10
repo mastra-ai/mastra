@@ -297,7 +297,7 @@ describe.skip('D1Store REST API', () => {
       await store.saveThread({ thread: thread2 });
 
       const { threads } = await retryUntil(
-        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, limit: 10, offset: 0 }),
+        async () => await store.listThreadsByResourceId({ resourceId: thread1.resourceId, perPage: 10, page: 0 }),
         result => result?.threads?.length === 2,
       );
       expect(threads?.length).toBe(2);
@@ -405,10 +405,10 @@ describe.skip('D1Store REST API', () => {
 
       // Verify messages were also deleted with retry
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 0,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === 0,
       );
-      expect(retrievedMessages).toHaveLength(0);
+      expect(retrievedMessages.messages).toHaveLength(0);
     });
   });
 
@@ -430,16 +430,16 @@ describe.skip('D1Store REST API', () => {
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
         async () => {
-          const msgs = await store.getMessages({ threadId: thread.id });
+          const msgs = await store.listMessages({ threadId: thread.id });
           return msgs;
         },
-        msgs => msgs.length === 2,
+        result => result.messages.length === 2,
       );
       const checkMessages = messages.map(m => ({
         ...m,
         createdAt: m.createdAt.toISOString(),
       }));
-      expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
+      expect(retrievedMessages.messages).toEqual(expect.arrayContaining(checkMessages));
     });
 
     it('should handle empty message array', async () => {
@@ -460,10 +460,10 @@ describe.skip('D1Store REST API', () => {
       await store.saveMessages({ messages });
 
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length > 0,
       );
-      expect(retrievedMessages).toHaveLength(3);
+      expect(retrievedMessages.messages).toHaveLength(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
@@ -519,19 +519,19 @@ describe.skip('D1Store REST API', () => {
 
     //   await store.saveMessages({ messages: messages, format: 'v2' });
 
-    //   const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
-    //   expect(retrievedMessages).toHaveLength(3);
+    //   const retrievedMessages = await store.listMessages({ threadId: 'thread-one', format: 'v2' });
+    //   expect(retrievedMessages.messages).toHaveLength(3);
     //   expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
 
-    //   const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
-    //   expect(retrievedMessages2).toHaveLength(3);
+    //   const retrievedMessages2 = await store.listMessages({ threadId: 'thread-two', format: 'v2' });
+    //   expect(retrievedMessages2.messages).toHaveLength(3);
     //   expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
 
-    //   const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
-    //   expect(retrievedMessages3).toHaveLength(2);
+    //   const retrievedMessages3 = await store.listMessages({ threadId: 'thread-three', format: 'v2' });
+    //   expect(retrievedMessages3.messages).toHaveLength(2);
     //   expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
 
-    //   const crossThreadMessages = await store.getMessages({
+    //   const crossThreadMessages = await store.listMessages({
     //     threadId: 'thread-doesnt-exist',
     //     resourceId: 'cross-thread-resource',
     //     format: 'v2',
@@ -552,11 +552,11 @@ describe.skip('D1Store REST API', () => {
     //     },
     //   });
 
-    //   expect(crossThreadMessages).toHaveLength(6);
-    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+    //   expect(crossThreadMessages.messages).toHaveLength(6);
+    //   expect(crossThreadMessages.messages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages.messages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
 
-    //   const crossThreadMessages2 = await store.getMessages({
+    //   const crossThreadMessages2 = await store.listMessages({
     //     threadId: 'thread-one',
     //     resourceId: 'cross-thread-resource',
     //     format: 'v2',
@@ -572,11 +572,11 @@ describe.skip('D1Store REST API', () => {
     //     },
     //   });
 
-    //   expect(crossThreadMessages2).toHaveLength(3);
-    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
-    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+    //   expect(crossThreadMessages2.messages).toHaveLength(3);
+    //   expect(crossThreadMessages2.messages.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+    //   expect(crossThreadMessages2.messages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
 
-    //   const crossThreadMessages3 = await store.getMessages({
+    //   const crossThreadMessages3 = await store.listMessages({
     //     threadId: 'thread-two',
     //     resourceId: 'cross-thread-resource',
     //     format: 'v2',
@@ -592,9 +592,9 @@ describe.skip('D1Store REST API', () => {
     //     },
     //   });
 
-    //   expect(crossThreadMessages3).toHaveLength(3);
-    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+    //   expect(crossThreadMessages3.messages).toHaveLength(3);
+    //   expect(crossThreadMessages3.messages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages3.messages.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
     // });
   });
 
@@ -985,7 +985,7 @@ describe.skip('D1Store REST API', () => {
       await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await store.listWorkflowRuns({ limit: 2, offset: 0 });
+      const page1 = await store.listWorkflowRuns({ perPage: 2, page: 0 });
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
       expect(page1.runs[0]!.workflowName).toBe(workflowName3);
@@ -996,7 +996,7 @@ describe.skip('D1Store REST API', () => {
       checkWorkflowSnapshot(secondSnapshot, stepId2, 'failed');
 
       // Get second page
-      const page2 = await store.listWorkflowRuns({ limit: 2, offset: 2 });
+      const page2 = await store.listWorkflowRuns({ perPage: 2, page: 1 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
@@ -1192,17 +1192,17 @@ describe.skip('D1Store REST API', () => {
       // Create messages with identical timestamps
       const timestamp = new Date();
       const messages = Array.from({ length: 3 }, () =>
-        createSampleMessageV1({ threadId: thread.id, createdAt: timestamp }),
+        createSampleMessageV2({ threadId: thread.id, createdAt: timestamp }),
       );
 
       await store.saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length === messages.length,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === messages.length,
       );
-      const orderIds = order.map(m => m.id);
+      const orderIds = order.messages.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
       // Order should match insertion order
@@ -1216,7 +1216,7 @@ describe.skip('D1Store REST API', () => {
       // Create messages with different timestamps
       const now = Date.now();
       const messages = Array.from({ length: 3 }, (_, i) =>
-        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
+        createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
       );
 
       // Save messages in reverse order to verify write order is preserved
@@ -1226,10 +1226,10 @@ describe.skip('D1Store REST API', () => {
       }
       // Verify all messages are saved successfully
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length === messages.length,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === messages.length,
       );
-      const orderIds = order.map(m => m.id);
+      const orderIds = order.messages.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
       // Order should match insertion order
@@ -1243,9 +1243,17 @@ describe.skip('D1Store REST API', () => {
       // Create messages with explicit timestamps to test chronological ordering
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
-        createSampleMessageV1({ threadId: thread.id, content: 'First', createdAt: new Date(baseTime) }),
-        createSampleMessageV1({ threadId: thread.id, content: 'Second', createdAt: new Date(baseTime + 1000) }),
-        createSampleMessageV1({ threadId: thread.id, content: 'Third', createdAt: new Date(baseTime + 2000) }),
+        createSampleMessageV2({ threadId: thread.id, content: { content: 'First' }, createdAt: new Date(baseTime) }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Second' },
+          createdAt: new Date(baseTime + 1000),
+        }),
+        createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: 'Third' },
+          createdAt: new Date(baseTime + 2000),
+        }),
       ];
 
       await store.saveMessages({ messages });
@@ -1254,10 +1262,10 @@ describe.skip('D1Store REST API', () => {
 
       // Get messages and verify order
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length > 0,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length > 0,
       );
-      expect(order.length).toBe(3);
+      expect(order.messages.length).toBe(3);
     });
   });
 
@@ -1271,7 +1279,7 @@ describe.skip('D1Store REST API', () => {
 
       // Should be able to retrieve thread
       const { threads } = await retryUntil(
-        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 }),
+        async () => await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 }),
         result => result?.threads?.length === 1,
       );
       expect(threads?.length).toBe(1);
@@ -1284,12 +1292,12 @@ describe.skip('D1Store REST API', () => {
       const message = createSampleMessageV2({ threadId: thread.id, content: { content: '特殊字符 !@#$%^&*()' } });
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message], format: 'v2' });
+      await store.saveMessages({ messages: [message] });
 
       // Should retrieve correctly
-      const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
+      const { messages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length > 0,
       );
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toEqual(message.content);
@@ -1304,7 +1312,7 @@ describe.skip('D1Store REST API', () => {
       // Create messages with sequential timestamps (but write order will be preserved)
       const now = Date.now();
       const messages = Array.from({ length: 5 }, (_, i) =>
-        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
+        createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
       );
 
       // Save messages sequentially to avoid race conditions in REST API
@@ -1313,13 +1321,13 @@ describe.skip('D1Store REST API', () => {
       }
       // Verify all messages are saved
       const order = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length === messages.length,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === messages.length,
       );
 
       const messageIds = messages.map(m => m.id);
-      expect(order?.length).toBe(messages.length);
-      const orderIds = order?.map(m => m.id);
+      expect(order.messages.length).toBe(messages.length);
+      const orderIds = order.messages.map(m => m.id);
       expect(orderIds).toEqual(messageIds);
     });
   });
@@ -1327,17 +1335,17 @@ describe.skip('D1Store REST API', () => {
   describe('Resource Management', () => {
     it('should clean up orphaned messages when thread is deleted', async () => {
       const thread = createSampleThread();
-      const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV2({ threadId: thread.id }));
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages });
 
       // Verify messages exist
       const initialOrder = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length > 0,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length > 0,
       );
-      expect(initialOrder).toHaveLength(messages.length);
+      expect(initialOrder.messages.length).toBe(messages.length);
 
       // Delete thread
       await store.deleteThread({ threadId: thread.id });
@@ -1346,13 +1354,13 @@ describe.skip('D1Store REST API', () => {
 
       // Verify messages are cleaned up
       const finalOrder = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        order => order.length === 0,
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === 0,
       );
-      expect(finalOrder).toHaveLength(0);
+      expect(finalOrder.messages.length).toBe(0);
 
       // Verify thread is gone
-      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, limit: 10, offset: 0 });
+      const { threads } = await store.listThreadsByResourceId({ resourceId: thread.resourceId, perPage: 10, page: 0 });
       expect(threads?.length).toBe(0);
     });
   });
@@ -1417,7 +1425,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should handle missing thread gracefully', async () => {
-      const message = createSampleMessageV1({ threadId: 'non-existent-thread' });
+      const message = createSampleMessageV2({ threadId: 'non-existent-thread' });
       await expect(
         store.saveMessages({
           messages: [message],
@@ -1430,14 +1438,17 @@ describe.skip('D1Store REST API', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = createSampleMessageV1({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
+      const malformedMessage = createSampleMessageV2({
+        threadId: thread.id,
+        content: { content: ''.padStart(1024 * 1024, 'x') },
+      });
 
       await store.saveMessages({ messages: [malformedMessage] });
 
       // Should still be able to retrieve and handle the message
-      const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
-        messages => messages.length === 1,
+      const { messages } = await retryUntil(
+        async () => await store.listMessages({ threadId: thread.id }),
+        result => result.messages.length === 1,
       );
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);

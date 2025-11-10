@@ -1,0 +1,214 @@
+---
+title: "Reference: Completeness Scorer | Evals | Mastra Docs"
+description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
+---
+
+# Completeness Scorer
+
+The `createCompletenessScorer()` function evaluates how thoroughly an LLM's output covers the key elements present in the input. It analyzes nouns, verbs, topics, and terms to determine coverage and provides a detailed completeness score.
+
+## Parameters
+
+The `createCompletenessScorer()` function does not take any options.
+
+This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
+
+## .run() Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description:
+        "Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
+    },
+    {
+      name: "score",
+      type: "number",
+      description:
+        "Completeness score (0-1) representing the proportion of input elements covered in the output.",
+    },
+  ]}
+/>
+
+The `.run()` method returns a result in the following shape:
+
+```typescript
+{
+  runId: string,
+  extractStepResult: {
+    inputElements: string[],
+    outputElements: string[],
+    missingElements: string[],
+    elementCounts: { input: number, output: number }
+  },
+  score: number
+}
+```
+
+## Element Extraction Details
+
+The scorer extracts and analyzes several types of elements:
+
+- Nouns: Key objects, concepts, and entities
+- Verbs: Actions and states (converted to infinitive form)
+- Topics: Main subjects and themes
+- Terms: Individual significant words
+
+The extraction process includes:
+
+- Normalization of text (removing diacritics, converting to lowercase)
+- Splitting camelCase words
+- Handling of word boundaries
+- Special handling of short words (3 characters or less)
+- Deduplication of elements
+
+### extractStepResult
+
+From the `.run()` method, you can get the `extractStepResult` object with the following properties:
+
+- **inputElements**: Key elements found in the input (e.g., nouns, verbs, topics, terms).
+- **outputElements**: Key elements found in the output.
+- **missingElements**: Input elements not found in the output.
+- **elementCounts**: The number of elements in the input and output.
+
+## Scoring Details
+
+The scorer evaluates completeness through linguistic element coverage analysis.
+
+### Scoring Process
+
+1. Extracts key elements:
+   - Nouns and named entities
+   - Action verbs
+   - Topic-specific terms
+   - Normalized word forms
+2. Calculates coverage of input elements:
+   - Exact matches for short terms (≤3 chars)
+   - Substantial overlap (>60%) for longer terms
+
+Final score: `(covered_elements / total_input_elements) * scale`
+
+### Score interpretation
+
+A completeness score between 0 and 1:
+
+- **1.0**: Thoroughly addresses all aspects of the query with comprehensive detail.
+- **0.7–0.9**: Covers most important aspects with good detail, minor gaps.
+- **0.4–0.6**: Addresses some key points but missing important aspects or lacking detail.
+- **0.1–0.3**: Only partially addresses the query with significant gaps.
+- **0.0**: Fails to address the query or provides irrelevant information.
+
+## Examples
+
+### High completeness example
+
+In this example, the response comprehensively addresses all aspects of the query with detailed information covering multiple dimensions.
+
+```typescript title="src/example-high-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
+
+const query =
+  "Explain the process of photosynthesis, including the inputs, outputs, and stages involved.";
+const response =
+  "Photosynthesis is the process by which plants convert sunlight into chemical energy. Inputs: Carbon dioxide (CO2) from the air enters through stomata, water (H2O) is absorbed by roots, and sunlight provides energy captured by chlorophyll. The process occurs in two main stages: 1) Light-dependent reactions in the thylakoids convert light energy to ATP and NADPH while splitting water and releasing oxygen. 2) Light-independent reactions (Calvin cycle) in the stroma use ATP, NADPH, and CO2 to produce glucose. Outputs: Glucose (C6H12O6) serves as food for the plant, and oxygen (O2) is released as a byproduct. The overall equation is: 6CO2 + 6H2O + light energy → C6H12O6 + 6O2.";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+#### High completeness output
+
+The output receives a high score because it addresses all requested aspects: inputs, outputs, stages, and provides additional context.
+
+```typescript
+{
+  score: 1,
+  reason: "The score is 1 because the response comprehensively addresses all aspects of the query: it explains what photosynthesis is, lists all inputs (CO2, H2O, sunlight), describes both stages in detail (light-dependent and light-independent reactions), specifies all outputs (glucose and oxygen), and even provides the chemical equation. No significant aspects are missing."
+}
+```
+
+### Partial completeness example
+
+In this example, the response addresses some key points but misses important aspects or lacks sufficient detail.
+
+```typescript title="src/example-partial-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
+
+const query =
+  "What are the benefits and drawbacks of remote work for both employees and employers?";
+const response =
+  "Remote work offers several benefits for employees including flexible schedules, no commuting time, and better work-life balance. It also reduces costs for office space and utilities for employers. However, remote work can lead to isolation and communication challenges for employees.";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+#### Partial completeness output
+
+The output receives a moderate score because it covers employee benefits and some drawbacks, but lacks comprehensive coverage of employer drawbacks.
+
+```typescript
+{
+  score: 0.6,
+  reason: "The score is 0.6 because the response covers employee benefits (flexibility, no commuting, work-life balance) and one employer benefit (reduced costs), as well as some employee drawbacks (isolation, communication challenges). However, it fails to address potential drawbacks for employers such as reduced oversight, team cohesion challenges, or productivity monitoring difficulties."
+}
+```
+
+### Low completeness example
+
+In this example, the response only partially addresses the query and misses several important aspects.
+
+```typescript title="src/example-low-completeness.ts" showLineNumbers copy
+import { createCompletenessScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createCompletenessScorer({ model: "openai/gpt-4o-mini" });
+
+const query =
+  "Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.";
+const response =
+  "Renewable energy sources like solar and wind are becoming cheaper. They're better for the environment than fossil fuels.";
+
+const result = await scorer.run({
+  input: [{ role: "user", content: query }],
+  output: { text: response },
+});
+
+console.log(result);
+```
+
+#### Low completeness output
+
+The output receives a low score because it only briefly mentions cost and environmental impact while completely missing sustainability and lacking detailed comparison.
+
+```typescript
+{
+  score: 0.2,
+  reason: "The score is 0.2 because the response only superficially touches on cost (renewable getting cheaper) and environmental impact (renewable better than fossil fuels) but provides no detailed comparison, fails to address sustainability aspects, doesn't discuss specific non-renewable sources, and lacks depth in all mentioned areas."
+}
+```
+
+## Related
+
+- [Answer Relevancy Scorer](./answer-relevancy)
+- [Content Similarity Scorer](./content-similarity)
+- [Textual Difference Scorer](./textual-difference)
+- [Keyword Coverage Scorer](./keyword-coverage)

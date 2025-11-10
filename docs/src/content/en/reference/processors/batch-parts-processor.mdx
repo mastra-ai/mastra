@@ -65,10 +65,16 @@ const processor = new BatchPartsProcessor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'batch-parts'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'batch-parts'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -107,4 +113,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Guardrails](/docs/agents/guardrails)
+- [Guardrails](/docs/v1/agents/guardrails)

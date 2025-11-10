@@ -2,8 +2,6 @@ import type { MastraMessageContentV2 } from '../../../agent';
 import { MastraBase } from '../../../base';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
-  StorageGetMessagesArg,
-  PaginationInfo,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
@@ -38,8 +36,6 @@ export abstract class MemoryStorage extends MastraBase {
 
   abstract deleteThread({ threadId }: { threadId: string }): Promise<void>;
 
-  abstract getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }>;
-
   abstract listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput>;
 
   abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
@@ -63,8 +59,6 @@ export abstract class MemoryStorage extends MastraBase {
   abstract listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput>;
-
-  abstract getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }>;
 
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
@@ -94,11 +88,16 @@ export abstract class MemoryStorage extends MastraBase {
     );
   }
 
-  protected parseOrderBy(orderBy?: StorageOrderBy): { field: ThreadOrderBy; direction: ThreadSortDirection } {
+  protected parseOrderBy(
+    orderBy?: StorageOrderBy,
+    defaultDirection: ThreadSortDirection = 'DESC',
+  ): { field: ThreadOrderBy; direction: ThreadSortDirection } {
     return {
       field: orderBy?.field && orderBy.field in THREAD_ORDER_BY_SET ? orderBy.field : 'createdAt',
       direction:
-        orderBy?.direction && orderBy.direction in THREAD_THREAD_SORT_DIRECTION_SET ? orderBy.direction : 'DESC',
+        orderBy?.direction && orderBy.direction in THREAD_THREAD_SORT_DIRECTION_SET
+          ? orderBy.direction
+          : defaultDirection,
     };
   }
 }

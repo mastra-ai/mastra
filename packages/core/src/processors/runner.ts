@@ -1,8 +1,8 @@
 import type { MastraDBMessage, MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
-import { AISpanType } from '../ai-tracing';
-import type { AISpan, TracingContext } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
+import { SpanType } from '../observability';
+import type { Span, TracingContext } from '../observability';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { Processor } from './index';
@@ -14,16 +14,16 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   private accumulatedText = '';
   public customState: Record<string, any> = {};
   public streamParts: ChunkType<OUTPUT>[] = [];
-  public span?: AISpan<AISpanType.PROCESSOR_RUN>;
+  public span?: Span<SpanType.PROCESSOR_RUN>;
 
   constructor(options: { processorName: string; tracingContext?: TracingContext; processorIndex?: number }) {
     const { processorName, tracingContext, processorIndex } = options;
     const currentSpan = tracingContext?.currentSpan;
 
     // Find the AGENT_RUN span by walking up the parent chain
-    const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+    const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
     this.span = parentSpan?.createChildSpan({
-      type: AISpanType.PROCESSOR_RUN,
+      type: SpanType.PROCESSOR_RUN,
       name: `output processor: ${processorName}`,
       attributes: {
         processorName: processorName,
@@ -108,9 +108,9 @@ export class ProcessorRunner {
       }
 
       const currentSpan = tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: AISpanType.PROCESSOR_RUN,
+        type: SpanType.PROCESSOR_RUN,
         name: `output processor: ${processor.id}`,
         attributes: {
           processorName: processor.name ?? processor.id,
@@ -313,9 +313,9 @@ export class ProcessorRunner {
       }
 
       const currentSpan = tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(AISpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
       const processorSpan = parentSpan?.createChildSpan({
-        type: AISpanType.PROCESSOR_RUN,
+        type: SpanType.PROCESSOR_RUN,
         name: `input processor: ${processor.id}`,
         attributes: {
           processorName: processor.name ?? processor.id,
@@ -341,10 +341,11 @@ export class ProcessorRunner {
 
       // Add system messages using addSystem
       for (const sysMsg of systemMessages) {
-        messageList.addSystem(
-          (sysMsg.content.content as string) ||
-            sysMsg.content.parts.map(p => (p.type === 'text' ? p.text : '')).join('\n'),
-        );
+        const systemText =
+          (sysMsg.content.content as string | undefined) ??
+          sysMsg.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join('\n') ??
+          '';
+        messageList.addSystem(systemText);
       }
 
       // Add non-system messages normally

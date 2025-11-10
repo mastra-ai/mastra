@@ -85,7 +85,6 @@ export class StepExecutor extends MastraBase {
               // TODO
               params.state = state;
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -255,7 +254,6 @@ export class StepExecutor extends MastraBase {
           setState: (_state: any) => {
             // TODO
           },
-          runCount: retryCount,
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
@@ -326,7 +324,6 @@ export class StepExecutor extends MastraBase {
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -400,7 +397,6 @@ export class StepExecutor extends MastraBase {
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,

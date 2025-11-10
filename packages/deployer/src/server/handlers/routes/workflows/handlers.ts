@@ -14,7 +14,6 @@ import {
   getWorkflowRunByIdHandler as getOriginalGetWorkflowRunByIdHandler,
   getWorkflowRunExecutionResultHandler as getOriginalGetWorkflowRunExecutionResultHandler,
   cancelWorkflowRunHandler as getOriginalCancelWorkflowRunHandler,
-  sendWorkflowRunEventHandler as getOriginalSendWorkflowRunEventHandler,
   observeStreamLegacyWorkflowHandler as getOriginalObserveStreamLegacyWorkflowHandler,
   resumeStreamWorkflowHandler as getOriginalResumeStreamWorkflowHandler,
   observeStreamVNextWorkflowHandler as getOriginalObserveStreamVNextWorkflowHandler,
@@ -24,6 +23,7 @@ import { HTTPException } from 'hono/http-exception';
 import { stream } from 'hono/streaming';
 
 import { handleError } from '../../error';
+import { parsePage, parsePerPage } from '../../utils/query-parsers';
 
 export async function listWorkflowsHandler(c: Context) {
   try {
@@ -440,14 +440,14 @@ export async function listWorkflowRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const { fromDate, toDate, limit, offset, resourceId } = c.req.query();
+    const { fromDate, toDate, perPage: perPageRaw, page: pageRaw, resourceId } = c.req.query();
     const workflowRuns = await getOriginalListWorkflowRunsHandler({
       mastra,
       workflowId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      offset: offset ? Number(offset) : undefined,
+      perPage: perPageRaw !== undefined ? parsePerPage(perPageRaw) : undefined,
+      page: pageRaw !== undefined ? parsePage(pageRaw) : undefined,
       resourceId,
     });
 
@@ -506,26 +506,5 @@ export async function cancelWorkflowRunHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error canceling workflow run');
-  }
-}
-
-export async function sendWorkflowRunEventHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const workflowId = c.req.param('workflowId');
-    const runId = c.req.param('runId');
-    const { event, data } = await c.req.json();
-
-    const result = await getOriginalSendWorkflowRunEventHandler({
-      mastra,
-      workflowId,
-      runId,
-      event,
-      data,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error sending workflow run event');
   }
 }

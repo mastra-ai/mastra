@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto';
 import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
-import { AISpanType, wrapMastra } from '@mastra/core/ai-tracing';
-import type { TracingContext, TracingOptions } from '@mastra/core/ai-tracing';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
+import { SpanType, wrapMastra } from '@mastra/core/observability';
+import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
@@ -156,13 +156,14 @@ export class InngestRun<
 
   async getRunOutput(eventId: string) {
     let runs = await this.getRuns(eventId);
+    const storage = this.#mastra?.getStorage();
 
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
 
       if (runs?.[0]?.status === 'Failed') {
-        const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+        const snapshot = await storage?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
         });
@@ -172,7 +173,7 @@ export class InngestRun<
       }
 
       if (runs?.[0]?.status === 'Cancelled') {
-        const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+        const snapshot = await storage?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
         });
@@ -182,14 +183,9 @@ export class InngestRun<
     return runs?.[0];
   }
 
-  async sendEvent(event: string, data: any) {
-    await this.inngest.send({
-      name: `user-event-${event}`,
-      data,
-    });
-  }
-
   async cancel() {
+    const storage = this.#mastra?.getStorage();
+
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
       data: {
@@ -197,12 +193,12 @@ export class InngestRun<
       },
     });
 
-    const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const snapshot = await storage?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
     if (snapshot) {
-      await this.#mastra?.storage?.persistWorkflowSnapshot({
+      await storage?.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -324,10 +320,12 @@ export class InngestRun<
       | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const storage = this.#mastra?.getStorage();
+
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
-    const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const snapshot = await storage?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -598,8 +596,8 @@ export class InngestWorkflow<
   async listWorkflowRuns(args?: {
     fromDate?: Date;
     toDate?: Date;
-    limit?: number;
-    offset?: number;
+    perPage?: number | false;
+    page?: number;
     resourceId?: string;
   }) {
     const storage = this.#mastra?.getStorage();
@@ -651,22 +649,7 @@ export class InngestWorkflow<
     }
   }
 
-  /**
-   * @deprecated Use createRunAsync() instead.
-   * @throws {Error} Always throws an error directing users to use createRunAsync()
-   */
-  createRun(_options?: { runId?: string }): Run<TEngineType, TSteps, TState, TInput, TOutput> {
-    throw new Error(
-      'createRun() has been deprecated. ' +
-        'Please use createRunAsync() instead.\n\n' +
-        'Migration guide:\n' +
-        '  Before: const run = workflow.createRun();\n' +
-        '  After:  const run = await workflow.createRunAsync();\n\n' +
-        'Note: createRunAsync() is an async method, so make sure your calling function is async.',
-    );
-  }
-
-  async createRunAsync(options?: {
+  async createRun(options?: {
     runId?: string;
     resourceId?: string;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
@@ -795,7 +778,7 @@ export class InngestWorkflow<
           resume,
           format,
           abortController: new AbortController(),
-          // currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+          // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
@@ -890,12 +873,12 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSchemaOut extends z.ZodType<any>,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema>,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
     inputSchema: TSchemaIn;
     outputSchema: TSchemaOut;
-    execute: (context: TContext) => Promise<any>;
+    execute: (input: z.infer<TSchemaIn>, context: TContext) => Promise<z.infer<TSchemaOut>>;
   },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
 export function createStep<
@@ -1064,7 +1047,7 @@ export function createStep<
   }
 
   return {
-    id: params.id,
+    id: params.id as TStepId,
     description: params.description,
     inputSchema: params.inputSchema,
     outputSchema: params.outputSchema,
@@ -1241,7 +1224,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     let { duration, fn } = entry;
 
     const sleepSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
         durationMs: duration,
@@ -1265,7 +1248,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               setState: (state: any) => {
                 executionContext.state = state;
               },
-              runCount: -1,
               retryCount: -1,
               tracingContext: {
                 currentSpan: sleepSpan,
@@ -1359,7 +1341,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     let { date, fn } = entry;
 
     const sleepUntilSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
         untilDate: date,
@@ -1384,7 +1366,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               setState: (state: any) => {
                 executionContext.state = state;
               },
-              runCount: -1,
               retryCount: -1,
               tracingContext: {
                 currentSpan: sleepUntilSpan,
@@ -1447,19 +1428,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
   }
 
-  async executeWaitForEvent({ event, timeout }: { event: string; timeout?: number }): Promise<any> {
-    const eventData = await this.inngestStep.waitForEvent(`user-event-${event}`, {
-      event: `user-event-${event}`,
-      timeout: timeout ?? 5e3,
-    });
-
-    if (eventData === null) {
-      throw 'Timeout waiting for event';
-    }
-
-    return eventData?.data;
-  }
-
   async executeStep({
     step,
     stepResults,
@@ -1489,9 +1457,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
+    const stepSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
-      type: AISpanType.WORKFLOW_STEP,
+      type: SpanType.WORKFLOW_STEP,
       input: prevOutput,
       attributes: {
         stepId: step.id,
@@ -1744,7 +1712,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
             tracingContext: {
-              currentSpan: stepAISpan,
+              currentSpan: stepSpan,
             },
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
@@ -1804,7 +1772,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           execResults = stepFailure;
 
           const fallbackErrorMessage = `Step ${step.id} failed`;
-          stepAISpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
+          stepSpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
           throw new RetryAfterError(execResults.error ?? fallbackErrorMessage, executionContext.retryConfig.delay, {
             cause: execResults,
           });
@@ -1856,7 +1824,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           });
         }
 
-        stepAISpan?.end({ output: execResults });
+        stepSpan?.end({ output: execResults });
 
         return { result: execResults, executionContext, stepResults };
       });
@@ -1894,7 +1862,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             requestContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan },
+            tracingContext: { currentSpan: stepSpan },
           });
         }
       });
@@ -2005,7 +1973,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_CONDITIONAL,
+      type: SpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: '${entry.conditions.length} conditions'`,
       input: prevOutput,
       attributes: {
@@ -2020,7 +1988,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         entry.conditions.map((cond, index) =>
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
             const evalSpan = conditionalSpan?.createChildSpan({
-              type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+              type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
               name: `condition: '${index}'`,
               input: prevOutput,
               attributes: {
@@ -2037,7 +2005,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     workflowId,
                     mastra: this.mastra!,
                     requestContext,
-                    runCount: -1,
                     retryCount: -1,
                     inputData: prevOutput,
                     state: executionContext.state,

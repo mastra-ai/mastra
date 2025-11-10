@@ -31,7 +31,7 @@ An introduction to agents, and how they compare to workflows on [YouTube (7 minu
 Add the Mastra core package to your project:
 
 ```bash
-npm install @mastra/core
+npm install @mastra/core@beta
 ```
 
 </StepItem>
@@ -46,7 +46,7 @@ OPENAI_API_KEY=<your-api-key>
 
 :::note
 
-Mastra supports more than 600 models. Choose from the [full list](/models).
+Mastra supports more than 600 models. Choose from the [full list](/models/v1).
 
 :::
 
@@ -79,7 +79,7 @@ export const testAgent = new Agent({
 Include the Mastra core package alongside the Vercel AI SDK provider you want to use:
 
 ```bash
-npm install @mastra/core @ai-sdk/openai
+npm install @mastra/core@beta @ai-sdk/openai
 ```
 
 </StepItem>
@@ -163,7 +163,7 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](/reference/agents/agent) for more information.
+> See the [Agent reference doc](/reference/v1/agents/agent) for more information.
 
 ### Registering an agent
 
@@ -191,7 +191,7 @@ const testAgent = mastra.getAgent("testAgent");
 
 `mastra.getAgent()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 
-See [Calling agents](/examples/agents/calling-agents) for more information.
+See [Calling agents](/examples/v1/agents/calling-agents) for more information.
 
 :::
 
@@ -261,7 +261,7 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/agents/generate) or [.stream()](/reference/streaming/agents/stream) for more information.
+> See [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
 
 ## Structured output
 
@@ -454,15 +454,15 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Request Context](/docs/server-db/request-context) for more information.
+> See [Request Context](/docs/v1/server-db/request-context) for more information.
 
-## Testing with Mastra Playground
+## Testing with Studio
 
-Use the Mastra [Playground](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](/docs/v1/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
 - [Using Tools](./using-tools)
 - [Agent Memory](./agent-memory)
-- [Request Context](/examples/agents/request-context)
-- [Calling Agents](/examples/agents/calling-agents)
+- [Request Context](/examples/v1/agents/request-context)
+- [Calling Agents](/examples/v1/agents/calling-agents)

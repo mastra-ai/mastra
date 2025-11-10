@@ -1,0 +1,362 @@
+---
+title: "Example: Running Scorers in CI | Evals | Mastra Docs"
+description: Example of using runEvals to test agents in a CI/CD pipeline with Vitest.
+---
+
+# Running Scorers in CI
+
+This example shows how to use `runEvals` to run scorer tests in your CI/CD pipeline. The function processes multiple test cases through your agent and returns aggregate scores that you can assert against.
+
+## Installation
+
+```bash copy
+npm install @mastra/core@beta
+npm install -D vitest
+```
+
+## Vitest Configuration
+
+Create a `vitest.config.ts` file to configure your test environment:
+
+```typescript title="vitest.config.ts" showLineNumbers copy
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    // Increase timeout for API calls to LLMs
+    testTimeout: 120000, // 2 minutes
+    // Disable parallel execution to avoid hitting API rate limits for this example
+    fileParallelism: false,
+  },
+});
+```
+
+## Create Your Agent
+
+First, define the weather tool that fetches real weather data:
+
+```typescript title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+interface GeocodingResponse {
+  results: {
+    latitude: number;
+    longitude: number;
+    name: string;
+    countryCode: string;
+    country: string;
+    admin1: string;
+  }[];
+}
+
+interface WeatherResponse {
+  current: {
+    time: string;
+    temperature_2m: number;
+    apparent_temperature: number;
+    relative_humidity_2m: number;
+    wind_speed_10m: number;
+    wind_gusts_10m: number;
+    weather_code: number;
+  };
+}
+
+export const weatherTool = createTool({
+  id: 'weatherTool',
+  description: 'Get current weather for a location',
+  inputSchema: z.object({
+    location: z.string().describe('City name'),
+    countryCode: z.string().describe('Country code in ISO-3166-1 alpha2 format'),
+  }),
+  outputSchema: z.array(
+    z.object({
+      temperature: z.number(),
+      feelsLike: z.number(),
+      humidity: z.number(),
+      windSpeed: z.number(),
+      windGust: z.number(),
+      conditions: z.string(),
+      location: z.string(),
+      countryCode: z.string().describe('Country code in ISO-3166-1 alpha2 format'),
+      country: z.string().describe('Country name'),
+      administrativeArea: z
+        .string()
+        .describe('Administrative area name such as state, province, or region'),
+    })
+  ),
+  execute: async ({ context }) => {
+    return await getWeather(context.location, context.countryCode);
+  },
+});
+
+const getWeather = async (location: string, countryCode: string) => {
+  const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&country=${encodeURIComponent(countryCode)}&count=10`;
+  const geocodingResponse = await fetch(geocodingUrl);
+  const geocodingData = (await geocodingResponse.json()) as GeocodingResponse;
+
+  if (!geocodingData.results?.[0]) {
+    throw new Error(`Location '${location}' not found`);
+  }
+
+  const results = geocodingData.results.map((result) => {
+    return {
+      latitude: result.latitude,
+      longitude: result.longitude,
+      countryCode: result.countryCode,
+      country: result.country,
+      administrativeArea: result.admin1,
+      name: result.name,
+    };
+  });
+
+  const weatherResults = await Promise.all(
+    results.map(async (result) => {
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${result.latitude}&longitude=${result.longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
+      const response = await fetch(weatherUrl);
+      const data = (await response.json()) as WeatherResponse;
+
+      return {
+        temperature: data.current.temperature_2m,
+        feelsLike: data.current.apparent_temperature,
+        humidity: data.current.relative_humidity_2m,
+        windSpeed: data.current.wind_speed_10m,
+        windGust: data.current.wind_gusts_10m,
+        conditions: getWeatherCondition(data.current.weather_code),
+        countryCode: result.countryCode,
+        country: result.country,
+        administrativeArea: result.administrativeArea,
+        location: result.name,
+      };
+    })
+  );
+
+  return weatherResults;
+};
+
+function getWeatherCondition(code: number): string {
+  const conditions: Record<number, string> = {
+    0: 'Clear sky',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Foggy',
+    48: 'Depositing rime fog',
+    51: 'Light drizzle',
+    53: 'Moderate drizzle',
+    55: 'Dense drizzle',
+    56: 'Light freezing drizzle',
+    57: 'Dense freezing drizzle',
+    61: 'Slight rain',
+    63: 'Moderate rain',
+    65: 'Heavy rain',
+    66: 'Light freezing rain',
+    67: 'Heavy freezing rain',
+    71: 'Slight snow fall',
+    73: 'Moderate snow fall',
+    75: 'Heavy snow fall',
+    77: 'Snow grains',
+    80: 'Slight rain showers',
+    81: 'Moderate rain showers',
+    82: 'Violent rain showers',
+    85: 'Slight snow showers',
+    86: 'Heavy snow showers',
+    95: 'Thunderstorm',
+    96: 'Thunderstorm with slight hail',
+    99: 'Thunderstorm with heavy hail',
+  };
+  return conditions[code] || 'Unknown';
+}
+```
+
+Then create the agent with the weather tool:
+
+```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { weatherTool } from '../tools/weather-tool';
+
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: 'You are a helpful weather assistant that provides accurate weather information.',
+  model: openai('gpt-4o-mini'),
+  tools: {
+    weatherTool,
+  },
+});
+```
+
+## Create a Custom Scorer
+
+Define a scorer that validates the agent's tool calls:
+
+```typescript title="src/mastra/scorers/location-scorer.ts" showLineNumbers copy
+import { createScorer } from '@mastra/core/evals';
+
+export const locationScorer = createScorer({
+  name: 'location-accuracy',
+  description: 'Validates location extraction from queries',
+  type: 'agent',
+}).generateScore(({ run }) => {
+  const { expectedLocation, expectedCountry } = run.groundTruth;
+
+  // Extract tool calls from agent output
+  const toolCalls = [];
+  for (const message of run.output) {
+    for (const part of message.parts) {
+      if (part.type === 'tool-invocation') {
+        if (part.toolInvocation.toolName === 'weatherTool') {
+          toolCalls.push(part.toolInvocation.args);
+        }
+      }
+    }
+  }
+
+  // Expect exactly one tool call
+  if (toolCalls.length !== 1) {
+    return 0;
+  }
+
+  // Validate against ground truth
+  const args = toolCalls[0];
+  const isValid =
+    args.location.toLowerCase() === expectedLocation.toLowerCase() &&
+    args.countryCode.toLowerCase() === expectedCountry.toLowerCase();
+
+  return isValid ? 1 : 0;
+});
+```
+
+## Create Test Suite
+
+Use `runEvals` to test your agent against multiple cases:
+
+```typescript title="src/mastra/agents/weather-agent.test.ts" showLineNumbers copy
+import { describe, it, expect } from 'vitest';
+import { runEvals } from '@mastra/core/evals';
+import { weatherAgent } from './weather-agent';
+import { locationScorer } from '../scorers/location-scorer';
+
+describe('Weather Agent Tests', () => {
+  it('should correctly extract locations from queries', async () => {
+    const result = await runEvals({
+      data: [
+        {
+          input: 'weather in Berlin',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
+        },
+        {
+          input: 'weather in Berlin, Maryland',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'US' },
+        },
+        {
+          input: 'weather in Berlin, Russia',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'RU' },
+        },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer],
+    });
+
+    console.log('Experiment result:', result);
+
+    // Assert aggregate score meets threshold
+    expect(result.scores['location-accuracy']).toBe(1);
+    expect(result.summary.totalItems).toBe(3);
+  });
+
+  it('should handle typos and misspellings', async () => {
+    const result = await runEvals({
+      data: [
+        {
+          input: 'weather in Berln',
+          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
+        },
+        {
+          input: 'weather in Parris',
+          groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' },
+        },
+        {
+          input: 'weather in Londn',
+          groundTruth: { expectedLocation: 'London', expectedCountry: 'GB' },
+        },
+      ],
+      target: weatherAgent,
+      scorers: [locationScorer],
+    });
+
+    // Assert agent can correct spelling errors
+    expect(result.scores['location-accuracy']).toBe(1);
+    expect(result.summary.totalItems).toBe(3);
+  });
+});
+```
+
+## Perfect Score Example
+
+When all test cases pass the scorer criteria, `runEvals` returns a perfect aggregate score:
+
+```typescript
+{
+  scores: {
+    'location-accuracy': 1
+  },
+  summary: {
+    totalItems: 3
+  }
+}
+```
+
+## Running Tests
+
+Execute your tests using Vitest:
+
+```bash copy
+# Run all tests
+npx vitest
+
+# Run specific test file
+npx vitest src/mastra/agents/weather-agent.test.ts
+```
+
+## Environment Variables
+
+Ensure your CI environment has required API key:
+
+```bash
+OPENAI_API_KEY=your_key_here
+```
+
+## Understanding the Results
+
+`runEvals` returns a result in the following shape:
+
+```typescript
+{
+  scores: Record<string, number>,
+  summary: {
+    totalItems: number
+  }
+}
+```
+
+### Scores
+
+The `scores` object contains average scores for each scorer across all test cases:
+
+- **1.0**: All test cases passed the scorer criteria
+- **0.5-0.9**: Some test cases passed, indicating partial success
+- **0.0**: No test cases passed the scorer criteria
+
+Each scorer's average score is calculated by summing individual scores and dividing by the total number of test cases.
+
+### Summary
+
+The `summary` object provides metadata about the experiment:
+
+- `totalItems`: The total number of test cases processed
+
+You can assert on these values in your tests to ensure your agent meets quality thresholds.

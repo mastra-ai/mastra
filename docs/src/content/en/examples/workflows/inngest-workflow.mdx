@@ -10,7 +10,7 @@ This example demonstrates how to build an Inngest workflow with Mastra.
 ## Setup
 
 ```sh copy
-npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
+npm install @mastra/inngest@beta inngest @mastra/core@beta @mastra/deployer@beta @hono/node-server @ai-sdk/openai
 
 docker run --rm -p 8288:8288 \
   inngest/inngest \
@@ -381,7 +381,7 @@ const srv = serve({
 });
 
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 // Start the workflow with the required input data (city name)
 // This will trigger the workflow steps and stream the result to the console

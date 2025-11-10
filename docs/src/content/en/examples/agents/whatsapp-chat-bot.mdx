@@ -126,6 +126,7 @@ export const chatAgent = new Agent({
   model: anthropic("claude-4-sonnet-20250514"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'agent-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -164,6 +165,7 @@ export const textMessageAgent = new Agent({
   model: anthropic("claude-4-sonnet-20250514"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'agent-storage',
       url: "file:../mastra.db",
     }),
   }),
@@ -314,6 +316,7 @@ export const mastra = new Mastra({
   workflows: { chatWorkflow },
   agents: { textMessageAgent, chatAgent },
   storage: new LibSQLStore({
+    id: 'agent-storage',
     url: ":memory:",
   }),
   logger: new PinoLogger({
@@ -347,7 +350,7 @@ export const mastra = new Mastra({
 
           const body = await c.req.json();
 
-          const workflowRun = await chatWorkflow.createRunAsync();
+          const workflowRun = await chatWorkflow.createRun();
           const runResult = await workflowRun.start({
             inputData: { userMessage: JSON.stringify(body) },
           });
@@ -392,7 +395,7 @@ const mockWebhookData = {
 };
 
 const workflow = mastra.getWorkflow("chatWorkflow");
-const workflowRun = await workflow.createRunAsync();
+const workflowRun = await workflow.createRun();
 
 const result = await workflowRun.start({
   inputData: { userMessage: JSON.stringify(mockWebhookData) },

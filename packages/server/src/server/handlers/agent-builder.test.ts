@@ -19,7 +19,6 @@ import {
   getAgentBuilderActionRunsHandler,
   getAgentBuilderActionRunExecutionResultHandler,
   cancelAgentBuilderActionRunHandler,
-  sendAgentBuilderActionRunEventHandler,
   streamAgentBuilderActionHandler,
   streamLegacyAgentBuilderActionHandler,
   streamVNextAgentBuilderActionHandler,
@@ -379,7 +378,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -423,7 +422,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action run execution result successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -525,7 +524,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should start action run successfully', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -604,7 +603,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should resume action run successfully', async () => {
-      const run = await reusableWorkflow.createRunAsync({
+      const run = await reusableWorkflow.createRun({
         runId: 'test-run',
       });
 
@@ -661,7 +660,7 @@ describe('Agent Builder Handlers', () => {
     });
 
     it('should get action runs successfully (not empty)', async () => {
-      const run = await mockWorkflow.createRunAsync({
+      const run = await mockWorkflow.createRun({
         runId: 'test-run',
       });
       await run.start({ inputData: {} });
@@ -703,35 +702,6 @@ describe('Agent Builder Handlers', () => {
       expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Cancelling agent builder action run',
-        expect.objectContaining({
-          actionId: 'merge-template',
-        }),
-      );
-    });
-  });
-
-  describe('sendAgentBuilderActionRunEventHandler', () => {
-    it('should handle workflow registry correctly on send event', async () => {
-      await expect(
-        sendAgentBuilderActionRunEventHandler({
-          mastra: mockMastra,
-          actionId: 'merge-template',
-          runId: 'non-existent',
-          event: 'test',
-          data: {},
-        }),
-      ).rejects.toThrow();
-
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Sending agent builder action run event',
         expect.objectContaining({
           actionId: 'merge-template',
         }),

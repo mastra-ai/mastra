@@ -1,6 +1,6 @@
 {
   "name": "@mastra/schema-compat",
-  "version": "0.11.4",
+  "version": "1.0.0-beta.0",
   "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
   "main": "dist/index.js",
@@ -76,5 +76,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -8,9 +8,21 @@
  * This is derived from the JSON data and provides type-safe access
  */
 export type ProviderModelsMap = {
-  readonly 'moonshotai-cn': readonly ['kimi-k2-0711-preview', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'];
+  readonly 'moonshotai-cn': readonly [
+    'kimi-k2-0711-preview',
+    'kimi-k2-0905-preview',
+    'kimi-k2-thinking',
+    'kimi-k2-thinking-turbo',
+    'kimi-k2-turbo-preview',
+  ];
   readonly lucidquery: readonly ['lucidnova-rf1-100b', 'lucidquery-nexus-coder'];
-  readonly moonshotai: readonly ['kimi-k2-0711-preview', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview'];
+  readonly moonshotai: readonly [
+    'kimi-k2-0711-preview',
+    'kimi-k2-0905-preview',
+    'kimi-k2-thinking',
+    'kimi-k2-thinking-turbo',
+    'kimi-k2-turbo-preview',
+  ];
   readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
   readonly alibaba: readonly [
     'qvq-max',
@@ -95,11 +107,14 @@ export type ProviderModelsMap = {
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
     'nvidia/llama-embed-nemotron-8b',
     'nvidia/nemoretriever-ocr-v1',
+    'nvidia/nvidia-nemotron-nano-9b-v2',
     'nvidia/parakeet-tdt-0.6b-v2',
     'openai/gpt-oss-120b',
     'openai/whisper-large-v3',
     'qwen/qwen3-235b-a22b',
     'qwen/qwen3-coder-480b-a35b-instruct',
+    'qwen/qwen3-next-80b-a3b-instruct',
+    'qwen/qwen3-next-80b-a3b-thinking',
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2'];
   readonly groq: readonly [
@@ -178,6 +193,7 @@ export type ProviderModelsMap = {
     'meta/llama-3.3-70b',
     'meta/llama-4-maverick',
     'meta/llama-4-scout',
+    'minimax/minimax-m2',
     'mistral/codestral',
     'mistral/magistral-medium',
     'mistral/magistral-small',
@@ -323,39 +339,61 @@ export type ProviderModelsMap = {
     'qwen3-235b',
     'qwen3-4b',
     'venice-uncensored',
+    'zai-org-glm-4.6',
   ];
   readonly chutes: readonly [
+    'Alibaba-NLP/Tongyi-DeepResearch-30B-A3B',
+    'ArliAI/QwQ-32B-ArliAI-RpR-v1',
     'MiniMaxAI/MiniMax-M2',
+    'NousResearch/DeepHermes-3-Mistral-24B-Preview',
+    'NousResearch/Hermes-4-14B',
+    'NousResearch/Hermes-4-405B-FP8',
+    'NousResearch/Hermes-4-70B',
+    'OpenGVLab/InternVL3-78B',
+    'Qwen/Qwen2.5-72B-Instruct',
+    'Qwen/Qwen2.5-Coder-32B-Instruct',
+    'Qwen/Qwen2.5-VL-32B-Instruct',
+    'Qwen/Qwen2.5-VL-72B-Instruct',
+    'Qwen/Qwen3-14B',
+    'Qwen/Qwen3-235B-A22B',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'Qwen/Qwen3-235B-A22B-Thinking-2507',
     'Qwen/Qwen3-30B-A3B',
     'Qwen/Qwen3-30B-A3B-Instruct-2507',
+    'Qwen/Qwen3-32B',
     'Qwen/Qwen3-Coder-30B-A3B-Instruct',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8',
     'Qwen/Qwen3-Next-80B-A3B-Instruct',
-    'Qwen/Qwen3-Next-80B-A3B-Thinking',
+    'Qwen/Qwen3-VL-235B-A22B-Instruct',
+    'Qwen/Qwen3-VL-235B-A22B-Thinking',
+    'chutesai/Mistral-Small-3.1-24B-Instruct-2503',
     'chutesai/Mistral-Small-3.2-24B-Instruct-2506',
+    'deepseek-ai/DeepSeek-R1',
     'deepseek-ai/DeepSeek-R1-0528',
     'deepseek-ai/DeepSeek-R1-0528-Qwen3-8B',
     'deepseek-ai/DeepSeek-R1-Distill-Llama-70B',
+    'deepseek-ai/DeepSeek-V3',
     'deepseek-ai/DeepSeek-V3-0324',
     'deepseek-ai/DeepSeek-V3.1',
     'deepseek-ai/DeepSeek-V3.1-Terminus',
-    'deepseek-ai/DeepSeek-V3.1:THINKING',
     'deepseek-ai/DeepSeek-V3.2-Exp',
     'meituan-longcat/LongCat-Flash-Chat-FP8',
+    'microsoft/MAI-DS-R1-FP8',
     'moonshotai/Kimi-K2-Instruct-0905',
-    'moonshotai/Kimi-K2-Instruct-75k',
-    'moonshotai/Kimi-VL-A3B-Thinking',
+    'moonshotai/Kimi-K2-Thinking',
     'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'rednote-hilab/dots.ocr',
     'tngtech/DeepSeek-R1T-Chimera',
     'tngtech/DeepSeek-TNG-R1T2-Chimera',
+    'unsloth/Mistral-Nemo-Instruct-2407',
+    'unsloth/Mistral-Small-24B-Instruct-2501',
+    'unsloth/gemma-3-12b-it',
+    'unsloth/gemma-3-27b-it',
+    'unsloth/gemma-3-4b-it',
     'zai-org/GLM-4.5',
     'zai-org/GLM-4.5-Air',
-    'zai-org/GLM-4.5-FP8',
     'zai-org/GLM-4.6',
-    'zai-org/GLM-4.6-FP8',
-    'zai-org/GLM-4.6-turbo',
   ];
   readonly cortecs: readonly [
     'claude-4-5-sonnet',
@@ -436,7 +474,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
   ];
   readonly baseten: readonly [
-    'Qwen3/Qwen3-Coder-480B-A35B-Instruct',
+    'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
     'zai-org/GLM-4.6',
   ];
@@ -457,7 +495,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly opencode: readonly [
-    'an-gbt',
+    'an-gd4',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -620,6 +658,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2',
     'moonshotai/kimi-k2-0905',
     'moonshotai/kimi-k2-0905:exacto',
+    'moonshotai/kimi-k2-thinking',
     'moonshotai/kimi-k2:free',
     'nousresearch/deephermes-3-llama-3-8b-preview',
     'nousresearch/hermes-4-405b',
@@ -642,6 +681,7 @@ export type ProviderModelsMap = {
     'openrouter/cypher-alpha:free',
     'openrouter/horizon-alpha',
     'openrouter/horizon-beta',
+    'openrouter/polaris-alpha',
     'openrouter/sonoma-dusk-alpha',
     'openrouter/sonoma-sky-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
@@ -742,6 +782,7 @@ export type ProviderModelsMap = {
     'hf:meta-llama/Llama-4-Scout-17B-16E-Instruct',
     'hf:moonshotai/Kimi-K2-Instruct',
     'hf:moonshotai/Kimi-K2-Instruct-0905',
+    'hf:moonshotai/Kimi-K2-Thinking',
     'hf:openai/gpt-oss-120b',
     'hf:zai-org/GLM-4.5',
     'hf:zai-org/GLM-4.6',
@@ -750,6 +791,8 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
     'moonshotai/Kimi-K2-Instruct',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
   ];
   readonly zhipuai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];

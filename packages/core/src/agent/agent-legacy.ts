@@ -1,12 +1,9 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { CoreMessage, UIMessage } from '@internal/ai-sdk-v4/message';
-import type { Tool } from '@internal/ai-sdk-v4/tool';
+import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
-import { AISpanType, getOrCreateSpan, getValidTraceId } from '../ai-tracing';
-import type { AISpan, TracingContext, TracingOptions, TracingProperties } from '../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
@@ -24,6 +21,8 @@ import type { MastraLanguageModel, TripwireProperties } from '../llm/model/share
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { Span, TracingContext, TracingOptions, TracingProperties } from '../observability';
+import { SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
@@ -216,8 +215,8 @@ export class AgentLegacyHandler {
           this.capabilities.logger.debug(`[Agents:${this.capabilities.name}] - Starting generation`, { runId });
         }
 
-        const agentAISpan = getOrCreateSpan({
-          type: AISpanType.AGENT_RUN,
+        const agentSpan = getOrCreateSpan({
+          type: SpanType.AGENT_RUN,
           name: `agent run: '${this.capabilities.id}'`,
           input: {
             messages,
@@ -239,9 +238,10 @@ export class AgentLegacyHandler {
           tracingOptions,
           tracingContext,
           requestContext,
+          mastra: this.capabilities.mastra,
         });
 
-        const innerTracingContext: TracingContext = { currentSpan: agentAISpan };
+        const innerTracingContext: TracingContext = { currentSpan: agentSpan };
 
         const memory = await this.capabilities.getMemory({ requestContext });
 
@@ -301,7 +301,7 @@ export class AgentLegacyHandler {
             threadExists: false,
             thread: undefined,
             messageList,
-            agentAISpan,
+            agentSpan,
             ...(tripwireTriggered && {
               tripwire: true,
               tripwireReason,
@@ -322,7 +322,7 @@ export class AgentLegacyHandler {
           });
           (this.capabilities.logger as any).trackException(mastraError);
           this.capabilities.logger.error(mastraError.toString());
-          agentAISpan?.error({ error: mastraError });
+          agentSpan?.error({ error: mastraError });
           throw mastraError;
         }
         const store = memory.constructor.name;
@@ -477,7 +477,7 @@ export class AgentLegacyHandler {
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
-          agentAISpan,
+          agentSpan,
           ...(tripwireTriggered && {
             tripwire: true,
             tripwireReason,
@@ -496,7 +496,7 @@ export class AgentLegacyHandler {
         threadExists,
         structuredOutput = false,
         overrideScorers,
-        agentAISpan,
+        agentSpan,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -508,7 +508,7 @@ export class AgentLegacyHandler {
         threadExists: boolean;
         structuredOutput?: boolean;
         overrideScorers?: Record<string, any>;
-        agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+        agentSpan?: Span<SpanType.AGENT_RUN>;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -603,7 +603,7 @@ export class AgentLegacyHandler {
               if (shouldGenerate && userMessage) {
                 promises.push(
                   this.capabilities
-                    .genTitle(userMessage, requestContext, { currentSpan: agentAISpan }, titleModel, titleInstructions)
+                    .genTitle(userMessage, requestContext, { currentSpan: agentSpan }, titleModel, titleInstructions)
                     .then(title => {
                       if (title) {
                         return memory.createThread({
@@ -623,7 +623,7 @@ export class AgentLegacyHandler {
           } catch (e) {
             await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             if (e instanceof MastraError) {
-              agentAISpan?.error({ error: e });
+              agentSpan?.error({ error: e });
               throw e;
             }
             const mastraError = new MastraError(
@@ -642,7 +642,7 @@ export class AgentLegacyHandler {
             );
             (this.capabilities.logger as any).trackException(mastraError);
             this.capabilities.logger.error(mastraError.toString());
-            agentAISpan?.error({ error: mastraError });
+            agentSpan?.error({ error: mastraError });
             throw mastraError;
           }
         } else {
@@ -673,7 +673,7 @@ export class AgentLegacyHandler {
           overrideScorers,
           threadId,
           resourceId,
-          tracingContext: { currentSpan: agentAISpan },
+          tracingContext: { currentSpan: agentSpan },
         });
 
         const scoringData: {
@@ -689,7 +689,7 @@ export class AgentLegacyHandler {
           output: messageList.getPersisted.response.ui(),
         };
 
-        agentAISpan?.end({
+        agentSpan?.end({
           output: {
             text: result?.text,
             object: result?.object,
@@ -729,13 +729,13 @@ export class AgentLegacyHandler {
               experimental_output?: never;
             },
         'runId'
-      > & { runId: string } & TripwireProperties & { agentAISpan?: AISpan<AISpanType.AGENT_RUN> }
+      > & { runId: string } & TripwireProperties & { agentSpan?: Span<SpanType.AGENT_RUN> }
     >;
     after: (args: {
       result: GenerateReturn<any, Output, ExperimentalOutput> | StreamReturn<any, Output, ExperimentalOutput>;
       outputText: string;
       structuredOutput?: boolean;
-      agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+      agentSpan?: Span<SpanType.AGENT_RUN>;
       overrideScorers?: Record<string, any> | Record<string, { scorer: string; sampling?: any }>;
     }) => Promise<{
       scoringData: {
@@ -808,7 +808,7 @@ export class AgentLegacyHandler {
       llm: llm as MastraLLMV1,
       before: async () => {
         const beforeResult = await before();
-        const { messageObjects, convertedTools, agentAISpan } = beforeResult;
+        const { messageObjects, convertedTools, agentSpan } = beforeResult;
         threadExists = beforeResult.threadExists || false;
         messageList = beforeResult.messageList;
         thread = beforeResult.thread;
@@ -856,7 +856,7 @@ export class AgentLegacyHandler {
             tripwireReason: beforeResult.tripwireReason,
           }),
           ...args,
-          agentAISpan,
+          agentSpan,
         } as any;
 
         return result;
@@ -865,13 +865,13 @@ export class AgentLegacyHandler {
         result,
         outputText,
         structuredOutput = false,
-        agentAISpan,
+        agentSpan,
         overrideScorers,
       }: {
         result: GenerateReturn<any, Output, ExperimentalOutput> | StreamReturn<any, Output, ExperimentalOutput>;
         outputText: string;
         structuredOutput?: boolean;
-        agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+        agentSpan?: Span<SpanType.AGENT_RUN>;
         overrideScorers?: Record<string, any>;
       }) => {
         const afterResult = await after({
@@ -884,7 +884,7 @@ export class AgentLegacyHandler {
           messageList,
           structuredOutput,
           threadExists,
-          agentAISpan,
+          agentSpan,
           overrideScorers,
         });
         return afterResult;
@@ -946,7 +946,7 @@ export class AgentLegacyHandler {
 
     const llmToUse = llm as MastraLLMV1;
     const beforeResult = await before();
-    const traceId = getValidTraceId(beforeResult.agentAISpan);
+    const traceId = beforeResult.agentSpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -981,8 +981,8 @@ export class AgentLegacyHandler {
         : GenerateObjectResult<OUTPUT>;
     }
 
-    const { experimental_output, output, agentAISpan, ...llmOptions } = beforeResult;
-    const tracingContext: TracingContext = { currentSpan: agentAISpan };
+    const { experimental_output, output, agentSpan, ...llmOptions } = beforeResult;
+    const tracingContext: TracingContext = { currentSpan: agentSpan };
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     let finalOutputProcessors = mergedGenerateOptions.outputProcessors;
@@ -1090,7 +1090,7 @@ export class AgentLegacyHandler {
       const afterResult = await after({
         result: result as any,
         outputText: newText,
-        agentAISpan,
+        agentSpan,
         ...(overrideScorers ? { overrideScorers } : {}),
       });
 
@@ -1177,7 +1177,7 @@ export class AgentLegacyHandler {
       result: result as any,
       outputText: newText,
       structuredOutput: true,
-      agentAISpan,
+      agentSpan,
       ...(overrideScorers ? { overrideScorers } : {}),
     });
 
@@ -1237,7 +1237,7 @@ export class AgentLegacyHandler {
     }
 
     const beforeResult = await before();
-    const traceId = getValidTraceId(beforeResult.agentAISpan);
+    const traceId = beforeResult.agentSpan?.externalTraceId;
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
@@ -1300,9 +1300,9 @@ export class AgentLegacyHandler {
         | (StreamObjectResult<OUTPUT extends ZodSchema ? OUTPUT : never> & TracingProperties);
     }
 
-    const { onFinish, runId, output, experimental_output, agentAISpan, ...llmOptions } = beforeResult;
+    const { onFinish, runId, output, experimental_output, agentSpan, ...llmOptions } = beforeResult;
     const overrideScorers = mergedStreamOptions.scorers;
-    const tracingContext: TracingContext = { currentSpan: agentAISpan };
+    const tracingContext: TracingContext = { currentSpan: agentSpan };
 
     if (!output || experimental_output) {
       this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm stream call`, {
@@ -1320,7 +1320,7 @@ export class AgentLegacyHandler {
             await after({
               result: result as any,
               outputText,
-              agentAISpan,
+              agentSpan,
               ...(overrideScorers ? { overrideScorers } : {}),
             });
           } catch (e) {
@@ -1355,7 +1355,7 @@ export class AgentLegacyHandler {
             result: result as any,
             outputText,
             structuredOutput: true,
-            agentAISpan,
+            agentSpan,
             ...(overrideScorers ? { overrideScorers } : {}),
           });
         } catch (e) {

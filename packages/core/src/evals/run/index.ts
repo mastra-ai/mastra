@@ -1,7 +1,7 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
-import type { TracingContext } from '../../ai-tracing';
 import { MastraError } from '../../error';
+import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
 import type { WorkflowResult, StepResult } from '../../workflows';
@@ -209,7 +209,7 @@ async function executeTarget(target: Agent | Workflow, item: RunEvalsDataItem<an
 }
 
 async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
-  const run = await target.createRunAsync({ disableScorers: true });
+  const run = await target.createRun({ disableScorers: true });
   const workflowResult = await run.start({
     inputData: item.input,
     requestContext: item.requestContext,

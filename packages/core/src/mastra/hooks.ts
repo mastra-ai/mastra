@@ -70,7 +70,7 @@ export function createOnScorerHook(mastra: Mastra) {
 
       if (currentSpan && spanId && traceId) {
         await pMap(
-          currentSpan.aiTracing.getExporters(),
+          currentSpan.observabilityInstance.getExporters(),
           async exporter => {
             if (exporter.addScoreToTrace) {
               try {

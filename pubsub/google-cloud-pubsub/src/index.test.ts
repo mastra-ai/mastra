@@ -63,7 +63,7 @@ describe.sequential(
 
         const runId = `test-run-id-${testRunIdCounter++}`;
         let watchData: StreamEvent[] = [];
-        const run = await workflow.createRunAsync({
+        const run = await workflow.createRun({
           runId,
         });
 
@@ -247,7 +247,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await promptEvalWorkflow.createRunAsync();
+        const run = await promptEvalWorkflow.createRun();
 
         const { stream, getWorkflowState } = await run.streamAsync({ inputData: { input: 'test' } });
 
@@ -414,7 +414,7 @@ describe.sequential(
           .commit();
 
         const runId = `test-run-id-${testRunIdCounter++}`;
-        const run = await workflow.createRunAsync({
+        const run = await workflow.createRun({
           runId,
         });
         const { stream } = await run.streamAsync({
@@ -656,7 +656,7 @@ describe.sequential(
 
         const runId = `test-run-id-${testRunIdCounter++}`;
         let watchData: StreamEvent[] = [];
-        const run = await workflow.createRunAsync({
+        const run = await workflow.createRun({
           runId,
         });
 
@@ -791,154 +791,6 @@ describe.sequential(
         });
         await mastra.stopEventEngine();
       });
-
-      it('should handle waitForEvent waiting flow', async () => {
-        const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-        const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
-
-        const step1 = createStep({
-          id: 'step1',
-          execute: step1Action,
-          inputSchema: z.object({}),
-          outputSchema: z.object({ value: z.string() }),
-        });
-        const step2 = createStep({
-          id: 'step2',
-          execute: step2Action,
-          inputSchema: z.object({ value: z.string() }),
-          outputSchema: z.object({}),
-        });
-
-        const workflow = createWorkflow({
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({}),
-          steps: [step1, step2],
-        });
-        workflow.then(step1).waitForEvent('user-event-test', step2).commit();
-
-        const mastra = new Mastra({
-          workflows: { 'test-workflow': workflow },
-          storage: testStorage,
-          pubsub: new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        });
-        await mastra.startEventEngine();
-
-        const runId = `test-run-id-${testRunIdCounter++}`;
-        let watchData: StreamEvent[] = [];
-        const run = await workflow.createRunAsync({
-          runId,
-        });
-
-        const { stream, getWorkflowState } = await run.streamAsync({ inputData: {} });
-
-        setTimeout(() => {
-          run.sendEvent('user-event-test', {
-            value: 'eventdata',
-          });
-        }, 2000);
-
-        // Start watching the workflow
-        const collectedStreamData: StreamEvent[] = [];
-        for await (const data of stream) {
-          collectedStreamData.push(JSON.parse(JSON.stringify(data)));
-        }
-        watchData = collectedStreamData;
-
-        const executionResult = await getWorkflowState();
-
-        expect(watchData.length).toBe(9);
-        expect(watchData).toMatchObject([
-          {
-            payload: {
-              runId,
-            },
-            type: 'start',
-          },
-          {
-            payload: {
-              id: 'step1',
-            },
-            type: 'step-start',
-          },
-          {
-            payload: {
-              id: 'step1',
-              output: {
-                result: 'success1',
-              },
-              status: 'success',
-            },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: 'step1',
-              metadata: {},
-            },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              id: 'step2',
-            },
-            type: 'step-waiting',
-          },
-          {
-            payload: {
-              id: 'step2',
-            },
-            type: 'step-start',
-          },
-          {
-            payload: {
-              id: 'step2',
-              output: {
-                result: 'success2',
-              },
-              status: 'success',
-            },
-            type: 'step-result',
-          },
-          {
-            payload: {
-              id: 'step2',
-              metadata: {},
-            },
-            type: 'step-finish',
-          },
-          {
-            payload: {
-              runId,
-            },
-            type: 'finish',
-          },
-        ]);
-        // Verify execution completed successfully
-        expect(executionResult.steps.step1).toEqual({
-          status: 'success',
-          output: { result: 'success1' },
-          payload: {},
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-        expect(executionResult.steps.step2).toEqual({
-          status: 'success',
-          output: { result: 'success2' },
-          payload: {
-            result: 'success1',
-          },
-          resumePayload: {
-            value: 'eventdata',
-          },
-          resumedAt: expect.any(Number),
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-        await mastra.stopEventEngine();
-      });
     });
 
     describe.sequential('Basic Workflow Execution', () => {
@@ -984,7 +836,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { value: 'bail' } });
 
         expect(result.steps['step1']).toEqual({
@@ -997,7 +849,7 @@ describe.sequential(
 
         expect(result.steps['step2']).toBeUndefined();
 
-        const run2 = await workflow.createRunAsync();
+        const run2 = await workflow.createRun();
         const result2 = await run2.start({ inputData: { value: 'no-bail' } });
 
         expect(result2.steps['step1']).toEqual({
@@ -1095,7 +947,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(execute).toHaveBeenCalled();
@@ -1140,7 +992,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(execute).toHaveBeenCalled();
@@ -1193,7 +1045,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(step1Action).toHaveBeenCalled();
@@ -1250,7 +1102,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps).toEqual({
@@ -1301,7 +1153,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { inputData: 'test-input' } });
 
           expect(result.steps.step1).toEqual({
@@ -1380,7 +1232,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { inputValue: 'test-input' } });
 
           expect(step1Action).toHaveBeenCalled();
@@ -1441,7 +1293,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           await run.start({ inputData: { inputData: 'test-input' } });
 
           expect(execute).toHaveBeenCalledWith(
@@ -1493,7 +1345,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { cool: 'test-input' } });
 
           expect(execute).toHaveBeenCalledWith(
@@ -1555,7 +1407,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { cool: 'test-input' } });
 
           expect(execute).toHaveBeenCalledWith(
@@ -1630,7 +1482,7 @@ describe.sequential(
           const requestContext = new RequestContext<{ life: number }>();
           requestContext.set('life', 42);
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { cool: 'test-input' }, requestContext });
 
           expect(execute).toHaveBeenCalledWith(
@@ -1716,7 +1568,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { cool: 'test-input' } });
 
           if (result.status !== 'success') {
@@ -1789,7 +1641,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           await run.start({ inputData: {} });
 
           expect(step2Action).toHaveBeenCalledWith(
@@ -1837,7 +1689,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: {} });
 
           expect(result.steps).toEqual({
@@ -1897,7 +1749,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: {} });
 
           expect(result.steps).toEqual({
@@ -1966,7 +1818,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: {} });
 
           expect(result.steps).toMatchObject({
@@ -2043,7 +1895,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { cool: 'test-input' } });
 
           expect(execute).toHaveBeenCalledWith(
@@ -2114,7 +1966,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { cool: 'test-input' } });
 
           expect(execute).toHaveBeenCalledWith(
@@ -2215,7 +2067,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { status: 'success' } });
 
           expect(step1Action).toHaveBeenCalled();
@@ -2269,7 +2121,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           let result: Awaited<ReturnType<typeof run.start>> | undefined = undefined;
           try {
             result = await run.start({ inputData: {} });
@@ -2357,7 +2209,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { status: 'success' } });
 
           expect(step1Action).toHaveBeenCalled();
@@ -2431,7 +2283,7 @@ describe.sequential(
           });
           await mastra.startEventEngine();
 
-          const run = await workflow.createRunAsync();
+          const run = await workflow.createRun();
           const result = await run.start({ inputData: { count: 5 } });
 
           expect(step2Action).toHaveBeenCalled();
@@ -2492,7 +2344,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const startTime = Date.now();
         const result = await run.start({ inputData: {} });
         const endTime = Date.now();
@@ -2559,7 +2411,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const startTime = Date.now();
         const result = await run.start({ inputData: {} });
         const endTime = Date.now();
@@ -2576,142 +2428,6 @@ describe.sequential(
         expect(result.steps['step2']).toEqual({
           status: 'success',
           output: { result: 'slept successfully: success' },
-          payload: { result: 'success' },
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-
-        expect(endTime - startTime).toBeGreaterThan(900);
-        await mastra.stopEventEngine();
-      });
-
-      it('should execute a waitForEvent step', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
-        const step1 = createStep({
-          id: 'step1',
-          execute,
-          inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-        const step2 = createStep({
-          id: 'step2',
-          execute: async ({ inputData, resumeData }) => {
-            return { result: inputData.result, resumed: resumeData };
-          },
-          inputSchema: z.object({ result: z.string() }),
-          outputSchema: z.object({ result: z.string(), resumed: z.any() }),
-          resumeSchema: z.any(),
-        });
-
-        const workflow = createWorkflow({
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-            resumed: z.any(),
-          }),
-          steps: [step1],
-        });
-
-        workflow.then(step1).waitForEvent('hello-event', step2).commit();
-
-        const mastra = new Mastra({
-          workflows: { 'test-workflow': workflow },
-          storage: testStorage,
-          pubsub: new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        });
-        await mastra.startEventEngine();
-
-        const run = await workflow.createRunAsync();
-        const startTime = Date.now();
-        setTimeout(() => {
-          run.sendEvent('hello-event', { data: 'hello' });
-        }, 3e3);
-        const result = await run.start({ inputData: {} });
-        const endTime = Date.now();
-
-        expect(execute).toHaveBeenCalled();
-        expect(result.steps['step1']).toEqual({
-          status: 'success',
-          output: { result: 'success' },
-          payload: {},
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-
-        expect(result.steps['step2']).toEqual({
-          status: 'success',
-          output: { result: 'success', resumed: { data: 'hello' } },
-          payload: { result: 'success' },
-          resumePayload: { data: 'hello' },
-          resumedAt: expect.any(Number),
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-
-        expect(endTime - startTime).toBeGreaterThan(1000);
-        await mastra.stopEventEngine();
-      });
-
-      // timeouts not supported for now
-      it.todo('should execute a waitForEvent step after timeout', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
-        const step1 = createStep({
-          id: 'step1',
-          execute,
-          inputSchema: z.object({}),
-          outputSchema: z.object({ result: z.string() }),
-        });
-        const step2 = createStep({
-          id: 'step2',
-          execute: async ({ inputData, resumeData }) => {
-            return { result: inputData.result, resumed: resumeData };
-          },
-          inputSchema: z.object({ result: z.string() }),
-          outputSchema: z.object({ result: z.string(), resumed: z.any() }),
-          resumeSchema: z.any(),
-        });
-
-        const workflow = createWorkflow({
-          id: 'test-workflow',
-          inputSchema: z.object({}),
-          outputSchema: z.object({
-            result: z.string(),
-            resumed: z.any(),
-          }),
-          steps: [step1],
-        });
-
-        workflow.then(step1).waitForEvent('hello-event', step2, { timeout: 1000 }).commit();
-
-        const mastra = new Mastra({
-          workflows: { 'test-workflow': workflow },
-          storage: testStorage,
-          pubsub: new GoogleCloudPubSub({
-            projectId: 'pubsub-test',
-          }),
-        });
-        await mastra.startEventEngine();
-
-        const run = await workflow.createRunAsync();
-        const startTime = Date.now();
-        const result = await run.start({ inputData: {} });
-        const endTime = Date.now();
-
-        expect(execute).toHaveBeenCalled();
-        expect(result.steps['step1']).toEqual({
-          status: 'success',
-          output: { result: 'success' },
-          payload: {},
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        });
-
-        expect(result.steps['step2']).toEqual({
-          status: 'failed',
-          error: expect.any(Error),
           payload: { result: 'success' },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -2761,7 +2477,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const p = run.start({ inputData: { value: 'test' } });
 
         setTimeout(() => {
@@ -2822,7 +2538,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const p = run.start({ inputData: { value: 'test' } });
 
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -2896,7 +2612,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const p = run.start({ inputData: { value: 'test' } });
 
         setTimeout(() => {
@@ -2956,7 +2672,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
 
         const result = await run.start({ inputData: {} });
 
@@ -3022,7 +2738,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         await expect(run.start({ inputData: {} })).resolves.toMatchObject({
           steps: {
             step1: {
@@ -3097,7 +2813,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps).toMatchObject({
@@ -3176,7 +2892,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await mainWorkflow.createRunAsync();
+        const run = await mainWorkflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps).toMatchObject({
@@ -3284,7 +3000,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(step2Action).toHaveBeenCalled();
@@ -3372,7 +3088,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await counterWorkflow.createRunAsync();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { target: 10, value: 0 } });
 
         expect(increment).toHaveBeenCalledTimes(12);
@@ -3450,7 +3166,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await counterWorkflow.createRunAsync();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { target: 10, value: 0 } });
 
         expect(increment).toHaveBeenCalledTimes(12);
@@ -3514,7 +3230,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await counterWorkflow.createRunAsync();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
 
         const endTime = Date.now();
@@ -3654,7 +3370,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await counterWorkflow.createRunAsync();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 1 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -3778,7 +3494,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await counterWorkflow.createRunAsync();
+        const run = await counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 6 } });
 
         expect(start).toHaveBeenCalledTimes(1);
@@ -3866,7 +3582,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps['nested-a']).toEqual({
@@ -3926,7 +3642,7 @@ describe.sequential(
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps.step1).toEqual({
@@ -3990,7 +3706,7 @@ describe.sequential(
 
         workflow.then(step1).then(step2).commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.steps.step1).toEqual({
@@ -4057,7 +3773,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(step1Action).toHaveBeenCalled();
@@ -4107,8 +3823,8 @@ describe.sequential(
         })
           .then(step1)
           .commit();
-        const run = await workflow.createRunAsync();
-        const run2 = await workflow.createRunAsync({ runId: run.runId });
+        const run = await workflow.createRun();
+        const run2 = await workflow.createRun({ runId: run.runId });
 
         expect(run.runId).toBeDefined();
         expect(run2.runId).toBeDefined();
@@ -4206,7 +3922,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await promptEvalWorkflow.createRunAsync();
+        const run = await promptEvalWorkflow.createRun();
 
         const initialResult = await run.start({ inputData: { input: 'test' } });
         expect(initialResult.steps.promptAgent.status).toBe('suspended');
@@ -4424,7 +4140,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await promptEvalWorkflow.createRunAsync();
+        const run = await promptEvalWorkflow.createRun();
 
         const initialResult = await run.start({ inputData: { input: 'test' } });
         expect(initialResult.steps.promptAgent.status).toBe('suspended');
@@ -4497,7 +4213,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await promptEvalWorkflow.createRunAsync();
+        const run = await promptEvalWorkflow.createRun();
 
         const requestContext = new RequestContext();
         const initialResult = await run.start({ inputData: { input: 'test' }, requestContext });
@@ -4593,7 +4309,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await dowhileWorkflow.createRunAsync();
+        const run = await dowhileWorkflow.createRun();
         const result = await run.start({ inputData: { value: 0 } });
         expect(result.steps['simple-resume-workflow']).toMatchObject({
           status: 'suspended',
@@ -4666,10 +4382,10 @@ describe.sequential(
         await mastra.startEventEngine();
 
         // Create a few runs
-        const run1 = await workflow.createRunAsync();
+        const run1 = await workflow.createRun();
         await run1.start({ inputData: {} });
 
-        const run2 = await workflow.createRunAsync();
+        const run2 = await workflow.createRun();
         await run2.start({ inputData: {} });
 
         const { runs, total } = await workflow.listWorkflowRuns();
@@ -4715,7 +4431,7 @@ describe.sequential(
         await mastra.startEventEngine();
 
         // Create a few runs
-        const run1 = await workflow.createRunAsync();
+        const run1 = await workflow.createRun();
         await run1.start({ inputData: {} });
 
         const { runs, total } = await workflow.listWorkflowRuns();
@@ -4834,7 +4550,7 @@ describe.sequential(
           .then(agentStep2)
           .commit();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({
           inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
         });
@@ -6867,7 +6583,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: { input: 'test-data' } });
 
         // Verify the final results
@@ -6911,15 +6627,15 @@ describe.sequential(
     });
 
     describe.sequential('Run count', () => {
-      it('runCount property should increment the run count when a step is executed multiple times', async () => {
+      it('retryCount property should increment the run count when a step is executed multiple times', async () => {
         const repeatingStep = createStep({
           id: 'repeatingStep',
           inputSchema: z.object({}),
           outputSchema: z.object({
             count: z.number(),
           }),
-          execute: async ({ runCount }) => {
-            return { count: runCount };
+          execute: async ({ retryCount }) => {
+            return { count: retryCount };
           },
         });
 
@@ -6954,8 +6670,8 @@ describe.sequential(
           outputSchema: z.object({
             count: z.number(),
           }),
-          execute: async ({ runCount }) => {
-            return { count: runCount };
+          execute: async ({ retryCount }) => {
+            return { count: retryCount };
           },
         });
 
@@ -6965,8 +6681,8 @@ describe.sequential(
           outputSchema: z.object({
             count: z.number(),
           }),
-          execute: async ({ runCount }) => {
-            return { count: runCount };
+          execute: async ({ retryCount }) => {
+            return { count: retryCount };
           },
         });
 
@@ -6990,7 +6706,7 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         const result = await run.start({ inputData: {} });
 
         expect(result.status).toBe('success');
@@ -7000,8 +6716,8 @@ describe.sequential(
       });
 
       it('runCount should exist and equal zero for the first run', async () => {
-        const mockExec = vi.fn().mockImplementation(async ({ runCount }) => {
-          return { count: runCount };
+        const mockExec = vi.fn().mockImplementation(async ({ retryCount }) => {
+          return { count: retryCount };
         });
         const step = createStep({
           id: 'step',
@@ -7029,11 +6745,11 @@ describe.sequential(
         });
         await mastra.startEventEngine();
 
-        const run = await workflow.createRunAsync();
+        const run = await workflow.createRun();
         await run.start({ inputData: {} });
 
         expect(mockExec).toHaveBeenCalledTimes(1);
-        expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ runCount: 0 }));
+        expect(mockExec).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 0 }));
         await mastra.stopEventEngine();
       });
     });

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "0.17.5",
+  "version": "1.0.0-beta.0",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -67,5 +67,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { UIMessageChunk } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -76,7 +76,7 @@ describe('Stream ID Consistency', () => {
     console.log('DEBUG streamResponseId', streamResponseId);
     expect(streamResponseId).toBeDefined();
 
-    const result = await memory.getMessages({ threadId });
+    const result = await memory.recall({ threadId });
 
     const messageById = result.messages.find(m => m.id === streamResponseId);
 
@@ -138,7 +138,7 @@ describe('Stream ID Consistency', () => {
     const res = await stream.response;
     const messageId = res.messages[0].id;
 
-    const result = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId }] } });
+    const result = await memory.recall({ threadId, perPage: 0, include: [{ id: messageId }] });
     const savedMessages = result.messages;
 
     expect(savedMessages).toHaveLength(1);
@@ -202,7 +202,7 @@ describe('Stream ID Consistency', () => {
 
     expect(streamResponseId).toBeDefined();
 
-    const result = await memory.getMessages({ threadId, selectBy: { include: [{ id: streamResponseId! }] } });
+    const result = await memory.recall({ threadId, include: [{ id: streamResponseId! }] });
     const messageById = result.messages.find(m => m.id === streamResponseId);
 
     expect(messageById).toBeDefined();
@@ -277,7 +277,7 @@ describe('Stream ID Consistency', () => {
     await stream.consumeStream();
     const res = await stream.response;
     const messageId = res?.uiMessages?.[0]?.id;
-    const result = await memory.getMessages({ threadId, selectBy: { include: [{ id: messageId! }] } });
+    const result = await memory.recall({ threadId, perPage: 0, include: [{ id: messageId! }] });
     const savedMessages = result.messages;
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId!);
@@ -505,7 +505,7 @@ describe('Stream ID Consistency', () => {
       reader.releaseLock();
     }
 
-    const result = await mockMemory.getMessages({ threadId });
+    const result = await mockMemory.recall({ threadId });
     console.log('messages', result);
 
     const assistantMessage = result.messages.find((m: MastraMessageV1) => m.role === 'assistant');

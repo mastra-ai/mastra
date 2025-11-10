@@ -46,6 +46,7 @@ jobs:
           # This is needed to access the .github/actions/app-auth action
           fetch-depth: 1
           persist-credentials: true
+          token: ${{ secrets.RENOVATE_PAT  }}
 
       # This third party action allows you to download the cache artifact from different workflow runs
       # Note that actions/cache doesn't work well because the cache key would need to be computed from

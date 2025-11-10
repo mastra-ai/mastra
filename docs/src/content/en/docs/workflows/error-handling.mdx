@@ -172,7 +172,7 @@ import { mastra } from "../src/mastra";
 
 const workflow = mastra.getWorkflow("testWorkflow");
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = await run.stream({
   inputData: {
@@ -189,4 +189,4 @@ for await (const chunk of stream.stream) {
 
 - [Control Flow](./control-flow)
 - [Conditional Branching](./control-flow#conditional-logic-with-branch)
-- [Running Workflows](/docs/workflows/overview)
+- [Running Workflows](/docs/v1/workflows/overview)

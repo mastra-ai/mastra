@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
@@ -203,8 +203,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
@@ -243,8 +243,9 @@ export class WorkflowsPG extends WorkflowsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       let total = 0;
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
       // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
+      if (usePagination) {
         const countResult = await this.client.one(
           `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
           values,
@@ -252,15 +253,18 @@ export class WorkflowsPG extends WorkflowsStorage {
         total = Number(countResult.count);
       }
 
+      const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const offset = usePagination ? page! * normalizedPerPage : undefined;
+
       // Get results
       const query = `
           SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
           ${whereClause}
           ORDER BY "createdAt" DESC
-          ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
+          ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
         `;
 
-      const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+      const queryValues = usePagination ? [...values, normalizedPerPage, offset] : values;
 
       const result = await this.client.manyOrNone(query, queryValues);
 

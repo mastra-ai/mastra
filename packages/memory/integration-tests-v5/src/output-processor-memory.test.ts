@@ -18,6 +18,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     dbPath = join(await mkdtemp(join(tmpdir(), 'output-processor-test-')), 'test.db');
 
     storage = new LibSQLStore({
+      id: 'output-processor-test-storage',
       url: `file:${dbPath}`,
     });
 
@@ -161,9 +162,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const savedMessages = await storage.getMessages({
+    const { messages: savedMessages } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message
@@ -245,9 +245,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const savedMessages = await storage.getMessages({
+    const { messages: savedMessages } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message
@@ -424,9 +423,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve from storage
-    const savedMessages = await storage.getMessages({
+    const { messages: savedMessages } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     const assistantMessage = savedMessages.find((m: any) => m.role === 'assistant');
@@ -549,9 +547,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Simulate page refresh - retrieve messages from storage
-    const messagesAfterRefresh = await storage.getMessages({
+    const { messages: messagesAfterRefresh } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opensearch",
-  "version": "0.11.15",
+  "version": "1.0.0-beta.0",
   "description": "OpenSearch vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -58,5 +58,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

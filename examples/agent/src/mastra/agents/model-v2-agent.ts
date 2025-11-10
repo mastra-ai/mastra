@@ -16,9 +16,9 @@ export const weatherInfo = createTool({
   inputSchema: z.object({
     city: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async inputData => {
     return {
-      city: context.city,
+      city: inputData.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
@@ -29,7 +29,13 @@ export const weatherInfo = createTool({
   // requireApproval: true,
 });
 
-const memory = new Memory();
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+  },
+});
 
 const testAPICallError = new APICallError({
   message: 'Test API error',

@@ -9,7 +9,7 @@ import { removeEmptyValues } from '../utils';
 function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
   const baseSchema = getBaseSchema(schema);
   const fieldConfig = getFieldConfigInZodStack(schema);
-  const type = inferFieldType(baseSchema, fieldConfig);
+  let type = inferFieldType(baseSchema, fieldConfig);
   const defaultValue = getDefaultValueInZodStack(schema);
 
   // Enums
@@ -35,12 +35,30 @@ function parseField(key: string, schema: z.ZodTypeAny): ParsedField {
     });
   }
   if (baseSchema instanceof zV3.ZodIntersection || baseSchema instanceof z.ZodIntersection) {
-    const subSchemaLeft = Object.entries((baseSchema.def as any).left.shape).map(([key, field]) =>
-      parseField(key, field as z.ZodTypeAny),
-    );
-    const subSchemaRight = Object.entries((baseSchema.def as any).right.shape).map(([key, field]) =>
-      parseField(key, field as z.ZodTypeAny),
-    );
+    const leftSchema = 'left' in baseSchema.def ? baseSchema.def.left : null;
+    const rightSchema = 'right' in baseSchema.def ? baseSchema.def.right : null;
+    let subSchemaRight: ParsedField[] = [];
+    let subSchemaLeft: ParsedField[] = [];
+    if (leftSchema) {
+      if ('shape' in leftSchema && leftSchema.shape) {
+        subSchemaLeft = Object.entries(leftSchema.shape).map(([key, field]) => parseField(key, field as z.ZodTypeAny));
+      } else {
+        const leftChild = parseField(key, leftSchema as z.ZodTypeAny);
+        subSchemaLeft = leftChild.schema ?? [leftChild];
+        type = leftChild.type;
+      }
+    }
+    if (rightSchema) {
+      if ('shape' in rightSchema && rightSchema.shape) {
+        subSchemaRight = Object.entries(rightSchema.shape).map(([key, field]) =>
+          parseField(key, field as z.ZodTypeAny),
+        );
+      } else {
+        const rightChild = parseField(key, rightSchema as z.ZodTypeAny);
+        subSchemaRight = rightChild.schema ?? [rightChild];
+        type = rightChild.type;
+      }
+    }
     subSchema = [...subSchemaLeft, ...subSchemaRight];
   }
   if (baseSchema instanceof zV3.ZodArray || baseSchema instanceof z.ZodArray) {
