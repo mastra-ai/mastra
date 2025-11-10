@@ -167,7 +167,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     deployerOpenAPISpec = await openAPIHandler(mockContext, mockNext);
   });
 
-  describe('1. Route Coverage: Deployer routes not in Server-Adapter', () => {
+  describe('Route Coverage: Deployer routes not in Server-Adapter', () => {
     it('should not have routes that exist only in deployer', () => {
       const failures: string[] = [];
 
@@ -190,7 +190,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('2. Route Coverage: Server-Adapter routes not in Deployer', () => {
+  describe('Route Coverage: Server-Adapter routes not in Deployer', () => {
     it('should not have routes that exist only in server-adapter', () => {
       const failures: string[] = [];
 
@@ -213,9 +213,9 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('3. Route Coverage: Same Handler, Different Paths', () => {
-    it('should not have routes with same handler but different paths', () => {
-      const failures: Array<{ handler: string; deployer: string; serverAdapter: string }> = [];
+  describe('Route Coverage: Same Handler, Completely Different Paths', () => {
+    it('should not have handlers with zero overlapping paths', () => {
+      const failures: Array<{ handler: string; deployerPaths: string[]; serverAdapterPaths: string[] }> = [];
 
       // Find handlers that exist in both systems
       const commonHandlers = Array.from(deployerHandlerMap.keys()).filter(handler => serverHandlerMap.has(handler));
@@ -224,29 +224,83 @@ describe('Deployer Routes → Server Adapter Parity', () => {
         const deployerRoutes = deployerHandlerMap.get(handlerName)!;
         const serverRoutes = serverHandlerMap.get(handlerName)!;
 
-        // Compare each deployer route with server routes for this handler
-        deployerRoutes.forEach(deployerRoute => {
-          serverRoutes.forEach(serverRoute => {
-            // Only check if paths differ (method mismatches are handled by test #4)
-            if (deployerRoute.path !== serverRoute.path && deployerRoute.method === serverRoute.method) {
-              failures.push({
-                handler: handlerName,
-                deployer: `${deployerRoute.method} ${deployerRoute.path}`,
-                serverAdapter: `${serverRoute.method} ${serverRoute.path}`,
-              });
-            }
+        // Get all paths for each system (path only, ignore method - method mismatches handled by separate test)
+        const deployerPathSet = new Set(deployerRoutes.map(r => r.path));
+        const serverPathSet = new Set(serverRoutes.map(r => r.path));
+
+        // Check if there's ANY overlap
+        const hasOverlap = Array.from(deployerPathSet).some(path => serverPathSet.has(path));
+
+        if (!hasOverlap) {
+          failures.push({
+            handler: handlerName,
+            deployerPaths: Array.from(deployerPathSet),
+            serverAdapterPaths: Array.from(serverPathSet),
           });
-        });
+        }
       });
 
       if (failures.length > 0) {
-        const errorMessage = `\nFound ${failures.length} routes where the same handler has different paths:\n${failures.map(f => `  Handler: ${f.handler}\n    Deployer:       ${f.deployer}\n    Server-Adapter: ${f.serverAdapter}`).join('\n\n')}\n\nRoutes using the same handler must have matching paths.`;
+        const errorMessage = `\nFound ${failures.length} handlers with completely different paths (no overlap):\n${failures.map(f => `  Handler: ${f.handler}\n    Deployer paths:       ${f.deployerPaths.join(', ')}\n    Server-Adapter paths: ${f.serverAdapterPaths.join(', ')}`).join('\n\n')}\n\nHandlers must have at least one matching path between deployer and server-adapter.`;
         throw new Error(errorMessage);
       }
     });
   });
 
-  describe('4. Route Coverage: HTTP Method Mismatches (Same Path)', () => {
+  describe('Route Coverage: Same Handler, Extra Paths', () => {
+    it('should not have handlers with extra paths on one side', () => {
+      const failures: Array<{ handler: string; extraIn: string; extraPaths: string[]; commonPaths: string[] }> = [];
+
+      // Find handlers that exist in both systems
+      const commonHandlers = Array.from(deployerHandlerMap.keys()).filter(handler => serverHandlerMap.has(handler));
+
+      commonHandlers.forEach(handlerName => {
+        const deployerRoutes = deployerHandlerMap.get(handlerName)!;
+        const serverRoutes = serverHandlerMap.get(handlerName)!;
+
+        // Get all paths for each system (path only, ignore method - method mismatches handled by separate test)
+        const deployerPathSet = new Set(deployerRoutes.map(r => r.path));
+        const serverPathSet = new Set(serverRoutes.map(r => r.path));
+
+        // Find common paths
+        const commonPaths = Array.from(deployerPathSet).filter(path => serverPathSet.has(path));
+
+        // Find extra paths in deployer
+        const extraInDeployer = Array.from(deployerPathSet).filter(path => !serverPathSet.has(path));
+
+        // Find extra paths in server-adapter
+        const extraInServer = Array.from(serverPathSet).filter(path => !deployerPathSet.has(path));
+
+        // Only report if there are common paths AND extras (skip if completely different - that's Test 3)
+        if (commonPaths.length > 0) {
+          if (extraInDeployer.length > 0) {
+            failures.push({
+              handler: handlerName,
+              extraIn: 'deployer',
+              extraPaths: extraInDeployer,
+              commonPaths,
+            });
+          }
+
+          if (extraInServer.length > 0) {
+            failures.push({
+              handler: handlerName,
+              extraIn: 'server-adapter',
+              extraPaths: extraInServer,
+              commonPaths,
+            });
+          }
+        }
+      });
+
+      if (failures.length > 0) {
+        const errorMessage = `\nFound ${failures.length} handlers with extra paths on one side:\n${failures.map(f => `  Handler: ${f.handler}\n    Extra in ${f.extraIn}: ${f.extraPaths.join(', ')}\n    Common paths: ${f.commonPaths.join(', ')}`).join('\n\n')}\n\nEach handler should have the same paths in both deployer and server-adapter, or document why extras exist.`;
+        throw new Error(errorMessage);
+      }
+    });
+  });
+
+  describe('Route Coverage: HTTP Method Mismatches (Same Path)', () => {
     it('should not have routes with same path but different HTTP methods', () => {
       const failures: Array<{ deployer: string; serverAdapter: string; path: string }> = [];
 
@@ -271,7 +325,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('5. Schema Parity: Response Types', () => {
+  describe('Schema Parity: Response Types', () => {
     it('all routes should have valid response types', () => {
       const failures: string[] = [];
 
@@ -291,7 +345,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('6. OpenAPI Documentation', () => {
+  describe('OpenAPI Documentation', () => {
     it('all routes should have complete OpenAPI metadata', () => {
       const missingSummary: string[] = [];
       const missingDescription: string[] = [];
@@ -332,7 +386,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('7. Schema Parity: Path Parameters', () => {
+  describe('Schema Parity: Path Parameters', () => {
     it('overlapping routes should have matching path parameter schemas', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 
@@ -401,7 +455,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('8. Schema Parity: Query Parameters', () => {
+  describe('Schema Parity: Query Parameters', () => {
     it('overlapping routes should have matching query parameter schemas', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 
@@ -478,7 +532,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('9. Schema Parity: Request Body', () => {
+  describe('Schema Parity: Request Body', () => {
     it('overlapping routes should have matching request body schemas', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 
@@ -554,7 +608,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('10. Schema Parity: Required vs Optional Status', () => {
+  describe('Schema Parity: Required vs Optional Status', () => {
     it('overlapping routes should have matching required/optional status for query params and body fields', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 

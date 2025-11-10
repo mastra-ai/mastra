@@ -14,11 +14,12 @@ import {
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
-  streamVNextWorkflowHandler,
   resumeStreamWorkflowHandler,
   observeStreamVNextWorkflowHandler,
   streamLegacyWorkflowHandler,
   observeStreamLegacyWorkflowHandler,
+  streamWorkflowHandler,
+  observeStreamWorkflowHandler,
 } from './handlers';
 
 export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
@@ -444,7 +445,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    streamVNextWorkflowHandler,
+    streamWorkflowHandler,
   );
 
   router.post(
@@ -475,7 +476,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    observeStreamVNextWorkflowHandler,
+    observeStreamWorkflowHandler,
   );
 
   router.post(
@@ -538,7 +539,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    streamVNextWorkflowHandler,
+    streamWorkflowHandler,
   );
 
   router.post(

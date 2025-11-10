@@ -22,7 +22,6 @@ import {
   optionalRunIdQuerySchema,
   resumeBodySchema,
   runIdQuerySchema,
-  sendWorkflowRunEventBodySchema,
   startAsyncWorkflowBodySchema,
   streamWorkflowBodySchema,
   workflowControlResponseSchema,

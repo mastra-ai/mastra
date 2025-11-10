@@ -238,7 +238,7 @@ export const AGENTS_ROUTES: ServerRoute[] = [
     method: 'POST',
     responseType: 'json',
     handler: transcribeSpeechHandler as unknown as ServerRouteHandler,
-    path: '/api/agents/:agentId/voice/transcribe',
+    path: '/api/agents/:agentId/voice/listen',
     pathParamSchema: agentIdPathParams,
     bodySchema: transcribeSpeechBodySchema,
     responseSchema: transcribeSpeechResponseSchema,
