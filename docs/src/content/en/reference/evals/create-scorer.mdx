@@ -107,7 +107,7 @@ You can specify input/output types when creating scorers for better type inferen
 For evaluating agents, use `type: 'agent'` to automatically get the correct types for agent input/output:
 
 ```typescript
-import { createScorer } from "@mastra/core/scorers";
+import { createScorer } from "@mastra/core/evals";
 
 // Agent scorer with automatic typing
 const agentScorer = createScorer({
@@ -132,7 +132,7 @@ const agentScorer = createScorer({
 For custom input/output types, use the generic approach:
 
 ```typescript
-import { createScorer } from "@mastra/core/scorers";
+import { createScorer } from "@mastra/core/evals";
 
 type CustomInput = { query: string; context: string[] };
 type CustomOutput = { answer: string; confidence: number };
