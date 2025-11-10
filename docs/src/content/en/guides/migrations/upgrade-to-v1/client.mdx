@@ -80,6 +80,16 @@ To migrate, use `toAISdkStream()` instead.
 + const stream = toAISdkStream(agentStream, { from: 'agent' });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-to-ai-sdk-format .
+```
+
+:::
+
 ### Network memory methods
 
 Network memory methods have been removed from `@mastra/client-js`. The `NetworkMemoryThread` class and all network memory-related methods are no longer available. This change simplifies the memory API by removing specialized network memory functionality.
