@@ -146,10 +146,6 @@ export class DatasetsStorage extends MastraBase {
     throw new Error('Not implemented');
   }
 
-  getDatasetVersionByTag({ datasetId, tag }: { datasetId: string; tag: string }): Promise<DatasetVersion> {
-    throw new Error('Not implemented');
-  }
-
   // DATASET ROWS
   addDatasetRows(args: AddDatasetRowsPayload): Promise<{ rows: DatasetRow[]; versionId: string }> {
     throw new Error('Not implemented');
