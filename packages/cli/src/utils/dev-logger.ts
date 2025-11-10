@@ -71,6 +71,13 @@ export class DevLogger {
     console.info(`${pc.dim('│')} ${pc.bold('Playground:')} ${pc.cyan(`${protocol}://${host}:${port}/`)}`);
     console.info(`${pc.dim('│')} ${pc.bold('API:')}        ${`${protocol}://${host}:${port}/api`}`);
     console.info('');
+    console.info(pc.inverse(pc.yellowBright(' Important ')) + pc.yellowBright(' Mastra v1.0.0 will go stable soon.'));
+    console.info(
+      pc.yellowBright(
+        'Please update to the latest v0.x and try out the v1.0.0-beta releases! Follow the migration guide:',
+      ),
+    );
+    console.info(pc.yellowBright('https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview'));
   }
 
   bundling(): void {
