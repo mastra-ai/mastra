@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Set correct peer dependency range for `@mastra/observability` ([#9908](https://github.com/mastra-ai/mastra/pull/9908))
+
+- Add visual styles and labels for more workflow node types ([#9777](https://github.com/mastra-ai/mastra/pull/9777))
+
 ## 1.0.0-beta.0
 
 ### Major Changes
