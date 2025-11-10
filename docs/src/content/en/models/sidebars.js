@@ -214,7 +214,7 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/nebius",
-          label: "Nebius AI Studio",
+          label: "Nebius Token Factory",
         },
         {
           type: "doc",
