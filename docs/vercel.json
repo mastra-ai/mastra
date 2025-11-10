@@ -17,12 +17,12 @@
     },
     {
       "source": "/:path(ja)?/docs/agents/runtime-variables",
-      "destination": "/:path/docs/agents/runtime-context",
+      "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/08-running-evals",
-      "destination": "/:path/docs/evals/overview",
+      "destination": "/:path/docs/scorers/overview",
       "permanent": true
     },
     {
@@ -37,12 +37,12 @@
     },
     {
       "source": "/:path(ja)?/docs/agents/adding-tools",
-      "destination": "/:path/docs/agents/using-tools-and-mcp",
+      "destination": "/:path/docs/agents/using-tools",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/agents/mcp-guide",
-      "destination": "/:path/docs/agents/using-tools-and-mcp",
+      "destination": "/:path/docs/agents/using-tools",
       "permanent": true
     },
     {
@@ -52,22 +52,22 @@
     },
     {
       "source": "/:path(ja)?/docs/evals/00-overview",
-      "destination": "/:path/docs/evals/overview",
+      "destination": "/:path/docs/scorers/overview",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/01-textual-evals",
-      "destination": "/:path/docs/evals/textual-evals",
+      "destination": "/:path/docs/scorers/evals-old-api/textual-evals",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/02-custom-eval",
-      "destination": "/:path/docs/evals/custom-eval",
+      "destination": "/:path/docs/scorers/evals-old-api/custom-eval",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/evals/03-running-in-ci",
-      "destination": "/:path/docs/evals/running-in-ci",
+      "destination": "/:path/docs/scorers/evals-old-api/running-in-ci",
       "permanent": true
     },
     {
@@ -82,7 +82,7 @@
     },
     {
       "source": "/:path(ja)?/docs/deployment/deployment",
-      "destination": "/:path/docs/deployment/serverless-platforms",
+      "destination": "/:path/docs/deployment/cloud-providers",
       "permanent": true
     },
     {
@@ -132,12 +132,12 @@
     },
     {
       "source": "/:path(ja)?/docs/frameworks/01-next-js",
-      "destination": "/:path/docs/frameworks/next-js",
+      "destination": "/:path/docs/frameworks/web-frameworks/next-js",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/docs/frameworks/02-ai-sdk",
-      "destination": "/:path/docs/frameworks/ai-sdk",
+      "destination": "/:path/docs/frameworks/agentic-uis/ai-sdk",
       "permanent": true
     },
     {
@@ -242,7 +242,7 @@
     },
     {
       "source": "/:path(ja)?/docs/evals/01-supported-evals",
-      "destination": "/:path/docs/evals/overview",
+      "destination": "/:path/docs/scorers/overview",
       "permanent": true
     },
     {
@@ -252,7 +252,7 @@
     },
     {
       "source": "/:path(ja)?/docs/guide/deployment/deployment",
-      "destination": "/:path/docs/deployment/serverless-platforms",
+      "destination": "/:path/docs/deployment/cloud-providers",
       "permanent": true
     },
     {
@@ -312,7 +312,7 @@
     },
     {
       "source": "/:path(ja)?/docs/reference/observability/otel-config",
-      "destination": "/:path/reference/observability/otel-config",
+      "destination": "/:path/reference/observability/otel-tracing/otel-config",
       "permanent": true
     },
     {
@@ -332,7 +332,7 @@
     },
     {
       "source": "/:path(ja)?/docs/reference/observability/combine-loggers",
-      "destination": "/:path/reference/observability/logger",
+      "destination": "/:path/reference/observability/logging/pino-logger",
       "permanent": true
     },
     {
@@ -342,7 +342,7 @@
     },
     {
       "source": "/:path(ja)?/docs/reference/rag/pgstore",
-      "destination": "/:path/reference/rag/pg",
+      "destination": "/:path/reference/vectors/pg",
       "permanent": true
     },
     {
@@ -392,7 +392,7 @@
     },
     {
       "source": "/:path(ja)?/docs/local-dev/creating-projects",
-      "destination": "/:path/docs/local-dev/creating-a-new-project",
+      "destination": "/:path/docs/getting-started/installation",
       "permanent": true
     },
     {
@@ -417,7 +417,7 @@
     },
     {
       "source": "/:path(ja)?/docs/deployment/server",
-      "destination": "/:path/docs/deployment/server-deployment",
+      "destination": "/:path/docs/deployment/building-mastra",
       "permanent": true
     },
     {
@@ -502,22 +502,22 @@
     },
     {
       "source": "/:path(ja)?/examples/rag/insert-embedding-in-libsql",
-      "destination": "/:path/reference/rag/libsql",
+      "destination": "/:path/reference/vectors/libsql",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/examples/rag/insert-embedding-in-qdrant",
-      "destination": "/:path/reference/rag/qdrant",
+      "destination": "/:path/reference/vectors/qdrant",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/examples/rag/insert-embedding-in-upstash",
-      "destination": "/:path/reference/rag/upstash",
+      "destination": "/:path/reference/vectors/upstash",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/examples/rag/insert-embedding-in-vectorize",
-      "destination": "/:path/reference/rag/pg",
+      "destination": "/:path/reference/vectors/vectorize",
       "permanent": true
     },
     {
@@ -572,7 +572,7 @@
     },
     {
       "source": "/:path(ja)?/reference/observability/create-logger",
-      "destination": "/:path/reference/observability/logger",
+      "destination": "/:path/reference/observability/logging/pino-logger",
       "permanent": true
     },
     {
@@ -732,7 +732,7 @@
     },
     {
       "source": "/:path(ja)?/reference/agents/streamVNext",
-      "destination": "/:path/reference/streaming/agents/streamVNext",
+      "destination": "/:path/reference/streaming/workflows/streamVNext",
       "permanent": true
     },
     {
@@ -947,7 +947,7 @@
     },
     {
       "source": "/:path(ja)?/docs/agents/dynamic-agents",
-      "destination": "/:path/docs/agents/runtime-context",
+      "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
     },
     {
@@ -1157,7 +1157,7 @@
     },
     {
       "source": "/:path(ja)?/examples/agents/using-a-tool",
-      "destination": "/:path/docs/agents/using-tools-and-mcp#adding-tools-to-an-agent",
+      "destination": "/:path/docs/agents/using-tools#adding-tools-to-an-agent",
       "permanent": true
     },
     {

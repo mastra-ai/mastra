@@ -16,8 +16,8 @@ const stripLocalePattern = url => {
 
 // Check if a file exists locally for a given URL path
 const checkLocalFile = urlPath => {
-  // Remove leading slash and convert URL to file path
-  const cleanPath = urlPath.replace(/^\//, '');
+  // Remove anchor links and leading slash
+  const cleanPath = urlPath.replace(/#.*$/, '').replace(/^\//, '');
 
   // Try different possible file locations
   const possiblePaths = [
