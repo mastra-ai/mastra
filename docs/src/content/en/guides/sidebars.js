@@ -19,7 +19,8 @@ const sidebars = {
           label: "Next.js",
         },
       ],
-    }, {
+    },
+    {
       type: "category",
       label: "Guides",
       collapsed: false,
