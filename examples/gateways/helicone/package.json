@@ -16,6 +16,5 @@
     "overrides": {
       "@mastra/core": "link:../../../packages/core"
     }
-  },
-  "version": "0.0.1"
+  }
 }
