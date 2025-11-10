@@ -443,6 +443,7 @@ export class Workflow<
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
   #nestedWorkflowInput?: z.infer<TInput>;
+  public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
   protected executionEngine: ExecutionEngine;
@@ -999,6 +1000,7 @@ export class Workflow<
    */
   commit() {
     this.executionGraph = this.buildExecutionGraph();
+    this.committed = true;
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TOutput>;
   }
 

@@ -9086,7 +9086,7 @@ npm install @mastra/core@beta zod@^4
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm init -y
+pnpm init
 pnpm add -D typescript @types/node mastra@beta
 pnpm add @mastra/core@beta zod@^4
 ```
@@ -35118,6 +35118,283 @@ See the following API references for more information:
 
 
 ---
+title: "Next.js Quickstart"
+description: "Get started with Mastra, Next.js, and AS SDK UI. Quickly."
+---
+
+# Next.js Quickstart
+[EN] Source: https://mastra.ai/en/guides/quickstarts/nextjs
+
+In this quickstart, you'll build an AI agent with tool-calling capabilities using [Mastra](/docs/v1), then connect it to Next.js by importing and calling the agent directly within your routes. 
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience. 
+
+In ~5 minutes, you'll have a functional AI-powered app ready to extend with your own tools and logic.
+
+<figure>
+![Screenshot of a chat-style web app displaying a completed "weatherTool" tool call, answering "What is the weather in London?" with a JSON result. A message suggests offering activity ideas, and a text input field is at the bottom.](/img/nextjs-quickstart.png)
+<figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, display the JSON result, stream a weather summary in the chat UI, and persist conversation history across reloads.</figcaption>
+</figure>
+
+## Before you begin
+
+* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](https://platform.openai.com/api-keys).
+
+## Create a new Next.js app
+
+Run the following command to [create a new Next.js app](https://nextjs.org/docs/app/getting-started/installation):
+
+```bash
+npx create-next-app \
+    my-nextjs-agent \
+    --yes \
+    --ts \
+    --eslint \
+    --tailwind \
+    --src-dir \
+    --app \
+    --turbopack \
+    --no-react-compiler \
+    --no-import-alias
+```
+
+This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
+
+## Initialize Mastra
+`cd` and run [`mastra init`](/reference/v1/cli/create-mastra). 
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash
+cd my-nextjs-agent
+npx --force mastra@beta init
+```
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your Next.js routes in the next steps.
+
+
+## Install AI SDK UI and AI Elements
+
+Install AI SDK UI along with the Mastra adapter:
+
+```bash
+npm install \
+    @mastra/ai-sdk \
+    @ai-sdk/react 
+```
+
+Next, initialize AI Elements. When prompted, choose the default options:
+
+```bash
+npx ai-elements@latest
+```
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+
+
+## Create a chat route
+
+Create `src/app/api/chat/route.ts`:
+
+```ts title="src/app/api/chat/route.ts"
+import { mastra } from "@/mastra";
+import { NextResponse } from "next/server";
+import { toAISdkFormat } from "@mastra/ai-sdk";
+import { convertMessages } from "@mastra/core/agent";
+import { createUIMessageStreamResponse } from "ai";
+
+const weatherAgent = mastra.getAgent("weatherAgent");
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const stream = await weatherAgent.stream(messages, {
+    memory: {
+      thread: "example-user-id",
+      resource: "weather-chat",
+    },
+  });
+
+  return createUIMessageStreamResponse({
+    stream: toAISdkFormat(stream, { from: "agent" }),
+  })
+}
+
+export async function GET() {
+  const memory = await weatherAgent.getMemory();
+  const response = await memory?.query({
+    threadId: "example-user-id",
+    resourceId: "weather-chat",
+  });
+
+  const uiMessages = 
+    convertMessages(response?.uiMessages ?? []).to("AIV5.UI");
+  return NextResponse.json(uiMessages);
+}
+```
+
+The POST route accepts a prompt and streams the agent's response back in AI SDK format, while the GET route fetches message history from memory so the UI can be hydrated when the client reloads.
+
+## Create a chat page
+
+Create `src/app/chat/page.tsx`:
+
+```tsx title="src/app/chat/page.tsx"
+'use client';
+
+import '@/app/globals.css';
+import { useEffect, useState } from 'react';
+import { DefaultChatTransport } from 'ai';
+import { useChat } from '@ai-sdk/react';
+
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+} from '@/components/ai-elements/prompt-input';
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool';
+
+
+function Chat() {
+  const [input, setInput] = useState<string>('');
+
+  const { messages, setMessages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  });
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      const res = await fetch('/api/chat');
+      const data = await res.json();
+      setMessages([...data]);
+    };
+    fetchMessages();
+  }, [setMessages]);
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+
+    sendMessage({ text: input });
+    setInput('');
+  };
+
+  return (
+    <div className="w-full p-6 relative size-full h-screen">
+      <div className="flex flex-col h-full">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map((message: any) => (
+              <div key={message.id}>
+                {message.parts?.map((part: any, i: number) => {
+                  if (part.type === 'text') {
+                    return (
+                      <Message 
+                        key={`${message.id}-${i}`} 
+                        from={message.role}>
+                          <MessageContent>
+                            <MessageResponse>{part.text}</MessageResponse>
+                          </MessageContent>
+                      </Message>
+                    );
+                  }
+
+                  if (part.type?.startsWith('tool-')) {
+                    return (
+                      <Tool key={`${message.id}-${i}`}>
+                        <ToolHeader
+                          type={part.type}
+                          state={part.state || 'output-available'}
+                          className="cursor-pointer"
+                        />
+                        <ToolContent>
+                          <ToolInput input={part.input || part.args || {}} />
+                          <ToolOutput
+                            output={part.output || part.result}
+                            errorText={part.errorText || part.error}
+                          />
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
+            ))}
+            <ConversationScrollButton />
+          </ConversationContent>
+        </Conversation>
+
+        <PromptInput onSubmit={handleSubmit} className="mt-20">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={(e: any) => setInput(e.target.value)}
+              className="md:leading-10"
+              value={input}
+              placeholder="Type your message..."
+              disabled={status !== 'ready'}
+            />
+          </PromptInputBody>
+        </PromptInput>
+      </div>
+    </div>
+  );
+}
+
+export default Chat;
+```
+
+This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+
+It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
+
+
+## Test your agent 
+1. Run your Next.js app with `npm run dev`
+
+2. Open the chat at http://localhost:3000/chat
+
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response.
+
+## Next steps
+
+Congratulations on building your Mastra agent with Next.js! 🎉 
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK and Next.js, and how to deploy to Vercel:
+
+- Integrate Mastra with [AI SDK](/docs/v1/frameworks/agentic-uis/ai-sdk)
+- Use Mastra in your [Next.js app](/docs/v1/frameworks/web-frameworks/next-js)
+- Deploy your agent to [Vercel](/docs/v1/deployment/serverless-platforms/vercel-deployer)
+
+---
 title: "Embedding Models"
 sidebar_position: 2
 sidebar_label: "Embeddings"
@@ -35737,7 +36014,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 49+ AI providers and 864+ models through Mastra's model router."
+description: "Access 49+ AI providers and 888+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35750,7 +36027,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 864 models from 49 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 888 models from 49 providers through a single API.
 
 ## Features
 
@@ -37908,7 +38185,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
+  model: "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct"
 });
 
 // Generate a response
@@ -37944,7 +38221,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
-    "model": "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    "model": "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -37980,7 +38257,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.baseten.co/v1",
-    id: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    id: "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     apiKey: process.env.BASETEN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -37999,7 +38276,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "baseten/zai-org/GLM-4.6"
-      : "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct";
+      : "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct";
   }
 });
 ```
@@ -38161,7 +38438,7 @@ For detailed provider-specific documentation, see the [AI SDK Cerebras provider 
 
 ---
 title: "Chutes | Models | Mastra"
-description: "Use Chutes models with Mastra. 31 models available."
+description: "Use Chutes models with Mastra. 52 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -38174,7 +38451,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 [EN] Source: https://mastra.ai/en/models/providers/chutes
 
-Access 31 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 52 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -38189,7 +38466,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "chutes/MiniMaxAI/MiniMax-M2"
+  model: "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B"
 });
 
 // Generate a response
@@ -38213,16 +38490,64 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506",
+    "model": "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B",
     "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/ArliAI/QwQ-32B-ArliAI-RpR-v1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/chutesai/Mistral-Small-3.1-24B-Instruct-2503",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.02,
-    "outputCost": 0.08
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.06,
+    "outputCost": 0.18
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-R1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-R1-0528",
@@ -38231,46 +38556,58 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 75000,
+    "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.18,
-    "outputCost": 0.72
+    "inputCost": 0.4,
+    "outputCost": 1.75
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
     "inputCost": 0.02,
-    "outputCost": 0.07
+    "outputCost": 0.1
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
     "inputCost": 0.03,
-    "outputCost": 0.14
+    "outputCost": 0.13
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V3-0324",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 75000,
+    "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.18,
-    "outputCost": 0.72
+    "inputCost": 0.24,
+    "outputCost": 0.84
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V3.1",
@@ -38278,7 +38615,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
     "inputCost": 0.2,
@@ -38291,22 +38628,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 0.25,
-    "outputCost": 1
-  },
-  {
-    "model": "chutes/deepseek-ai/DeepSeek-V3.1:THINKING",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.23,
+    "outputCost": 0.9
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V3.2-Exp",
@@ -38315,8 +38640,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
     "inputCost": 0.25,
     "outputCost": 0.35
   },
@@ -38329,8 +38654,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.25,
-    "outputCost": 1
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/microsoft/MAI-DS-R1-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/MiniMaxAI/MiniMax-M2",
@@ -38339,10 +38676,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
-    "inputCost": 0.15,
-    "outputCost": 0.45
+    "contextWindow": 196608,
+    "maxOutput": 196608,
+    "inputCost": 0.26,
+    "outputCost": 1.02
   },
   {
     "model": "chutes/moonshotai/Kimi-K2-Instruct-0905",
@@ -38353,32 +38690,68 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.296176,
-    "outputCost": 1.18528
+    "inputCost": 0.39,
+    "outputCost": 1.9
   },
   {
-    "model": "chutes/moonshotai/Kimi-K2-Instruct-75k",
+    "model": "chutes/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/NousResearch/DeepHermes-3-Mistral-24B-Preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 75000,
-    "maxOutput": 75000,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.59
   },
   {
-    "model": "chutes/moonshotai/Kimi-VL-A3B-Thinking",
-    "imageInput": true,
+    "model": "chutes/NousResearch/Hermes-4-14B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4-405B-FP8",
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.02499,
-    "outputCost": 0.100008
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4-70B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.11,
+    "outputCost": 0.38
   },
   {
     "model": "chutes/openai/gpt-oss-120b",
@@ -38388,9 +38761,105 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.04,
+    "outputCost": 0.4
+  },
+  {
+    "model": "chutes/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/OpenGVLab/InternVL3-78B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.1,
-    "outputCost": 0.41
+    "inputCost": 0.07,
+    "outputCost": 0.26
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-72B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.07,
+    "outputCost": 0.26
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-Coder-32B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.04,
+    "outputCost": 0.16
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-VL-32B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-VL-72B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.08,
+    "outputCost": 0.33
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-14B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-235B-A22B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507",
@@ -38400,9 +38869,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.078,
-    "outputCost": 0.312
+    "maxOutput": 262144,
+    "inputCost": 0.08,
+    "outputCost": 0.55
   },
   {
     "model": "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507",
@@ -38413,8 +38882,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.078,
-    "outputCost": 0.312
+    "inputCost": 0.11,
+    "outputCost": 0.6
   },
   {
     "model": "chutes/Qwen/Qwen3-30B-A3B",
@@ -38425,8 +38894,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 40960,
     "maxOutput": 40960,
-    "inputCost": 0.02,
-    "outputCost": 0.08
+    "inputCost": 0.06,
+    "outputCost": 0.22
   },
   {
     "model": "chutes/Qwen/Qwen3-30B-A3B-Instruct-2507",
@@ -38437,6 +38906,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
+    "inputCost": 0.08,
+    "outputCost": 0.33
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-32B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
     "inputCost": 0.05,
     "outputCost": 0.2
   },
@@ -38449,8 +38930,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.06,
+    "outputCost": 0.25
   },
   {
     "model": "chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
@@ -38461,8 +38942,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.22,
+    "outputCost": 0.95
   },
   {
     "model": "chutes/Qwen/Qwen3-Next-80B-A3B-Instruct",
@@ -38477,16 +38958,40 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.8
   },
   {
-    "model": "chutes/Qwen/Qwen3-Next-80B-A3B-Thinking",
-    "imageInput": false,
+    "model": "chutes/Qwen/Qwen3-VL-235B-A22B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-VL-235B-A22B-Thinking",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.1,
-    "outputCost": 0.8
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/rednote-hilab/dots.ocr",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.01,
+    "outputCost": 0.01
   },
   {
     "model": "chutes/tngtech/DeepSeek-R1T-Chimera",
@@ -38497,20 +39002,80 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.18,
-    "outputCost": 0.72
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/tngtech/DeepSeek-TNG-R1T2-Chimera",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-12b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.1
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 96000,
+    "maxOutput": 96000,
+    "inputCost": 0.13,
+    "outputCost": 0.52
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-4b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 96000,
+    "maxOutput": 96000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/unsloth/Mistral-Nemo-Instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/unsloth/Mistral-Small-24B-Instruct-2501",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.05,
+    "outputCost": 0.22
   },
   {
     "model": "chutes/zai-org/GLM-4.5",
@@ -38532,18 +39097,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "chutes/zai-org/GLM-4.5-FP8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
@@ -38555,34 +39108,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
+    "contextWindow": 202752,
+    "maxOutput": 202752,
     "inputCost": 0.4,
     "outputCost": 1.75
-  },
-  {
-    "model": "chutes/zai-org/GLM-4.6-FP8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.39,
-    "outputCost": 1.55
-  },
-  {
-    "model": "chutes/zai-org/GLM-4.6-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 1.15,
-    "outputCost": 3.25
   }
 ]}
 />
@@ -38597,7 +39126,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://llm.chutes.ai/v1",
-    id: "chutes/MiniMaxAI/MiniMax-M2",
+    id: "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B",
     apiKey: process.env.CHUTES_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -38615,8 +39144,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "chutes/zai-org/GLM-4.6-turbo"
-      : "chutes/MiniMaxAI/MiniMax-M2";
+      ? "chutes/zai-org/GLM-4.6"
+      : "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B";
   }
 });
 ```
@@ -38874,7 +39403,7 @@ const agent = new Agent({
 
 ---
 title: "Deep Infra | Models | Mastra"
-description: "Use Deep Infra models with Mastra. 4 models available."
+description: "Use Deep Infra models with Mastra. 6 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -38888,7 +39417,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 [EN] Source: https://mastra.ai/en/models/providers/deepinfra
 
-Access 4 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 6 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -38937,6 +39466,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.5,
     "outputCost": 2
+  },
+  {
+    "model": "deepinfra/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.05,
+    "outputCost": 0.24
+  },
+  {
+    "model": "deepinfra/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.03,
+    "outputCost": 0.14
   },
   {
     "model": "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct",
@@ -41924,7 +42477,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/cerebras.svg"
     />    <CardGridItem
       title="Chutes"
-      description="31 models"
+      description="52 models"
       href="/models/v1/providers/chutes"
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
@@ -41934,7 +42487,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/cortecs.svg"
     />    <CardGridItem
       title="Deep Infra"
-      description="4 models"
+      description="6 models"
       href="/models/v1/providers/deepinfra"
       logo="https://models.dev/logos/deepinfra.svg"
     />    <CardGridItem
@@ -42008,7 +42561,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/morph"
       logo="https://models.dev/logos/morph.svg"
     />    <CardGridItem
-      title="Nebius AI Studio"
+      title="Nebius Token Factory"
       description="15 models"
       href="/models/v1/providers/nebius"
       logo="https://models.dev/logos/nebius.svg"
@@ -42044,7 +42597,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/submodel.svg"
     />    <CardGridItem
       title="Synthetic"
-      description="22 models"
+      description="23 models"
       href="/models/v1/providers/synthetic"
       logo="https://models.dev/logos/synthetic.svg"
     />    <CardGridItem
@@ -42767,12 +43320,6 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
-
-:::info
-
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Mistral documentation](https://docs.mistral.ai/getting-started/models/) for details.
-
-:::
 
 ## Models
 
@@ -43669,8 +44216,8 @@ const agent = new Agent({
 
 
 ---
-title: "Nebius AI Studio | Models | Mastra"
-description: "Use Nebius AI Studio models with Mastra. 15 models available."
+title: "Nebius Token Factory | Models | Mastra"
+description: "Use Nebius Token Factory models with Mastra. 15 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -43680,12 +44227,12 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
-# <img src="https://models.dev/logos/nebius.svg" alt="Nebius AI Studio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nebius AI Studio
+# <img src="https://models.dev/logos/nebius.svg" alt="Nebius Token Factory logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nebius Token Factory
 [EN] Source: https://mastra.ai/en/models/providers/nebius
 
-Access 15 Nebius AI Studio models through Mastra's model router. Authentication is handled automatically using the `NEBIUS_API_KEY` environment variable.
+Access 15 Nebius Token Factory models through Mastra's model router. Authentication is handled automatically using the `NEBIUS_API_KEY` environment variable.
 
-Learn more in the [Nebius AI Studio documentation](https://docs.studio.nebius.com/quickstart).
+Learn more in the [Nebius Token Factory documentation](https://docs.tokenfactory.nebius.com/).
 
 ```bash
 NEBIUS_API_KEY=your-api-key
@@ -43713,7 +44260,7 @@ for await (const chunk of stream) {
 
 :::info
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Nebius AI Studio documentation](https://docs.studio.nebius.com/quickstart) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Nebius Token Factory documentation](https://docs.tokenfactory.nebius.com/) for details.
 
 :::
 
@@ -43913,7 +44460,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.studio.nebius.com/v1/",
+    url: "https://api.tokenfactory.nebius.com/v1",
     id: "nebius/NousResearch/hermes-4-405b",
     apiKey: process.env.NEBIUS_API_KEY,
     headers: {
@@ -46003,7 +46550,7 @@ const agent = new Agent({
 
 ---
 title: "Synthetic | Models | Mastra"
-description: "Use Synthetic models with Mastra. 22 models available."
+description: "Use Synthetic models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -46016,7 +46563,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 [EN] Source: https://mastra.ai/en/models/providers/synthetic
 
-Access 22 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 23 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -46233,6 +46780,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 1.2,
     "outputCost": 1.2
+  },
+  {
+    "model": "synthetic/hf:moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.55,
+    "outputCost": 2.19
   },
   {
     "model": "synthetic/hf:openai/gpt-oss-120b",
@@ -48682,13 +49241,13 @@ export const agent = new Agent({
       type: "string",
       isOptional: true,
       description:
-        "Optional unique identifier for the agent. Defaults to `name` if not provided.",
+        "Unique identifier for the agent. Defaults to `name` if not provided.",
     },
     {
       name: "name",
       type: "string",
       isOptional: false,
-      description: "Unique identifier for the agent.",
+      description: "Display name for the agent. Used as the identifier if `id` is not provided.",
     },
     {
       name: "description",
@@ -57488,8 +58047,11 @@ Mastra provides a unified `createScorer` factory that allows you to define custo
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
 
 ```typescript
+import { createScorer } from "@mastra/core/evals";
+
 const scorer = createScorer({
-  name: "My Custom Scorer",
+  id: "my-custom-scorer",
+  name: "My Custom Scorer", // Optional, defaults to id
   description: "Evaluates responses based on custom criteria",
   type: "agent", // Optional: for agent evaluation with automatic typing
   judge: {
@@ -57516,28 +58078,34 @@ const scorer = createScorer({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      isOptional: false,
+      description: "Unique identifier for the scorer. Used as the name if `name` is not provided.",
+    },
+    {
       name: "name",
       type: "string",
-      required: true,
-      description: "Name of the scorer.",
+      isOptional: true,
+      description: "Name of the scorer. Defaults to `id` if not provided.",
     },
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what the scorer does.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Optional judge configuration for LLM-based steps. See Judge Object section below.",
     },
     {
       name: "type",
       type: "string",
-      required: false,
+      isOptional: true,
       description:
         "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
     },
@@ -57553,13 +58121,13 @@ This function returns a scorer builder that you can chain step methods onto. See
     {
       name: "model",
       type: "LanguageModel",
-      required: true,
+      isOptional: false,
       description: "The LLM model instance to use for evaluation.",
     },
     {
       name: "instructions",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "System prompt/instructions for the LLM.",
     },
   ]}
@@ -57574,7 +58142,7 @@ You can specify input/output types when creating scorers for better type inferen
 For evaluating agents, use `type: 'agent'` to automatically get the correct types for agent input/output:
 
 ```typescript
-import { createScorer } from "@mastra/core/scorers";
+import { createScorer } from "@mastra/core/evals";
 
 // Agent scorer with automatic typing
 const agentScorer = createScorer({
@@ -57599,7 +58167,7 @@ const agentScorer = createScorer({
 For custom input/output types, use the generic approach:
 
 ```typescript
-import { createScorer } from "@mastra/core/scorers";
+import { createScorer } from "@mastra/core/evals";
 
 type CustomInput = { query: string; context: string[] };
 type CustomOutput = { answer: string; confidence: number };
@@ -57661,34 +58229,34 @@ Function: `({ run, results }) => any`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results",
       type: "object",
-      required: true,
+      isOptional: false,
       description: "Empty object (no previous steps).",
     },
   ]}
@@ -57704,26 +58272,26 @@ The method can return any value. The returned value will be available to subsequ
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this preprocessing step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description: "Zod schema for the expected output of the preprocess step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -57742,34 +58310,34 @@ Function: `({ run, results }) => any`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
   ]}
@@ -57785,26 +58353,26 @@ The method can return any value. The returned value will be available to subsequ
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this analysis step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description: "Zod schema for the expected output of the analyze step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -57823,40 +58391,40 @@ Function: `({ run, results }) => number`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
     {
       name: "results.analyzeStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from analyze step, if defined (optional).",
     },
   ]}
@@ -57872,27 +58440,27 @@ The method must return a numerical score.
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this scoring step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description:
         "Zod schema for the expected output of the generateScore step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -57906,7 +58474,7 @@ When using prompt object mode, you must also provide a `calculateScore` function
     {
       name: "calculateScore",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results, analyzeStepResult }) => number. Converts the LLM's structured output into a numerical score.",
     },
@@ -57925,46 +58493,46 @@ Function: `({ run, results, score }) => string`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
     {
       name: "results.analyzeStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from analyze step, if defined (optional).",
     },
     {
       name: "score",
       type: "number",
-      required: true,
+      isOptional: false,
       description: "Score computed by the generateScore step.",
     },
   ]}
@@ -57980,20 +58548,20 @@ The method must return a string explaining the score.
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this reasoning step does.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results, score }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -58751,6 +59319,8 @@ The `MastraScorer` class is the base class for all scorers in Mastra. It provide
 Use the `createScorer` factory function, which returns a `MastraScorer` instance:
 
 ```typescript
+import { createScorer } from "@mastra/core/evals";
+
 const scorer = createScorer({
   name: "My Custom Scorer",
   description: "Evaluates responses based on custom criteria",
@@ -66247,10 +66817,16 @@ const processor = new BatchPartsProcessor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'batch-parts'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'batch-parts'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -66402,10 +66978,16 @@ const processor = new LanguageDetector({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'language-detector'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'language-detector'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -66543,10 +67125,16 @@ const processor = new ModerationProcessor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'moderation'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'moderation'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -66723,10 +67311,16 @@ const processor = new PIIDetector({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'pii-detector'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'pii-detector'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -66890,10 +67484,16 @@ const processor = new PromptInjectionDetector({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'prompt-injection-detector'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'prompt-injection-detector'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -67029,10 +67629,16 @@ const processor = new SystemPromptScrubber({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'system-prompt-scrubber'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'system-prompt-scrubber'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -67158,10 +67764,16 @@ const processor = new TokenLimiterProcessor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'token-limiter'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'token-limiter'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -67295,10 +67907,16 @@ const processor = new UnicodeNormalizer({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'unicode-normalizer'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'unicode-normalizer'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -79149,10 +79767,11 @@ npm install @mastra/couchbase@beta
 
 ## Usage Example
 
-```typescript copy showLineNumbers
+```typescript copy
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
+  id: 'couchbase-vector',
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
   username: process.env.COUCHBASE_USERNAME,
   password: process.env.COUCHBASE_PASSWORD,
@@ -79166,6 +79785,11 @@ const store = new CouchbaseVector({
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
     {
       name: "connectionString",
       type: "string",
@@ -80308,6 +80932,7 @@ npm install @mastra/mongodb@beta
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
+  id: 'mongodb-vector',
   url: process.env.MONGODB_URL,
   database: process.env.MONGODB_DATABASE,
 });
@@ -80317,6 +80942,11 @@ const store = new MongoDBVector({
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
     {
       name: "url",
       type: "string",

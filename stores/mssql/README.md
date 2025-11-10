@@ -27,6 +27,7 @@ MSSQLStore supports multiple connection methods:
 import { MSSQLStore } from '@mastra/mssql';
 
 const store = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString:
     'Server=localhost,1433;Database=mastra;User Id=sa;Password=yourPassword;Encrypt=true;TrustServerCertificate=true',
 });
@@ -36,6 +37,7 @@ const store = new MSSQLStore({
 
 ```typescript
 const store = new MSSQLStore({
+  id: 'mssql-storage',
   server: 'localhost',
   port: 1433,
   database: 'mastra',
@@ -49,6 +51,7 @@ const store = new MSSQLStore({
 
 ```typescript
 const store = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString:
     'Server=localhost,1433;Database=mastra;User Id=sa;Password=yourPassword;Encrypt=true;TrustServerCertificate=true',
   schemaName: 'custom_schema', // Use custom schema (default: dbo)
@@ -103,6 +106,10 @@ const messages = await store.listMessages({ threadId: 'thread-123' });
 
 ## Configuration
 
+### Identifier
+
+- `id`: Unique identifier for this store instance (required)
+
 ### Connection Methods
 
 MSSQLStore supports multiple connection methods:
@@ -111,6 +118,7 @@ MSSQLStore supports multiple connection methods:
 
    ```typescript
    {
+     id: 'mssql-storage',
      connectionString: 'Server=localhost,1433;Database=mastra;User Id=sa;Password=yourPassword;Encrypt=true;TrustServerCertificate=true';
    }
    ```
@@ -118,6 +126,7 @@ MSSQLStore supports multiple connection methods:
 2. **Server/Port/Database**
    ```typescript
    {
+     id: 'mssql-storage',
      server: 'localhost',
      port: 1433,
      database: 'mastra',

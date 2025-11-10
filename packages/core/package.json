@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -218,7 +218,7 @@
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0",
-    "@mastra/observability": ">=0.0.0"
+    "@mastra/observability": ">=1.0.0-0 <2.0.0-0"
   },
   "peerDependenciesMeta": {
     "@mastra/observability": {
@@ -229,6 +229,7 @@
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.33",
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.23",
+    "@ai-sdk/mistral-v5": "npm:@ai-sdk/mistral@2.0.23",
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.22",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.53",
     "@ai-sdk/xai-v5": "npm:@ai-sdk/xai@2.0.26",

@@ -2028,6 +2028,9 @@ describe('Workflow', () => {
           resumedAt: expect.any(Number),
           suspendedAt: expect.any(Number),
           suspendPayload: {},
+          suspendOutput: {
+            modelOutput: 'test output',
+          },
         },
       });
     });
@@ -3243,9 +3246,54 @@ describe('Workflow', () => {
 
       workflow.then(step1);
 
+      expect(workflow.committed).toBe(false);
+
       await expect(workflow.createRun()).rejects.toThrowError(
         'Uncommitted step flow changes detected. Call .commit() to register the steps.',
       );
+    });
+
+    it('should automatically commit uncommitted workflow when registering in mastra instance', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1);
+
+      expect(workflow.committed).toBe(false);
+
+      new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+      });
+
+      expect(workflow.committed).toBe(true);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.status).toBe('success');
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
 
     it('should execute a single step workflow successfully', async () => {
@@ -6446,6 +6494,7 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
+      expect(resumedResult.steps.map.suspendOutput).toBeUndefined();
     });
 
     it('should run a all item concurrency for loop', async () => {
