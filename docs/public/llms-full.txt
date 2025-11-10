@@ -10547,7 +10547,7 @@ All memory types are [resource-scoped](./working-memory#resource-scoped-memory-d
 
 To persist and recall information between conversations, memory requires a storage adapter.
 
-Supported options include [LibSQL](/docs/v1/memory/storage/memory-with-libsql), [MongoDB](/examples/v1/memory/memory-with-mongodb), [Postgres](/docs/v1/memory/storage/memory-with-pg), and [Upstash](/docs/v1/memory/storage/memory-with-upstash)
+Supported options include [LibSQL](/docs/v1/memory/storage/memory-with-libsql), [MongoDB](/docs/v1/memory/storage/memory-with-mongodb), [Postgres](/docs/v1/memory/storage/memory-with-pg), and [Upstash](/docs/v1/memory/storage/memory-with-upstash)
 
 We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with Studio.
 
@@ -10696,7 +10696,7 @@ const agent = new Agent({
 **Storage/vector code Examples**:
 
 - [LibSQL](/docs/v1/memory/storage/memory-with-libsql)
-- [MongoDB](/examples/v1/memory/memory-with-mongodb)
+- [MongoDB](/docs/v1/memory/storage/memory-with-mongodb)
 - [Postgres](/docs/v1/memory/storage/memory-with-pg)
 - [Upstash](/docs/v1/memory/storage/memory-with-upstash)
 
@@ -10979,6 +10979,161 @@ for await (const chunk of stream.textStream) {
 ## Related
 
 - [Calling Agents](/examples/v1/agents/calling-agents)
+
+
+---
+title: "Example: Memory with MongoDB | Memory | Mastra Docs"
+description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
+---
+
+# Memory with MongoDB
+[EN] Source: https://mastra.ai/en/docs/memory/storage/memory-with-mongodb
+
+This example demonstrates how to use Mastra's memory system with MongoDB as the storage backend.
+
+## Prerequisites
+
+This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+MONGODB_URI=<your-connection-string>
+MONGODB_DB_NAME=<your-db-name>
+```
+
+And install the following package:
+
+```bash copy
+npm install @mastra/mongodb@beta
+```
+
+## Adding memory to an agent
+
+To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore } from "@mastra/mongodb";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      threads: {
+        generateTitle: true,
+      },
+    },
+  }),
+});
+```
+
+## Vector embeddings with MongoDB
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
+
+> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
+To use this, install `@mastra/fastembed`:
+
+```bash copy
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // generates descriptive thread titles automatically
+      },
+    },
+  }),
+});
+```
+
+## Usage example
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mongodbAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Related
+
+- [Calling Agents](/docs/v1/agents/overview)
 
 
 ---
@@ -23688,10 +23843,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Memory with Schema",
         href: "/examples/v1/memory/working-memory-schema",
       },
-      {
-        title: "Memory with MongoDB",
-        href: "/examples/v1/memory/memory-with-mongodb",
-      },
     ],
     RAG: [
       { title: "Chunk Text", href: "/examples/v1/rag/chunking/chunk-text" },
@@ -23765,161 +23916,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
     ],
   }}
 />
-
-
----
-title: "Example: Memory with MongoDB | Memory | Mastra Docs"
-description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
----
-
-# Memory with MongoDB
-[EN] Source: https://mastra.ai/en/examples/memory/memory-with-mongodb
-
-This example demonstrates how to use Mastra's memory system with MongoDB as the storage backend.
-
-## Prerequisites
-
-This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-MONGODB_URI=<your-connection-string>
-MONGODB_DB_NAME=<your-db-name>
-```
-
-And install the following package:
-
-```bash copy
-npm install @mastra/mongodb@beta
-```
-
-## Adding memory to an agent
-
-To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
-
-```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { MongoDBStore } from "@mastra/mongodb";
-
-export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
-  name: "mongodb-agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
-  memory: new Memory({
-    storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    options: {
-      threads: {
-        generateTitle: true,
-      },
-    },
-  }),
-});
-```
-
-## Vector embeddings with MongoDB
-
-Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
-
-> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
-
-This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
-To use this, install `@mastra/fastembed`:
-
-```bash copy
-npm install @mastra/fastembed@beta
-```
-
-Add the following to your agent:
-
-```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
-import { fastembed } from "@mastra/fastembed";
-
-export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
-  name: "mongodb-agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
-  memory: new Memory({
-    storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    vector: new MongoDBVector({
-      uri: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-      threads: {
-        generateTitle: true, // generates descriptive thread titles automatically
-      },
-    },
-  }),
-});
-```
-
-## Usage example
-
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
-
-```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const threadId = "123";
-const resourceId = "user-456";
-
-const agent = mastra.getAgent("mongodbAgent");
-
-const message = await agent.stream("My name is Mastra", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-});
-
-await message.textStream.pipeTo(new WritableStream());
-
-const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-## Related
-
-- [Calling Agents](/docs/v1/agents/overview)
 
 
 ---
@@ -33836,6 +33832,26 @@ Storage APIs have been standardized with consistent pagination and naming patter
 
 ## Changed
 
+### Required `id` property for storage instances
+
+Storage instances now require an `id` property. This unique identifier is used for tracking and managing storage instances within Mastra. The `id` should be a descriptive, unique string for each storage instance in your application.
+
+To migrate, add an `id` field to your storage constructor.
+
+```diff
+  const storage = new PostgresStore({
++   id: 'main-postgres-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+    schemaName: 'public',
+  });
+
+  const upstashStore = new UpstashStore({
++   id: 'upstash-cache-store',
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
+```
+
 ### Pagination from `offset/limit` to `page/perPage`
 
 All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`. This change provides a more intuitive pagination model that aligns with common web pagination patterns.
@@ -34506,9 +34522,33 @@ description: "Learn how to migrate vector-related changes when upgrading to v1."
 # Vectors
 [EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/vectors
 
-Vector store methods have been renamed to follow consistent naming conventions.
+Vector store constructors now require an `id` property, and vector store methods have been renamed to follow consistent naming conventions.
 
 ## Changed
+
+### Required `id` property for vector store instances
+
+Vector store instances now require an `id` property. This unique identifier is used for tracking and managing vector store instances within Mastra. The `id` should be a descriptive, unique string for each vector store in your application.
+
+To migrate, add an `id` field to your vector store constructor.
+
+```diff
+  const vectorStore = new PgVector({
++   id: 'main-vector-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+  });
+
+  const chromaStore = new ChromaVector({
++   id: 'chroma-embeddings',
+    url: process.env.CHROMA_URL,
+  });
+
+  const pineconeStore = new PineconeVector({
++   id: 'pinecone-production',
+    apiKey: process.env.PINECONE_API_KEY,
+    environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
 
 ### `getVectors` to `listVectors`
 
@@ -36354,9 +36394,6 @@ description: "Use Alibaba (China) models with Mastra. 61 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/alibaba-cn.svg" alt="Alibaba (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba (China)
@@ -37179,9 +37216,6 @@ description: "Use Alibaba models with Mastra. 39 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/alibaba.svg" alt="Alibaba logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba
@@ -37763,9 +37797,6 @@ description: "Use Anthropic models with Mastra. 19 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -38162,9 +38193,6 @@ description: "Use Baseten models with Mastra. 3 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/baseten.svg" alt="Baseten logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Baseten
@@ -38290,9 +38318,6 @@ description: "Use Cerebras models with Mastra. 4 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -38442,9 +38467,6 @@ description: "Use Chutes models with Mastra. 52 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -39183,9 +39205,6 @@ description: "Use Cortecs models with Mastra. 11 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
@@ -39408,9 +39427,6 @@ description: "Use Deep Infra models with Mastra. 6 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -39584,9 +39600,6 @@ description: "Use DeepSeek models with Mastra. 2 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
@@ -39700,9 +39713,6 @@ description: "Use FastRouter models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -39962,9 +39972,6 @@ description: "Use Fireworks AI models with Mastra. 11 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Fireworks AI
@@ -40186,9 +40193,6 @@ description: "Use GitHub Models models with Mastra. 55 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -40963,9 +40967,6 @@ description: "Use Google models with Mastra. 24 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -41429,9 +41430,6 @@ description: "Use Groq models with Mastra. 17 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -41737,9 +41735,6 @@ description: "Use Hugging Face models with Mastra. 14 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
@@ -41997,9 +41992,6 @@ description: "Use iFlow models with Mastra. 17 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42294,9 +42286,6 @@ description: "Use Inception models with Mastra. 2 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42660,9 +42649,6 @@ description: "Use Inference models with Mastra. 9 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/inference.svg" alt="Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Inference
@@ -42861,9 +42847,6 @@ description: "Use Llama models with Mastra. 7 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/llama.svg" alt="Llama logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Llama
@@ -43038,9 +43021,6 @@ description: "Use LMStudio models with Mastra. 3 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/lmstudio.svg" alt="LMStudio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LMStudio
@@ -43167,9 +43147,6 @@ description: "Use LucidQuery AI models with Mastra. 2 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/lucidquery.svg" alt="LucidQuery AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LucidQuery AI
@@ -43283,9 +43260,6 @@ description: "Use Mistral models with Mastra. 19 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -43610,9 +43584,6 @@ description: "Use ModelScope models with Mastra. 7 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/modelscope.svg" alt="ModelScope logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ModelScope
@@ -43787,9 +43758,6 @@ description: "Use Moonshot AI (China) models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/moonshotai-cn.svg" alt="Moonshot AI (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI (China)
@@ -43939,9 +43907,6 @@ description: "Use Moonshot AI models with Mastra. 5 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44093,9 +44058,6 @@ description: "Use Morph models with Mastra. 3 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/morph.svg" alt="Morph logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Morph
@@ -44221,9 +44183,6 @@ description: "Use Nebius Token Factory models with Mastra. 15 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44494,9 +44453,6 @@ description: "Use Nvidia models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44850,9 +44806,6 @@ description: "Use OpenAI models with Mastra. 31 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -45443,9 +45396,6 @@ description: "Use OpenCode Zen models with Mastra. 14 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
@@ -45704,9 +45654,6 @@ description: "Use Perplexity models with Mastra. 4 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -45855,9 +45802,6 @@ description: "Use Requesty models with Mastra. 13 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -46105,9 +46049,6 @@ description: "Use Scaleway models with Mastra. 13 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/scaleway.svg" alt="Scaleway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Scaleway
@@ -46354,9 +46295,6 @@ description: "Use submodel models with Mastra. 9 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/submodel.svg" alt="submodel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />submodel
@@ -46554,9 +46492,6 @@ description: "Use Synthetic models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -46924,9 +46859,6 @@ description: "Use Together AI models with Mastra. 6 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -47100,9 +47032,6 @@ description: "Use Upstage models with Mastra. 2 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/upstage.svg" alt="Upstage logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Upstage
@@ -47216,9 +47145,6 @@ description: "Use Venice AI models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -47478,9 +47404,6 @@ description: "Use Vultr models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/vultr.svg" alt="Vultr logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vultr
@@ -47630,9 +47553,6 @@ description: "Use Weights & Biases models with Mastra. 10 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -47843,9 +47763,6 @@ description: "Use xAI models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -48214,9 +48131,6 @@ description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
@@ -48367,9 +48281,6 @@ description: "Use Z.AI models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/zai.svg" alt="Z.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI
@@ -48519,9 +48430,6 @@ description: "Use ZenMux models with Mastra. 18 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -48829,9 +48737,6 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
@@ -48981,9 +48886,6 @@ description: "Use Zhipu AI models with Mastra. 5 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
