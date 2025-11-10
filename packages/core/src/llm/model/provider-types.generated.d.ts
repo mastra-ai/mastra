@@ -791,6 +791,8 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
     'moonshotai/Kimi-K2-Instruct',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
   ];
   readonly zhipuai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6'];
