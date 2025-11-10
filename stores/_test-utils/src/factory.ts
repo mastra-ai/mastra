@@ -8,12 +8,16 @@ import {
   TABLE_SCORERS,
   TABLE_TRACES,
   TABLE_SPANS,
+  TABLE_DATASETS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_ROWS,
 } from '@mastra/core/storage';
 import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
+import { createDatasetsTests } from './domains/datasets';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -39,6 +43,9 @@ export function createTestSuite(storage: MastraStorage) {
         storage.clearTable({ tableName: TABLE_SCORERS }),
         storage.clearTable({ tableName: TABLE_TRACES }),
         storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_SPANS }),
+        storage.clearTable({ tableName: TABLE_DATASETS }),
+        storage.clearTable({ tableName: TABLE_DATASET_VERSIONS }),
+        storage.clearTable({ tableName: TABLE_DATASET_ROWS }),
       ]);
     });
 
@@ -49,6 +56,8 @@ export function createTestSuite(storage: MastraStorage) {
     createMemoryTest({ storage });
 
     createScoresTest({ storage });
+
+    createDatasetsTests({ storage });
 
     if (storage.supports.observabilityInstance) {
       createObservabilityTests({ storage });

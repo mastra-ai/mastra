@@ -2934,6 +2934,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      ulid:
+        specifier: ^3.0.1
+        version: 3.0.1
 
   stores/astra:
     dependencies:
