@@ -22,6 +22,7 @@ import { agentBuilderRouter } from '../routes/agent-builder/router';
 interface RouteInfo {
   method: string;
   path: string;
+  handlerName?: string;
 }
 
 // Helper to convert Hono path format (:param) to OpenAPI format ({param})
@@ -36,6 +37,8 @@ describe('Deployer Routes → Server Adapter Parity', () => {
   let serverRoutes: RouteInfo[];
   let serverRoutesMap: Map<string, ServerRoute>;
   let deployerOpenAPISpec: any;
+  let deployerHandlerMap: Map<string, RouteInfo[]>; // handler name -> routes
+  let serverHandlerMap: Map<string, RouteInfo[]>; // handler name -> routes
 
   beforeAll(async () => {
     vi.clearAllMocks();
@@ -100,19 +103,46 @@ describe('Deployer Routes → Server Adapter Parity', () => {
 
     // Extract unique deployer routes (deduplicate by method + path)
     const deployerRoutesMap = new Map<string, RouteInfo>();
+    deployerHandlerMap = new Map<string, RouteInfo[]>();
+
     deployerApp.routes.forEach(r => {
+      const handlerName = r.handler.name;
       const key = `${r.method} ${r.path}`;
-      if (!deployerRoutesMap.has(key)) {
-        deployerRoutesMap.set(key, { method: r.method, path: r.path });
+
+      // Only process routes with actual handler names (skip middleware like bodyLimit, describeRoute)
+      if (handlerName && !handlerName.startsWith('bodyLimit') && handlerName !== 'bound ') {
+        const routeInfo: RouteInfo = { method: r.method, path: r.path, handlerName };
+
+        if (!deployerRoutesMap.has(key)) {
+          deployerRoutesMap.set(key, routeInfo);
+        }
+
+        // Build handler map
+        if (!deployerHandlerMap.has(handlerName)) {
+          deployerHandlerMap.set(handlerName, []);
+        }
+        deployerHandlerMap.get(handlerName)!.push(routeInfo);
       }
     });
     uniqueDeployerRoutes = Array.from(deployerRoutesMap.values());
 
     // Extract server-adapter routes
-    serverRoutes = SERVER_ROUTES.map(r => ({
-      method: r.method,
-      path: r.path,
-    }));
+    serverHandlerMap = new Map<string, RouteInfo[]>();
+
+    serverRoutes = SERVER_ROUTES.map(r => {
+      const handlerName = r.handler.name;
+      const routeInfo: RouteInfo = { method: r.method, path: r.path, handlerName };
+
+      // Build handler map
+      if (handlerName) {
+        if (!serverHandlerMap.has(handlerName)) {
+          serverHandlerMap.set(handlerName, []);
+        }
+        serverHandlerMap.get(handlerName)!.push(routeInfo);
+      }
+
+      return routeInfo;
+    });
 
     // Create a map for easy lookup of full ServerRoute objects
     serverRoutesMap = new Map();
@@ -142,17 +172,19 @@ describe('Deployer Routes → Server Adapter Parity', () => {
       const failures: string[] = [];
 
       uniqueDeployerRoutes.forEach(route => {
-        const exactMatch = serverRoutes.find(sr => sr.method === route.method && sr.path === route.path);
-        // Only report if there's no exact match AND no path-only match (handled separately)
-        const pathMatch = serverRoutes.find(sr => sr.path === route.path);
+        if (!route.handlerName) return; // Skip routes without handler names
 
-        if (!exactMatch && !pathMatch) {
-          failures.push(`${route.method} ${route.path}`);
+        // Check if this handler exists in server-adapter at all
+        const handlerExistsInServer = serverHandlerMap.has(route.handlerName);
+
+        if (!handlerExistsInServer) {
+          // This handler is completely unique to deployer
+          failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);
         }
       });
 
       if (failures.length > 0) {
-        const errorMessage = `\nFound ${failures.length} deployer routes with no equivalent in server-adapter:\n${failures.map(r => `  - ${r}`).join('\n')}\n\nEach route must be added to server-adapter or documented as deprecated.`;
+        const errorMessage = `\nFound ${failures.length} deployer routes with handlers not in server-adapter:\n${failures.map(r => `  - ${r}`).join('\n')}\n\nEach route must be added to server-adapter or documented as deprecated.`;
         throw new Error(errorMessage);
       }
     });
@@ -163,23 +195,58 @@ describe('Deployer Routes → Server Adapter Parity', () => {
       const failures: string[] = [];
 
       serverRoutes.forEach(route => {
-        const exactMatch = uniqueDeployerRoutes.find(dr => dr.method === route.method && dr.path === route.path);
-        // Only report if there's no exact match AND no path-only match (handled separately)
-        const pathMatch = uniqueDeployerRoutes.find(dr => dr.path === route.path);
+        if (!route.handlerName) return; // Skip routes without handler names
 
-        if (!exactMatch && !pathMatch) {
-          failures.push(`${route.method} ${route.path}`);
+        // Check if this handler exists in deployer at all
+        const handlerExistsInDeployer = deployerHandlerMap.has(route.handlerName);
+
+        if (!handlerExistsInDeployer) {
+          // This handler is completely unique to server-adapter
+          failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);
         }
       });
 
       if (failures.length > 0) {
-        const errorMessage = `\nFound ${failures.length} server-adapter routes with no equivalent in deployer:\n${failures.map(r => `  - ${r}`).join('\n')}\n\nDocument as new feature or add to deployer.`;
+        const errorMessage = `\nFound ${failures.length} server-adapter routes with handlers not in deployer:\n${failures.map(r => `  - ${r}`).join('\n')}\n\nDocument as new feature or add to deployer.`;
         throw new Error(errorMessage);
       }
     });
   });
 
-  describe('3. Route Coverage: HTTP Method Mismatches', () => {
+  describe('3. Route Coverage: Same Handler, Different Paths', () => {
+    it('should not have routes with same handler but different paths', () => {
+      const failures: Array<{ handler: string; deployer: string; serverAdapter: string }> = [];
+
+      // Find handlers that exist in both systems
+      const commonHandlers = Array.from(deployerHandlerMap.keys()).filter(handler => serverHandlerMap.has(handler));
+
+      commonHandlers.forEach(handlerName => {
+        const deployerRoutes = deployerHandlerMap.get(handlerName)!;
+        const serverRoutes = serverHandlerMap.get(handlerName)!;
+
+        // Compare each deployer route with server routes for this handler
+        deployerRoutes.forEach(deployerRoute => {
+          serverRoutes.forEach(serverRoute => {
+            // Only check if paths differ (method mismatches are handled by test #4)
+            if (deployerRoute.path !== serverRoute.path && deployerRoute.method === serverRoute.method) {
+              failures.push({
+                handler: handlerName,
+                deployer: `${deployerRoute.method} ${deployerRoute.path}`,
+                serverAdapter: `${serverRoute.method} ${serverRoute.path}`,
+              });
+            }
+          });
+        });
+      });
+
+      if (failures.length > 0) {
+        const errorMessage = `\nFound ${failures.length} routes where the same handler has different paths:\n${failures.map(f => `  Handler: ${f.handler}\n    Deployer:       ${f.deployer}\n    Server-Adapter: ${f.serverAdapter}`).join('\n\n')}\n\nRoutes using the same handler must have matching paths.`;
+        throw new Error(errorMessage);
+      }
+    });
+  });
+
+  describe('4. Route Coverage: HTTP Method Mismatches (Same Path)', () => {
     it('should not have routes with same path but different HTTP methods', () => {
       const failures: Array<{ deployer: string; serverAdapter: string; path: string }> = [];
 
@@ -204,7 +271,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('4. Schema Parity: Response Types', () => {
+  describe('5. Schema Parity: Response Types', () => {
     it('all routes should have valid response types', () => {
       const failures: string[] = [];
 
@@ -224,7 +291,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('5. OpenAPI Documentation', () => {
+  describe('6. OpenAPI Documentation', () => {
     it('all routes should have complete OpenAPI metadata', () => {
       const missingSummary: string[] = [];
       const missingDescription: string[] = [];
@@ -265,7 +332,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('6. Schema Parity: Path Parameters', () => {
+  describe('7. Schema Parity: Path Parameters', () => {
     it('overlapping routes should have matching path parameter schemas', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 
@@ -334,7 +401,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('7. Schema Parity: Query Parameters', () => {
+  describe('8. Schema Parity: Query Parameters', () => {
     it('overlapping routes should have matching query parameter schemas', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 
@@ -411,7 +478,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('8. Schema Parity: Request Body', () => {
+  describe('9. Schema Parity: Request Body', () => {
     it('overlapping routes should have matching request body schemas', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 
@@ -487,7 +554,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('9. Schema Parity: Required vs Optional Status', () => {
+  describe('10. Schema Parity: Required vs Optional Status', () => {
     it('overlapping routes should have matching required/optional status for query params and body fields', () => {
       const failures: Array<{ route: string; issue: string }> = [];
 

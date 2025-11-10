@@ -11,6 +11,7 @@ import { LOGS_ROUTES } from './logs';
 import { VECTORS_ROUTES } from './vectors';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { LEGACY_ROUTES } from './legacy';
 
 export type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
   params: TParams & { mastra: Mastra },
@@ -40,6 +41,7 @@ export const SERVER_ROUTES: ServerRoute[] = [
   ...VECTORS_ROUTES,
   ...A2A_ROUTES,
   ...AGENT_BUILDER_ROUTES,
+  ...LEGACY_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities
