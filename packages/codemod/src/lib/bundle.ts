@@ -16,4 +16,5 @@ export const BUNDLE = [
   'v1/workflows-get-workflows',
   'v1/agent-abort-signal',
   'v1/agent-format-parameter',
+  'v1/agent-to-step',
 ];
