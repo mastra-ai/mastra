@@ -105,10 +105,34 @@ When using separate instances for different purposes, use descriptive unique IDs
 
 ### Primitive plural APIs changes from `get<primitives>` to `list<primitive>`
 
+`get*` functions that returned all instances of a primitive have been renamed to `list*` to better reflect their purpose.
+
 ```diff
+- const agents = mastra.getAgents();
++ const agents = mastra.listAgents();
+- const vectors = mastra.getVectors();
++ const vectors = mastra.listVectors();
+- const workflows = mastra.getWorkflows();
++ const workflows = mastra.listWorkflows();
+- const scorers = mastra.getScorers();
++ const scorers = mastra.listScorers();
 - const mcpServers = mastra.getMCPServers();
 + const mcpServers = mastra.listMCPServers();
+- const logsByRunId = await mastra.getLogsByRunId({ runId: 'id', transportId: 'id' });
++ const logsByRunId = await mastra.listLogsByRunId({ runId: 'id', transportId: 'id' });
+- const logs = await mastra.getLogs('transportId');
++ const logs = await mastra.listLogs('transportId');
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/mastra-plural-apis .
+```
+
+:::
 
 ### Each primtive has a `getById` and a `get` function
 
