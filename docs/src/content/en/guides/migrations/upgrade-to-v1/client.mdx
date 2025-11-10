@@ -28,6 +28,16 @@ To migrate, update type imports to use the new naming pattern.
 + } from '@mastra/client-js';
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-sdk-types .
+```
+
+:::
+
 ### Pagination parameters from `offset/limit` to `page/perPage`
 
 All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
