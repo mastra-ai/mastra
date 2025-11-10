@@ -70,7 +70,7 @@ function getUpgradeToV1Messages(area?: string): PromptMessage[] {
    - If "${area}" doesn't end with 's', try adding 's' (e.g., "agent" → "agents")
 3. If the guide exists, walk me through the changes step by step
 4. If neither form exists, list available migration guides in "upgrade-to-v1/" and suggest which ones might be relevant to "${area}"
-4. After you find the guide, collect all the codemod calls to run to codemods. These callouts are marked with ":::tip[Codemod]" in the docs. Run the codemods with "npx @mastra/codemod@beta <codemod-name> <path>" to automate all those changes. Afterwards, help me with any remaining manual changes needed.`,
+5. After you find the guide, collect all the codemod calls to run to codemods. These callouts are marked with ":::tip[Codemod]" in the docs. Run the codemods with "npx @mastra/codemod@beta <codemod-name> <path>" to automate all those changes. Afterwards, help me with any remaining manual changes needed.`,
         },
       },
     ];
