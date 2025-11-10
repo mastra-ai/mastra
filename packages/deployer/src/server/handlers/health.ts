@@ -4,4 +4,3 @@ import type { Context } from 'hono';
 export async function healthHandler(c: Context) {
   return c.json({ success: true }, 200);
 }
-

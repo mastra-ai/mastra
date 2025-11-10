@@ -9,9 +9,11 @@ import { cn } from '@/lib/utils';
 export interface WorkflowStepActionBarProps {
   input?: any;
   output?: any;
+  suspendOutput?: any;
   resumeData?: any;
   error?: any;
   stepName: string;
+  stepId?: string;
   mapConfig?: string;
   onShowNestedGraph?: () => void;
   status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
@@ -21,9 +23,11 @@ export const WorkflowStepActionBar = ({
   input,
   output,
   resumeData,
+  suspendOutput,
   error,
   mapConfig,
   stepName,
+  stepId,
   onShowNestedGraph,
   status,
 }: WorkflowStepActionBarProps) => {
@@ -56,7 +60,12 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isMapConfigOpen} onOpenChange={setIsMapConfigOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} map config</DialogTitle>
+                  <DialogTitle className={dialogTitleClass}>
+                    <div className="flex flex-col gap-1">
+                      <div>{stepName} Map Config</div>
+                      {stepId && stepId !== stepName && <div className="text-xs text-icon3 font-normal">{stepId}</div>}
+                    </div>
+                  </DialogTitle>
 
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent data={mapConfig} />
@@ -97,7 +106,7 @@ export const WorkflowStepActionBar = ({
             </>
           )}
 
-          {output && (
+          {(output ?? suspendOutput) && (
             <>
               <Button onClick={() => setIsOutputOpen(true)}>Output</Button>
 
@@ -105,7 +114,7 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogTitle className={dialogTitleClass}>{stepName} output</DialogTitle>
                   <div className="px-4 overflow-hidden">
-                    <CodeDialogContent data={output} />
+                    <CodeDialogContent data={output ?? suspendOutput} />
                   </div>
                 </DialogContent>
               </Dialog>

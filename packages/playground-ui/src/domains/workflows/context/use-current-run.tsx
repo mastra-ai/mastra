@@ -9,6 +9,8 @@ export type Step = {
   output?: any;
   input?: any;
   resumeData?: any;
+  suspendOutput?: any;
+  suspendPayload?: any;
 };
 
 type UseCurrentRunReturnType = {
@@ -31,6 +33,8 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
         output: 'output' in value ? value.output : undefined,
         input: value.payload,
         resumeData: 'resumePayload' in value ? value.resumePayload : undefined,
+        suspendOutput: 'suspendOutput' in value ? value.suspendOutput : undefined,
+        suspendPayload: 'suspendPayload' in value ? value.suspendPayload : undefined,
       },
     };
   }, {});

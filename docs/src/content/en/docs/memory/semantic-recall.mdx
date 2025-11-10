@@ -68,7 +68,7 @@ const agent = new Agent({
 
 ### Storage configuration
 
-Semantic recall relies on a [storage and vector db](/reference/memory/memory-class) to store messages and their embeddings.
+Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.
 
 ```ts {8-17}
 import { Memory } from "@mastra/memory";
@@ -93,14 +93,14 @@ const agent = new Agent({
 
 **Storage/vector code Examples**:
 
-- [LibSQL](/docs/memory/storage/memory-with-libsql)
-- [MongoDB](/examples/memory/memory-with-mongodb)
-- [Postgres](/docs/memory/storage/memory-with-pg)
-- [Upstash](/docs/memory/storage/memory-with-upstash)
+- [LibSQL](/docs/v1/memory/storage/memory-with-libsql)
+- [MongoDB](/docs/v1/memory/storage/memory-with-mongodb)
+- [Postgres](/docs/v1/memory/storage/memory-with-pg)
+- [Upstash](/docs/v1/memory/storage/memory-with-upstash)
 
 ### Embedder configuration
 
-Semantic recall relies on an [embedding model](/reference/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+Semantic recall relies on an [embedding model](/reference/v1/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
 #### Using the Model Router (Recommended)
 
@@ -147,7 +147,7 @@ const agent = new Agent({
 To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
 
 ```bash npm2yarn copy
-npm install @mastra/fastembed
+npm install @mastra/fastembed@beta
 ```
 
 Then configure it in your memory:
@@ -201,7 +201,7 @@ const agent = new Agent({
 });
 ```
 
-For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/vectors/pg#index-configuration-guide).
+For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/v1/vectors/pg#index-configuration-guide).
 
 ### Disabling
 

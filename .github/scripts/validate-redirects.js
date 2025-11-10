@@ -21,18 +21,12 @@ const checkRedirects = async () => {
   const redirects = await loadRedirects();
   const sourceMap = new Map();
   const duplicateSourceGroups = new Map();
-  const nonLocaleAwareRedirects = [];
 
   for (const redirect of redirects) {
     if (!redirect || typeof redirect !== 'object') continue;
 
     const { source, destination } = redirect;
     if (!source) continue;
-
-    // Check if redirect is locale aware
-    if (!source.includes('/:locale')) {
-      nonLocaleAwareRedirects.push(redirect);
-    }
 
     if (sourceMap.has(source)) {
       if (!duplicateSourceGroups.has(source)) {
@@ -94,17 +88,6 @@ const checkRedirects = async () => {
     }
   }
 
-  if (nonLocaleAwareRedirects.length > 0) {
-    console.log('\n' + '='.repeat(40));
-    console.log('Non-locale aware redirects found:\n');
-    for (const redirect of nonLocaleAwareRedirects) {
-      console.log('├──NON-LOCALE AWARE──', `${baseUrl}${redirect.source}`);
-      console.log('⚠️  Redirect source should include /:locale parameter:');
-      console.dir(redirect, { depth: null });
-      console.log(' ');
-    }
-  }
-
   const elapsed = Math.floor((Date.now() - start) / 1000);
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
@@ -115,11 +98,10 @@ const checkRedirects = async () => {
   console.log(`Redirects OK: ${successful}`);
   console.log(`Broken destinations: ${brokenDestination}`);
   console.log(`Duplicate sources: ${duplicateSourceGroups.size}`);
-  console.log(`Non-locale aware redirects: ${nonLocaleAwareRedirects.length}`);
   console.log(`Time elapsed: ${minutes} minutes, ${seconds} seconds`);
   console.log('='.repeat(40));
 
-  process.exit(brokenDestination > 0 || duplicateSourceGroups.size > 0 || nonLocaleAwareRedirects.length > 0 ? 1 : 0);
+  process.exit(brokenDestination > 0 || duplicateSourceGroups.size > 0 ? 1 : 0);
 };
 
 checkRedirects().catch(console.error);

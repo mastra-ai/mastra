@@ -1,0 +1,152 @@
+---
+title: "Example: Memory with MongoDB | Memory | Mastra Docs"
+description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
+---
+
+# Memory with MongoDB
+
+This example demonstrates how to use Mastra's memory system with MongoDB as the storage backend.
+
+## Prerequisites
+
+This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+MONGODB_URI=<your-connection-string>
+MONGODB_DB_NAME=<your-db-name>
+```
+
+And install the following package:
+
+```bash copy
+npm install @mastra/mongodb@beta
+```
+
+## Adding memory to an agent
+
+To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore } from "@mastra/mongodb";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      threads: {
+        generateTitle: true,
+      },
+    },
+  }),
+});
+```
+
+## Vector embeddings with MongoDB
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
+
+> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
+To use this, install `@mastra/fastembed`:
+
+```bash copy
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // generates descriptive thread titles automatically
+      },
+    },
+  }),
+});
+```
+
+## Usage example
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mongodbAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Related
+
+- [Calling Agents](/docs/v1/agents/overview)
