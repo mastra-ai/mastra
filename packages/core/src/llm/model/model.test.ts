@@ -1,4 +1,4 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';

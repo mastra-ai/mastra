@@ -8,7 +8,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { MCPToolType } from '@mastra/core/mcp';
 import { MainContentContent } from '@/components/ui/containers/MainContent';
 
-export interface ToolExecutorProps {
+interface ToolExecutorProps {
   isExecutingTool: boolean;
   zodInputSchema: ZodType;
   handleExecuteTool: (data: any) => void;
