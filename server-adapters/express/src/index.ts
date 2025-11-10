@@ -2,8 +2,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter, type BodyLimitOptions } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+import type { ServerRoute, BodyLimitOptions } from '@mastra/server/server-adapter';
+import { MastraServerAdapter } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 // Extend Express types to include Mastra context
