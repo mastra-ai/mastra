@@ -77,7 +77,7 @@ export class DevLogger {
         'Please update to the latest v0.x and try out the v1.0.0-beta releases! Follow the migration guide:',
       ),
     );
-    console.info(pc.yellowBright('https://mastra.ai/guides/migrations/upgrade-to-v1'));
+    console.info(pc.yellowBright('https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview'));
   }
 
   bundling(): void {
