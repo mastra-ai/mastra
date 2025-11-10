@@ -49,16 +49,64 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506",
+    "model": "chutes/Alibaba-NLP/Tongyi-DeepResearch-30B-A3B",
     "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/ArliAI/QwQ-32B-ArliAI-RpR-v1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/chutesai/Mistral-Small-3.1-24B-Instruct-2503",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.02,
-    "outputCost": 0.08
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/chutesai/Mistral-Small-3.2-24B-Instruct-2506",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.06,
+    "outputCost": 0.18
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-R1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-R1-0528",
@@ -67,46 +115,58 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 75000,
+    "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.18,
-    "outputCost": 0.72
+    "inputCost": 0.4,
+    "outputCost": 1.75
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
     "inputCost": 0.02,
-    "outputCost": 0.07
+    "outputCost": 0.1
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
     "inputCost": 0.03,
-    "outputCost": 0.14
+    "outputCost": 0.13
+  },
+  {
+    "model": "chutes/deepseek-ai/DeepSeek-V3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V3-0324",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": true,
+    "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 75000,
+    "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.18,
-    "outputCost": 0.72
+    "inputCost": 0.24,
+    "outputCost": 0.84
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V3.1",
@@ -114,7 +174,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
     "inputCost": 0.2,
@@ -127,22 +187,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": 0.25,
-    "outputCost": 1
-  },
-  {
-    "model": "chutes/deepseek-ai/DeepSeek-V3.1:THINKING",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.23,
+    "outputCost": 0.9
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V3.2-Exp",
@@ -151,8 +199,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 64000,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
     "inputCost": 0.25,
     "outputCost": 0.35
   },
@@ -165,8 +213,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.25,
-    "outputCost": 1
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/microsoft/MAI-DS-R1-FP8",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/MiniMaxAI/MiniMax-M2",
@@ -175,10 +235,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
-    "inputCost": 0.15,
-    "outputCost": 0.45
+    "contextWindow": 196608,
+    "maxOutput": 196608,
+    "inputCost": 0.26,
+    "outputCost": 1.02
   },
   {
     "model": "chutes/moonshotai/Kimi-K2-Instruct-0905",
@@ -189,32 +249,68 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.296176,
-    "outputCost": 1.18528
+    "inputCost": 0.39,
+    "outputCost": 1.9
   },
   {
-    "model": "chutes/moonshotai/Kimi-K2-Instruct-75k",
+    "model": "chutes/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/NousResearch/DeepHermes-3-Mistral-24B-Preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 75000,
-    "maxOutput": 75000,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.59
   },
   {
-    "model": "chutes/moonshotai/Kimi-VL-A3B-Thinking",
-    "imageInput": true,
+    "model": "chutes/NousResearch/Hermes-4-14B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4-405B-FP8",
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.02499,
-    "outputCost": 0.100008
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/NousResearch/Hermes-4-70B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.11,
+    "outputCost": 0.38
   },
   {
     "model": "chutes/openai/gpt-oss-120b",
@@ -224,9 +320,105 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.04,
+    "outputCost": 0.4
+  },
+  {
+    "model": "chutes/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/OpenGVLab/InternVL3-78B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
     "maxOutput": 32768,
-    "inputCost": 0.1,
-    "outputCost": 0.41
+    "inputCost": 0.07,
+    "outputCost": 0.26
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-72B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.07,
+    "outputCost": 0.26
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-Coder-32B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.04,
+    "outputCost": 0.16
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-VL-32B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 16384,
+    "maxOutput": 16384,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/Qwen/Qwen2.5-VL-72B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.08,
+    "outputCost": 0.33
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-14B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.05,
+    "outputCost": 0.22
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-235B-A22B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/Qwen/Qwen3-235B-A22B-Instruct-2507",
@@ -236,9 +428,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 0.078,
-    "outputCost": 0.312
+    "maxOutput": 262144,
+    "inputCost": 0.08,
+    "outputCost": 0.55
   },
   {
     "model": "chutes/Qwen/Qwen3-235B-A22B-Thinking-2507",
@@ -249,8 +441,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.078,
-    "outputCost": 0.312
+    "inputCost": 0.11,
+    "outputCost": 0.6
   },
   {
     "model": "chutes/Qwen/Qwen3-30B-A3B",
@@ -261,8 +453,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 40960,
     "maxOutput": 40960,
-    "inputCost": 0.02,
-    "outputCost": 0.08
+    "inputCost": 0.06,
+    "outputCost": 0.22
   },
   {
     "model": "chutes/Qwen/Qwen3-30B-A3B-Instruct-2507",
@@ -273,6 +465,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
+    "inputCost": 0.08,
+    "outputCost": 0.33
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-32B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 40960,
+    "maxOutput": 40960,
     "inputCost": 0.05,
     "outputCost": 0.2
   },
@@ -285,8 +489,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 0.06,
+    "outputCost": 0.25
   },
   {
     "model": "chutes/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
@@ -297,8 +501,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.22,
+    "outputCost": 0.95
   },
   {
     "model": "chutes/Qwen/Qwen3-Next-80B-A3B-Instruct",
@@ -313,16 +517,40 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.8
   },
   {
-    "model": "chutes/Qwen/Qwen3-Next-80B-A3B-Thinking",
-    "imageInput": false,
+    "model": "chutes/Qwen/Qwen3-VL-235B-A22B-Instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/Qwen/Qwen3-VL-235B-A22B-Thinking",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.1,
-    "outputCost": 0.8
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/rednote-hilab/dots.ocr",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.01,
+    "outputCost": 0.01
   },
   {
     "model": "chutes/tngtech/DeepSeek-R1T-Chimera",
@@ -333,20 +561,80 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.18,
-    "outputCost": 0.72
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/tngtech/DeepSeek-TNG-R1T2-Chimera",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 163840,
-    "inputCost": 0.2,
-    "outputCost": 0.8
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-12b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.1
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-27b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 96000,
+    "maxOutput": 96000,
+    "inputCost": 0.13,
+    "outputCost": 0.52
+  },
+  {
+    "model": "chutes/unsloth/gemma-3-4b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 96000,
+    "maxOutput": 96000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "chutes/unsloth/Mistral-Nemo-Instruct-2407",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.03,
+    "outputCost": 0.11
+  },
+  {
+    "model": "chutes/unsloth/Mistral-Small-24B-Instruct-2501",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.05,
+    "outputCost": 0.22
   },
   {
     "model": "chutes/zai-org/GLM-4.5",
@@ -368,18 +656,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "chutes/zai-org/GLM-4.5-FP8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
@@ -391,34 +667,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
+    "contextWindow": 202752,
+    "maxOutput": 202752,
     "inputCost": 0.4,
     "outputCost": 1.75
-  },
-  {
-    "model": "chutes/zai-org/GLM-4.6-FP8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.39,
-    "outputCost": 1.55
-  },
-  {
-    "model": "chutes/zai-org/GLM-4.6-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 1.15,
-    "outputCost": 3.25
   }
 ]}
 />
