@@ -15,6 +15,9 @@ import {
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   TABLE_SPANS,
+  TABLE_DATASETS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_ROWS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type {
@@ -377,6 +380,27 @@ export abstract class MastraStorage extends MastraBase {
         }),
       );
     }
+
+    // if (this.supports.datasets) {
+    tableCreationTasks.push(
+      this.createTable({
+        tableName: TABLE_DATASETS,
+        schema: TABLE_SCHEMAS[TABLE_DATASETS],
+      }),
+    );
+    tableCreationTasks.push(
+      this.createTable({
+        tableName: TABLE_DATASET_VERSIONS,
+        schema: TABLE_SCHEMAS[TABLE_DATASET_VERSIONS],
+      }),
+    );
+    tableCreationTasks.push(
+      this.createTable({
+        tableName: TABLE_DATASET_ROWS,
+        schema: TABLE_SCHEMAS[TABLE_DATASET_ROWS],
+      }),
+    );
+    // }
 
     this.hasInitialized = Promise.all(tableCreationTasks).then(() => true);
 

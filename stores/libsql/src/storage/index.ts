@@ -20,6 +20,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { DatasetsLibSQL } from './domains/datasets';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { StoreOperationsLibSQL } from './domains/operations';
@@ -102,6 +103,7 @@ export class LibSQLStore extends MastraStorage {
     const workflows = new WorkflowsLibSQL({ client: this.client, operations });
     const memory = new MemoryLibSQL({ client: this.client, operations });
     const observability = new ObservabilityLibSQL({ operations });
+    const datasets = new DatasetsLibSQL({ client: this.client, operations });
 
     this.stores = {
       operations,
@@ -109,6 +111,7 @@ export class LibSQLStore extends MastraStorage {
       workflows,
       memory,
       observability,
+      datasets,
     };
   }
 
