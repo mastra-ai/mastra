@@ -14,10 +14,10 @@ const otherAgentId = 'agent-09876';
 
 const threadOne = await client.getMemoryThread({
   threadId,
-  agentId,
+  agentId
 });
 
 const threadTwo = await client.getMemoryThread({
   threadId: otherThreadId,
-  agentId: otherAgentId,
+  agentId: otherAgentId
 });

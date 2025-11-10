@@ -22,3 +22,4 @@ explorations/longmemeval/prepared-data/**/*.json
 explorations/longmemeval/.embedding-cache/**/*.json
 explorations/longmemeval/.temp-longmemeval/**/*.json
 e2e-tests/kitchen-sink/tests/**/*.aria.yml
+packages/codemod/src/test/__fixtures__/**/*.ts

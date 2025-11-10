@@ -264,48 +264,17 @@ export async function testUpgrade(version: string, fixtureName: string) {
     throw new Error(`No codemods found for version: ${version}`);
   }
 
-  // Load all transformers - vite requires explicit imports for nested paths
-  const transformers = await Promise.all(
-    versionCodemods.map(async codemodPath => {
-      // Extract the codemod name from the path (e.g., 'v1/mastra-core-imports' -> 'mastra-core-imports')
-      const codemodName = codemodPath.split('/').pop()!;
+  // Load transformers dynamically in the order specified by BUNDLE
+  const transformers = [];
+  for (const codemodPath of versionCodemods) {
+    // In test environment (vitest), we need to import .ts files
+    // Construct a relative path from the current file
+    const relativeImportPath = `../codemods/${codemodPath}`;
 
-      // Dynamic imports with nested paths need to be explicit for vite
-      const modules: Record<string, () => Promise<any>> = {
-        'mastra-core-imports': () => import('../codemods/v1/mastra-core-imports.js'),
-        'runtime-context': () => import('../codemods/v1/runtime-context.js'),
-        'experimental-auth': () => import('../codemods/v1/experimental-auth.js'),
-        'agent-property-access': () => import('../codemods/v1/agent-property-access.js'),
-        'agent-voice': () => import('../codemods/v1/agent-voice.js'),
-        'agent-processor-methods': () => import('../codemods/v1/agent-processor-methods.js'),
-        'agent-generate-stream-v-next': () => import('../codemods/v1/agent-generate-stream-v-next.js'),
-        'voice-property-names': () => import('../codemods/v1/voice-property-names.js'),
-        'agent-get-agents': () => import('../codemods/v1/agent-get-agents.js'),
-        'evals-get-scorers': () => import('../codemods/v1/evals-get-scorers.js'),
-        'mcp-get-mcp-servers': () => import('../codemods/v1/mcp-get-mcp-servers.js'),
-        'mcp-get-tools': () => import('../codemods/v1/mcp-get-tools.js'),
-        'mcp-get-toolsets': () => import('../codemods/v1/mcp-get-toolsets.js'),
-        'workflows-get-workflows': () => import('../codemods/v1/workflows-get-workflows.js'),
-        'agent-abort-signal': () => import('../codemods/v1/agent-abort-signal.js'),
-        'agent-format-parameter': () => import('../codemods/v1/agent-format-parameter.js'),
-        'agent-to-step': () => import('../codemods/v1/agent-to-step.js'),
-        'client-sdk-types': () => import('../codemods/v1/client-sdk-types.js'),
-        'client-to-ai-sdk-format': () => import('../codemods/v1/client-to-ai-sdk-format.js'),
-        'client-offset-limit': () => import('../codemods/v1/client-offset-limit.js'),
-        'client-get-memory-thread': () => import('../codemods/v1/client-get-memory-thread.js'),
-        'mastra-required-id': () => import('../codemods/v1/mastra-required-id.js'),
-        'mastra-memory': () => import('../codemods/v1/mastra-memory.js'),
-        'mastra-plural-apis': () => import('../codemods/v1/mastra-plural-apis.js'),
-      };
-
-      if (!modules[codemodName]) {
-        throw new Error(`Codemod not found in test mapping: ${codemodName}`);
-      }
-
-      const module = await modules[codemodName]();
-      return module.default;
-    }),
-  );
+    // Use dynamic import - Node/Vite will resolve the correct extension
+    const module = await import(relativeImportPath);
+    transformers.push(module.default);
+  }
 
   // Apply all transformers sequentially
   let currentCode = input;
