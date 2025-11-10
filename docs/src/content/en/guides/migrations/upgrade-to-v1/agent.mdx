@@ -177,6 +177,16 @@ To migrate, move `abortSignal` from `modelSettings` to the top level.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-abort-signal .
+```
+
+:::
+
 ### `output` to `structuredOutput.schema`
 
 The deprecated `output` and `experimental_output` options have been removed. This change consolidates on a single, stable API for structured output.

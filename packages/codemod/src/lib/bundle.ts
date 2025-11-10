@@ -14,4 +14,5 @@ export const BUNDLE = [
   'v1/mcp-get-tools',
   'v1/mcp-get-toolsets',
   'v1/workflows-get-workflows',
+  'v1/agent-abort-signal',
 ];
