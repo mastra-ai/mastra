@@ -178,7 +178,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
           try {
             const errorResponse = this.bodyLimitOptions!.onError({ error: 'Request body too large' });
             return res.status(413).json(errorResponse);
-          } catch (error) {
+          } catch {
             return res.status(413).json({ error: 'Request body too large' });
           }
         }
@@ -191,7 +191,6 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
       `${prefix}${route.path}`,
       ...middlewares,
       async (req: Request, res: Response) => {
-        console.log('got request', req.method, req.url);
         const params = await this.getParams(route, req);
 
         if (params.queryParams) {

@@ -31,7 +31,7 @@ export const weatherTool = createTool({
     location: z.string(),
   }),
   execute: async inputData => {
-    console.log('tool context', inputData);
+    console.info('tool context', inputData);
     const location = inputData.location;
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
@@ -423,9 +423,9 @@ await expressServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' })
 app.use('/swagger-ui', swaggerUi.serve, swaggerUi.setup(undefined, { swaggerUrl: '/openapi.json' }));
 
 app.listen(3001, () => {
-  console.log('Server is running on port 3001');
-  console.log('OpenAPI spec: http://localhost:3001/openapi.json');
-  console.log('Swagger UI: http://localhost:3001/swagger-ui');
+  console.info('Server is running on port 3001');
+  console.info('OpenAPI spec: http://localhost:3001/openapi.json');
+  console.info('Swagger UI: http://localhost:3001/swagger-ui');
 });
 
 // TODOs
