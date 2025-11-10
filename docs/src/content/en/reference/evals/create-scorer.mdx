@@ -12,6 +12,8 @@ Mastra provides a unified `createScorer` factory that allows you to define custo
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
 
 ```typescript
+import { createScorer } from "@mastra/core/evals";
+
 const scorer = createScorer({
   id: "my-custom-scorer",
   name: "My Custom Scorer", // Optional, defaults to id
@@ -43,32 +45,32 @@ const scorer = createScorer({
     {
       name: "id",
       type: "string",
-      required: true,
-      description: "Unique identifier for the scorer. Used as the name if name is not provided.",
+      isOptional: false,
+      description: "Unique identifier for the scorer. Used as the name if `name` is not provided.",
     },
     {
       name: "name",
       type: "string",
-      required: false,
-      description: "Name of the scorer. Defaults to id if not provided.",
+      isOptional: true,
+      description: "Name of the scorer. Defaults to `id` if not provided.",
     },
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what the scorer does.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Optional judge configuration for LLM-based steps. See Judge Object section below.",
     },
     {
       name: "type",
       type: "string",
-      required: false,
+      isOptional: true,
       description:
         "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
     },
@@ -84,13 +86,13 @@ This function returns a scorer builder that you can chain step methods onto. See
     {
       name: "model",
       type: "LanguageModel",
-      required: true,
+      isOptional: false,
       description: "The LLM model instance to use for evaluation.",
     },
     {
       name: "instructions",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "System prompt/instructions for the LLM.",
     },
   ]}
@@ -192,34 +194,34 @@ Function: `({ run, results }) => any`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results",
       type: "object",
-      required: true,
+      isOptional: false,
       description: "Empty object (no previous steps).",
     },
   ]}
@@ -235,26 +237,26 @@ The method can return any value. The returned value will be available to subsequ
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this preprocessing step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description: "Zod schema for the expected output of the preprocess step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -273,34 +275,34 @@ Function: `({ run, results }) => any`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
   ]}
@@ -316,26 +318,26 @@ The method can return any value. The returned value will be available to subsequ
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this analysis step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description: "Zod schema for the expected output of the analyze step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -354,40 +356,40 @@ Function: `({ run, results }) => number`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
     {
       name: "results.analyzeStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from analyze step, if defined (optional).",
     },
   ]}
@@ -403,27 +405,27 @@ The method must return a numerical score.
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this scoring step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description:
         "Zod schema for the expected output of the generateScore step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -437,7 +439,7 @@ When using prompt object mode, you must also provide a `calculateScore` function
     {
       name: "calculateScore",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results, analyzeStepResult }) => number. Converts the LLM's structured output into a numerical score.",
     },
@@ -456,46 +458,46 @@ Function: `({ run, results, score }) => string`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
     {
       name: "results.analyzeStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from analyze step, if defined (optional).",
     },
     {
       name: "score",
       type: "number",
-      required: true,
+      isOptional: false,
       description: "Score computed by the generateScore step.",
     },
   ]}
@@ -511,20 +513,20 @@ The method must return a string explaining the score.
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this reasoning step does.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results, score }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
