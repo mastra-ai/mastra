@@ -4316,7 +4316,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
-    it.only('should maintain correct step status after resuming in branching workflows - #6419', async ctx => {
+    it('should maintain correct step status after resuming in branching workflows - #6419', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,

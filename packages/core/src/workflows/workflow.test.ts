@@ -3253,7 +3253,7 @@ describe('Workflow', () => {
       );
     });
 
-    it('should automaitcally commit uncommitted workflow when registering in mastra instance', async () => {
+    it('should automatically commit uncommitted workflow when registering in mastra instance', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
