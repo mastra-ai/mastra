@@ -20,7 +20,7 @@ describe('HeliconeGateway', () => {
   });
 
   it('buildUrl returns the Helicone base URL', () => {
-    const url = gateway.buildUrl('helicone/openai/gpt-4o', process.env as any);
+    const url = gateway.buildUrl(undefined, process.env as any);
     expect(url).toBe('https://ai-gateway.helicone.ai');
   });
 
