@@ -27,7 +27,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct"
+  model: "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct"
 });
 
 // Generate a response
@@ -63,7 +63,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
-    "model": "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    "model": "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -99,7 +99,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.baseten.co/v1",
-    id: "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct",
+    id: "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     apiKey: process.env.BASETEN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -118,7 +118,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "baseten/zai-org/GLM-4.6"
-      : "baseten/Qwen3/Qwen3-Coder-480B-A35B-Instruct";
+      : "baseten/Qwen/Qwen3-Coder-480B-A35B-Instruct";
   }
 });
 ```
