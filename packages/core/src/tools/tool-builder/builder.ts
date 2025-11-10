@@ -102,23 +102,54 @@ export class CoreToolBuilder extends MastraBase {
       typeof tool.id === 'string' &&
       tool.id.includes('.')
     ) {
-      const parameters = this.getParameters();
-      const outputSchema = this.getOutputSchema();
+      // Get schema directly from provider-defined tool (v4 uses parameters, v5 uses inputSchema)
+      let parameters: unknown =
+        'parameters' in tool ? tool.parameters : 'inputSchema' in tool ? (tool as any).inputSchema : undefined;
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof parameters === 'function') {
+        parameters = parameters();
+      }
+
+      // Get output schema directly from provider-defined tool
+      let outputSchema: unknown = 'outputSchema' in tool ? (tool as any).outputSchema : undefined;
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof outputSchema === 'function') {
+        outputSchema = outputSchema();
+      }
+
+      // Convert parameters to AI SDK Schema format
+      let processedParameters;
+      if (parameters !== undefined && parameters !== null) {
+        if (typeof parameters === 'object' && 'jsonSchema' in parameters) {
+          // Already in AI SDK Schema format
+          processedParameters = parameters;
+        } else {
+          // Convert Zod schema to AI SDK Schema
+          processedParameters = convertZodSchemaToAISDKSchema(parameters as z.ZodType);
+        }
+      }
+
+      // Convert output schema to AI SDK Schema format if present
+      let processedOutputSchema;
+      if (outputSchema !== undefined && outputSchema !== null) {
+        if (typeof outputSchema === 'object' && 'jsonSchema' in outputSchema) {
+          // Already in AI SDK Schema format
+          processedOutputSchema = outputSchema;
+        } else {
+          // Convert Zod schema to AI SDK Schema
+          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema as z.ZodType);
+        }
+      }
 
       return {
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters:
-          typeof parameters === 'object' && parameters && 'jsonSchema' in parameters
-            ? parameters
-            : parameters !== undefined
-              ? convertZodSchemaToAISDKSchema(parameters)
-              : z.object({}).passthrough().optional(),
-        ...(outputSchema !== undefined && outputSchema !== null && 'jsonSchema' in outputSchema
-          ? { outputSchema: outputSchema.jsonSchema ? outputSchema : convertZodSchemaToAISDKSchema(outputSchema) }
-          : {}),
+        parameters: processedParameters,
+        ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
