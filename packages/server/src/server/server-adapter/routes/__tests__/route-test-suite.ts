@@ -4,13 +4,15 @@ import type { Mastra } from '@mastra/core';
 import { z } from 'zod';
 import { InMemoryTaskStore } from '../../../a2a/store';
 import {
-  createMockRequestContext,
+  createTestMastra,
   createTestTask,
   expectInvalidSchema,
   expectValidSchema,
   populateTaskStore,
   validateRouteMetadata,
 } from './test-helpers';
+import { RouteAdapter, type MockRequest } from './route-adapter';
+import { createRoute } from '../route-builder';
 
 /**
  * Generate context-aware test value based on field name
@@ -162,6 +164,7 @@ export interface RouteTestConfig {
  */
 export function createRouteTestSuite(config: RouteTestConfig) {
   const { routes, getMastra, getTools } = config;
+  const adapter = new RouteAdapter();
 
   describe('Route Registration and Metadata', () => {
     it(`should have all ${routes.length} routes registered`, () => {
@@ -244,39 +247,60 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       }
 
       // Handler integration test - always run
-      it('should execute handler with valid inputs', async () => {
-        const mastra = getMastra();
-        const tools = getTools?.();
-        const params = await buildHandlerParams(route, mastra, {}, tools);
+        it('should execute handler with valid inputs', async () => {
+          const mastra = getMastra();
+          const tools = getTools?.();
+          const taskStore = await createTestTaskStore();
+          const request = buildMockRequest(route);
 
-        const result = await route.handler(params);
-        expect(result).toBeDefined();
+          const result = await adapter.executeRoute(route, request, {
+            mastra,
+            tools,
+            taskStore,
+          });
+          expect(result).toBeDefined();
 
-        // Validate response schema if present
-        if (route.responseSchema) {
-          expectValidSchema(route.responseSchema, result);
-        }
-      });
+          // Validate response schema if present
+          if (route.responseSchema) {
+            expectValidSchema(route.responseSchema, result);
+          }
+        });
 
       // Error test for routes with agentId
       if (hasAgentIdParam(route)) {
         it('should throw 404 when agent not found', async () => {
           const mastra = getMastra();
           const tools = getTools?.();
-          const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' }, tools);
+            const taskStore = await createTestTaskStore();
+            const request = buildMockRequest(route, {
+              pathParams: { agentId: 'non-existent' },
+            });
 
           // Both stream and JSON handlers throw validation errors immediately
-          await expect(route.handler(params)).rejects.toThrow();
+            await expect(
+              adapter.executeRoute(route, request, {
+                mastra,
+                tools,
+                taskStore,
+              }),
+            ).rejects.toThrow();
         });
 
         it('should return properly formatted error response', async () => {
           const mastra = getMastra();
           const tools = getTools?.();
-          const params = await buildHandlerParams(route, mastra, { agentId: 'non-existent' }, tools);
+            const taskStore = await createTestTaskStore();
+            const request = buildMockRequest(route, {
+              pathParams: { agentId: 'non-existent' },
+            });
 
           try {
             // Both stream and JSON handlers throw immediately
-            await route.handler(params);
+              await adapter.executeRoute(route, request, {
+                mastra,
+                tools,
+                taskStore,
+              });
             // Should not reach here
             expect(true).toBe(false);
           } catch (error: any) {
@@ -297,9 +321,14 @@ export function createRouteTestSuite(config: RouteTestConfig) {
         it('should return ReadableStream for stream responses', async () => {
           const mastra = getMastra();
           const tools = getTools?.();
-          const params = await buildHandlerParams(route, mastra, {}, tools);
+            const taskStore = await createTestTaskStore();
+            const request = buildMockRequest(route);
 
-          const result = await route.handler(params);
+            const result = await adapter.executeRoute(route, request, {
+              mastra,
+              tools,
+              taskStore,
+            });
 
           // Verify it's a ReadableStream (web streams API)
           expect(result).toBeDefined();
@@ -309,9 +338,14 @@ export function createRouteTestSuite(config: RouteTestConfig) {
         it('should be consumable via ReadableStream reader', async () => {
           const mastra = getMastra();
           const tools = getTools?.();
-          const params = await buildHandlerParams(route, mastra, {}, tools);
+            const taskStore = await createTestTaskStore();
+            const request = buildMockRequest(route);
 
-          const stream = (await route.handler(params)) as ReadableStream;
+            const stream = (await adapter.executeRoute(route, request, {
+              mastra,
+              tools,
+              taskStore,
+            })) as ReadableStream;
           const reader = stream.getReader();
 
           // Should be able to get at least one chunk
@@ -330,9 +364,14 @@ export function createRouteTestSuite(config: RouteTestConfig) {
         it('should return JSON-serializable response', async () => {
           const mastra = getMastra();
           const tools = getTools?.();
-          const params = await buildHandlerParams(route, mastra, {}, tools);
+            const taskStore = await createTestTaskStore();
+            const request = buildMockRequest(route);
 
-          const result = await route.handler(params);
+            const result = await adapter.executeRoute(route, request, {
+              mastra,
+              tools,
+              taskStore,
+            });
 
           // Verify result can be JSON stringified (no circular refs, functions, etc)
           expect(() => JSON.stringify(result)).not.toThrow();
@@ -388,54 +427,188 @@ function getDefaultInvalidPathParams(route: ServerRoute): Array<Record<string, a
 }
 
 /**
- * Helper: Build handler parameters from route - fully automatic
- */
-async function buildHandlerParams(
-  route: ServerRoute,
-  mastra: Mastra,
-  overrides: Record<string, any> = {},
-  tools?: Record<string, any>,
-): Promise<any> {
-  const params: any = {
-    mastra,
-    requestContext: createMockRequestContext(),
-  };
-
-  // Always include taskStore for A2A routes and pre-populate with test task
-  const taskStore = new InMemoryTaskStore();
-  // Import helpers at runtime to avoid circular deps
-  const testTask = createTestTask();
-  await populateTaskStore(taskStore, [{ agentId: 'test-agent', task: testTask }]);
-  params.taskStore = taskStore;
-
-  // Add tools if provided (for tools routes)
-  if (tools) {
-    params.tools = tools;
-  }
-
-  // Add path parameters - auto-generated from route
-  if (route.pathParamSchema) {
-    const pathParams = getDefaultValidPathParams(route);
-    Object.assign(params, pathParams, overrides);
-  }
-
-  // Add query parameters - auto-generated from schema
-  if (route.queryParamSchema) {
-    const queryParams = generateValidDataFromSchema(route.queryParamSchema);
-    Object.assign(params, queryParams);
-  }
-
-  // Add body - auto-generated from schema
-  if (route.bodySchema) {
-    params.body = generateValidDataFromSchema(route.bodySchema);
-  }
-
-  return params;
-}
-
-/**
  * Helper: Check if route has agentId path parameter
  */
 function hasAgentIdParam(route: ServerRoute): boolean {
   return route.path.includes(':agentId');
 }
+
+interface MockRequestOverrides {
+  pathParams?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+}
+
+async function createTestTaskStore() {
+  const taskStore = new InMemoryTaskStore();
+  const testTask = createTestTask();
+  await populateTaskStore(taskStore, [{ agentId: 'test-agent', task: testTask }]);
+  return taskStore;
+}
+
+function buildMockRequest(route: ServerRoute, overrides: MockRequestOverrides = {}): MockRequest {
+  const method = route.method;
+  let path = route.path;
+
+  if (route.pathParamSchema) {
+    const defaultPathParams = getDefaultValidPathParams(route);
+    const pathParams = { ...defaultPathParams, ...(overrides.pathParams ?? {}) };
+    for (const [key, value] of Object.entries(pathParams)) {
+      path = path.replace(`:${key}`, encodeURIComponent(String(value)));
+    }
+  }
+
+  let queryValues: Record<string, unknown> | undefined;
+  if (route.queryParamSchema) {
+    queryValues = {
+      ...(generateValidDataFromSchema(route.queryParamSchema) as Record<string, unknown>),
+      ...(overrides.query ?? {}),
+    };
+  } else if (overrides.query) {
+    queryValues = { ...overrides.query };
+  }
+
+  let body: Record<string, unknown> | undefined;
+  if (route.bodySchema) {
+    body = {
+      ...(generateValidDataFromSchema(route.bodySchema) as Record<string, unknown>),
+      ...(overrides.body ?? {}),
+    };
+  } else if (overrides.body) {
+    body = { ...overrides.body };
+  }
+
+  return {
+    method,
+    path,
+    query: queryValues ? convertQueryValues(queryValues) : undefined,
+    body,
+  };
+}
+
+function convertQueryValues(values: Record<string, unknown>): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      query[key] = value.map(item => convertQueryValue(item));
+      continue;
+    }
+
+    query[key] = convertQueryValue(value);
+  }
+  return query;
+}
+
+function convertQueryValue(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+describe('Route Adapter Integration', () => {
+  const adapter = new RouteAdapter();
+
+  it('should extract path parameters correctly', async () => {
+    const route = createRoute({
+      method: 'GET',
+      path: '/api/agents/:agentId',
+      responseType: 'json',
+      handler: async ({ agentId }: { agentId: string }) => ({ agentId }),
+      pathParamSchema: z.object({ agentId: z.string() }),
+      responseSchema: z.object({ agentId: z.string() }),
+    });
+
+    const result = await adapter.executeRoute(
+      route,
+      {
+        method: 'GET',
+        path: '/api/agents/test-agent',
+      },
+      { mastra: createTestMastra() },
+    );
+
+    expect(result).toEqual({ agentId: 'test-agent' });
+  });
+
+  it('should validate path parameters against schema', async () => {
+    const route = createRoute({
+      method: 'GET',
+      path: '/api/agents/:agentId',
+      responseType: 'json',
+      handler: async () => ({}),
+      pathParamSchema: z.object({ agentId: z.string().min(5) }),
+      responseSchema: z.object({}).passthrough(),
+    });
+
+    await expect(
+      adapter.executeRoute(
+        route,
+        {
+          method: 'GET',
+          path: '/api/agents/abc',
+        },
+        { mastra: createTestMastra() },
+      ),
+    ).rejects.toThrow(/Path parameter validation failed/);
+  });
+
+  it('should parse and validate query parameters', async () => {
+    const route = createRoute({
+      method: 'GET',
+      path: '/api/workflows',
+      responseType: 'json',
+      handler: async ({ limit }: { limit: number }) => ({ limit }),
+      queryParamSchema: z.object({ limit: z.coerce.number() }),
+      responseSchema: z.object({ limit: z.number() }),
+    });
+
+    const result = await adapter.executeRoute(
+      route,
+      {
+        method: 'GET',
+        path: '/api/workflows',
+        query: { limit: '5' },
+      },
+      { mastra: createTestMastra() },
+    );
+
+    expect(result).toEqual({ limit: 5 });
+  });
+
+  it('should parse and merge request body fields', async () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/api/tools',
+      responseType: 'json',
+      handler: async ({ body, name }: { body: { name: string }; name: string }) => ({
+        viaBody: body.name,
+        viaTopLevel: name,
+      }),
+      bodySchema: z.object({ name: z.string() }),
+      responseSchema: z.object({
+        viaBody: z.string(),
+        viaTopLevel: z.string(),
+      }),
+    });
+
+    const result = await adapter.executeRoute(
+      route,
+      {
+        method: 'POST',
+        path: '/api/tools',
+        body: { name: 'test-tool' },
+      },
+      { mastra: createTestMastra() },
+    );
+
+    expect(result).toEqual({ viaBody: 'test-tool', viaTopLevel: 'test-tool' });
+  });
+});
