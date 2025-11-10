@@ -54,20 +54,29 @@ function getExistingRedirects() {
   }
 }
 
+// Strip locale pattern from source for matching
+function stripLocalePattern(source) {
+  // Strip /:path(ja)? or /:locale(ja)? pattern from the beginning
+  return source.replace(/^\/:[^/]+\([^)]+\)\?/, '');
+}
+
 // Check if a URL has a redirect
 function hasRedirect(urlPath, redirects) {
   return redirects.some(({ source }) => {
+    // Strip locale pattern for comparison
+    const cleanSource = stripLocalePattern(source);
+
     // Exact match
-    if (source === urlPath) {
+    if (cleanSource === urlPath) {
       return true;
     }
 
     // Use path-to-regexp to handle patterns like :param, :param*, :param+, :param?, etc.
     try {
-      if (!matcherCache.has(source)) {
-        matcherCache.set(source, match(source, { decode: decodeURIComponent }));
+      if (!matcherCache.has(cleanSource)) {
+        matcherCache.set(cleanSource, match(cleanSource, { decode: decodeURIComponent }));
       }
-      const tester = matcherCache.get(source);
+      const tester = matcherCache.get(cleanSource);
       return Boolean(tester(urlPath));
     } catch {
       return false;
