@@ -175,19 +175,6 @@ export async function createHonoServer(
     app.use(logger());
   }
 
-  // TODO: add option to exclude openapi route from server adapter
-  if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
-    // app.get(
-    //   '/openapi.json',
-    //   openAPISpecs(app, {
-    //     includeEmptyPaths: true,
-    //     documentation: {
-    //       info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-    //     },
-    //   }),
-    // );
-  }
-
   // Register adapter routes (adapter was created earlier with configuration)
   // Cast needed due to Hono type variance - safe because registerRoutes is generic
   await honoServerAdapter.registerRoutes(app as any, { openapiPath: '/openapi.json' });
