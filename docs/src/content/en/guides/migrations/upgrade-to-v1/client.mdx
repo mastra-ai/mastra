@@ -54,6 +54,16 @@ To migrate, update pagination parameters in all client SDK method calls. Example
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-offset-limit .
+```
+
+:::
+
 ### `getMemoryThread` parameter structure
 
 The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
