@@ -669,6 +669,179 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   /**
+   * DATASETS
+   * These methods delegate to the datasets store for dataset management.
+   */
+
+  async createDataset(
+    args: Parameters<DatasetsStorage['createDataset']>[0],
+  ): Promise<ReturnType<DatasetsStorage['createDataset']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.createDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_CREATE_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async updateDataset(
+    args: Parameters<DatasetsStorage['updateDataset']>[0],
+  ): Promise<ReturnType<DatasetsStorage['updateDataset']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.updateDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_UPDATE_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async deleteDataset(
+    args: Parameters<DatasetsStorage['deleteDataset']>[0],
+  ): Promise<ReturnType<DatasetsStorage['deleteDataset']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.deleteDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DELETE_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async getDataset(
+    args: Parameters<DatasetsStorage['getDataset']>[0],
+  ): Promise<ReturnType<DatasetsStorage['getDataset']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getDataset(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_DATASET_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listDatasets(
+    args?: Parameters<DatasetsStorage['listDatasets']>[0],
+  ): Promise<ReturnType<DatasetsStorage['listDatasets']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.listDatasets(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_DATASETS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listDatasetVersions(
+    args: Parameters<DatasetsStorage['listDatasetVersions']>[0],
+  ): Promise<ReturnType<DatasetsStorage['listDatasetVersions']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.listDatasetVersions(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_DATASET_VERSIONS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async addDatasetRows(
+    args: Parameters<DatasetsStorage['addDatasetRows']>[0],
+  ): Promise<ReturnType<DatasetsStorage['addDatasetRows']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.addDatasetRows(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_ADD_DATASET_ROWS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async getDatasetRowByRowId(
+    args: Parameters<DatasetsStorage['getDatasetRowByRowId']>[0],
+  ): Promise<ReturnType<DatasetsStorage['getDatasetRowByRowId']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.getDatasetRowByRowId(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_DATASET_ROW_BY_ROW_ID_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listDatasetRows(
+    args: Parameters<DatasetsStorage['listDatasetRows']>[0],
+  ): Promise<ReturnType<DatasetsStorage['listDatasetRows']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.listDatasetRows(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_DATASET_ROWS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async listDatasetRowVersionsByRowId(
+    args: Parameters<DatasetsStorage['listDatasetRowVersionsByRowId']>[0],
+  ): Promise<ReturnType<DatasetsStorage['listDatasetRowVersionsByRowId']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.listDatasetRowVersionsByRowId(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_DATASET_ROW_VERSIONS_BY_ROW_ID_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async updateDatasetRows(
+    args: Parameters<DatasetsStorage['updateDatasetRows']>[0],
+  ): Promise<ReturnType<DatasetsStorage['updateDatasetRows']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.updateDatasetRows(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_UPDATE_DATASET_ROWS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  async deleteDatasetRows(
+    args: Parameters<DatasetsStorage['deleteDatasetRows']>[0],
+  ): Promise<ReturnType<DatasetsStorage['deleteDatasetRows']>> {
+    if (this.stores?.datasets) {
+      return this.stores.datasets.deleteDatasetRows(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DELETE_DATASET_ROWS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Dataset operations are not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
    * DATABASE INDEX MANAGEMENT
    * These methods delegate to the operations store for index management.
    * Storage adapters that support indexes should implement these in their operations class.

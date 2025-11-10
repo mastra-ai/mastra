@@ -5,6 +5,7 @@ import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
 import type { TABLE_NAMES } from './constants';
+import { DatasetsInMemory, type DatasetRecord, type DatasetRow, type DatasetVersion } from './domains';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
@@ -60,12 +61,22 @@ export class InMemoryStore extends MastraStorage {
       operations: operationsStorage,
     });
 
+    const datasetsStorage = new DatasetsInMemory({
+      collections: {
+        datasets: database.mastra_datasets as Map<string, Omit<DatasetRecord, 'currentVersion'>>,
+        datasetVersions: database.mastra_dataset_versions as Map<string, DatasetVersion>,
+        datasetRows: database.mastra_dataset_rows as Map<string, DatasetRow>,
+      },
+      operations: operationsStorage,
+    });
+
     this.stores = {
       operations: operationsStorage,
       workflows: workflowsStorage,
       scores: scoresStorage,
       memory: memoryStorage,
       observability: observabilityStorage,
+      datasets: datasetsStorage,
     };
   }
 

@@ -12,7 +12,7 @@ import type {
 import { RequestContext } from '../../../request-context';
 import { normalizePerPage, calculatePagination } from '../../base';
 
-export class MemoryDatasetsStorage extends DatasetsStorage {
+export class DatasetsInMemory extends DatasetsStorage {
   datasets: Map<string, Omit<DatasetRecord, 'currentVersion'>>;
   datasetVersions: Map<string, DatasetVersion>;
   datasetRows: Map<string, DatasetRow>;
