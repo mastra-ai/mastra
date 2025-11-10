@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Fix yarn/bun compatibility by using -D flag instead of --save-dev
+Fixes an error during `mastra create` with bun/yarn due to usage of `--save-dev`. Replaced with `-D` during installation.
