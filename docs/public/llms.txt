@@ -191,6 +191,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Voice | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/voice): Learn how to migrate voice package changes when upgrading to v1.
 - [Workflows | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/workflows): Learn how to migrate workflow-related changes when upgrading to v1.
 - [Migration: VNext to Standard APIs | Migration Guide](https://mastra.ai/en/guides/migrations/vnext-to-standard-apis): Learn how to migrate from VNext methods to the new standard agent APIs in Mastra.
+- [Next.js Quickstart](https://mastra.ai/en/guides/quickstarts/nextjs): Get started with Mastra, Next.js, and AS SDK UI. Quickly.
 
 ## EN - models
 - [Embedding Models](https://mastra.ai/en/models/embeddings): Use embedding models through Mastras model router for semantic search and RAG.
