@@ -627,7 +627,7 @@
     },
     {
       "source": "/:path(ja)?/reference/workflows/snapshots",
-      "destination": "/:path/docs/server-db/snapshots",
+      "destination": "/:path/docs/workflows/snapshots",
       "permanent": true
     },
     {
