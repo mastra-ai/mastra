@@ -25,7 +25,7 @@ import {
   approveToolCallHandler,
   declineToolCallHandler,
 } from './handlers';
-import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
+import { getListenerHandler, getSpeakersHandler, generateSpeechHandler, transcribeSpeechHandler } from './voice';
 
 export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
   const router = new Hono();
@@ -1013,7 +1013,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    speakHandler,
+    generateSpeechHandler,
   );
 
   router.post(
@@ -1089,7 +1089,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    speakHandler,
+    generateSpeechHandler,
   );
 
   router.get(
@@ -1193,7 +1193,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    listenHandler,
+    transcribeSpeechHandler,
   );
 
   router.post(
@@ -1263,7 +1263,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    listenHandler,
+    transcribeSpeechHandler,
   );
 
   router.get(

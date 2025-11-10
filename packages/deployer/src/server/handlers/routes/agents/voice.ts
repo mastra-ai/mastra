@@ -1,9 +1,9 @@
 import type { Mastra } from '@mastra/core/mastra';
 import {
   getSpeakersHandler as getOriginalSpeakersHandler,
-  generateSpeechHandler as getOriginalSpeakHandler,
+  generateSpeechHandler as getOriginalGenerateSpeechHandler,
   getListenerHandler as getOriginalListenerHandler,
-  transcribeSpeechHandler as getOriginalListenHandler,
+  transcribeSpeechHandler as getOriginalTranscribeSpeechHandler,
 } from '@mastra/server/handlers/voice';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -34,14 +34,14 @@ export async function getSpeakersHandler(c: Context) {
 /**
  * Convert text to speech using the agent's voice provider
  */
-export async function speakHandler(c: Context) {
+export async function generateSpeechHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const requestContext = c.get('requestContext');
     const { input, options } = await c.req.json();
 
-    const audioStream = await getOriginalSpeakHandler({
+    const audioStream = await getOriginalGenerateSpeechHandler({
       mastra,
       agentId,
       requestContext,
@@ -80,7 +80,7 @@ export async function getListenerHandler(c: Context) {
 /**
  * Convert speech to text using the agent's voice provider
  */
-export async function listenHandler(c: Context) {
+export async function transcribeSpeechHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
@@ -102,7 +102,7 @@ export async function listenHandler(c: Context) {
       // Ignore parsing errors and use empty options
     }
 
-    const transcription = await getOriginalListenHandler({
+    const transcription = await getOriginalTranscribeSpeechHandler({
       mastra,
       agentId,
       requestContext,

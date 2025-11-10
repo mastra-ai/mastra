@@ -18,8 +18,9 @@ interface AgentBuilderContext extends Context {
 function createAgentBuilderWorkflowHandler<TWorkflowArgs, TResult>(
   workflowHandlerFn: (args: TWorkflowArgs) => Promise<TResult>,
   logMessage: string,
+  handlerName?: string,
 ) {
-  return async (builderArgs: TWorkflowArgs & AgentBuilderContext): Promise<TResult> => {
+  const handler = async (builderArgs: TWorkflowArgs & AgentBuilderContext): Promise<TResult> => {
     const { actionId, ...actionArgs } = builderArgs;
     const mastra = (actionArgs as any).mastra;
     const logger = mastra.getLogger();
@@ -58,105 +59,133 @@ function createAgentBuilderWorkflowHandler<TWorkflowArgs, TResult>(
       throw error;
     }
   };
+
+  // Set the function name if provided
+  if (handlerName) {
+    Object.defineProperty(handler, 'name', { value: handlerName, writable: false });
+  }
+
+  return handler;
 }
 
-export const getAgentBuilderActionsHandler = createAgentBuilderWorkflowHandler(async () => {
-  try {
-    const registryWorkflows = WorkflowRegistry.getAllWorkflows();
-    const _workflows = Object.entries(registryWorkflows).reduce<Record<string, WorkflowInfo>>(
-      (acc, [key, workflow]) => {
-        acc[key] = getWorkflowInfo(workflow);
-        return acc;
-      },
-      {},
-    );
-    return _workflows;
-  } catch (error) {
-    return handleError(error, 'Error getting agent builder workflows');
-  }
-}, 'Getting agent builder actions');
+export const getAgentBuilderActionsHandler = createAgentBuilderWorkflowHandler(
+  async () => {
+    try {
+      const registryWorkflows = WorkflowRegistry.getAllWorkflows();
+      const _workflows = Object.entries(registryWorkflows).reduce<Record<string, WorkflowInfo>>(
+        (acc, [key, workflow]) => {
+          acc[key] = getWorkflowInfo(workflow);
+          return acc;
+        },
+        {},
+      );
+      return _workflows;
+    } catch (error) {
+      return handleError(error, 'Error getting agent builder workflows');
+    }
+  },
+  'Getting agent builder actions',
+  'getAgentBuilderActionsHandler',
+);
 
 export const getAgentBuilderActionByIdHandler = createAgentBuilderWorkflowHandler(
   workflows.getWorkflowByIdHandler,
   'Getting agent builder action by ID',
+  'getAgentBuilderActionByIdHandler',
 );
 
 export const getAgentBuilderActionRunByIdHandler = createAgentBuilderWorkflowHandler(
   workflows.getWorkflowRunByIdHandler,
   'Getting agent builder action run by ID',
+  'getAgentBuilderActionRunByIdHandler',
 );
 
 export const getAgentBuilderActionRunExecutionResultHandler = createAgentBuilderWorkflowHandler(
   workflows.getWorkflowRunExecutionResultHandler,
   'Getting agent builder action run execution result',
+  'getAgentBuilderActionRunExecutionResultHandler',
 );
 
 export const createAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandler(
   workflows.createWorkflowRunHandler,
   'Creating agent builder action run',
+  'createAgentBuilderActionRunHandler',
 );
 
 export const startAsyncAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.startAsyncWorkflowHandler,
   'Starting async agent builder action',
+  'startAsyncAgentBuilderActionHandler',
 );
 
 export const startAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandler(
   workflows.startWorkflowRunHandler,
   'Starting agent builder action run',
+  'startAgentBuilderActionRunHandler',
 );
 
 export const streamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.streamWorkflowHandler,
   'Streaming agent builder action',
+  'streamAgentBuilderActionHandler',
 );
 
 export const streamLegacyAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.streamLegacyWorkflowHandler,
   'Streaming legacy agent builder action',
+  'streamLegacyAgentBuilderActionHandler',
 );
 
 export const streamVNextAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.streamVNextWorkflowHandler,
   'Streaming VNext agent builder action',
+  'streamVNextAgentBuilderActionHandler',
 );
 
 export const observeStreamLegacyAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.observeStreamLegacyWorkflowHandler,
   'Observing legacy stream for agent builder action',
+  'observeStreamLegacyAgentBuilderActionHandler',
 );
 
 export const observeStreamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.observeStreamWorkflowHandler,
   'Observing stream for agent builder action',
+  'observeStreamAgentBuilderActionHandler',
 );
 
 export const observeStreamVNextAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.observeStreamVNextWorkflowHandler,
   'Observing VNext stream for agent builder action',
+  'observeStreamVNextAgentBuilderActionHandler',
 );
 
 export const resumeAsyncAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.resumeAsyncWorkflowHandler,
   'Resuming async agent builder action',
+  'resumeAsyncAgentBuilderActionHandler',
 );
 
 export const resumeAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.resumeWorkflowHandler,
   'Resuming agent builder action',
+  'resumeAgentBuilderActionHandler',
 );
 
 export const resumeStreamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
   workflows.resumeStreamWorkflowHandler,
   'Resuming stream for agent builder action',
+  'resumeStreamAgentBuilderActionHandler',
 );
 
 export const getAgentBuilderActionRunsHandler = createAgentBuilderWorkflowHandler(
   workflows.listWorkflowRunsHandler,
   'Getting agent builder action runs',
+  'getAgentBuilderActionRunsHandler',
 );
 
 export const cancelAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandler(
   workflows.cancelWorkflowRunHandler,
   'Cancelling agent builder action run',
+  'cancelAgentBuilderActionRunHandler',
 );

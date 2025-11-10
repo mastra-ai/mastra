@@ -82,7 +82,7 @@ export async function getTracesPaginatedHandler(c: Context) {
   }
 }
 
-export async function processTraceScoringHandler(c: Context) {
+export async function scoreTracesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const { scorerName, targets } = await c.req.json();
