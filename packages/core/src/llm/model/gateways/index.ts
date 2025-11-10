@@ -1,8 +1,10 @@
 import { MastraError } from '../../../error/index.js';
 import type { MastraModelGateway } from './base.js';
+import { HeliconeGateway } from './helicone.js';
 export { MastraModelGateway, type ProviderConfig } from './base.js';
 export { ModelsDevGateway } from './models-dev.js';
 export { NetlifyGateway } from './netlify.js';
+export { HeliconeGateway } from './helicone.js';
 
 /**
  * Find the gateway that handles a specific model ID based on prefix
@@ -12,6 +14,13 @@ export function findGatewayForModel(gatewayId: string, gateways: MastraModelGate
   const prefixedGateway = gateways.find((g: MastraModelGateway) => g.prefix && gatewayId.startsWith(`${g.prefix}/`));
   if (prefixedGateway) {
     return prefixedGateway;
+  }
+
+  // Safety fallback: if the ID is clearly targeting a known prefix (e.g., helicone/)
+  // but the corresponding gateway instance wasn't provided, instantiate it on-demand.
+  if (gatewayId.startsWith('helicone/')) {
+    const existing = gateways.find(g => g.prefix === 'helicone');
+    return existing ?? new HeliconeGateway();
   }
 
   // Then check gateways without prefixes (like models.dev) that might handle the model

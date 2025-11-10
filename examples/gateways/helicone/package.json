@@ -1,0 +1,21 @@
+{
+  "name": "examples-helicone",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Example of using Mastra's Helicone Gateway with the client SDK",
+  "scripts": {
+    "start": "pnpx tsx index.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.20.6"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../../packages/core"
+    }
+  },
+  "version": "0.0.1"
+}
