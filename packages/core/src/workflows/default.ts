@@ -751,7 +751,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           tracingContext: { currentSpan: stepSpan },
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
-          suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions): Promise<any> => {
+          suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<any> => {
             executionContext.suspendedPaths[step.id] = executionContext.executionPath;
             if (suspendOptions?.resumeLabel) {
               const resumeLabel = Array.isArray(suspendOptions.resumeLabel)
@@ -819,7 +819,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }
 
         if (suspended) {
-          execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
+          execResults = {
+            status: 'suspended',
+            suspendPayload: suspended.payload,
+            ...(result ? { suspendOutput: result } : {}),
+            suspendedAt: Date.now(),
+          };
         } else if (bailed) {
           execResults = { status: 'bailed', output: bailed.payload, endedAt: Date.now() };
         } else {
@@ -1072,13 +1077,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         return result;
       }),
     );
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
 
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      };
     } else if (abortController?.signal?.aborted) {
       execResults = { status: 'canceled' };
     } else {
@@ -1304,12 +1313,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }),
     );
 
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload, suspendedAt: Date.now() };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+        suspendedAt: hasSuspended.suspendedAt,
+      };
     } else if (abortController?.signal?.aborted) {
       execResults = { status: 'canceled' };
     } else {
@@ -1705,6 +1719,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           ...stepInfo,
           suspendedAt: Date.now(),
           status: 'suspended',
+          ...(foreachIndexObj[foreachIndex].suspendOutput
+            ? { suspendOutput: foreachIndexObj[foreachIndex].suspendOutput }
+            : {}),
           suspendPayload: {
             ...foreachIndexObj[foreachIndex].suspendPayload,
             __workflow_meta: {
@@ -1714,7 +1731,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               resumeLabels: executionContext.resumeLabels,
             },
           },
-        } as StepSuspended<any, any>;
+        } as StepSuspended<any, any, any>;
       }
     }
 
