@@ -296,7 +296,27 @@ describe('ModelsDevGateway', () => {
     });
   });
 
-  describe('Azure OpenAI Integration', () => {
+  describe('Azure OpenAI provider', () => {
+    beforeEach(async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          azure: {
+            id: 'azure',
+            name: 'Azure',
+            models: { 'gpt-4.1-mini': {} },
+            env: ['AZURE_RESOURCE_NAME', 'AZURE_API_KEY'],
+            npm: '@ai-sdk/azure',
+          },
+        }),
+      });
+      await gateway.fetchProviders();
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
     describe('fetchProviders', () => {
       it('should include Azure provider from models.dev API', async () => {
         mockFetch.mockResolvedValueOnce({
@@ -328,30 +348,14 @@ describe('ModelsDevGateway', () => {
 
         expect(providers.azure).toBeDefined();
         expect(providers.azure.name).toBe('Azure');
-        // API picks first env var, which is AZURE_RESOURCE_NAME for Azure
-        expect(providers.azure.apiKeyEnvVar).toBe('AZURE_RESOURCE_NAME');
+        // Azure uses second env var (index [1]) for API key, which is AZURE_API_KEY
+        expect(providers.azure.apiKeyEnvVar).toBe('AZURE_API_KEY');
         expect(providers.azure.models).toContain('gpt-4.1-mini');
         expect(providers.azure.url).toBeUndefined();
       });
     });
 
     describe('buildUrl', () => {
-      beforeEach(async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            azure: {
-              id: 'azure',
-              name: 'Azure',
-              models: { 'gpt-4.1-mini': {} },
-              env: ['AZURE_RESOURCE_NAME', 'AZURE_API_KEY'],
-              npm: '@ai-sdk/azure',
-            },
-          }),
-        });
-        await gateway.fetchProviders();
-      });
-
       it('should return undefined for Azure (SDK manages URL)', () => {
         const url = gateway.buildUrl('azure/gpt-4.1-mini');
         expect(url).toBeUndefined();
@@ -359,67 +363,26 @@ describe('ModelsDevGateway', () => {
     });
 
     describe('getApiKey', () => {
-      beforeEach(async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            azure: {
-              id: 'azure',
-              name: 'Azure',
-              models: { 'gpt-4.1-mini': {} },
-              env: ['AZURE_RESOURCE_NAME', 'AZURE_API_KEY'],
-              npm: '@ai-sdk/azure',
-            },
-          }),
-        });
-        await gateway.fetchProviders();
-      });
-
-      it('should throw comprehensive error when AZURE_API_KEY is missing', async () => {
-        const originalEnv = process.env.AZURE_API_KEY;
+      it('should throw error when AZURE_API_KEY is missing', () => {
+        // Ensure env var is unset before test
+        vi.unstubAllEnvs();
         delete process.env.AZURE_API_KEY;
 
-        try {
-          await gateway.getApiKey('azure/gpt-4.1-mini');
-          throw new Error('Expected getApiKey to throw an error');
-        } catch (error: any) {
-          expect(error.message).toContain('AZURE_API_KEY environment variable is required');
-          expect(error.message).toContain('AZURE_RESOURCE_NAME');
-          expect(error.message).toContain('OPENAI_API_VERSION');
-        }
+        const runGetApiKey = () => gateway.getApiKey('azure/gpt-4.1-mini');
 
-        if (originalEnv) process.env.AZURE_API_KEY = originalEnv;
+        expect(runGetApiKey).toThrow(/Could not find API key process\.env\.AZURE_API_KEY/);
       });
 
       it('should return API key when AZURE_API_KEY is set', async () => {
-        process.env.AZURE_API_KEY = 'test-azure-key';
+        vi.stubEnv('AZURE_API_KEY', 'test-azure-key');
 
         const apiKey = await gateway.getApiKey('azure/gpt-4.1-mini');
         expect(apiKey).toBe('test-azure-key');
-
-        delete process.env.AZURE_API_KEY;
       });
     });
 
     describe('resolveLanguageModel', () => {
-      beforeEach(async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            azure: {
-              id: 'azure',
-              name: 'Azure',
-              models: { 'gpt-4.1-mini': {} },
-              env: ['AZURE_RESOURCE_NAME', 'AZURE_API_KEY'],
-              npm: '@ai-sdk/azure',
-            },
-          }),
-        });
-        await gateway.fetchProviders();
-      });
-
       it('should throw error when AZURE_RESOURCE_NAME is missing', async () => {
-        const originalEnv = process.env.AZURE_RESOURCE_NAME;
         delete process.env.AZURE_RESOURCE_NAME;
 
         await expect(
@@ -429,69 +392,31 @@ describe('ModelsDevGateway', () => {
             apiKey: 'test-key',
           }),
         ).rejects.toThrow('AZURE_RESOURCE_NAME environment variable is required');
-
-        if (originalEnv) process.env.AZURE_RESOURCE_NAME = originalEnv;
-      });
-
-      it('should use default API version when OPENAI_API_VERSION not set', async () => {
-        const originalResourceName = process.env.AZURE_RESOURCE_NAME;
-        const originalApiVersion = process.env.OPENAI_API_VERSION;
-
-        process.env.AZURE_RESOURCE_NAME = 'test-resource';
-        delete process.env.OPENAI_API_VERSION;
-
-        const model = await gateway.resolveLanguageModel({
-          modelId: 'gpt-4.1-mini',
-          providerId: 'azure',
-          apiKey: 'test-key',
-        });
-
-        expect(model).toBeDefined();
-
-        if (originalResourceName) {
-          process.env.AZURE_RESOURCE_NAME = originalResourceName;
-        } else {
-          delete process.env.AZURE_RESOURCE_NAME;
-        }
-        if (originalApiVersion) {
-          process.env.OPENAI_API_VERSION = originalApiVersion;
-        } else {
-          delete process.env.OPENAI_API_VERSION;
-        }
       });
 
       it('should respect custom OPENAI_API_VERSION', async () => {
-        const originalResourceName = process.env.AZURE_RESOURCE_NAME;
-        const originalApiVersion = process.env.OPENAI_API_VERSION;
+        vi.stubEnv('AZURE_RESOURCE_NAME', 'test-resource');
+        vi.stubEnv('OPENAI_API_VERSION', '2025-04-01-preview');
 
-        process.env.AZURE_RESOURCE_NAME = 'test-resource';
-        process.env.OPENAI_API_VERSION = '2025-04-01-preview';
-
-        const model = await gateway.resolveLanguageModel({
+        await gateway.resolveLanguageModel({
           modelId: 'gpt-4.1-mini',
           providerId: 'azure',
           apiKey: 'test-key',
         });
 
-        expect(model).toBeDefined();
-
-        if (originalResourceName) {
-          process.env.AZURE_RESOURCE_NAME = originalResourceName;
-        } else {
-          delete process.env.AZURE_RESOURCE_NAME;
-        }
-        if (originalApiVersion) {
-          process.env.OPENAI_API_VERSION = originalApiVersion;
-        } else {
-          delete process.env.OPENAI_API_VERSION;
-        }
+        expect(mockCreateAzure).toHaveBeenCalledWith(
+          expect.objectContaining({
+            resourceName: 'test-resource',
+            apiKey: 'test-key',
+            apiVersion: '2025-04-01-preview',
+            useDeploymentBasedUrls: true,
+          }),
+        );
+        expect(mockAzureProvider).toHaveBeenCalledWith('gpt-4.1-mini');
       });
 
       it('should create Azure provider with deployment-based URLs', async () => {
-        const originalResourceName = process.env.AZURE_RESOURCE_NAME;
-        const originalApiVersion = process.env.OPENAI_API_VERSION;
-
-        process.env.AZURE_RESOURCE_NAME = 'test-resource';
+        vi.stubEnv('AZURE_RESOURCE_NAME', 'test-resource');
         delete process.env.OPENAI_API_VERSION;
 
         await gateway.resolveLanguageModel({
@@ -509,44 +434,6 @@ describe('ModelsDevGateway', () => {
           }),
         );
         expect(mockAzureProvider).toHaveBeenCalledWith('gpt-4.1-mini');
-
-        if (originalResourceName) {
-          process.env.AZURE_RESOURCE_NAME = originalResourceName;
-        } else {
-          delete process.env.AZURE_RESOURCE_NAME;
-        }
-        if (originalApiVersion) {
-          process.env.OPENAI_API_VERSION = originalApiVersion;
-        } else {
-          delete process.env.OPENAI_API_VERSION;
-        }
-      });
-    });
-
-    describe('integration with existing providers', () => {
-      it('should not affect OpenAI provider resolution', async () => {
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            openai: {
-              id: 'openai',
-              name: 'OpenAI',
-              models: { 'gpt-4': {} },
-              env: ['OPENAI_API_KEY'],
-              api: 'https://api.openai.com/v1',
-            },
-          }),
-        });
-
-        await gateway.fetchProviders();
-
-        const model = await gateway.resolveLanguageModel({
-          modelId: 'gpt-4',
-          providerId: 'openai',
-          apiKey: 'sk-test',
-        });
-
-        expect(model).toBeDefined();
       });
     });
   });

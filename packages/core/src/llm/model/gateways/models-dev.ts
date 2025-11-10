@@ -11,7 +11,6 @@ import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
-import z from 'zod';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -114,7 +113,10 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         // Get the API key env var from the provider info
         // Convert hyphens to underscores for env var naming convention
-        const apiKeyEnvVar = providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+        const apiKeyEnvVar =
+          providerInfo.id === 'azure'
+            ? providerInfo.env?.[1] || `AZURE_API_KEY` // if not in env, use AZURE_API_KEY
+            : providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)
         const apiKeyHeader = !hasInstalledPackage
@@ -155,6 +157,17 @@ export class ModelsDevGateway extends MastraModelGateway {
     return customBaseUrl || config.url;
   }
 
+  private getAzureResourceName(): string {
+    const resourceName = process.env.AZURE_RESOURCE_NAME;
+    if (!resourceName) {
+      throw new Error(
+        'AZURE_RESOURCE_NAME environment variable is required for Azure OpenAI. ' +
+          'Set it to your Azure resource name (e.g., "my-resource" for my-resource.openai.azure.com)',
+      );
+    }
+    return resourceName;
+  }
+
   getApiKey(modelId: string): Promise<string> {
     const [provider, model] = modelId.split('/');
     if (!provider || !model) {
@@ -164,19 +177,6 @@ export class ModelsDevGateway extends MastraModelGateway {
 
     if (!config) {
       throw new Error(`Could not find config for provider ${provider} with model id ${modelId}`);
-    }
-
-    // Azure-specific validation with better error messages
-    if (provider === 'azure') {
-      const apiKey = process.env.AZURE_API_KEY;
-      if (!apiKey) {
-        throw new Error(
-          'AZURE_API_KEY environment variable is required for Azure OpenAI. ' +
-            'Also required: AZURE_RESOURCE_NAME. ' +
-            'Optional: OPENAI_API_VERSION (defaults to 2024-10-21)',
-        );
-      }
-      return Promise.resolve(apiKey);
     }
 
     const apiKey = typeof config.apiKeyEnvVar === `string` ? process.env[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
@@ -219,22 +219,10 @@ export class ModelsDevGateway extends MastraModelGateway {
         })(modelId);
 
       case 'azure': {
-        // Azure requires resource name to construct endpoint URL
-        const resourceName = process.env.AZURE_RESOURCE_NAME;
-        if (!resourceName) {
-          throw new Error(
-            'AZURE_RESOURCE_NAME environment variable is required for Azure OpenAI. ' +
-              'Set it to your Azure resource name (e.g., "my-resource" for my-resource.openai.azure.com)',
-          );
-        }
-
-        // API version defaults to recommended stable version from issue
-        const apiVersion = process.env.OPENAI_API_VERSION || '2024-10-21';
-
         const azure = createAzure({
-          resourceName,
+          resourceName: this.getAzureResourceName(),
           apiKey,
-          apiVersion,
+          apiVersion: process.env.OPENAI_API_VERSION || '2024-10-21',
           useDeploymentBasedUrls: true,
         });
 
@@ -243,7 +231,6 @@ export class ModelsDevGateway extends MastraModelGateway {
 
       default:
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        z;
         return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
           modelId,
         );
