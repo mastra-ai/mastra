@@ -44,7 +44,7 @@ const details = await workflow.details();
 Start a workflow run with inputData and await full run results:
 
 ```typescript
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.startAsync({
   inputData: {
@@ -58,7 +58,7 @@ const result = await run.startAsync({
 Resume a suspended workflow step and await full run result:
 
 ```typescript
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.resumeAsync({
   step: "step-id",
@@ -74,7 +74,7 @@ Resume workflow run:
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync({ runId: prevRunId });
+  const run = await workflow.createRun({ runId: prevRunId });
 
   run.resume({
     step: "step-id",
@@ -93,7 +93,7 @@ Stream workflow execution for real-time updates:
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
 
   const stream = await run.stream({
     inputData: {
@@ -117,7 +117,7 @@ Get the result of a workflow run:
 try {
   const workflow = mastraClient.getWorkflow("testWorkflow");
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
 
   // start the workflow run
   const startResult = await run.start({

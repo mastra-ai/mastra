@@ -1,7 +1,7 @@
 import type { z } from 'zod';
-import type { TracingContext } from '../ai-tracing';
 import type { MastraScorers } from '../evals';
 import type { Mastra } from '../mastra';
+import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
@@ -24,8 +24,6 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   state: TState;
   setState(state: TState): void;
   resumeData?: TResumeSchema;
-  /** @deprecated This parameter will be removed on November 4th, 2025. Use `retryCount` instead. */
-  runCount: number;
   retryCount: number;
   tracingContext: TracingContext;
   getInitData<T extends z.ZodType<any>>(): z.infer<T>;
@@ -36,7 +34,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
     stepId: T,
   ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
   getStepResult(stepId: string): any;
-  suspend(suspendPayload: TSuspendSchema, suspendOptions?: SuspendOptions): Promise<any>;
+  suspend(suspendPayload?: TSuspendSchema, suspendOptions?: SuspendOptions): Promise<any>;
   bail(result: any): any;
   abort(): any;
   resume?: {

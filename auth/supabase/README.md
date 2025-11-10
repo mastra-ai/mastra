@@ -19,10 +19,10 @@ import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
 // Initialize with environment variables
-const auth = new MastraAuthSupabase();
+const supabaseAuth = new MastraAuthSupabase();
 
 // Or initialize with explicit configuration
-const auth = new MastraAuthSupabase({
+const supabaseAuth = new MastraAuthSupabase({
   url: 'your-supabase-url',
   anonKey: 'your-supabase-anon-key',
 });
@@ -31,7 +31,7 @@ const auth = new MastraAuthSupabase({
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth,
+    auth: supabaseAuth,
   },
 });
 ```

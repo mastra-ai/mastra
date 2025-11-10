@@ -5,7 +5,7 @@ description: "API reference for the MastraAuthClerk class, which authenticates M
 
 # MastraAuthClerk Class
 
-The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthClerk` class provides authentication for Mastra applications using Clerk. It verifies incoming requests with Clerk-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
@@ -16,7 +16,7 @@ import { MastraAuthClerk } from "@mastra/auth-clerk";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthClerk({
+    auth: new MastraAuthClerk({
       jwksUri: process.env.CLERK_JWKS_URI,
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
       secretKey: process.env.CLERK_SECRET_KEY,
@@ -71,4 +71,4 @@ export const mastra = new Mastra({
 
 ## Related
 
-[MastraAuthClerk Class](/docs/auth/clerk)
+[MastraAuthClerk Class](/docs/v1/auth/clerk)

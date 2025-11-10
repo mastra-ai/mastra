@@ -1,18 +1,17 @@
 import { MastraStorage } from '@mastra/core/storage';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   WorkflowRun,
   WorkflowRuns,
-  PaginationInfo,
   StorageListWorkflowRunsInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
 } from '@mastra/core/storage';
 import { writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -167,76 +166,11 @@ export class BenchmarkStore extends MastraStorage {
     return resource;
   }
 
-  async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessages(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    let messages: any[] = [];
-    const includedMessageIds = new Set<string>();
-
-    // First, handle selectBy.include for cross-thread queries (resource scope support)
-    if (selectBy?.include?.length) {
-      for (const inc of selectBy.include) {
-        // Use the included threadId if provided (resource scope), otherwise use main threadId
-        const queryThreadId = inc.threadId || threadId;
-
-        // Get the target message and surrounding context
-        const threadMessages = Array.from(this.data.mastra_messages.values())
-          .filter((msg: any) => msg.threadId === queryThreadId)
-          .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-        const targetIndex = threadMessages.findIndex((msg: any) => msg.id === inc.id);
-
-        if (targetIndex >= 0) {
-          const startIdx = Math.max(0, targetIndex - (inc.withPreviousMessages || 0));
-          const endIdx = Math.min(threadMessages.length, targetIndex + (inc.withNextMessages || 0) + 1);
-
-          for (let i = startIdx; i < endIdx; i++) {
-            includedMessageIds.add(threadMessages[i].id);
-          }
-        }
-      }
-    }
-
-    // Get base messages for the thread
-    let baseMessages: any[] = [];
-    if (threadId || resourceId) {
-      baseMessages = Array.from(this.data.mastra_messages.values()).filter((msg: any) => {
-        if (threadId && msg.threadId !== threadId) return false;
-        if (resourceId && msg.resourceId !== resourceId) return false;
-        return true;
-      });
-
-      // Apply selectBy.last to base messages only
-      if (selectBy?.last) {
-        // Sort first to ensure we get the actual last messages
-        baseMessages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        baseMessages = baseMessages.slice(-selectBy.last);
-      }
-    }
-
-    // Combine base messages with included messages
-    const baseMessageIds = new Set(baseMessages.map((m: any) => m.id));
-    const allMessageIds = new Set([...baseMessageIds, ...includedMessageIds]);
-
-    // Get all unique messages
-    messages = Array.from(this.data.mastra_messages.values()).filter((msg: any) => allMessageIds.has(msg.id));
-    // Sort by createdAt
-    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    const list = new MessageList().add(messages, 'memory');
-    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
-  }
-
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: { messages: MastraDBMessage[]; format: 'v2' }): Promise<MastraDBMessage[]>;
   async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraDBMessage[]; format: 'v2' },
+  ): Promise<MastraDBMessage[] | MastraMessageV1[]> {
     if (this.mode === `read`) return [];
 
     const { messages, format = 'v1' } = args;
@@ -249,8 +183,8 @@ export class BenchmarkStore extends MastraStorage {
     return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
-  async updateMessages(args: { messages: Partial<MastraMessageV2> & { id: string }[] }): Promise<MastraMessageV2[]> {
-    const updatedMessages: MastraMessageV2[] = [];
+  async updateMessages(args: { messages: Partial<MastraDBMessage> & { id: string }[] }): Promise<MastraDBMessage[]> {
+    const updatedMessages: MastraDBMessage[] = [];
 
     if (this.mode === `read`) return [];
 
@@ -407,31 +341,86 @@ export class BenchmarkStore extends MastraStorage {
     };
   }
 
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format = 'v1' } = args;
+  async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, page = 0, perPage = 40, resourceId, filter, include, orderBy } = args;
     if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
 
-    const { page = 0, perPage = 40 } = selectBy?.pagination || {};
+    let messages: any[] = [];
+    const includedMessageIds = new Set<string>();
 
-    // Get all messages
-    const allMessages = await this.getMessages({
-      threadId,
-      selectBy: { ...selectBy, pagination: undefined },
-      format: format as any,
-    } as any);
+    // Handle include for cross-thread queries (resource scope support)
+    if (include?.length) {
+      for (const inc of include) {
+        // Use the included threadId if provided (resource scope), otherwise use main threadId
+        const queryThreadId = inc.threadId || threadId;
+
+        // Get the target message and surrounding context
+        const threadMessages = Array.from(this.data.mastra_messages.values())
+          .filter((msg: any) => msg.threadId === queryThreadId)
+          .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        const targetIndex = threadMessages.findIndex((msg: any) => msg.id === inc.id);
+
+        if (targetIndex >= 0) {
+          const startIdx = Math.max(0, targetIndex - (inc.withPreviousMessages || 0));
+          const endIdx = Math.min(threadMessages.length, targetIndex + (inc.withNextMessages || 0) + 1);
+
+          for (let i = startIdx; i < endIdx; i++) {
+            includedMessageIds.add(threadMessages[i].id);
+          }
+        }
+      }
+    }
+
+    // Get base messages for the thread
+    const baseMessages = Array.from(this.data.mastra_messages.values()).filter((msg: any) => {
+      if (msg.threadId !== threadId) return false;
+      if (resourceId && msg.resourceId !== resourceId) return false;
+      return true;
+    });
+
+    // Combine base messages with included messages
+    const baseMessageIds = new Set(baseMessages.map((m: any) => m.id));
+    const allMessageIds = new Set([...baseMessageIds, ...includedMessageIds]);
+
+    // Get all unique messages and convert to v2 format
+    const allMessages = Array.from(this.data.mastra_messages.values()).filter((msg: any) => allMessageIds.has(msg.id));
+    const list = new MessageList().add(allMessages, 'memory');
+    let filteredMessages = list.get.all.db();
+
+    // Apply date filters
+    if (filter?.dateRange?.start) {
+      filteredMessages = filteredMessages.filter((m: any) => new Date(m.createdAt) >= filter.dateRange!.start!);
+    }
+    if (filter?.dateRange?.end) {
+      filteredMessages = filteredMessages.filter((m: any) => new Date(m.createdAt) <= filter.dateRange!.end!);
+    }
+
+    // Apply ordering - default to ASC by createdAt
+    const sortField = orderBy?.field || 'createdAt';
+    const sortDirection = orderBy?.direction || 'ASC';
+    const direction = sortDirection === 'ASC' ? 1 : -1;
+
+    filteredMessages.sort((a: any, b: any) => {
+      const aVal = a[sortField];
+      const bVal = b[sortField];
+      if (aVal instanceof Date && bVal instanceof Date) {
+        return direction * (aVal.getTime() - bVal.getTime());
+      }
+      return direction * (aVal < bVal ? -1 : aVal > bVal ? 1 : 0);
+    });
 
     // Apply pagination
-    const start = page * perPage;
-    const messages = allMessages.slice(start, start + perPage);
+    const normalizedPerPage = perPage === false ? filteredMessages.length : perPage;
+    const start = perPage === false ? 0 : page * normalizedPerPage;
+    messages = filteredMessages.slice(start, start + normalizedPerPage);
 
     return {
-      messages,
-      total: allMessages.length,
+      messages: messages as MastraDBMessage[],
+      total: filteredMessages.length,
       page,
-      perPage,
-      hasMore: allMessages.length > (page + 1) * perPage,
+      perPage: perPage === false ? false : normalizedPerPage,
+      hasMore: perPage === false ? false : filteredMessages.length > (page + 1) * normalizedPerPage,
     };
   }
 

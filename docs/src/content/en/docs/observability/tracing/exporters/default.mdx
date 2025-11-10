@@ -1,0 +1,163 @@
+---
+title: "Default Exporter | Tracing | Observability | Mastra Docs"
+description: "Store traces locally for development and debugging"
+---
+
+# Default Exporter
+
+The `DefaultExporter` persists traces to your configured storage backend, making them accessible through Studio. It's automatically enabled when using the default observability configuration and requires no external services.
+
+## Configuration
+
+### Prerequisites
+
+1. **Storage Backend**: Configure a storage provider (LibSQL, PostgreSQL, etc.)
+2. **Studio**: Install for viewing traces locally
+
+### Basic Setup
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability, DefaultExporter } from "@mastra/observability";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db", // Required for trace persistence
+  }),
+  observability: new Observability({
+    configs: {
+      local: {
+        serviceName: "my-service",
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Automatic Configuration
+
+When using the default observability configuration, DefaultExporter is automatically included:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { LibSQLStore } from "@mastra/libsql";
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+  observability: new Observability({
+    default: { enabled: true }, // Automatically includes DefaultExporter
+  }),
+});
+```
+
+## Viewing Traces
+
+### Studio
+
+Access your traces through Studio:
+
+1. Start Studio
+2. Navigate to Observability
+3. Filter and search your local traces
+4. Inspect detailed span information
+
+## Tracing Strategies
+
+DefaultExporter automatically selects the optimal tracing strategy based on your storage provider. You can also override this selection if needed.
+
+### Available Strategies
+
+| Strategy               | Description                                               | Use Case                            |
+| ---------------------- | --------------------------------------------------------- | ----------------------------------- |
+| **realtime**           | Process each event immediately                            | Development, debugging, low traffic |
+| **batch-with-updates** | Buffer events and batch write with full lifecycle support | Low volume Production               |
+| **insert-only**        | Only process completed spans, ignore updates              | High volume Production              |
+
+### Strategy Configuration
+
+```typescript
+new DefaultExporter({
+  strategy: "auto", // Default - let storage provider decide
+  // or explicitly set:
+  // strategy: 'realtime' | 'batch-with-updates' | 'insert-only'
+
+  // Batching configuration (applies to both batch-with-updates and insert-only)
+  maxBatchSize: 1000, // Max spans per batch
+  maxBatchWaitMs: 5000, // Max wait before flushing
+  maxBufferSize: 10000, // Max spans to buffer
+});
+```
+
+## Storage Provider Support
+
+Different storage providers support different tracing strategies.
+
+If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects the optimal strategy for the storage provider. If you set the strategy to a mode that the storage provider doesn't support, you will get an error message.
+
+| Storage Provider                                | Preferred Strategy | Supported Strategies                      | Notes                                 |
+| ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
+| **[LibSQL](/reference/v1/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
+| **[PostgreSQL](/reference/v1/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Recommended for production            |
+
+### Strategy Benefits
+
+- **realtime**: Immediate visibility, best for debugging
+- **batch-with-updates**: 10-100x throughput improvement, full span lifecycle
+- **insert-only**: Additional 70% reduction in database operations, perfect for analytics
+
+## Batching Behavior
+
+### Flush Triggers
+
+For both batch strategies (`batch-with-updates` and `insert-only`), traces are flushed to storage when any of these conditions are met:
+
+1. **Size trigger**: Buffer reaches `maxBatchSize` spans
+2. **Time trigger**: `maxBatchWaitMs` elapsed since first event
+3. **Emergency flush**: Buffer approaches `maxBufferSize` limit
+4. **Shutdown**: Force flush all pending events
+
+### Error Handling
+
+The DefaultExporter includes robust error handling for production use:
+
+- **Retry Logic**: Exponential backoff (500ms, 1s, 2s, 4s)
+- **Transient Failures**: Automatic retry with backoff
+- **Persistent Failures**: Drop batch after 4 failed attempts
+- **Buffer Overflow**: Prevent memory issues during storage outages
+
+### Configuration Examples
+
+```typescript
+// Zero config - recommended for most users
+new DefaultExporter();
+
+// Development override
+new DefaultExporter({
+  strategy: "realtime", // Immediate visibility for debugging
+});
+
+// High-throughput production
+new DefaultExporter({
+  maxBatchSize: 2000, // Larger batches
+  maxBatchWaitMs: 10000, // Wait longer to fill batches
+  maxBufferSize: 50000, // Handle longer outages
+});
+
+// Low-latency production
+new DefaultExporter({
+  maxBatchSize: 100, // Smaller batches
+  maxBatchWaitMs: 1000, // Flush quickly
+});
+```
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [CloudExporter](/docs/v1/observability/tracing/exporters/cloud)
+- [Storage Configuration](/docs/v1/server-db/storage)

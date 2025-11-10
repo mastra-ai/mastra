@@ -1,37 +1,8 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
+import { GetScorerResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-
-export const useScoresByEntityId = (entityId: string, entityType: string, page: number = 0) => {
-  const client = useMastraClient();
-  const [scores, setScores] = useState<ListScoresResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchScores = async () => {
-      setIsLoading(true);
-      try {
-        const res = await client.listScoresByEntityId({
-          entityId,
-          entityType,
-          page: page || 0,
-          perPage: 10,
-        });
-        setScores(res);
-        setIsLoading(false);
-      } catch (error) {
-        setScores(null);
-        setIsLoading(false);
-      }
-    };
-
-    fetchScores();
-  }, [entityId, entityType, page]);
-
-  return { scores, isLoading };
-};
 
 type UseScoresByScorerIdProps = {
   scorerId: string;
@@ -54,15 +25,19 @@ export const useScorer = (scorerId: string) => {
   const client = useMastraClient();
   const [scorer, setScorer] = useState<GetScorerResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const fetchScorer = async () => {
       setIsLoading(true);
+      setError(null);
       try {
         const res = await client.getScorer(scorerId);
         setScorer(res);
       } catch (error) {
         setScorer(null);
+        const errorObj = error instanceof Error ? error : new Error('Error fetching scorer');
+        setError(errorObj);
         console.error('Error fetching scorer', error);
         toast.error('Error fetching scorer');
       } finally {
@@ -73,7 +48,7 @@ export const useScorer = (scorerId: string) => {
     fetchScorer();
   }, [scorerId]);
 
-  return { scorer, isLoading };
+  return { scorer, isLoading, error };
 };
 
 export const useScorers = () => {

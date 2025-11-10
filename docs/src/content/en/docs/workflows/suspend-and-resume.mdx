@@ -65,7 +65,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> For more details, check out the [Suspend & Resume documentation](/docs/workflows/suspend-and-resume).
+> For more details, check out the [Suspend & Resume documentation](/docs/v1/workflows/suspend-and-resume).
 
 ### Identifying suspended steps
 
@@ -74,7 +74,7 @@ To resume a suspended workflow, inspect the `suspended` array in the result to d
 ```typescript {15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRun();
 
 const result = await run.start({
   inputData: {
@@ -177,7 +177,7 @@ A workflow can be resumed by calling `resume` and providing the required `resume
 ```typescript {16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("testWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("testWorkflow").createRun();
 
 const result = await run.start({
   inputData: {
@@ -234,7 +234,7 @@ const resumedResult = await run.resume({
 });
 ```
 
-> See [Request Context](/docs/server-db/request-context) for more information.
+> See [Request Context](/docs/v1/server-db/request-context) for more information.
 
 ### Resuming nested workflows
 
@@ -268,7 +268,7 @@ const dowhileWorkflow = createWorkflow({
   )
   .commit();
 
-const run = await dowhileWorkflow.createRunAsync();
+const run = await dowhileWorkflow.createRun();
 const result = await run.start({ inputData: { value: 0 } });
 
 if (result.status === "suspended") {
@@ -287,7 +287,7 @@ Workflows can also pause execution for timed delays or external events. These me
 
 **Available methods:**
 
-- [`.sleep()`](/reference/workflows/workflow-methods/sleep): Pause for a specified number of milliseconds
-- [`.sleepUntil()`](/reference/workflows/workflow-methods/sleepUntil) : Pause until a specific date
-- [`.waitForEvent()`](/reference/workflows/workflow-methods/waitForEvent): Pause until an external event is received
-- [`.sendEvent()`](/reference/workflows/workflow-methods/sendEvent) : Send an event to resume a waiting workflow
+- [`.sleep()`](/reference/v1/workflows/workflow-methods/sleep): Pause for a specified number of milliseconds
+- [`.sleepUntil()`](/reference/v1/workflows/workflow-methods/sleepUntil) : Pause until a specific date
+- [`.waitForEvent()`](/reference/v1/workflows/workflow-methods/waitForEvent): Pause until an external event is received
+- [`.sendEvent()`](/reference/v1/workflows/workflow-methods/sendEvent) : Send an event to resume a waiting workflow

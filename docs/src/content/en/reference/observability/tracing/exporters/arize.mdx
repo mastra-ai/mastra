@@ -1,0 +1,164 @@
+---
+title: "Reference: ArizeExporter | Observability | Mastra Docs"
+description: Arize exporter for Tracing using OpenInference
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# ArizeExporter
+
+Sends Tracing data to Arize Phoenix, Arize AX, or any OpenTelemetry-compatible observability platform that supports OpenInference semantic conventions.
+
+## Constructor
+
+```typescript
+new ArizeExporter(config: ArizeExporterConfig)
+```
+
+## ArizeExporterConfig
+
+```typescript
+type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
+  // Phoenix / OpenTelemetry configuration
+  endpoint?: string;
+  apiKey?: string;
+
+  // Arize AX configuration
+  spaceId?: string;
+
+  // Common configuration
+  projectName?: string;
+  headers?: Record<string, string>;
+}
+```
+
+Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
+- `timeout?: number` - Export timeout in milliseconds (default: 30000)
+- `batchSize?: number` - Number of spans per batch (default: 512)
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
+- `resourceAttributes?: Record<string, any>` - Custom resource attributes
+
+<PropertiesTable
+  props={[
+    {
+      name: "endpoint",
+      type: "string",
+      description:
+        "Collector endpoint for trace exports (e.g., 'http://localhost:6006/v1/traces' for Phoenix). Required for Phoenix. Optional for Arize AX (defaults to https://otlp.arize.com/v1/traces).",
+      required: false,
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "API key for authentication. Required for Phoenix Cloud and Arize AX. Optional for self-hosted Phoenix.",
+      required: false,
+    },
+    {
+      name: "spaceId",
+      type: "string",
+      description:
+        "Arize AX space identifier. Required when sending traces to Arize AX.",
+      required: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "Project name added as OpenInference resource attribute",
+      required: false,
+    },
+    {
+      name: "headers",
+      type: "Record<string, string>",
+      description: "Additional headers for OTLP requests",
+      required: false,
+    },
+    {
+      name: "timeout",
+      type: "number",
+      description:
+        "Timeout in milliseconds before exporting spans (default: 30000)",
+      required: false,
+    },
+    {
+      name: "batchSize",
+      type: "number",
+      description: "Number of spans to batch before export (default: 512)",
+      required: false,
+    },
+    {
+      name: "logLevel",
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      description: "Logger level (default: 'warn')",
+      required: false,
+    },
+    {
+      name: "resourceAttributes",
+      type: "Record<string, any>",
+      description: "Custom resource attributes added to each span",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to the configured endpoint.
+
+### export
+
+```typescript
+async export(spans: ReadOnlySpan[]): Promise<void>
+```
+
+Batch exports spans using OpenTelemetry with OpenInference semantic conventions.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending data and shuts down the client.
+
+## Usage
+
+### Phoenix Configuration
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+const exporter = new ArizeExporter({
+  endpoint: "http://localhost:6006/v1/traces",
+  apiKey: process.env.PHOENIX_API_KEY, // Optional for local Phoenix
+  projectName: "my-ai-project",
+});
+```
+
+### Arize AX Configuration
+
+```typescript
+import { ArizeExporter } from "@mastra/arize";
+
+const exporter = new ArizeExporter({
+  spaceId: process.env.ARIZE_SPACE_ID!,
+  apiKey: process.env.ARIZE_API_KEY!,
+  projectName: "my-ai-project",
+});
+```
+
+## OpenInference Semantic Conventions
+
+The ArizeExporter implements [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
+
+## Related
+
+- [ArizeExporter Documentation](/docs/v1/observability/tracing/exporters/arize)
+- [Phoenix Documentation](https://docs.arize.com/phoenix)
+- [Arize AX Documentation](https://docs.arize.com/)

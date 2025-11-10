@@ -47,6 +47,7 @@ export interface SerializedWorkflow {
 
 export interface SerializedAgent {
   name: string;
+  description?: string;
   instructions?: SystemMessage;
   tools: Record<string, SerializedTool>;
   agents: Record<string, SerializedAgentDefinition>;
@@ -185,6 +186,7 @@ async function formatAgentList({
   agent: Agent;
   requestContext: RequestContext;
 }): Promise<SerializedAgentWithId> {
+  const description = agent.getDescription();
   const instructions = await agent.getInstructions({ requestContext });
   const tools = await agent.listTools({ requestContext });
   const llm = await agent.getLLM({ requestContext });
@@ -237,8 +239,9 @@ async function formatAgentList({
   }));
 
   return {
-    id,
+    id: agent.id || id,
     name: agent.name,
+    description,
     instructions,
     agents: serializedAgentAgents,
     tools: serializedAgentTools,
@@ -265,7 +268,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   let agent;
 
   try {
-    agent = mastra.getAgent(agentId);
+    agent = mastra.getAgentById(agentId);
   } catch (error) {
     logger.debug('Error getting agent from mastra, searching agents for agent', error);
   }
@@ -290,7 +293,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   }
 
   if (!agent) {
-    throw new HTTPException(404, { message: `Agent with name ${agentId} not found` });
+    throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
 
   return agent;
@@ -310,12 +313,13 @@ export async function listAgentsHandler({
       }),
     );
 
-    const serializedAgents = serializedAgentsMap.reduce<
-      Record<string, Omit<(typeof serializedAgentsMap)[number], 'id'>>
-    >((acc, { id, ...rest }) => {
-      acc[id] = rest;
-      return acc;
-    }, {});
+    const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      (acc, { id, ...rest }) => {
+        acc[id] = { id, ...rest };
+        return acc;
+      },
+      {},
+    );
 
     return serializedAgents;
   } catch (error) {
@@ -334,6 +338,7 @@ async function formatAgent({
   requestContext: RequestContext;
   isPlayground: boolean;
 }): Promise<SerializedAgent> {
+  const description = agent.getDescription();
   const tools = await agent.listTools({ requestContext });
 
   const serializedAgentTools = await getSerializedAgentTools(tools);
@@ -419,6 +424,7 @@ async function formatAgent({
 
   return {
     name: agent.name,
+    description,
     instructions,
     tools: serializedAgentTools,
     agents: serializedAgentAgents,

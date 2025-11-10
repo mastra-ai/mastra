@@ -2,9 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
-import type { ProviderConfig } from '../src/index.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
-import { generateProviderOptionsSection } from './generate-provider-options-docs.js';
+import type { ProviderConfig } from '../src/llm';
+import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
+import { generateProviderOptionsSection } from './generate-provider-options-docs';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -252,9 +252,6 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 ---
 
 ${getGeneratedComment()}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 ${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import Tabs from "@theme/Tabs";\nimport TabItem from "@theme/TabItem";' : ''}
 
@@ -639,7 +636,7 @@ Browse the directory of available models using the navigation on the left, or ex
 <CardGrid>
     <CardGridItem
       title="Gateways"
-      href="/models/gateways"
+      href="/models/v1/gateways"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -679,7 +676,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
     </CardGridItem>
     <CardGridItem
       title="Providers"
-      href="/models/providers"
+      href="/models/v1/providers"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -703,11 +700,11 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/getting-started/studio) UI.
+Alternatively, browse and test models in [Studio](/docs/v1/getting-started/studio) UI.
 
 :::info
 
-In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
+In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
 
 :::
 
@@ -737,7 +734,7 @@ const reasoningAgent = new Agent({
 \`\`\`
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [request context](/docs/server-db/request-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server-db/request-context), variables, or any other logic.
 
 \`\`\`typescript showLineNumbers
 const agent = new Agent({
@@ -863,7 +860,7 @@ const agent = new Agent({
   model: groq('gemma2-9b-it')
 })
 \`\`\`
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/scorers/overview).`;
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/v1/evals/overview).`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
@@ -871,10 +868,7 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
   const hasNetlify = gatewaysList.includes('netlify');
-  const logoImport = hasNetlify
-    ? '\
-import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";'
-    : '';
+  const logoImport = hasNetlify ? 'import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
 
   return `---
 title: "Gateways"
@@ -896,14 +890,14 @@ ${gatewaysList
       return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
-      href="/models/gateways/${g}"
+      href="/models/v1/gateways/${g}"
       logo={<NetlifyLogo />}
     />`;
     }
     return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
-      href="/models/gateways/${g}"
+      href="/models/v1/gateways/${g}"
       logo="${getLogoUrl(g)}"
 
     />`;
@@ -937,7 +931,7 @@ ${allProviders
     p => `    <CardGridItem
       title="${p.name.replace(/&/g, '&amp;')}"
       description="${p.models.length} models"
-      href="/models/providers/${p.id}"
+      href="/models/v1/providers/${p.id}"
       logo="${getLogoUrl(p.id)}"
     />`,
   )
@@ -1003,7 +997,7 @@ ${getGeneratedComment()}
 
 ${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.${aiSdkDocsText}
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/v1/agents/overview).
 
 ## Installation
 

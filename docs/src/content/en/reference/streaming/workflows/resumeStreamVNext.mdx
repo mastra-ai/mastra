@@ -14,7 +14,7 @@ The `.resumeStreamVNext()` method resumes a suspended workflow run with new data
 ## Usage example
 
 ```typescript showLineNumbers copy
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = run.streamVNext({
   inputData: {
@@ -59,7 +59,7 @@ if (result!.status === "suspended") {
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for AI tracing configuration.",
+      description: "Options for Tracing configuration.",
       properties: [
         {
           parameters: [
@@ -117,6 +117,6 @@ The stream emits various event types during workflow execution. Each event has a
 
 ## Related
 
-- [Workflows overview](/docs/workflows/overview#running-workflows)
-- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Workflows overview](/docs/v1/workflows/overview#running-workflows)
+- [Workflow.createRun()](/reference/v1/workflows/workflow-methods/create-run)
 - [Run.streamVNext()](./streamVNext)

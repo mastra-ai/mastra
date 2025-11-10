@@ -1,0 +1,168 @@
+---
+title: "Reference: Tracing | Observability | Mastra Docs"
+description: Core Tracing classes and methods
+asIndexPage: true
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Observability Instances
+
+## DefaultObservabilityInstance
+
+Default implementation of the ObservabilityInstance interface.
+
+### Constructor
+
+```typescript
+new DefaultObservabilityInstance(config: ObservabilityInstanceConfig)
+```
+
+Creates a new DefaultObservabilityInstance with the specified configuration.
+
+### Properties
+
+Inherits all properties and methods from BaseObservabilityInstance.
+
+## BaseObservabilityInstance
+
+Base class for custom ObservabilityInstance implementations.
+
+### Methods
+
+#### getConfig
+
+```typescript
+getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
+```
+
+Returns the current observability configuration.
+
+#### getExporters
+
+```typescript
+getExporters(): readonly ObservabilityExporter[]
+```
+
+Returns all configured exporters.
+
+#### getSpanOutputProcessors
+
+```typescript
+getSpanOutputProcessors(): readonly SpanOutputProcessor[]
+```
+
+Returns all configured span output processors.
+
+#### getLogger
+
+```typescript
+getLogger(): IMastraLogger
+```
+
+Returns the logger instance for exporters and other components.
+
+#### startSpan
+
+```typescript
+startSpan<TType extends SpanType>(
+  options: StartSpanOptions<TType>
+): Span<TType>
+```
+
+Start a new span of a specific SpanType. Creates the root span of a trace if no parent is provided.
+
+<PropertiesTable
+  props={[
+    {
+      name: "type",
+      type: "SpanType",
+      description: "Type of span to create",
+      required: true,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Name of the span",
+      required: true,
+    },
+    {
+      name: "parent",
+      type: "AnySpan",
+      description: "Parent span (if not root)",
+      required: false,
+    },
+    {
+      name: "attributes",
+      type: "SpanTypeMap[TType]",
+      description: "Type-specific attributes",
+      required: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "User-defined metadata",
+      required: false,
+    },
+    {
+      name: "input",
+      type: "any",
+      description: "Initial input data",
+      required: false,
+    },
+    {
+      name: "customSamplerOptions",
+      type: "CustomSamplerOptions",
+      description: "Options for custom sampler",
+      required: false,
+    },
+  ]}
+/>
+
+#### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Shuts down all exporters and processors, cleaning up resources.
+
+## Custom Implementation
+
+To create a custom ObservabilityInstance implementation, extend BaseObservabilityInstance:
+
+```typescript
+class CustomObservabilityInstance extends BaseObservabilityInstance {
+  constructor(config: ObservabilityInstanceConfig) {
+    super(config);
+    // Custom initialization
+  }
+
+  // Override methods as needed
+  startSpan<TType extends SpanType>(
+    options: StartSpanOptions<TType>,
+  ): Span<TType> {
+    // Custom span creation logic
+    return super.startSpan(options);
+  }
+}
+```
+
+## See Also
+
+### Documentation
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - Concepts and usage guide
+- [Configuration Reference](/reference/v1/observability/tracing/configuration) - Configuration options
+- [Interfaces Reference](/reference/v1/observability/tracing/interfaces) - Type definitions
+- [Spans Reference](/reference/v1/observability/tracing/spans) - Span lifecycle and methods
+
+### Examples
+
+- [Basic Tracing](/examples/v1/observability/basic-tracing) - Getting started example
+
+### Exporters
+
+- [DefaultExporter](/reference/v1/observability/tracing/exporters/default-exporter) - Storage persistence
+- [CloudExporter](/reference/v1/observability/tracing/exporters/cloud-exporter) - Mastra Cloud integration
+- [ConsoleExporter](/reference/v1/observability/tracing/exporters/console-exporter) - Debug output

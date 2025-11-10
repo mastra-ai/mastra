@@ -1781,7 +1781,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
 // Helper to merge a template by slug
 export async function mergeTemplateBySlug(slug: string, targetPath?: string) {
   const template = await getMastraTemplate(slug);
-  const run = await agentBuilderTemplateWorkflow.createRunAsync();
+  const run = await agentBuilderTemplateWorkflow.createRun();
   return await run.start({
     inputData: {
       repo: template.githubUrl,

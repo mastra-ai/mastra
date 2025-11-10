@@ -12,8 +12,8 @@ The `.listThreadsByResourceId()` method retrieves threads associated with a spec
 ```typescript copy
 await memory.listThreadsByResourceId({
   resourceId: "user-123",
-  offset: 0,
-  limit: 10,
+  page: 0,
+  perPage: 10,
 });
 ```
 
@@ -28,15 +28,15 @@ await memory.listThreadsByResourceId({
       isOptional: false,
     },
     {
-      name: "offset",
+      name: "page",
       type: "number",
-      description: "Number of items to skip",
+      description: "Page number (0-indexed) to retrieve",
       isOptional: false,
     },
     {
-      name: "limit",
+      name: "perPage",
       type: "number",
-      description: "Maximum number of threads to return",
+      description: "Maximum number of threads to return per page",
       isOptional: false,
     },
     {
@@ -64,8 +64,8 @@ await memory.listThreadsByResourceId({
 The return object contains:
 - `threads`: Array of thread objects
 - `total`: Total number of threads for this resource
-- `page`: Current page number (`Math.floor(offset / limit)` when `limit > 0`)
-- `perPage`: Items per page (same as limit)
+- `page`: Current page number (same as the input `page` parameter)
+- `perPage`: Items per page (same as the input `perPage` parameter)
 - `hasMore`: Boolean indicating if more results are available
 
 ## Extended usage example
@@ -76,15 +76,15 @@ import { mastra } from "./mastra";
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-let currentOffset = 0;
-const limit = 25;
+let currentPage = 0;
+const perPage = 25;
 let hasMorePages = true;
 
 while (hasMorePages) {
   const result = await memory?.listThreadsByResourceId({
     resourceId: "user-123",
-    offset: currentOffset,
-    limit: limit,
+    page: currentPage,
+    perPage: perPage,
     orderBy: { field: "createdAt", direction: "ASC" },
   });
 
@@ -98,13 +98,13 @@ while (hasMorePages) {
   });
 
   hasMorePages = result.hasMore;
-  currentOffset += limit; // Increment by limit to get next page
+  currentPage++; // Move to next page
 }
 ```
 
 ## Related
 
-- [Memory Class Reference](/reference/memory/memory-class)
-- [Getting Started with Memory](/docs/memory/overview) (Covers threads/resources concept)
-- [createThread](/reference/memory/createThread)
-- [getThreadById](/reference/memory/getThreadById)
+- [Memory Class Reference](/reference/v1/memory/memory-class)
+- [Getting Started with Memory](/docs/v1/memory/overview) (Covers threads/resources concept)
+- [createThread](/reference/v1/memory/createThread)
+- [getThreadById](/reference/v1/memory/getThreadById)

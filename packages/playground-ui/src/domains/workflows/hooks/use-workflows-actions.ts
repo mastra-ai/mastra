@@ -13,7 +13,7 @@ export const useExecuteWorkflow = () => {
     mutationFn: async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
       try {
         const workflow = client.getWorkflow(workflowId);
-        const { runId: newRunId } = await workflow.createRunAsync({ runId: prevRunId });
+        const { runId: newRunId } = await workflow.createRun({ runId: prevRunId });
         return { runId: newRunId };
       } catch (error) {
         console.error('Error creating workflow run:', error);
@@ -432,21 +432,4 @@ export const useCancelWorkflowRun = () => {
   });
 
   return cancelWorkflowRun;
-};
-
-export const useSendWorkflowRunEvent = (workflowId: string) => {
-  const client = useMastraClient();
-  const sendWorkflowRunEvent = useMutation({
-    mutationFn: async ({ runId, event, data }: { runId: string; event: string; data: unknown }) => {
-      try {
-        const response = await client.getWorkflow(workflowId).sendRunEvent({ runId, event, data });
-        return response;
-      } catch (error) {
-        console.error('Error sending workflow run event:', error);
-        throw error;
-      }
-    },
-  });
-
-  return sendWorkflowRunEvent;
 };

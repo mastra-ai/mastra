@@ -23,12 +23,12 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
-  AITraceRecord,
-  AISpanRecord,
-  StorageGetMessagesArg,
+  TraceRecord,
+  SpanRecord,
   PaginationInfo,
   WorkflowRun,
   WorkflowRuns,
+  StorageListMessagesInput,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 
@@ -79,6 +79,7 @@ export type NetworkStreamParams = {
 } & MultiPrimitiveExecutionOptions;
 
 export interface GetAgentResponse {
+  id: string;
   name: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
@@ -162,8 +163,8 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  limit?: number;
-  offset?: number;
+  perPage?: number | false;
+  page?: number;
   resourceId?: string;
 }
 
@@ -260,8 +261,8 @@ export type CreateMemoryThreadResponse = StorageThreadType;
 export interface ListMemoryThreadsParams {
   resourceId: string;
   agentId: string;
-  offset?: number;
-  limit?: number;
+  page?: number;
+  perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
   sortDirection?: 'ASC' | 'DESC';
   requestContext?: RequestContext | Record<string, any>;
@@ -285,20 +286,9 @@ export interface UpdateMemoryThreadParams {
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export interface GetMemoryThreadMessagesParams {
-  /**
-   * Limit the number of messages to retrieve (default: 40)
-   */
-  limit?: number;
-}
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
 
-export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
-
-export interface GetMemoryThreadMessagesResponse {
-  messages: MastraDBMessage[];
-}
-
-export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
+export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
 };
 
@@ -493,12 +483,12 @@ export interface TemplateInstallationRequest {
   variables?: Record<string, string>;
 }
 
-export interface GetAITraceResponse {
-  trace: AITraceRecord;
+export interface GetTraceResponse {
+  trace: TraceRecord;
 }
 
-export interface GetAITracesResponse {
-  spans: AISpanRecord[];
+export interface GetTracesResponse {
+  spans: SpanRecord[];
   pagination: PaginationInfo;
 }
 

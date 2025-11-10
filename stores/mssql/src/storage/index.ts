@@ -8,17 +8,16 @@ export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> &
 import type {
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   StorageResourceType,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
-  AISpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
-  UpdateAISpanRecord,
+  SpanRecord,
+  TraceRecord,
+  TracesPaginatedArg,
+  UpdateSpanRecord,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -33,6 +32,7 @@ import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
 export type MSSQLConfigType = {
+  id: string;
   schemaName?: string;
 } & (
   | {
@@ -57,7 +57,10 @@ export class MSSQLStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
-    super({ name: 'MSSQLStore' });
+    if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+      throw new Error('MSSQLStore: id must be provided and cannot be empty.');
+    }
+    super({ id: config.id, name: 'MSSQLStore' });
     try {
       if ('connectionString' in config) {
         if (
@@ -160,7 +163,7 @@ export class MSSQLStore extends MastraStorage {
     createTable: boolean;
     deleteMessages: boolean;
     listScoresBySpan: boolean;
-    aiTracing: boolean;
+    observabilityInstance: boolean;
     indexManagement: boolean;
   } {
     return {
@@ -170,7 +173,7 @@ export class MSSQLStore extends MastraStorage {
       createTable: true,
       deleteMessages: true,
       listScoresBySpan: true,
-      aiTracing: true,
+      observabilityInstance: true,
       indexManagement: true,
     };
   }
@@ -245,21 +248,8 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  /**
-   * @deprecated use getMessagesPaginated instead
-   */
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
-  }
-
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg,
-  ): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -369,11 +359,11 @@ export class MSSQLStore extends MastraStorage {
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
+    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, perPage, page, resourceId });
   }
 
   async getWorkflowRunById({
@@ -410,7 +400,7 @@ export class MSSQLStore extends MastraStorage {
   }
 
   /**
-   * AI Tracing / Observability
+   * Tracing / Observability
    */
   private getObservabilityStore(): ObservabilityMSSQL {
     if (!this.stores.observability) {
@@ -424,48 +414,46 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.observability as ObservabilityMSSQL;
   }
 
-  async createAISpan(span: AISpanRecord): Promise<void> {
-    return this.getObservabilityStore().createAISpan(span);
+  async createSpan(span: SpanRecord): Promise<void> {
+    return this.getObservabilityStore().createSpan(span);
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
-    return this.getObservabilityStore().updateAISpan({ spanId, traceId, updates });
+    return this.getObservabilityStore().updateSpan({ spanId, traceId, updates });
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    return this.getObservabilityStore().getAITrace(traceId);
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    return this.getObservabilityStore().getTrace(traceId);
   }
 
-  async getAITracesPaginated(
-    args: AITracesPaginatedArg,
-  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
-    return this.getObservabilityStore().getAITracesPaginated(args);
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    return this.getObservabilityStore().getTracesPaginated(args);
   }
 
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    return this.getObservabilityStore().batchCreateAISpans(args);
+  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
+    return this.getObservabilityStore().batchCreateSpans(args);
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
-    return this.getObservabilityStore().batchUpdateAISpans(args);
+    return this.getObservabilityStore().batchUpdateSpans(args);
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
-    return this.getObservabilityStore().batchDeleteAITraces(args);
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+    return this.getObservabilityStore().batchDeleteTraces(args);
   }
 
   /**

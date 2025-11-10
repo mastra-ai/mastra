@@ -1,0 +1,227 @@
+---
+title: "Reference: Answer Relevancy Scorer | Evals | Mastra Docs"
+description: Documentation for the Answer Relevancy Scorer in Mastra, which evaluates how well LLM outputs address the input query.
+---
+
+# Answer Relevancy Scorer
+
+The `createAnswerRelevancyScorer()` function accepts a single options object with the following properties:
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      required: true,
+      description: "Configuration for the model used to evaluate relevancy.",
+    },
+    {
+      name: "uncertaintyWeight",
+      type: "number",
+      required: false,
+      defaultValue: "0.3",
+      description: "Weight given to 'unsure' verdicts in scoring (0-1).",
+    },
+    {
+      name: "scale",
+      type: "number",
+      required: false,
+      defaultValue: "1",
+      description: "Maximum score value.",
+    },
+  ]}
+/>
+
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
+
+## .run() Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The id of the run (optional).",
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Relevancy score (0 to scale, default 0-1)",
+    },
+    {
+      name: "preprocessPrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the preprocess step (optional).",
+    },
+    {
+      name: "preprocessStepResult",
+      type: "object",
+      description: "Object with extracted statements: { statements: string[] }",
+    },
+    {
+      name: "analyzePrompt",
+      type: "string",
+      description:
+        "The prompt sent to the LLM for the analyze step (optional).",
+    },
+    {
+      name: "analyzeStepResult",
+      type: "object",
+      description:
+        "Object with results: { results: Array<{ result: 'yes' | 'unsure' | 'no', reason: string }> }",
+    },
+    {
+      name: "generateReasonPrompt",
+      type: "string",
+      description: "The prompt sent to the LLM for the reason step (optional).",
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Explanation of the score.",
+    },
+  ]}
+/>
+
+## Scoring Details
+
+The scorer evaluates relevancy through query-answer alignment, considering completeness and detail level, but not factual correctness.
+
+### Scoring Process
+
+1. **Statement Preprocess:**
+   - Breaks output into meaningful statements while preserving context.
+2. **Relevance Analysis:**
+   - Each statement is evaluated as:
+     - "yes": Full weight for direct matches
+     - "unsure": Partial weight (default: 0.3) for approximate matches
+     - "no": Zero weight for irrelevant content
+3. **Score Calculation:**
+   - `((direct + uncertainty * partial) / total_statements) * scale`
+
+### Score Interpretation
+
+A relevancy score between 0 and 1:
+
+- **1.0**: The response fully answers the query with relevant and focused information.
+- **0.7–0.9**: The response mostly answers the query but may include minor unrelated content.
+- **0.4–0.6**: The response partially answers the query, mixing relevant and unrelated information.
+- **0.1–0.3**: The response includes minimal relevant content and largely misses the intent of the query.
+- **0.0**: The response is entirely unrelated and does not answer the query.
+
+## Examples
+
+### High relevancy example
+
+In this example, the response accurately addresses the input query with specific and relevant information.
+
+```typescript title="src/example-high-answer-relevancy.ts" showLineNumbers copy
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
+
+const inputMessages = [
+  {
+    role: "user",
+    content: "What are the health benefits of regular exercise?",
+  },
+];
+const outputMessage = {
+  text: "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.",
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+#### High relevancy output
+
+The output receives a high score because it accurately answers the query without including unrelated information.
+
+```typescript
+{
+  score: 1,
+  reason: 'The score is 1 because the output directly addresses the question by providing multiple explicit health benefits of regular exercise, including improvements in cardiovascular health, muscle strength, metabolism, and mental well-being. Each point is relevant and contributes to a comprehensive understanding of the health benefits.'
+}
+```
+
+### Partial relevancy example
+
+In this example, the response addresses the query in part but includes additional information that isn't directly relevant.
+
+```typescript title="src/example-partial-answer-relevancy.ts" showLineNumbers copy
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
+
+const inputMessages = [
+  { role: "user", content: "What should a healthy breakfast include?" },
+];
+const outputMessage = {
+  text: "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.",
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+#### Partial relevancy output
+
+The output receives a lower score because it partially answers the query. While some relevant information is included, unrelated details reduce the overall relevance.
+
+```typescript
+{
+  score: 0.25,
+  reason: 'The score is 0.25 because the output provides a direct answer by mentioning whole grains and protein as components of a healthy breakfast, which is relevant. However, the additional information about the timing of breakfast and its effects on metabolism and energy levels is not directly related to the question, leading to a lower overall relevance score.'
+}
+```
+
+## Low relevancy example
+
+In this example, the response does not address the query and contains information that is entirely unrelated.
+
+```typescript title="src/example-low-answer-relevancy.ts" showLineNumbers copy
+import { createAnswerRelevancyScorer } from "@mastra/evals/scorers/prebuilt";
+
+const scorer = createAnswerRelevancyScorer({ model: "openai/gpt-4o-mini" });
+
+const inputMessages = [
+  { role: "user", content: "What are the benefits of meditation?" },
+];
+const outputMessage = {
+  text: "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.",
+};
+
+const result = await scorer.run({
+  input: inputMessages,
+  output: outputMessage,
+});
+
+console.log(result);
+```
+
+#### Low relevancy output
+
+The output receives a score of 0 because it fails to answer the query or provide any relevant information.
+
+```typescript
+{
+  score: 0,
+  reason: 'The score is 0 because the output about the Great Wall of China is completely unrelated to the benefits of meditation, providing no relevant information or context that addresses the input question.'
+}
+```
+
+## Related
+
+- [Faithfulness Scorer](./faithfulness)

@@ -18,7 +18,6 @@ import {
   getAgentBuilderActionRunByIdHandler as getOriginalGetAgentBuilderActionRunByIdHandler,
   getAgentBuilderActionRunExecutionResultHandler as getOriginalGetAgentBuilderActionRunExecutionResultHandler,
   cancelAgentBuilderActionRunHandler as getOriginalCancelAgentBuilderActionRunHandler,
-  sendAgentBuilderActionRunEventHandler as getOriginalSendAgentBuilderActionRunEventHandler,
 } from '@mastra/server/handlers/agent-builder';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -289,15 +288,16 @@ export async function getAgentBuilderActionRunsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const actionId = c.req.param('actionId');
-    const { fromDate, toDate, limit, offset, resourceId } = c.req.query();
+    const queryParams = c.req.query();
+    const { fromDate, toDate, perPage, page, resourceId } = queryParams;
 
     const runs = await getOriginalGetAgentBuilderActionRunsHandler({
       mastra,
       actionId,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      offset: offset ? Number(offset) : undefined,
+      perPage: perPage !== null && perPage !== undefined && !isNaN(Number(perPage)) ? Number(perPage) : undefined,
+      page: page !== null && page !== undefined && !isNaN(Number(page)) ? Number(page) : undefined,
       resourceId,
     });
 
@@ -358,27 +358,6 @@ export async function cancelAgentBuilderActionRunHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error cancelling agent builder action run');
-  }
-}
-
-export async function sendAgentBuilderActionRunEventHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const actionId = c.req.param('actionId');
-    const runId = c.req.param('runId');
-    const { event, data } = await c.req.json();
-
-    const result = await getOriginalSendAgentBuilderActionRunEventHandler({
-      mastra,
-      actionId,
-      runId,
-      event,
-      data,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error sending agent builder action run event');
   }
 }
 

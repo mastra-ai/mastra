@@ -13,7 +13,6 @@ import {
 import type {
   TABLE_NAMES,
   StorageColumn,
-  StorageGetMessagesArg,
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
@@ -29,7 +28,7 @@ import { StoreOperationsCloudflare } from './domains/operations';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
-import type { CloudflareStoreConfig, RecordTypes } from './types';
+import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig, RecordTypes } from './types';
 
 export class CloudflareStore extends MastraStorage {
   stores: StorageDomains;
@@ -38,9 +37,7 @@ export class CloudflareStore extends MastraStorage {
   private namespacePrefix: string;
   private bindings?: Record<TABLE_NAMES, KVNamespace>;
 
-  private validateWorkersConfig(
-    config: CloudflareStoreConfig,
-  ): asserts config is { bindings: Record<TABLE_NAMES, KVNamespace>; keyPrefix?: string } {
+  private validateWorkersConfig(config: CloudflareStoreConfig): asserts config is CloudflareWorkersConfig {
     if (!isWorkersConfig(config)) {
       throw new Error('Invalid Workers API configuration');
     }
@@ -58,9 +55,7 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private validateRestConfig(
-    config: CloudflareStoreConfig,
-  ): asserts config is { accountId: string; apiToken: string; namespacePrefix?: string } {
+  private validateRestConfig(config: CloudflareStoreConfig): asserts config is CloudflareRestConfig {
     if (isWorkersConfig(config)) {
       throw new Error('Invalid REST API configuration');
     }
@@ -81,7 +76,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   constructor(config: CloudflareStoreConfig) {
-    super({ name: 'Cloudflare' });
+    super({ id: config.id, name: 'Cloudflare' });
 
     try {
       if (isWorkersConfig(config)) {
@@ -204,14 +199,6 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.memory.saveMessages(args);
   }
 
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
-  }
-
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -269,16 +256,16 @@ export class CloudflareStore extends MastraStorage {
 
   async listWorkflowRuns({
     workflowName,
-    limit = 20,
-    offset = 0,
+    perPage = 20,
+    page = 0,
     resourceId,
     fromDate,
     toDate,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns({
       workflowName,
-      limit,
-      offset,
+      perPage,
+      page,
       resourceId,
       fromDate,
       toDate,
@@ -293,10 +280,6 @@ export class CloudflareStore extends MastraStorage {
     workflowName: string;
   }): Promise<WorkflowRun | null> {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async getMessagesPaginated(args: StorageGetMessagesArg): Promise<PaginationInfo & { messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
   }
 
   async updateMessages(args: {

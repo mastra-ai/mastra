@@ -45,6 +45,7 @@ For detailed setup instructions and best practices, see the [official MongoDB At
 import { PgVector } from "@mastra/pg";
 
 const store = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING,
 });
 
@@ -73,6 +74,7 @@ For detailed setup instructions and best practices, see the [official pgvector r
 import { PineconeVector } from "@mastra/pinecone";
 
 const store = new PineconeVector({
+  id: 'pinecone-vector',
   apiKey: process.env.PINECONE_API_KEY,
 });
 await store.createIndex({
@@ -94,6 +96,7 @@ await store.upsert({
 import { QdrantVector } from "@mastra/qdrant";
 
 const store = new QdrantVector({
+  id: 'qdrant-vector',
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
 });
@@ -122,6 +125,7 @@ import { ChromaVector } from "@mastra/chroma";
 
 // Running on Chroma Cloud
 const store = new ChromaVector({
+  id: 'chroma-vector',
   apiKey: process.env.CHROMA_API_KEY,
   tenant: process.env.CHROMA_TENANT,
   database: process.env.CHROMA_DATABASE,
@@ -172,6 +176,7 @@ await store.upsert({
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
+  id: 'libsql-vector',
   connectionUrl: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
@@ -197,6 +202,7 @@ import { UpstashVector } from "@mastra/upstash";
 
 // In upstash they refer to the store as an index
 const store = new UpstashVector({
+  id: 'upstash-vector',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });
@@ -490,7 +496,7 @@ The upsert operation:
 - Creates new vectors if they don't exist
 - Automatically handles batching for large datasets
 
-For complete examples of upserting embeddings in different vector stores, see the [Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) guide.
+For complete examples of upserting embeddings in different vector stores, see the [Upsert Embeddings](/examples/v1/rag/upsert/upsert-embeddings) guide.
 
 ## Adding Metadata
 

@@ -103,11 +103,13 @@ describe('create mastra', () => {
         expect(response.status).toBe(200);
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
-            "weatherAgent": {
+            "weather-agent": {
               "agents": {},
               "defaultGenerateOptionsLegacy": {},
               "defaultOptions": {},
               "defaultStreamOptionsLegacy": {},
+              "description": "",
+              "id": "weather-agent",
               "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.

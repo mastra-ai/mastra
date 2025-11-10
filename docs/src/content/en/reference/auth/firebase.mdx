@@ -5,7 +5,7 @@ description: "API reference for the MastraAuthFirebase class, which authenticate
 
 # MastraAuthFirebase Class
 
-The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthFirebase` class provides authentication for Mastra using Firebase Authentication. It verifies incoming requests using Firebase ID tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage examples
 
@@ -19,7 +19,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase(),
+    auth: new MastraAuthFirebase(),
   },
 });
 ```
@@ -33,7 +33,7 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthFirebase({
+    auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account-key.json",
       databaseId: "your-database-id",
     }),
@@ -132,4 +132,4 @@ The `FirebaseUser` type used in the `authorizeUser` function corresponds to Fire
 
 ## Related
 
-[MastraAuthFirebase Class](/docs/auth/firebase)
+[MastraAuthFirebase Class](/docs/v1/auth/firebase)

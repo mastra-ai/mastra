@@ -1,6 +1,6 @@
 {
   "name": "@mastra/loggers",
-  "version": "0.10.17",
+  "version": "1.0.0-beta.0",
   "description": "",
   "type": "module",
   "files": [
@@ -87,5 +87,8 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

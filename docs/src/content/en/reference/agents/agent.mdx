@@ -110,13 +110,13 @@ export const agent = new Agent({
       type: "string",
       isOptional: true,
       description:
-        "Optional unique identifier for the agent. Defaults to `name` if not provided.",
+        "Unique identifier for the agent. Defaults to `name` if not provided.",
     },
     {
       name: "name",
       type: "string",
       isOptional: false,
-      description: "Unique identifier for the agent.",
+      description: "Display name for the agent. Used as the identifier if `id` is not provided.",
     },
     {
       name: "description",
@@ -244,5 +244,5 @@ export const agent = new Agent({
 
 ## Related
 
-- [Agents overview](/docs/agents/overview)
-- [Calling Agents](/examples/agents/calling-agents)
+- [Agents overview](/docs/v1/agents/overview)
+- [Calling Agents](/examples/v1/agents/calling-agents)

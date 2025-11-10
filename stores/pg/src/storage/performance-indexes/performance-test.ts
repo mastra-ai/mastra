@@ -37,6 +37,7 @@ export class PostgresPerformanceTest {
   constructor(config: PerformanceTestConfig) {
     this.config = config;
     this.store = new PostgresStore({
+      id: 'perf-test-store',
       connectionString: config.connectionString,
     });
   }
@@ -367,23 +368,21 @@ export class PostgresPerformanceTest {
     results.push(
       await this.measureOperation(
         'listThreadsByResourceId',
-        () => this.store.listThreadsByResourceId({ resourceId, offset: 0, limit: 20 }),
+        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
         scenario,
       ),
     );
 
-    // Test getMessages
     const threadId = 'thread_0';
-    results.push(await this.measureOperation('getMessages', () => this.store.getMessages({ threadId }), scenario));
-
-    // Test getMessagesPaginated
+    // Test listMessages
     results.push(
       await this.measureOperation(
-        'getMessagesPaginated',
+        'listMessages',
         () =>
-          this.store.getMessagesPaginated({
+          this.store.listMessages({
             threadId,
-            selectBy: { pagination: { page: 0, perPage: 20 } },
+            perPage: 20,
+            page: 0,
           }),
         scenario,
       ),
@@ -444,7 +443,7 @@ export class PostgresPerformanceTest {
       console.info('listThreadsByResourceId plan:');
       threadPlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
 
-      // Analyze getMessages query
+      // Analyze listMessages query
       const messagePlan = await db.manyOrNone(`
         EXPLAIN (ANALYZE false, FORMAT TEXT)
         SELECT id, content, role, type, "createdAt", thread_id AS "threadId", "resourceId"
@@ -452,7 +451,7 @@ export class PostgresPerformanceTest {
         WHERE thread_id = 'thread_0'
         ORDER BY "createdAt" DESC
       `);
-      console.info('\ngetMessages plan:');
+      console.info('\nlistMessages plan:');
       messagePlan.forEach(row => console.info('  ' + row['QUERY PLAN']));
     } catch (error) {
       console.warn('Could not analyze query plans:', error);

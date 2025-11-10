@@ -1,0 +1,81 @@
+---
+title: "Reference: Mastra.getMCPServerById() | Core | Mastra Docs"
+description: "Documentation for the `Mastra.getMCPServerById()` method in Mastra, which retrieves a specific MCP server instance by its intrinsic id property."
+---
+
+# Mastra.getMCPServerById()
+
+The `.getMCPServerById()` method retrieves an MCP server instance by its intrinsic `id` property. For retrieving by registry key (the key used in configuration), use `.getMCPServer()` instead.
+
+## Usage example
+
+```typescript copy
+// Register an MCP server with a registry key
+const myServer = new MCPServer({
+  id: 'my-mcp-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { /* ... */ },
+});
+
+export const mastra = new Mastra({
+  mcpServers: {
+    customKey: myServer,  // 'customKey' is the registry key
+  },
+});
+
+// Retrieve by intrinsic ID
+const server = mastra.getMCPServerById('my-mcp-server');
+
+// Alternatively, retrieve by registry key
+const serverByKey = mastra.getMCPServer('customKey');
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "serverId",
+      type: "string",
+      description:
+        "The intrinsic id property of the MCP server (set when the server was instantiated).",
+    },
+    {
+      name: "version",
+      type: "string",
+      description:
+        "Optional. If provided, returns the server only if its version matches.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "server",
+      type: "MCPServerBase | undefined",
+      description:
+        "The MCP server instance with the specified id (and version, if provided), or undefined if not found.",
+    },
+  ]}
+/>
+
+## Notes
+
+- The server's `id` is slugified during construction, so `'myMcpServer'` becomes `'my-mcp-server'`
+- If multiple servers have the same `id` but different versions, you must provide the `version` parameter to disambiguate
+- If no `version` is provided and multiple versions exist, the method returns the first match
+
+## Related Methods
+
+- [Mastra.getMCPServer()](/reference/v1/core/getMCPServer) - Retrieve an MCP server by its registry key
+- [Mastra.listMCPServers()](/reference/v1/core/listMCPServers) - List all registered MCP servers
+
+## See Also
+
+- [MCP overview](/docs/v1/tools-mcp/mcp-overview)
+- [MCP server reference](/reference/v1/tools/mcp-server)

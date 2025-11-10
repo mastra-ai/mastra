@@ -342,7 +342,7 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRunAsync(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -645,18 +645,6 @@ export class EventedRun<
       data: {
         workflowId: this.workflowId,
         runId: this.runId,
-      },
-    });
-  }
-
-  async sendEvent(eventName: string, data: any) {
-    await this.mastra?.pubsub.publish('workflows', {
-      type: `workflow.user-event.${eventName}`,
-      runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-        resumeData: data,
       },
     });
   }

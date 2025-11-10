@@ -85,7 +85,6 @@ export class StepExecutor extends MastraBase {
               // TODO
               params.state = state;
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -124,6 +123,7 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
+          ...(stepResult ? { suspendOutput: stepResult } : {}),
         };
 
         if (suspended.payload) {
@@ -255,7 +255,6 @@ export class StepExecutor extends MastraBase {
           setState: (_state: any) => {
             // TODO
           },
-          runCount: retryCount,
           retryCount,
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
@@ -326,7 +325,6 @@ export class StepExecutor extends MastraBase {
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
@@ -400,7 +398,6 @@ export class StepExecutor extends MastraBase {
             setState: (_state: any) => {
               // TODO
             },
-            runCount: retryCount,
             retryCount,
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,

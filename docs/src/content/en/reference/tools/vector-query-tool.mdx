@@ -326,7 +326,7 @@ This agent-driven approach:
 
 For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
-For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](/examples/rag/usage/filter-rag) example.
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](/examples/v1/rag/usage/filter-rag) example.
 
 ## Example with Reranking
 
@@ -567,8 +567,8 @@ const response = await agent.generate(
 
 For more information on request context, please see:
 
-- [Agent Request Context](/docs/server-db/request-context)
-- [Tool Request Context](/docs/tools-mcp/overview#using-requestcontext)
+- [Agent Request Context](/docs/v1/server-db/request-context)
+- [Tool Request Context](/docs/v1/tools-mcp/overview#using-requestcontext)
 
 ## Usage Without a Mastra Server
 
@@ -581,6 +581,7 @@ import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
 
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
