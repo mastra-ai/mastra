@@ -4,7 +4,7 @@ export const BUNDLE = [
   'v1/runtime-context',
   'v1/mastra-memory',
   'v1/mastra-plural-apis',
-  'v1/mastra-required-id',
+  'v1/not-implemented/mastra-required-id',
   'v1/agent-property-access',
   'v1/agent-voice',
   'v1/agent-processor-methods',

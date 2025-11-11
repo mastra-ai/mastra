@@ -1,11 +1,11 @@
-// Adjusted from https://github.com/vercel/ai/blob/main/packages/codemod/src/lib/transform.ts
-// License: Apache-2.0
-
-import { execSync } from 'child_process';
 import fs from 'fs';
+import child_process from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import util from 'node:util';
 import path from 'path';
 import debug from 'debug';
+
+const exec = util.promisify(child_process.exec);
 
 interface TransformOptions {
   dry?: boolean;
@@ -93,12 +93,12 @@ function parseNotImplementedErrors(transform: string, output: string): Transform
   return notImplementedErrors;
 }
 
-export function transform(
+export async function transform(
   codemod: string,
   source: string,
   transformOptions: TransformOptions,
   options: { logStatus: boolean } = { logStatus: true },
-): { errors: TransformErrors; notImplementedErrors: TransformErrors } {
+): Promise<{ errors: TransformErrors; notImplementedErrors: TransformErrors }> {
   if (options.logStatus) {
     log(`Applying codemod '${codemod}': ${source}`);
   }
@@ -106,7 +106,7 @@ export function transform(
   const targetPath = path.resolve(source);
   const jscodeshift = getJscodeshift();
   const command = buildCommand(codemodPath, targetPath, jscodeshift, transformOptions);
-  const stdout = execSync(command, { encoding: 'utf8', stdio: 'pipe' });
+  const { stdout } = await exec(command, { encoding: 'utf8' });
   const errors = parseErrors(codemod, stdout);
   const notImplementedErrors = parseNotImplementedErrors(codemod, stdout);
   if (options.logStatus) {

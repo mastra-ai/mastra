@@ -19,9 +19,9 @@ program
   .option('-p, --print', 'Print transformed files to stdout')
   .option('--verbose', 'Show more information about the transform process')
   .option('-j, --jscodeshift <options>', 'Pass options directly to jscodeshift')
-  .action((codemod, source, options) => {
+  .action(async (codemod, source, options) => {
     try {
-      transform(codemod, source, options);
+      await transform(codemod, source, options);
     } catch (err: any) {
       error(`Error transforming: ${err}`);
       process.exit(1);
@@ -35,9 +35,9 @@ program
   .option('-p, --print', 'Print transformed files to stdout')
   .option('--verbose', 'Show more information about the transform process')
   .option('-j, --jscodeshift <options>', 'Pass options directly to jscodeshift')
-  .action(options => {
+  .action(async options => {
     try {
-      upgradeV1(options);
+      await upgradeV1(options);
     } catch (err: any) {
       error(`Error transforming: ${err}`);
       process.exit(1);

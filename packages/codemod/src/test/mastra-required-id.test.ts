@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import transformer from '../codemods/v1/mastra-required-id';
+import transformer from '../codemods/v1/not-implemented/mastra-required-id';
 import { testTransform, applyTransform } from './test-utils';
 
 describe('mastra-required-id', () => {

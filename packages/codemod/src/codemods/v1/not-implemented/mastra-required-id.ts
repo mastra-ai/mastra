@@ -1,6 +1,6 @@
 /* eslint-disable no-warning-comments */
-import { insertCommentOnce } from '../lib/add-comment';
-import { createTransformer } from '../lib/create-transformer';
+import { insertCommentOnce } from '../../lib/add-comment';
+import { createTransformer } from '../../lib/create-transformer';
 
 /**
  * Adds FIXME comments to Mastra primitives that now require an `id` parameter.
@@ -128,6 +128,6 @@ export default createTransformer((fileInfo, api, options, context) => {
   });
 
   if (context.hasChanges) {
-    context.messages.push('Added FIXME comments for Mastra primitives that now require an id parameter');
+    context.messages.push(`Not Implemented ${fileInfo.path}: Mastra primitives now require a unique id parameter.`);
   }
 });

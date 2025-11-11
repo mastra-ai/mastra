@@ -1,4 +1,4 @@
-import { progress } from '@clack/prompts';
+import { spinner, intro, outro } from '@clack/prompts';
 import debug from 'debug';
 import { BUNDLE } from './bundle';
 import type { TransformErrors } from './transform';
@@ -17,27 +17,29 @@ const error = debug('codemod:upgrade:error');
 // Extract v1 codemods from the bundle
 const v1Bundle = BUNDLE.filter(codemod => codemod.startsWith('v1/'));
 
-function runCodemods(codemods: string[], options: TransformOptions, versionLabel: string) {
+async function runCodemods(codemods: string[], options: TransformOptions, versionLabel: string) {
   const cwd = process.cwd();
-  log(`Starting ${versionLabel} codemods...`);
+  intro(`Starting ${versionLabel} codemods`);
   const modCount = codemods.length;
-  const p = progress({ size: modCount });
+  const s = spinner();
 
-  p.start('Starting...');
+  s.start(`Running ${modCount} ${versionLabel} codemods`);
 
   const allErrors: TransformErrors = [];
   let notImplementedAvailable = false;
+  let count = 0;
   for (const [_, codemod] of codemods.entries()) {
-    const { errors, notImplementedErrors } = transform(codemod, cwd, options, {
+    const { errors, notImplementedErrors } = await transform(codemod, cwd, options, {
       logStatus: false,
     });
     allErrors.push(...errors);
     if (notImplementedErrors.length > 0) {
       notImplementedAvailable = true;
     }
-    p.advance(1, `Codemod: ${codemod}`);
+    count++;
+    s.message(`Codemod ${count}/${modCount} (${codemod})`);
   }
-  p.stop('Ran all codemods.');
+  s.stop(`Ran ${count}/${modCount} codemods.`);
 
   if (allErrors.length > 0) {
     log(`Some ${versionLabel} codemods did not apply successfully to all files. Details:`);
@@ -52,9 +54,9 @@ function runCodemods(codemods: string[], options: TransformOptions, versionLabel
     );
   }
 
-  log(`${versionLabel} codemods complete.`);
+  outro(`${versionLabel} codemods complete.`);
 }
 
-export function upgradeV1(options: TransformOptions) {
-  runCodemods(v1Bundle, options, 'v1');
+export async function upgradeV1(options: TransformOptions) {
+  await runCodemods(v1Bundle, options, 'v1');
 }
