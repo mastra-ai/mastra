@@ -33,7 +33,7 @@ export interface WorkflowDefaultNodeProps {
 }
 
 export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
-  const { steps, runId } = useCurrentRun();
+  const { steps } = useCurrentRun();
   const {
     label,
     stepId,
@@ -153,6 +153,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}
+          suspendOutput={step?.suspendOutput}
           error={step?.error}
           mapConfig={mapConfig}
           status={step?.status}

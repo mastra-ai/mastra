@@ -9,6 +9,26 @@ Storage APIs have been standardized with consistent pagination and naming patter
 
 ## Changed
 
+### Required `id` property for storage instances
+
+Storage instances now require an `id` property. This unique identifier is used for tracking and managing storage instances within Mastra. The `id` should be a descriptive, unique string for each storage instance in your application.
+
+To migrate, add an `id` field to your storage constructor.
+
+```diff
+  const storage = new PostgresStore({
++   id: 'main-postgres-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+    schemaName: 'public',
+  });
+
+  const upstashStore = new UpstashStore({
++   id: 'upstash-cache-store',
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
+```
+
 ### Pagination from `offset/limit` to `page/perPage`
 
 All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`. This change provides a more intuitive pagination model that aligns with common web pagination patterns.

@@ -138,6 +138,10 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
           inputData: {
             city: messages[messages.length - 1].parts[0].text,
           },
+          //Or resumeData for resuming a suspended workflow
+          resumeData: {
+            confirmation: messages[messages.length - 1].parts[0].text
+          }
         },
       };
     },

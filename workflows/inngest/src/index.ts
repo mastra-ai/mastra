@@ -1665,7 +1665,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       };
       stepResults: Record<
         string,
-        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
       >;
       executionContext: ExecutionContext;
     };
@@ -1759,7 +1759,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           };
         } catch (e) {
-          const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } = {
+          const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } = {
             status: 'failed',
             payload: inputData,
             error: e instanceof Error ? e.message : String(e),
@@ -1782,6 +1782,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           execResults = {
             status: 'suspended',
             suspendPayload: suspended.payload,
+            ...(execResults.output ? { suspendOutput: execResults.output } : {}),
             payload: inputData,
             suspendedAt: Date.now(),
             startedAt,
@@ -1829,9 +1830,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return { result: execResults, executionContext, stepResults };
       });
     } catch (e) {
-      const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } =
+      const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
         e instanceof Error
-          ? (e?.cause as unknown as Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+          ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
           : {
               status: 'failed' as const,
               error: e instanceof Error ? e.message : String(e),
@@ -2113,12 +2114,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return result;
       }),
     );
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', suspendPayload: hasSuspended.suspendPayload };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      };
     } else {
       execResults = {
         status: 'success',
