@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import transformer from '../codemods/v1/agent-format-parameter';
+import transformer from '../codemods/v1/not-implemented/agent-format-parameter';
 import { testTransform, applyTransform } from './test-utils';
 
 describe('agent-format-parameter', () => {

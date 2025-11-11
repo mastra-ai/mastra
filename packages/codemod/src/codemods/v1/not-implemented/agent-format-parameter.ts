@@ -1,6 +1,6 @@
 /* eslint-disable no-warning-comments */
-import { insertCommentOnce } from '../lib/add-comment';
-import { createTransformer } from '../lib/create-transformer';
+import { insertCommentOnce } from '../../lib/add-comment';
+import { createTransformer } from '../../lib/create-transformer';
 
 /**
  * Adds a FIXME comment above the format parameter in agent.generate() and agent.stream() calls.
@@ -80,6 +80,6 @@ export default createTransformer((fileInfo, api, options, context) => {
     });
 
   if (context.hasChanges) {
-    context.messages.push('Added FIXME comments for format parameter in agent.generate() and agent.stream() calls');
+    context.messages.push(`Not Implemented ${fileInfo.path}: The format 'aisdk' parameter has been removed.`);
   }
 });

@@ -1,6 +1,6 @@
 /* eslint-disable no-warning-comments */
-import { insertCommentOnce } from '../lib/add-comment';
-import { createTransformer } from '../lib/create-transformer';
+import { insertCommentOnce } from '../../lib/add-comment';
+import { createTransformer } from '../../lib/create-transformer';
 
 /**
  * Adds FIXME comment when Mastra config includes a memory property.
@@ -64,6 +64,6 @@ export default createTransformer((fileInfo, api, options, context) => {
     });
 
   if (context.hasChanges) {
-    context.messages.push('Added FIXME comments for Mastra configurations with memory property');
+    context.messages.push(`Not Implemented ${fileInfo.path}: The memory property has been removed.`);
   }
 });

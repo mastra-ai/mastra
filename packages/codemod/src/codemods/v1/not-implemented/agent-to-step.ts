@@ -1,6 +1,6 @@
 /* eslint-disable no-warning-comments */
-import { insertCommentOnce } from '../lib/add-comment';
-import { createTransformer } from '../lib/create-transformer';
+import { insertCommentOnce } from '../../lib/add-comment';
+import { createTransformer } from '../../lib/create-transformer';
 
 /**
  * Adds a FIXME comment above agent.toStep() method calls.
@@ -74,6 +74,6 @@ export default createTransformer((fileInfo, api, options, context) => {
     });
 
   if (context.hasChanges) {
-    context.messages.push('Added FIXME comments for agent.toStep() method calls');
+    context.messages.push(`Not Implemented ${fileInfo.path}: The toStep() method has been removed.`);
   }
 });

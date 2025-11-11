@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import transformer from '../codemods/v1/mastra-memory';
+import transformer from '../codemods/v1/not-implemented/mastra-memory';
 import { testTransform, applyTransform } from './test-utils';
 
 describe('mastra-memory', () => {

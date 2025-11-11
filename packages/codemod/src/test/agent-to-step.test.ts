@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import transformer from '../codemods/v1/agent-to-step';
+import transformer from '../codemods/v1/not-implemented/agent-to-step';
 import { testTransform, applyTransform } from './test-utils';
 
 describe('agent-to-step', () => {
