@@ -1,112 +1,218 @@
 ---
-title: "Azure OpenAI"
-description: "Use Azure OpenAI models with Mastra"
+title: "Azure OpenAI | Models | Mastra"
+description: "Use Azure OpenAI models with Mastra. Deploy OpenAI models in your Azure environment."
 ---
 
 {/* MANUAL DOCUMENTATION - DO NOT AUTO-GENERATE */}
 
-# Azure OpenAI
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
-Azure OpenAI Service provides access to OpenAI models through Microsoft Azure infrastructure.
+# <img src="https://models.dev/logos/azure.svg" alt="Azure logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Azure OpenAI
+
+Azure OpenAI Service provides access to OpenAI's models through Microsoft Azure infrastructure. Unlike the standard OpenAI provider, Azure OpenAI uses **deployment-based model names** that you configure in the Azure Portal.
 
 ## Prerequisites
 
-1. **Azure OpenAI Resource:** Create an Azure OpenAI resource in the Azure Portal
-2. **Model Deployment:** Deploy a model (e.g., GPT-4) in your Azure resource
-3. **Deployment Name:** Note your deployment name (you'll use this in model IDs)
+Before using Azure OpenAI with Mastra, you need to:
+
+1. **Create an Azure OpenAI resource** in the [Azure Portal](https://portal.azure.com)
+2. **Deploy a model** to your Azure OpenAI resource (e.g., gpt-4, gpt-35-turbo)
+3. **Note your deployment name** - this is what you'll use in Mastra, not the underlying model name
 
 ## Environment Variables
 
-Set these environment variables:
-
 ```bash
 # Required
-AZURE_RESOURCE_NAME=your-resource-name  # Just the name, not the full URL
-AZURE_API_KEY=your-api-key
+AZURE_RESOURCE_NAME=your-resource-name  # From Azure Portal (e.g., "my-openai-resource")
+AZURE_API_KEY=your-api-key              # From Azure Portal "Keys and Endpoint"
 
-# Optional (defaults to '2024-10-21')
-OPENAI_API_VERSION=2024-10-21
+# Optional
+OPENAI_API_VERSION=2024-10-21          # Defaults to 2024-10-21 if not specified
 ```
+
+### Understanding AZURE_RESOURCE_NAME
+
+The `AZURE_RESOURCE_NAME` is the name of your Azure OpenAI resource as it appears in the Azure Portal. For example, if your Azure OpenAI endpoint is:
+
+```
+https://my-openai-resource.openai.azure.com/
+```
+
+Then your `AZURE_RESOURCE_NAME` should be:
+
+```bash
+AZURE_RESOURCE_NAME=my-openai-resource
+```
+
+**Important:** Use only the resource name, not the full URL.
 
 ## Model ID Format
 
-Use `azure/<deployment-name>` format:
+Azure OpenAI uses a unique model ID format in Mastra:
 
 ```typescript
-import { Agent } from '@mastra/core';
+model: "azure/<deployment-name>"
+```
+
+The `<deployment-name>` is the name you assigned when deploying the model in Azure Portal, **not** the underlying OpenAI model name.
+
+### Example
+
+If you deployed `gpt-4` in Azure Portal and named the deployment `my-gpt4-deployment`, you would use:
+
+```typescript
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "azure/my-gpt4-deployment"
+});
+```
+
+## Basic Usage
+
+```typescript
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  model: 'azure/gpt-4.1-mini',  // Your deployment name
-  // ... other config
+  id: "azure-agent",
+  name: "Azure Agent",
+  instructions: "You are a helpful assistant",
+  model: "azure/my-gpt4-deployment"  // Use your Azure deployment name
 });
+
+// Generate a response
+const response = await agent.generate("Hello!");
+console.log(response.text);
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
 ```
 
 ## Important Notes
 
-### Deployment Names
-- The model ID must match your **deployment name** in Azure, not the model name
-- Example: If you named your deployment "my-gpt4", use `azure/my-gpt4`
-- Common pattern: Deploy with names like `gpt-4.1-mini`, `gpt-4o`, etc.
+### Deployment Names vs Model Names
 
-### Resource Name
-- Use just the resource name, not the full URL
-- Example: If your endpoint is `https://my-resource.openai.azure.com`, use `AZURE_RESOURCE_NAME=my-resource`
+- **Deployment Name**: The name you choose in Azure Portal (e.g., "my-gpt4-deployment", "production-gpt35")
+- **Model Name**: The underlying OpenAI model (e.g., "gpt-4", "gpt-35-turbo")
+
+Mastra uses the **deployment name**, which can be different from the underlying model name. This allows you to:
+- Use descriptive names that match your deployment strategy
+- Have multiple deployments of the same model with different configurations
+- Easily switch between development and production deployments
 
 ### API Versions
-- Defaults to `2024-10-21` (stable)
-- Override with `OPENAI_API_VERSION` env var
-- See [Azure OpenAI API versions](https://learn.microsoft.com/azure/ai-services/openai/api-version-deprecation)
 
-## Example
+Azure OpenAI API versions evolve over time. The default version (`2024-10-21`) is set automatically, but you can override it:
 
-```typescript
-// Set environment variables
-process.env.AZURE_RESOURCE_NAME = 'my-resource';
-process.env.AZURE_API_KEY = 'abc123...';
-process.env.OPENAI_API_VERSION = '2024-10-21';
-
-// Create agent with Azure model
-const agent = new Agent({
-  model: 'azure/gpt-4.1-mini',
-  instructions: 'You are a helpful assistant',
-});
-
-// Generate response
-const response = await agent.generate('Hello!');
+```bash
+OPENAI_API_VERSION=2025-04-01-preview
 ```
 
-## Common Models
+Check the [Azure OpenAI API versions documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/api-version-deprecation) for the latest available versions.
 
-Assuming you've deployed these models with matching names:
+## Advanced Configuration
 
-- `azure/gpt-4` - GPT-4
-- `azure/gpt-4.1` - GPT-4 Turbo
-- `azure/gpt-4.1-mini` - GPT-4 Mini
-- `azure/gpt-4o` - GPT-4o
-- `azure/o1` - o1
-- `azure/o1-mini` - o1 Mini
-- `azure/o1-preview` - o1 Preview
+### Custom Headers
 
-**Note:** Azure OpenAI supports 25+ additional models through Mastra's model router, including GPT-3.5 variants, GPT-5 series, o3/o4 models, and Codex. Use `azure/<your-deployment-name>` for any model deployed in your Azure resource.
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "Custom Agent",
+  model: {
+    id: "azure/my-deployment",
+    apiKey: process.env.AZURE_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "azure/gpt4-deployment"
+      : "azure/gpt35-deployment";
+  }
+});
+```
 
 ## Troubleshooting
 
 ### "AZURE_RESOURCE_NAME environment variable is required"
-- Ensure `AZURE_RESOURCE_NAME` is set in your environment
-- Use just the resource name, not the full URL
 
-### "DeploymentNotFound" error from Azure
-- Your deployment name in Azure doesn't match the model ID
-- Check your deployment name in Azure Portal
-- Use `azure/<your-actual-deployment-name>`
+Make sure you've set the `AZURE_RESOURCE_NAME` environment variable to your Azure OpenAI resource name (not the full URL).
 
-### Authentication errors
-- Verify `AZURE_API_KEY` is correct
-- Check key hasn't expired in Azure Portal
-- Ensure resource has proper permissions
+```bash
+# Correct
+AZURE_RESOURCE_NAME=my-openai-resource
+
+# Incorrect
+AZURE_RESOURCE_NAME=https://my-openai-resource.openai.azure.com/
+```
+
+### "Could not find API key process.env.AZURE_API_KEY"
+
+Ensure the `AZURE_API_KEY` environment variable is set with your Azure OpenAI API key from the Azure Portal.
+
+### "Deployment not found"
+
+Verify that:
+1. The deployment name in your model ID matches exactly what's in Azure Portal
+2. The deployment is in an "Active" state in Azure Portal
+3. You're using the correct Azure resource name
+
+### Connection Issues
+
+If you experience connection issues:
+1. Verify your Azure OpenAI resource is in an active region
+2. Check that your API key is valid and hasn't expired
+3. Ensure your Azure subscription is active
+4. Review Azure service health status
+
+## Common Deployment Patterns
+
+While you can name your Azure deployments anything, here are common patterns:
+
+```typescript
+// Development
+model: "azure/dev-gpt4"
+model: "azure/dev-gpt35-turbo"
+
+// Production
+model: "azure/prod-gpt4"
+model: "azure/prod-gpt35-turbo"
+
+// By use case
+model: "azure/customer-support-gpt4"
+model: "azure/content-generation-gpt35"
+```
 
 ## Additional Resources
 
-- [Azure OpenAI Documentation](https://learn.microsoft.com/azure/ai-services/openai/)
-- [Azure OpenAI Quickstart](https://learn.microsoft.com/azure/ai-services/openai/quickstart)
+- [Azure OpenAI Service Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+- [Azure OpenAI Quickstart](https://learn.microsoft.com/en-us/azure/ai-services/openai/quickstart)
+- [Azure OpenAI Models](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models)
+- [Azure OpenAI Pricing](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/)
 - [AI SDK Azure Provider](https://ai-sdk.dev/providers/ai-sdk-providers/azure)
+
+## Direct Provider Installation
+
+This provider uses the AI SDK Azure package:
+
+```bash npm2yarn copy
+npm install @ai-sdk/azure
+```
+
+For detailed provider-specific documentation, see the [AI SDK Azure provider docs](https://ai-sdk.dev/providers/ai-sdk-providers/azure).
