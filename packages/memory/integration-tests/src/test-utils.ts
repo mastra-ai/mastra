@@ -157,7 +157,7 @@ export function filterToolResultsByName(messages: CoreMessage[], name: string) {
 
 export function filterMastraToolCallsByName(messages: MastraDBMessage[], name: string) {
   return messages.filter(m =>
-    m.content.parts.some(
+    m?.content?.parts?.some(
       part =>
         part.type === 'tool-invocation' &&
         part.toolInvocation.state === 'call' &&
@@ -168,7 +168,7 @@ export function filterMastraToolCallsByName(messages: MastraDBMessage[], name: s
 
 export function filterMastraToolResultsByName(messages: MastraDBMessage[], name: string) {
   return messages.filter(m =>
-    m.content.parts.some(
+    m?.content?.parts?.some(
       part =>
         part.type === 'tool-invocation' &&
         part.toolInvocation.state === 'result' &&
