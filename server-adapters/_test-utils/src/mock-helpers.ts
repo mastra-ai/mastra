@@ -1,61 +1,49 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { MockMemory } from '@mastra/core/memory';
-import { InMemoryStore } from '@mastra/core/storage';
-import { createTool } from '@mastra/core/tools';
-import { MastraVector } from '@mastra/core/vector';
-import { CompositeVoice } from '@mastra/core/voice';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { vi } from 'vitest';
 import type { AdapterTestContext } from './route-adapter-test-suite';
+import { Workflow } from '@mastra/core/workflows';
+import { createScorer } from '@mastra/core/evals';
+import { SpanType } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
+import { CompositeVoice } from '@mastra/core/voice';
+import { MockMemory } from '@mastra/core/memory';
+import { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { MastraVector } from '@mastra/core/vector';
+import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import type { ZodTypeAny } from 'zod';
+
+vi.mock('@mastra/core/vector');
+
+vi.mock('zod', async importOriginal => {
+  const actual: {} = await importOriginal();
+  return {
+    ...actual,
+    object: vi.fn(() => ({
+      parse: vi.fn(input => input),
+      safeParse: vi.fn(input => ({ success: true, data: input })),
+    })),
+    string: vi.fn(() => ({
+      parse: vi.fn(input => input),
+    })),
+  };
+});
+
+const z = require('zod');
 
 /**
- * Create a mock test tool
- */
-export function createTestTool() {
-  return createTool({
-    id: 'test-tool',
-    description: 'A test tool',
-    inputSchema: { type: 'object', properties: {} },
-    outputSchema: { type: 'object', properties: {} },
-    execute: async () => ({ result: 'test' }),
-  });
-}
-
-/**
- * Create a mock voice provider
- */
-export function createMockVoice() {
-  const voice = new CompositeVoice({});
-
-  // Mock voice methods to avoid "No provider configured" errors
-  vi.spyOn(voice, 'getSpeakers').mockResolvedValue([]);
-  vi.spyOn(voice, 'getListener').mockResolvedValue({ enabled: false } as any);
-
-  return voice;
-}
-
-/**
- * Create a mock memory instance
- */
-export function createMockMemory() {
-  const storage = new InMemoryStore();
-  const mockMemory = new MockMemory({ storage });
-
-  return mockMemory;
-}
-
-/**
- * Create a test agent with all necessary mocks
+ * Creates a test agent with all common mocks configured
  */
 export function createTestAgent(
-  options: {
+  overrides: {
     name?: string;
     description?: string;
     instructions?: string;
     tools?: Record<string, any>;
-    voice?: any;
-    memory?: any;
+    voice?: CompositeVoice;
+    memory?: MockMemory;
     model?: any;
   } = {},
 ) {
@@ -64,23 +52,36 @@ export function createTestAgent(
   const mockMemory = createMockMemory();
 
   const agent = new Agent({
-    name: options.name || 'test-agent',
-    description: options.description || 'A test agent',
-    instructions: options.instructions || 'Test instructions',
-    model: options.model || 'openai/gpt-4.1',
-    tools: options.tools || { 'test-tool': testTool },
-    voice: options.voice || mockVoice,
-    memory: options.memory || mockMemory,
+    name: overrides.name || 'test-agent',
+    description: overrides.description || 'A test agent',
+    instructions: overrides.instructions || 'Test instructions',
+    model: overrides.model || 'openai/gpt-4o',
+    tools: overrides.tools || { 'test-tool': testTool },
+    voice: overrides.voice || mockVoice,
+    memory: overrides.memory || mockMemory,
   });
 
   return agent;
 }
 
 /**
- * Mock all agent methods that would normally require API calls
+ * Creates a mock vector for testing (following handler test pattern)
  */
+export function createMockVector() {
+  // @ts-expect-error - Mocking for tests
+  const mockVector: MastraVector = new MastraVector();
+  mockVector.upsert = vi.fn().mockResolvedValue(['id1', 'id2']);
+  mockVector.createIndex = vi.fn().mockResolvedValue(undefined);
+  mockVector.query = vi.fn().mockResolvedValue([{ id: '1', score: 0.9, vector: [1, 2, 3] }]);
+  mockVector.listIndexes = vi.fn().mockResolvedValue(['test-index']);
+  mockVector.describeIndex = vi.fn().mockResolvedValue({ dimension: 3, count: 100, metric: 'cosine' });
+  mockVector.deleteIndex = vi.fn().mockResolvedValue(undefined);
+
+  return mockVector;
+}
+
 export function mockAgentMethods(agent: Agent) {
-  // Mock generate method
+  // Mock agent methods that would normally require API calls
   vi.spyOn(agent, 'generate').mockResolvedValue({ text: 'test response' } as any);
 
   // Create a reusable mock stream that returns a proper ReadableStream
@@ -115,72 +116,81 @@ export function mockAgentMethods(agent: Agent) {
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
 
-  // Mock getVoice to return the voice object
+  // Mock getVoice to return the voice object that the handler expects
   const mockVoice = createMockVoice();
-  vi.spyOn(agent, 'getVoice').mockReturnValue(mockVoice);
+
+  // Mock voice methods to avoid "No listener/speaker provider configured" errors
+  vi.spyOn(mockVoice, 'getSpeakers').mockResolvedValue([]);
+  vi.spyOn(mockVoice, 'getListener').mockResolvedValue({ enabled: false } as any);
+  vi.spyOn(mockVoice, 'speak').mockResolvedValue(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('mock audio data'));
+        controller.close();
+      },
+    }) as any,
+  );
+  vi.spyOn(mockVoice, 'listen').mockResolvedValue('transcribed text');
+
+  vi.spyOn(agent, 'getVoice').mockResolvedValue(mockVoice);
+
+  // Mock model list methods with proper model data structure
+  vi.spyOn(agent, 'getModelList').mockResolvedValue([
+    {
+      id: 'id1',
+      modelId: 'gpt-4o',
+      provider: 'openai',
+      model: {
+        modelId: 'gpt-4o',
+        provider: 'openai',
+        specificationVersion: 'v1',
+      },
+    },
+    {
+      id: 'id2',
+      modelId: 'gpt-4o-mini',
+      provider: 'openai',
+      model: {
+        modelId: 'gpt-4o-mini',
+        provider: 'openai',
+        specificationVersion: 'v1',
+      },
+    },
+  ] as any);
+
+  return agent;
 }
 
-/**
- * Create a test workflow with mocked methods
- */
-export function createTestWorkflow(
-  options: {
-    id?: string;
-    description?: string;
-  } = {},
-) {
-  const workflow = createWorkflow({
-    id: options.id || 'test-workflow',
-    description: options.description || 'A test workflow',
-  })
-    .step(
-      createStep({
-        id: 'step-1',
-        execute: async () => ({ result: 'test' }),
-      }),
-    )
-    .commit();
-
-  return workflow;
-}
-
-/**
- * Mock workflow execution methods
- */
-export function mockWorkflowMethods(workflow: any) {
-  // Create a mock stream for workflow execution
-  const createMockWorkflowStream = () => {
-    return {
-      fullStream: new ReadableStream({
-        start(controller) {
-          controller.enqueue({ type: 'step-start', stepId: 'step-1' });
-          controller.enqueue({ type: 'step-end', stepId: 'step-1', result: { result: 'test' } });
-          controller.close();
-        },
-      }),
-    };
-  };
-
-  // Mock execute method
-  vi.spyOn(workflow, 'execute').mockResolvedValue({ result: 'test' });
-
-  // Mock stream methods
-  vi.spyOn(workflow, 'stream').mockResolvedValue(createMockWorkflowStream() as any);
-  vi.spyOn(workflow, 'streamVNext').mockResolvedValue(createMockWorkflowStream() as any);
-}
+// Mock legacy workflow stream methods
+const createMockWorkflowStream = () => {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"step-result","result":"test"}\n\n'));
+      controller.close();
+    },
+  });
+};
 
 /**
  * Create a default test context with mocked Mastra instance, agents, workflows, etc.
  * This provides everything needed for adapter integration tests.
  */
-export function createDefaultTestContext(): AdapterTestContext {
+export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Create test agent with mocks
   const agent = createTestAgent({ name: 'test-agent' });
   mockAgentMethods(agent);
 
   // Create test workflow with mocks
   const workflow = createTestWorkflow({ id: 'test-workflow' });
-  mockWorkflowMethods(workflow);
+  const mergeTemplateWorkflow = createTestWorkflow({ id: 'merge-template' });
+  const workflowBuilderWorkflow = createTestWorkflow({ id: 'workflow-builder' });
+
+  // Create test scorer
+  const testScorer = createScorer({
+    id: 'test-scorer',
+    name: 'Test Scorer',
+    description: 'Test scorer for observability tests',
+  });
 
   // Create Mastra instance with all test entities
   const mastra = new Mastra({
@@ -190,10 +200,184 @@ export function createDefaultTestContext(): AdapterTestContext {
     },
     workflows: {
       'test-workflow': workflow,
+      'merge-template': mergeTemplateWorkflow,
+      'workflow-builder': workflowBuilderWorkflow,
     },
+    scorers: { 'test-scorer': testScorer },
   });
+
+  await mockWorkflowRun(workflow);
+  await mockWorkflowRun(mergeTemplateWorkflow);
+  await mockWorkflowRun(workflowBuilderWorkflow);
+
+  // Add test trace by creating a span with that traceId
+  const storage = mastra.getStorage();
+  if (storage) {
+    await storage.createSpan({
+      spanId: 'test-span-1',
+      traceId: 'test-trace',
+      parentSpanId: null,
+      name: 'test-span',
+      scope: null,
+      spanType: SpanType.GENERIC,
+      attributes: {},
+      metadata: null,
+      links: null,
+      startedAt: new Date(),
+      endedAt: new Date(),
+      input: null,
+      output: null,
+      error: null,
+      isEvent: false,
+    });
+  }
 
   return {
     mastra,
+  };
+}
+
+async function mockWorkflowRun(workflow: Workflow) {
+  const workflowBuilderRun = await workflow.createRun({
+    runId: 'test-run',
+  });
+  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+  // observeStreamLegacy returns an object with a stream property
+  vi.spyOn(workflowBuilderRun, 'observeStreamLegacy').mockReturnValue({
+    stream: createMockWorkflowStream(),
+  } as any);
+  await workflowBuilderRun.start({ inputData: {} }).catch(() => {});
+}
+
+/**
+ * Create a mock RequestContext
+ */
+export function createMockRequestContext(context?: Record<string, any>): RequestContext {
+  const requestContext = new RequestContext();
+  if (context) {
+    Object.entries(context).forEach(([key, value]) => {
+      requestContext.set(key, value);
+    });
+  }
+  return requestContext;
+}
+
+/**
+ * Pre-populates a taskStore with test tasks
+ */
+export async function populateTaskStore(taskStore: any, tasks: Array<{ agentId: string; task: any }>) {
+  for (const { agentId, task } of tasks) {
+    await taskStore.save({ agentId, data: task });
+  }
+}
+
+/**
+ * Creates a mock voice provider
+ */
+export function createMockVoice() {
+  return new CompositeVoice({});
+}
+
+/**
+ * Creates an InMemoryTaskStore for A2A testing
+ */
+export function createTaskStore() {
+  // Import InMemoryTaskStore dynamically to avoid circular deps
+  return new InMemoryTaskStore();
+}
+
+/**
+ * Creates a test tool with basic schema
+ */
+export function createTestTool(
+  overrides: {
+    id?: string;
+    description?: string;
+    inputSchema?: ZodTypeAny;
+    outputSchema?: ZodTypeAny;
+    execute?: (input: any) => Promise<any>;
+  } = {},
+) {
+  return createTool({
+    id: overrides.id || 'test-tool',
+    description: overrides.description || 'A test tool',
+    inputSchema: overrides.inputSchema || z.object({ key: z.string() }),
+    outputSchema: overrides.outputSchema || z.object({ result: z.string() }),
+    execute: overrides.execute || (async _inputData => ({ result: 'success' })),
+  });
+}
+
+/**
+ * Creates a mock memory instance with InMemoryStore
+ * Following the pattern from handler tests - uses actual MockMemory implementation
+ */
+export function createMockMemory() {
+  const storage = new InMemoryStore();
+  const mockMemory = new MockMemory({ storage });
+  (mockMemory as any).__registerMastra = vi.fn();
+  return mockMemory;
+}
+
+/**
+ * Creates a test workflow with a suspending step
+ * Following the pattern from handler tests - always includes suspend for resume tests
+ */
+export function createTestWorkflow(
+  overrides: {
+    id?: string;
+    description?: string;
+  } = {},
+) {
+  const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+  const stepA = createStep({
+    id: 'test-step',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async ({ suspend }: any) => {
+      await suspend({ test: 'data' });
+    },
+  });
+  const stepB = createStep({
+    id: 'test-step2',
+    inputSchema: z.object({ name: z.string() }),
+    outputSchema: z.object({ result: z.string() }),
+    execute,
+  });
+
+  return createWorkflow({
+    id: overrides.id || 'test-workflow',
+    description: overrides.description || 'A test workflow',
+    steps: [stepA, stepB],
+    inputSchema: z.object({}),
+    outputSchema: z.object({ result: z.string() }),
+  })
+    .then(stepA)
+    .then(stepB)
+    .commit();
+}
+
+/**
+ * Creates a test task for A2A routes
+ */
+export function createTestTask(
+  overrides: {
+    taskId?: string;
+    agentId?: string;
+    contextId?: string;
+    state?: string;
+  } = {},
+) {
+  return {
+    id: overrides.taskId || 'test-task-id',
+    contextId: overrides.contextId || 'test-context-id',
+    state: overrides.state || 'completed',
+    artifacts: [],
+    metadata: {},
+    message: {
+      messageId: 'test-message-id',
+      kind: 'message' as const,
+      role: 'agent' as const,
+      parts: [{ kind: 'text' as const, text: 'Test response' }],
+    },
   };
 }

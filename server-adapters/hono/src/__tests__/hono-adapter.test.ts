@@ -1,14 +1,13 @@
 import { describe } from 'vitest';
 import { Hono } from 'hono';
 import { HonoServerAdapter } from '../index';
-import { Mastra } from '@mastra/core';
 import {
   createRouteAdapterTestSuite,
   type AdapterTestContext,
   type HttpRequest,
   type HttpResponse,
 } from '@internal/server-adapter-test-utils';
-import { SERVER_ROUTES, createTestAgent, mockAgentMethods } from '@mastra/server/server-adapter';
+import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {
@@ -125,25 +124,6 @@ describe('Hono Server Adapter', () => {
           headers,
         };
       }
-    },
-
-    createTestContext: async (): Promise<AdapterTestContext> => {
-      // Create test agent with mocked methods to avoid API calls
-      const agent = createTestAgent({ name: 'test-agent' });
-      mockAgentMethods(agent);
-
-      // Create test Mastra instance with entities matching auto-generated IDs
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': agent,
-        },
-        workflows: {},
-      });
-
-      return {
-        mastra,
-      };
     },
   });
 });

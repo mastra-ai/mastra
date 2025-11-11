@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
-    "@mastra/server": "workspace:*"
+    "@mastra/server": "workspace:*",
+    "zod": "^3.25.76"
   }
 }

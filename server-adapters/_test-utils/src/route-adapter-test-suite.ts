@@ -113,7 +113,7 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
         const result = createTestContext();
         context = result instanceof Promise ? await result : result;
       } else {
-        context = createDefaultTestContext();
+        context = await createDefaultTestContext();
       }
 
       // Setup adapter and app

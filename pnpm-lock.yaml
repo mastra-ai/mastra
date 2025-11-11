@@ -2936,6 +2936,9 @@ importers:
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
 
   server-adapters/express:
     dependencies:
