@@ -16,7 +16,13 @@ import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { filterToolCallsByName, filterToolResultsByName, filterMastraToolCallsByName, filterMastraToolResultsByName, generateConversationHistory } from './test-utils';
+import {
+  filterToolCallsByName,
+  filterToolResultsByName,
+  filterMastraToolCallsByName,
+  filterMastraToolResultsByName,
+  generateConversationHistory,
+} from './test-utils';
 
 function v2ToCoreMessages(messages: MastraDBMessage[] | UIMessage[]): CoreMessage[] {
   return new MessageList().add(messages, 'response').get.all.core();
@@ -203,14 +209,14 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       perPage: 20,
     });
-    
+
     console.log('queryResult.messages.length:', queryResult.messages.length);
     console.log('messagesV2.length:', messagesV2.length);
-    
+
     const toolCallFilter = new ToolCallFilter({ exclude: ['weather'] });
     const messageList = new MessageList({ threadId: thread.id, resourceId });
     messageList.add(queryResult.messages, 'memory');
-    
+
     const filteredResult = await toolCallFilter.processInput({
       messages: queryResult.messages,
       abort: () => {
@@ -220,7 +226,7 @@ describe('Memory with Processors', () => {
       messageList,
     });
     const messages = Array.isArray(filteredResult) ? filteredResult : filteredResult.get.all.db();
-    
+
     // ToolCallFilter removes tool parts but doesn't necessarily remove entire messages
     // if they contain other content. The key test is that weather tools are gone.
     expect(messages.length).toBe(messagesV2.length);

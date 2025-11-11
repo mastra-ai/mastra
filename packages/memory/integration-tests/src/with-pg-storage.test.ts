@@ -75,13 +75,10 @@ describe('Memory with PostgresStore Integration', () => {
             WHERE schemaname = 'public' 
             AND (tablename = 'memory_messages' OR tablename LIKE 'memory_messages_%')
           `);
-          
+
           for (const row of tablesResult.rows) {
             const tableName = row.tablename;
-            await client.query(
-              `DELETE FROM "public"."${tableName}" WHERE metadata->>'resource_id' = $1`,
-              ['resource']
-            );
+            await client.query(`DELETE FROM "public"."${tableName}" WHERE metadata->>'resource_id' = $1`, ['resource']);
           }
         } finally {
           client.release();

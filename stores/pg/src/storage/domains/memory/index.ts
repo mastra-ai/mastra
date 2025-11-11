@@ -318,12 +318,15 @@ export class MemoryPG extends MemoryStorage {
         // Delete vector embeddings for this thread (if they exist)
         // We need to delete from all possible vector tables (different dimensions)
         const schemaName = this.schema || 'public';
-        const vectorTables = await t.manyOrNone<{ tablename: string }>(`
+        const vectorTables = await t.manyOrNone<{ tablename: string }>(
+          `
           SELECT tablename 
           FROM pg_tables 
           WHERE schemaname = $1 
           AND (tablename = 'memory_messages' OR tablename LIKE 'memory_messages_%')
-        `, [schemaName]);
+        `,
+          [schemaName],
+        );
 
         for (const { tablename } of vectorTables) {
           const vectorTableName = getTableName({ indexName: tablename, schemaName: getSchemaName(this.schema) });

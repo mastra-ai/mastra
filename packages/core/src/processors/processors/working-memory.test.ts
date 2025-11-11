@@ -326,46 +326,46 @@ describe('WorkingMemory', () => {
       // Should return original messages on error
       expect(result).toEqual(messages);
     });
-it('should default to resource scope when scope not specified', async () => {
-    const processor = new WorkingMemory({
-      storage: mockStorage,
-      // scope not specified, should default to 'resource'
-    });
+    it('should default to resource scope when scope not specified', async () => {
+      const processor = new WorkingMemory({
+        storage: mockStorage,
+        // scope not specified, should default to 'resource'
+      });
 
-    const threadId = 'thread-123';
+      const threadId = 'thread-123';
 
-    runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
-      thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
-      resourceId: 'resource-1',
-    });
+      runtimeContext.set<MemoryRuntimeContext>('MastraMemory', {
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Test', createdAt: new Date(), updatedAt: new Date() },
+        resourceId: 'resource-1',
+      });
 
-    vi.mocked(mockStorage.getResourceById).mockResolvedValue({
-      id: 'resource-1',
-      workingMemory: 'Test data',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    const messages: MastraMessageV2[] = [
-      {
-        id: 'msg-1',
-        role: 'user',
-        content: 'Hello',
+      vi.mocked(mockStorage.getResourceById).mockResolvedValue({
+        id: 'resource-1',
+        workingMemory: 'Test data',
         createdAt: new Date(),
-      },
-    ];
+        updatedAt: new Date(),
+      });
 
-    const result = await processor.processInput({
-      messages,
-      abort: () => {
-        throw new Error('Aborted');
-      },
-      runtimeContext,
-    });
+      const messages: MastraMessageV2[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: 'Hello',
+          createdAt: new Date(),
+        },
+      ];
 
-    expect(result).toHaveLength(2);
-    expect(mockStorage.getResourceById).toHaveBeenCalledWith({ resourceId: 'resource-1' });
-    expect(mockStorage.getThreadById).not.toHaveBeenCalled();
+      const result = await processor.processInput({
+        messages,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        runtimeContext,
+      });
+
+      expect(result).toHaveLength(2);
+      expect(mockStorage.getResourceById).toHaveBeenCalledWith({ resourceId: 'resource-1' });
+      expect(mockStorage.getThreadById).not.toHaveBeenCalled();
     });
 
     it('should handle JSON format template', async () => {
