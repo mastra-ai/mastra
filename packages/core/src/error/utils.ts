@@ -22,7 +22,7 @@ export function safeParseErrorObject(obj: unknown): string {
   }
 }
 
-type SerializableError = Error & { toJSON: () => Record<string, any> };
+export type SerializableError = Error & { toJSON: () => Record<string, any> };
 
 /**
  * Safely converts an unknown error to an Error instance.
@@ -40,6 +40,9 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
     maxDepth?: number;
     /**
      * Whether to add .toJSON() method to the error instance to support serialization. (JSON.stringify)
+     *
+     * Defaults to `true`
+     *
      * @example
      * const error = getErrorFromUnknown(new Error('test'), { supportSerialization: true });
      * JSON.stringify(error) // { message: 'test', name: 'Error', stack: 'Error: test\n    at ...' }
