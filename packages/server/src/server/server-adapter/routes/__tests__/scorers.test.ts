@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { SCORES_ROUTES } from '../scorers';
 import { createRouteTestSuite } from './route-test-suite';
-import { createTestMastra } from './test-helpers';
+import { setupAgentTests } from './test-helpers';
 
 describe('Scores Routes', () => {
   let mastra: Mastra;
@@ -11,7 +11,8 @@ describe('Scores Routes', () => {
     vi.clearAllMocks();
 
     // Create Mastra instance
-    mastra = createTestMastra();
+    const setup = setupAgentTests();
+    mastra = setup.mastra;
   });
 
   // Create test suite with auto-generated bodies!

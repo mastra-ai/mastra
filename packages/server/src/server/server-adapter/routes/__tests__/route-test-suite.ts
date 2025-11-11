@@ -11,138 +11,11 @@ import {
   populateTaskStore,
   validateRouteMetadata,
 } from './test-helpers';
-
-/**
- * Generate context-aware test value based on field name
- */
-function generateContextualValue(fieldName?: string): string {
-  if (!fieldName) return 'test-string';
-
-  // Match common field name patterns
-  const field = fieldName.toLowerCase();
-
-  // Exact matches first
-  if (field === 'role') return 'user';
-
-  // Partial matches
-  if (field.includes('agent')) return 'test-agent';
-  if (field.includes('workflow')) return 'test-workflow';
-  if (field.includes('tool')) return 'test-tool';
-  if (field.includes('thread')) return 'test-thread';
-  if (field.includes('resource')) return 'test-resource';
-  if (field.includes('run')) return 'test-run';
-  if (field.includes('step')) return 'test-step';
-  if (field.includes('task')) return 'test-task';
-  if (field.includes('scorer') || field.includes('score')) return 'test-scorer';
-  if (field.includes('trace')) return 'test-trace';
-  if (field.includes('span')) return 'test-span';
-  if (field.includes('vector')) return 'test-vector';
-  if (field.includes('index')) return 'test-index';
-  if (field.includes('message')) return 'test-message';
-  if (field.includes('transport')) return 'test-transport';
-  if (field.includes('model')) return 'gpt-4o';
-  if (field.includes('action')) return 'merge-template';
-  if (field.includes('entity')) return 'test-entity';
-
-  return 'test-string';
-}
-
-/**
- * Generate valid test data from a Zod schema
- */
-function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: string): any {
-  // Unwrap effects (refine, transform, etc)
-  while (schema instanceof z.ZodEffects) {
-    schema = schema._def.schema;
-  }
-
-  // Handle optional/nullable/default
-  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
-    return generateValidDataFromSchema(schema._def.innerType, fieldName);
-  }
-  if (schema instanceof z.ZodDefault) {
-    return schema._def.defaultValue();
-  }
-
-  // Primitive types - use contextual values for strings
-  if (schema instanceof z.ZodString) return generateContextualValue(fieldName);
-  if (schema instanceof z.ZodNumber) return 10; // Use 10 instead of 0 to avoid validation issues
-  if (schema instanceof z.ZodBoolean) return true;
-  if (schema instanceof z.ZodNull) return null;
-  if (schema instanceof z.ZodUndefined) return undefined;
-  if (schema instanceof z.ZodDate) return new Date();
-  if (schema instanceof z.ZodBigInt) return BigInt(0);
-
-  // Literal
-  if (schema instanceof z.ZodLiteral) return schema._def.value;
-
-  // Enum
-  if (schema instanceof z.ZodEnum) return schema._def.values[0];
-  if (schema instanceof z.ZodNativeEnum) {
-    const values = Object.values(schema._def.values);
-    return values[0];
-  }
-
-  // Array
-  if (schema instanceof z.ZodArray) {
-    return [generateValidDataFromSchema(schema._def.type, fieldName)];
-  }
-
-  // Object
-  if (schema instanceof z.ZodObject) {
-    const shape = schema._def.shape();
-    const obj: any = {};
-    for (const [key, fieldSchema] of Object.entries(shape)) {
-      // Skip optional fields to generate minimal valid object
-      if (fieldSchema instanceof z.ZodOptional) {
-        continue;
-      }
-      // Pass field name for contextual value generation
-      obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
-    }
-    return obj;
-  }
-
-  // Record/Map
-  if (schema instanceof z.ZodRecord) {
-    return { key: generateValidDataFromSchema(schema._def.valueType, fieldName) };
-  }
-
-  // Union - try first option
-  if (schema instanceof z.ZodUnion) {
-    return generateValidDataFromSchema(schema._def.options[0], fieldName);
-  }
-
-  // Discriminated Union - use first option
-  if (schema instanceof z.ZodDiscriminatedUnion) {
-    const options = Array.from(schema._def.options.values());
-    return generateValidDataFromSchema(options[0] as z.ZodTypeAny, fieldName);
-  }
-
-  // Intersection - merge both schemas
-  if (schema instanceof z.ZodIntersection) {
-    const left = generateValidDataFromSchema(schema._def.left, fieldName);
-    const right = generateValidDataFromSchema(schema._def.right, fieldName);
-    return { ...left, ...right };
-  }
-
-  // Tuple
-  if (schema instanceof z.ZodTuple) {
-    return schema._def.items.map((item: z.ZodTypeAny) => generateValidDataFromSchema(item, fieldName));
-  }
-
-  // Any/Unknown
-  if (schema instanceof z.ZodAny || schema instanceof z.ZodUnknown) {
-    // Special case: message content must be an array of parts
-    if (fieldName === 'content') {
-      return [{ type: 'text', text: 'test message content' }];
-    }
-    return 'test-value';
-  }
-
-  // Fallback
-  return undefined;
-}
+import {
+  generateValidDataFromSchema,
+  getDefaultValidPathParams,
+  getDefaultInvalidPathParams,
+} from './route-test-utils';
 
 /**
  * Configuration for route test suite
@@ -259,7 +132,7 @@ export function createRouteTestSuite(config: RouteTestConfig) {
       });
 
       // Error test for routes with agentId
-      if (hasAgentIdParam(route)) {
+      if (route.path.includes(':agentId')) {
         it('should throw 404 when agent not found', async () => {
           const mastra = getMastra();
           const tools = getTools?.();
@@ -343,51 +216,6 @@ export function createRouteTestSuite(config: RouteTestConfig) {
 }
 
 /**
- * Helper: Get default valid path parameters for a route
- */
-function getDefaultValidPathParams(route: ServerRoute): Record<string, any> {
-  const params: Record<string, any> = {};
-
-  if (route.path.includes(':agentId')) params.agentId = 'test-agent';
-  if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
-  if (route.path.includes(':toolId')) params.toolId = 'test-tool';
-  if (route.path.includes(':threadId')) params.threadId = 'test-thread';
-  if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
-  if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1'; // Match agent model list
-  if (route.path.includes(':scorerId')) params.scorerId = 'test-scorer';
-  if (route.path.includes(':traceId')) params.traceId = 'test-trace';
-  if (route.path.includes(':runId')) params.runId = 'test-run';
-  if (route.path.includes(':stepId')) params.stepId = 'test-step';
-  if (route.path.includes(':taskId')) params.taskId = 'test-task-id';
-  if (route.path.includes(':vectorName')) params.vectorName = 'test-vector';
-  if (route.path.includes(':indexName')) params.indexName = 'test-index';
-  if (route.path.includes(':transportId')) params.transportId = 'test-transport';
-  if (route.path.includes(':spanId')) params.spanId = 'test-span';
-  if (route.path.includes(':entityType')) params.entityType = 'test-entity-type';
-  if (route.path.includes(':entityId')) params.entityId = 'test-entity-id';
-  if (route.path.includes(':actionId')) params.actionId = 'merge-template'; // Valid agent-builder actions: merge-template, workflow-builder
-
-  return params;
-}
-
-/**
- * Helper: Get default invalid path parameters for a route
- */
-function getDefaultInvalidPathParams(route: ServerRoute): Array<Record<string, any>> {
-  const invalid: Array<Record<string, any>> = [];
-
-  // Empty object
-  invalid.push({});
-
-  // Wrong type (number instead of string)
-  if (route.path.includes(':agentId')) {
-    invalid.push({ agentId: 123 });
-  }
-
-  return invalid;
-}
-
-/**
  * Helper: Build handler parameters from route - fully automatic
  */
 async function buildHandlerParams(
@@ -431,11 +259,4 @@ async function buildHandlerParams(
   }
 
   return params;
-}
-
-/**
- * Helper: Check if route has agentId path parameter
- */
-function hasAgentIdParam(route: ServerRoute): boolean {
-  return route.path.includes(':agentId');
 }

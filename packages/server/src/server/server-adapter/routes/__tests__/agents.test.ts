@@ -3,23 +3,16 @@ import type { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { AGENTS_ROUTES } from '../agents';
 import { createRouteTestSuite } from './route-test-suite';
-import { createTestAgent, mockAgentMethods, createTestMastra } from './test-helpers';
+import { setupAgentTests } from './test-helpers';
 
 describe('Agent Routes', () => {
   let mastra: Mastra;
-  let testAgent: Agent;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Create agent with all mocks configured
-    testAgent = createTestAgent();
-    mockAgentMethods(testAgent);
-
-    // Create Mastra instance
-    mastra = createTestMastra({
-      agents: { 'test-agent': testAgent },
-    });
+    const setup = setupAgentTests();
+    mastra = setup.mastra;
   });
 
   // Create test suite with auto-generated bodies!
