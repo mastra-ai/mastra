@@ -96,11 +96,6 @@ const sidebars = {
           id: "memory/working-memory-schema",
           label: "Memory with Schema",
         },
-        {
-          type: "doc",
-          id: "memory/memory-with-mongodb",
-          label: "Memory with MongoDB",
-        },
       ],
     },
     // Workflows (Legacy) - Hidden from sidebar using CSS class "sidebar-hidden" (see custom.css)
