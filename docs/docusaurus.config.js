@@ -84,11 +84,14 @@ const config = {
   ],
 
   plugins: [
-    // Custom webpack configuration plugin to handle process.env polyfill
+    // Custom webpack/rspack configuration plugin to handle process.env polyfill
     function customWebpackPlugin(context, options) {
       return {
         name: "custom-webpack-config",
-        configureWebpack(config, isServer) {
+        configureWebpack(config, isServer, { currentBundler }) {
+          // Use currentBundler.instance to work with both Webpack and Rspack
+          const { DefinePlugin, ProvidePlugin } = currentBundler.instance;
+
           return {
             resolve: {
               fallback: {
@@ -99,11 +102,12 @@ const config = {
             },
             plugins: [
               // Provide process globally so gt-react can check process.env
-              new (require("webpack")).ProvidePlugin({
+              // This works with both Webpack and Rspack
+              new ProvidePlugin({
                 process: "process/browser.js",
               }),
               // Define process.env.NEXT_RUNTIME to prevent "Cannot read properties of undefined" errors
-              new (require("webpack")).DefinePlugin({
+              new DefinePlugin({
                 "process.env.NEXT_RUNTIME": JSON.stringify(undefined),
               }),
             ],
