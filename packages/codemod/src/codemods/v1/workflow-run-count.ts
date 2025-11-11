@@ -43,17 +43,21 @@ export default createTransformer((fileInfo, api, options, context) => {
       if (!configObj.properties) return;
 
       // Find the execute property
-      configObj.properties.forEach((prop: any) => {
+      configObj.properties.forEach(prop => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-          prop.key?.type === 'Identifier' &&
-          prop.key.name === 'execute' &&
-          (prop.value?.type === 'ArrowFunctionExpression' || prop.value?.type === 'FunctionExpression')
+          prop.key &&
+          prop.key.type === 'Identifier' &&
+          prop.key.name === 'execute'
         ) {
-          // Extract the second parameter name (context)
-          const params = prop.value.params;
-          if (params && params.length >= 2 && params[1].type === 'Identifier') {
-            contextParamNames.add(params[1].name);
+          const value = prop.value;
+          if (value && (value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression')) {
+            // Extract the second parameter name (context)
+            const params = value.params;
+            const secondParam = params && params.length >= 2 ? params[1] : null;
+            if (secondParam && secondParam.type === 'Identifier') {
+              contextParamNames.add(secondParam.name);
+            }
           }
         }
       });

@@ -28,17 +28,19 @@ export default createTransformer((fileInfo, api, options, context) => {
       if (!configArg || configArg.type !== 'ObjectExpression') return;
 
       // Find the voice property in the Agent config object
-      configArg.properties?.forEach((prop: any) => {
+      configArg.properties?.forEach(prop => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+          prop.key &&
           prop.key.type === 'Identifier' &&
           prop.key.name === 'voice' &&
           prop.value.type === 'ObjectExpression'
         ) {
           // Now rename properties within the voice object
-          prop.value.properties?.forEach((voiceProp: any) => {
+          prop.value.properties?.forEach(voiceProp => {
             if (
               (voiceProp.type === 'Property' || voiceProp.type === 'ObjectProperty') &&
+              voiceProp.key &&
               voiceProp.key.type === 'Identifier'
             ) {
               const oldName = voiceProp.key.name;

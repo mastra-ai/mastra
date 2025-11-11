@@ -54,8 +54,12 @@ export default createTransformer((fileInfo, api, options, context) => {
       const args = path.value.arguments;
       const firstArg = args[0];
       if (firstArg && firstArg.type === 'ObjectExpression' && firstArg.properties) {
-        firstArg.properties.forEach((prop: any) => {
-          if ((prop.type === 'Property' || prop.type === 'ObjectProperty') && prop.key?.type === 'Identifier') {
+        firstArg.properties.forEach(prop => {
+          if (
+            (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+            prop.key &&
+            prop.key.type === 'Identifier'
+          ) {
             if (prop.key.name === 'offset') prop.key.name = 'page';
             if (prop.key.name === 'limit') prop.key.name = 'perPage';
           }

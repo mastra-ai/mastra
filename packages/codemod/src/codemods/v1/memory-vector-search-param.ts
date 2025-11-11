@@ -46,10 +46,11 @@ export default createTransformer((fileInfo, api, options, context) => {
       const firstArg = args[0];
       if (!firstArg || firstArg.type !== 'ObjectExpression' || !firstArg.properties) return;
 
-      firstArg.properties.forEach((prop: any) => {
+      firstArg.properties.forEach(prop => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-          prop.key?.type === 'Identifier' &&
+          prop.key &&
+          prop.key.type === 'Identifier' &&
           prop.key.name === oldParamName
         ) {
           prop.key.name = newParamName;

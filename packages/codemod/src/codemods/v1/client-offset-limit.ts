@@ -81,7 +81,7 @@ export default createTransformer((fileInfo, api, options, context) => {
   // Helper function to transform properties recursively
   function transformObjectProperties(obj: any) {
     obj.properties?.forEach((prop: any) => {
-      if ((prop.type === 'Property' || prop.type === 'ObjectProperty') && prop.key?.type === 'Identifier') {
+      if ((prop.type === 'Property' || prop.type === 'ObjectProperty') && prop.key && prop.key.type === 'Identifier') {
         const oldName = prop.key.name;
         const newName = propertyRenames[oldName];
 
@@ -91,7 +91,7 @@ export default createTransformer((fileInfo, api, options, context) => {
         }
 
         // Recursively transform nested objects
-        if (prop.value?.type === 'ObjectExpression') {
+        if (prop.value && prop.value.type === 'ObjectExpression') {
           transformObjectProperties(prop.value);
         }
       }
