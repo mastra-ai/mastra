@@ -238,7 +238,16 @@ export function isMemberExpressionOnInstance(node: any, instances: Set<string>, 
 
 /**
  * Renames an import and all its usages in a single optimized pass.
- * Handles aliased imports correctly and only transforms identifiers imported from the specific package.
+ * Handles aliased imports correctly - only transforms usages for non-aliased imports.
+ * Handles multiple imports of the same name (with different aliases) correctly.
+ *
+ * For non-aliased imports: Renames both import and all usages
+ *   import { oldName } → import { newName }
+ *   oldName() → newName()
+ *
+ * For aliased imports: Only renames the import, keeps alias in usages
+ *   import { oldName as alias } → import { newName as alias }
+ *   alias() → alias() (unchanged)
  *
  * @param j - JSCodeshift API
  * @param root - Root collection
@@ -255,9 +264,9 @@ export function renameImportAndUsages(
   newName: string,
 ): number {
   let changes = 0;
-  let localNameToReplace: string | null = null;
+  const localNamesToReplace = new Set<string>();
 
-  // First: Transform import specifiers from the specific package
+  // First: Transform import specifiers from the specific package and collect local names to replace
   root
     .find(j.ImportDeclaration)
     .filter(path => {
@@ -273,25 +282,27 @@ export function renameImportAndUsages(
           specifier.imported.type === 'Identifier' &&
           specifier.imported.name === oldName
         ) {
-          // Track the local name BEFORE renaming (could be aliased)
-          localNameToReplace = specifier.local?.name || oldName;
+          const isAliased = specifier.local && specifier.local.name !== oldName;
 
-          // Rename the imported name
+          // Always rename the imported name
           specifier.imported.name = newName;
-
-          // Also update the local name if it matches (not aliased)
-          if (specifier.local && specifier.local.name === oldName) {
-            specifier.local.name = newName;
-          }
-
           changes++;
+
+          // Only rename the local name and track for usage replacement if NOT aliased
+          if (!isAliased) {
+            if (specifier.local) {
+              specifier.local.name = newName;
+            }
+            // Track for usage replacement (only non-aliased imports)
+            localNamesToReplace.add(oldName);
+          }
         }
       });
     });
 
-  // Second: Transform usages only if it was imported from the specific package
-  if (localNameToReplace) {
-    root.find(j.Identifier, { name: localNameToReplace }).forEach(path => {
+  // Second: Transform usages only for non-aliased imports
+  localNamesToReplace.forEach(localName => {
+    root.find(j.Identifier, { name: localName }).forEach(path => {
       // Skip identifiers that are part of import declarations
       const parent = path.parent;
       if (parent && parent.value.type === 'ImportSpecifier') {
@@ -301,7 +312,7 @@ export function renameImportAndUsages(
       path.value.name = newName;
       changes++;
     });
-  }
+  });
 
   return changes;
 }
