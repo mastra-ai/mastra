@@ -239,6 +239,10 @@
     "message": "Memory with LibSQL",
     "description": "The label for the doc item 'Memory with LibSQL' in sidebar 'docsSidebar', linking to the doc memory/storage/memory-with-libsql"
   },
+  "sidebar.docsSidebar.doc.Memory with MongoDB": {
+    "message": "Memory with MongoDB",
+    "description": "The label for the doc item 'Memory with MongoDB' in sidebar 'docsSidebar', linking to the doc memory/storage/memory-with-mongodb"
+  },
   "sidebar.docsSidebar.doc.Memory with PostgreSQL": {
     "message": "Memory with PostgreSQL",
     "description": "The label for the doc item 'Memory with PostgreSQL' in sidebar 'docsSidebar', linking to the doc memory/storage/memory-with-pg"

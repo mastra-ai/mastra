@@ -10,7 +10,7 @@ import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Mastra Documentation",
+  title: "Mastra Docs",
   tagline: "TypeScript agent framework",
   favicon: "/favicon.ico",
 
