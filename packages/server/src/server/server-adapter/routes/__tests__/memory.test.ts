@@ -2,7 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, beforeEach, vi } from 'vitest';
 import { MEMORY_ROUTES } from '../memory';
 import { createRouteTestSuite } from './route-test-suite';
-import { createMockMemory, createTestMastra, createTestAgent, mockAgentMethods } from './test-helpers';
+import { setupMemoryTests } from './test-helpers';
 
 describe('Memory Routes', () => {
   let mastra: Mastra;
@@ -10,25 +10,8 @@ describe('Memory Routes', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Create memory instance with InMemoryStore (following handler test pattern)
-    const memory = createMockMemory();
-
-    // Pre-create a test thread for routes that need existing threads
-    await memory.createThread({
-      threadId: 'test-thread',
-      resourceId: 'test-resource',
-      metadata: {},
-    });
-
-    // Create agent WITH memory (needed for memory routes with agentId query param)
-    const testAgent = createTestAgent({ memory });
-    mockAgentMethods(testAgent);
-
-    // Create Mastra instance with both global memory and agent
-    mastra = createTestMastra({
-      memory,
-      agents: { 'test-agent': testAgent },
-    });
+    const setup = await setupMemoryTests();
+    mastra = setup.mastra;
   });
 
   // Create test suite with auto-generated bodies!
