@@ -29,14 +29,14 @@ export default createTransformer((fileInfo, api, options, context) => {
       return typeof source === 'string' && source === '@mastra/core/evals';
     })
     .forEach(path => {
-      path.value.specifiers?.forEach((specifier: any) => {
+      path.value.specifiers?.forEach(specifier => {
         if (
           specifier.type === 'ImportSpecifier' &&
           specifier.imported.type === 'Identifier' &&
           specifier.imported.name === oldName
         ) {
           // Track the local name BEFORE we rename it (could be aliased)
-          localNameToReplace = specifier.local?.name || oldName;
+          localNameToReplace = typeof specifier.local?.name === 'string' ? specifier.local.name : oldName;
 
           // Rename the imported name
           specifier.imported.name = newName;

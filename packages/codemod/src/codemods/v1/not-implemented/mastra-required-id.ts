@@ -48,10 +48,10 @@ export default createTransformer((fileInfo, api, options, context) => {
 
       if (storageClasses.includes(className)) {
         // Check if the config already has an id property
-        const hasId = path.value.arguments.some((arg: any) => {
+        const hasId = path.value.arguments.some(arg => {
           if (arg.type === 'ObjectExpression') {
             return arg.properties?.some(
-              (prop: any) =>
+              prop =>
                 (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
                 prop.key?.type === 'Identifier' &&
                 prop.key.name === 'id',
@@ -106,10 +106,10 @@ export default createTransformer((fileInfo, api, options, context) => {
 
       if (createFunctions.includes(functionName)) {
         // Check if the config already has an id property
-        const hasId = path.value.arguments.some((arg: any) => {
+        const hasId = path.value.arguments.some(arg => {
           if (arg.type === 'ObjectExpression') {
             return arg.properties?.some(
-              (prop: any) =>
+              prop =>
                 (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
                 prop.key?.type === 'Identifier' &&
                 prop.key.name === 'id',

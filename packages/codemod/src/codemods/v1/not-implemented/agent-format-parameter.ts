@@ -64,7 +64,7 @@ export default createTransformer((fileInfo, api, options, context) => {
       if (!optionsArg.properties) return;
 
       // Find the format property
-      optionsArg.properties.forEach((prop: any) => {
+      optionsArg.properties.forEach(prop => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
           prop.key?.type === 'Identifier' &&

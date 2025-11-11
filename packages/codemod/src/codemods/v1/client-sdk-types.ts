@@ -31,14 +31,14 @@ export default createTransformer((fileInfo, api, options, context) => {
       return typeof source === 'string' && source === '@mastra/client-js';
     })
     .forEach(path => {
-      path.value.specifiers?.forEach((specifier: any) => {
+      path.value.specifiers?.forEach(specifier => {
         if (specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier') {
           const oldName = specifier.imported.name;
           const newName = typeRenames[oldName];
 
           if (newName) {
             // Track the local name that was imported (could be aliased)
-            const localName = specifier.local?.name || oldName;
+            const localName = typeof specifier.local?.name === 'string' ? specifier.local.name : oldName;
             importedTypes.add(localName);
 
             specifier.imported.name = newName;

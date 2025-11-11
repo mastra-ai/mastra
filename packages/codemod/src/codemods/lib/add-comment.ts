@@ -6,7 +6,7 @@ function existsComment(comments: ASTPath<any>['node']['comments'], comment: stri
   let hasComment = false;
 
   if (comments) {
-    comments.forEach((commentNode: any) => {
+    comments.forEach((commentNode: { value: string; type: string }) => {
       const currentComment = commentNode.value.trim();
       if (currentComment === comment) {
         hasComment = true;

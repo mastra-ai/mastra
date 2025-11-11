@@ -3,7 +3,12 @@
 
 import type { FileInfo, API, JSCodeshift, Collection } from 'jscodeshift';
 
-type TransformerFunction = (fileInfo: FileInfo, api: API, options: any, context: TransformContext) => void;
+type TransformerFunction = (
+  fileInfo: FileInfo,
+  api: API,
+  options: Record<string, unknown>,
+  context: TransformContext,
+) => void;
 
 export interface TransformContext {
   /**
@@ -31,7 +36,7 @@ export function createTransformer(transformFn: TransformerFunction) {
   // Note the return type of this function is explicitly designed to conform to
   // the signature expected by jscodeshift. For more see
   // https://github.com/facebook/jscodeshift
-  return function transformer(fileInfo: FileInfo, api: API, options: any) {
+  return function transformer(fileInfo: FileInfo, api: API, options: Record<string, unknown>) {
     const j = api.jscodeshift;
     const root = j(fileInfo.source);
     const context: TransformContext = {

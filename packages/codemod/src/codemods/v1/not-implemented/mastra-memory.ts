@@ -29,10 +29,10 @@ export default createTransformer((fileInfo, api, options, context) => {
     })
     .forEach(path => {
       // Check if config has a memory property
-      const hasMemory = path.value.arguments.some((arg: any) => {
+      const hasMemory = path.value.arguments.some(arg => {
         if (arg.type === 'ObjectExpression') {
           return arg.properties?.some(
-            (prop: any) =>
+            prop =>
               (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
               prop.key?.type === 'Identifier' &&
               prop.key.name === 'memory',

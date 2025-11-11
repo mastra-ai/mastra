@@ -71,7 +71,7 @@ export default createTransformer((fileInfo, api, options, context) => {
     })
     .forEach(path => {
       // Transform offset/limit properties in the arguments of this call
-      path.value.arguments.forEach((arg: any) => {
+      path.value.arguments.forEach(arg => {
         if (arg.type === 'ObjectExpression') {
           transformObjectProperties(arg);
         }

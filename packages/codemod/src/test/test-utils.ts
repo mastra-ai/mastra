@@ -19,7 +19,7 @@ import { BUNDLE } from '../lib/bundle';
  * @returns The transformed code or the original input if no changes were made.
  */
 export function applyTransform(
-  transform: (fileInfo: FileInfo, api: API, options: any) => string | null,
+  transform: (fileInfo: FileInfo, api: API, options: Record<string, unknown>) => string | null,
   input: string,
   options = {},
 ): string {
@@ -195,7 +195,7 @@ export function validateSyntax(code: string, extension: string): void {
  * @param fixtureName - The base name of the fixture to test.
  */
 export function testTransform(
-  transformer: (fileInfo: FileInfo, api: API, options: any) => string | null,
+  transformer: (fileInfo: FileInfo, api: API, options: Record<string, unknown>) => string | null,
   fixtureName: string,
 ) {
   // Read input and output fixtures along with their extensions

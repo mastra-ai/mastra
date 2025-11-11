@@ -29,7 +29,7 @@ export default createTransformer((fileInfo, api, options, context) => {
       return typeof source === 'string' && source === '@mastra/core';
     })
     .forEach(path => {
-      path.value.specifiers?.forEach((specifier: any) => {
+      path.value.specifiers?.forEach(specifier => {
         if (
           specifier.type === 'ImportSpecifier' &&
           specifier.imported.type === 'Identifier' &&

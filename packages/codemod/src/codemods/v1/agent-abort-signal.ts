@@ -1,3 +1,11 @@
+import type {
+  ObjectProperty,
+  Property,
+  ObjectExpression,
+  SpreadElement,
+  ObjectMethod,
+  SpreadProperty,
+} from 'jscodeshift';
 import { createTransformer } from '../lib/create-transformer';
 
 /**
@@ -58,8 +66,9 @@ export default createTransformer((fileInfo, api, options, context) => {
       if (!optionsArg.properties) return;
 
       // Find the modelSettings property
+      type ObjectProp = SpreadElement | Property | ObjectMethod | ObjectProperty | SpreadProperty;
       let modelSettingsIndex = -1;
-      const modelSettingsProp = optionsArg.properties.find((prop: any, index: number) => {
+      const modelSettingsProp = optionsArg.properties.find((prop, index) => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
           prop.key?.type === 'Identifier' &&
@@ -70,16 +79,16 @@ export default createTransformer((fileInfo, api, options, context) => {
           return true;
         }
         return false;
-      }) as any;
+      }) as Property | ObjectProperty | undefined;
 
       if (!modelSettingsProp || modelSettingsProp.value?.type !== 'ObjectExpression') return;
       if (modelSettingsIndex === -1) return;
 
-      const modelSettingsValue = modelSettingsProp.value as any;
+      const modelSettingsValue = modelSettingsProp.value as ObjectExpression;
 
       // Find abortSignal property inside modelSettings
-      let abortSignalProp: any = null;
-      const filteredProperties = modelSettingsValue.properties?.filter((prop: any) => {
+      let abortSignalProp: Property | ObjectProperty | undefined;
+      const filteredProperties = modelSettingsValue.properties?.filter(prop => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
           prop.key?.type === 'Identifier' &&
@@ -97,15 +106,15 @@ export default createTransformer((fileInfo, api, options, context) => {
       modelSettingsValue.properties = filteredProperties;
 
       // Rebuild the parent options properties with abortSignal right after modelSettings
-      const newProperties: any[] = [];
-      optionsArg.properties.forEach((prop: any, index: number) => {
+      const newProperties: ObjectProp[] = [];
+      optionsArg.properties.forEach((prop, index) => {
         newProperties.push(prop);
         if (index === modelSettingsIndex) {
-          newProperties.push(abortSignalProp);
+          newProperties.push(abortSignalProp!);
         }
       });
 
-      optionsArg.properties = newProperties as any;
+      optionsArg.properties = newProperties;
       context.hasChanges = true;
     });
 
