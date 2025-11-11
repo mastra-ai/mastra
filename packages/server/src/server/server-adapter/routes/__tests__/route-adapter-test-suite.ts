@@ -28,6 +28,7 @@ export interface RouteAdapterTestSuiteConfig {
   executeRoute: (context: RouteExecutionContext) => Promise<RouteExecutionResult>;
   buildRequestOverrides?: (route: ServerRoute) => RouteRequestOverrides;
   skipRoute?: (route: ServerRoute) => boolean;
+  transformResponse?: (route: ServerRoute, data: unknown) => unknown;
 }
 
 /**
@@ -35,7 +36,14 @@ export interface RouteAdapterTestSuiteConfig {
  * The caller is responsible for translating the request payload into concrete HTTP calls.
  */
 export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig) {
-  const { suiteName = 'Route Adapter Integration', routes, executeRoute, buildRequestOverrides, skipRoute } = config;
+  const {
+    suiteName = 'Route Adapter Integration',
+    routes,
+    executeRoute,
+    buildRequestOverrides,
+    skipRoute,
+    transformResponse,
+  } = config;
 
   describe(suiteName, () => {
     routes.forEach(route => {
@@ -45,8 +53,8 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
 
       const testName = `${route.method} ${route.path}`;
 
-      it(`should execute ${testName}`, async () => {
-        const requestOverrides = buildRequestOverrides?.(route) ?? {};
+        it(`should execute ${testName}`, async () => {
+          const requestOverrides = buildRequestOverrides?.(route) ?? {};
         const request = buildRouteRequest(route, requestOverrides);
 
         const result = await executeRoute({ route, request });
@@ -54,9 +62,12 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
         expect(result.status).toBeLessThan(400);
         if (route.responseType === 'json') {
           expect(result.type).toBe('json');
-          expect(result).toHaveProperty('data');
+          const jsonResult = result as Extract<RouteExecutionResult, { type: 'json' }>;
+          const hydratedData = reviveDates(
+            transformResponse ? transformResponse(route, jsonResult.data) : jsonResult.data,
+          );
           if (route.responseSchema) {
-            expectValidSchema(route.responseSchema, (result as RouteExecutionResult & { type: 'json' }).data);
+            expectValidSchema(route.responseSchema, hydratedData);
           }
         } else {
           expect(result.type).toBe('stream');
@@ -70,4 +81,32 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
       });
     });
   });
+}
+
+function reviveDates<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(item => reviveDates(item)) as unknown as T;
+  }
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).map(([key, val]) => [key, reviveDates(val)]);
+    return Object.fromEntries(entries) as T;
+  }
+
+  if (typeof value === 'string' && isIsoDateString(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date as unknown as T;
+    }
+  }
+
+  return value;
+}
+
+function isIsoDateString(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value);
 }

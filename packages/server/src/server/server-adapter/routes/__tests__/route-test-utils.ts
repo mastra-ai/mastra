@@ -9,6 +9,8 @@ export function generateContextualValue(fieldName?: string): string {
 
   const field = fieldName.toLowerCase();
 
+  if (field === 'entitytype') return 'AGENT';
+  if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
 
   if (field.includes('agent')) return 'test-agent';
@@ -131,8 +133,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':indexName')) params.indexName = 'test-index';
   if (route.path.includes(':transportId')) params.transportId = 'test-transport';
   if (route.path.includes(':spanId')) params.spanId = 'test-span';
-  if (route.path.includes(':entityType')) params.entityType = 'test-entity-type';
-  if (route.path.includes(':entityId')) params.entityId = 'test-entity-id';
+  if (route.path.includes(':entityType')) params.entityType = 'AGENT';
+  if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
 
   return params;
@@ -200,23 +202,31 @@ export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOve
 
 export function convertQueryValues(values: Record<string, unknown>): Record<string, string | string[]> {
   const query: Record<string, string | string[]> = {};
-  for (const [key, value] of Object.entries(values)) {
-    if (value === undefined || value === null) continue;
+  const appendValue = (prefix: string, value: unknown) => {
+    if (value === undefined || value === null) return;
     if (Array.isArray(value)) {
-      query[key] = value.map(item => convertQueryValue(item));
-      continue;
+      query[prefix] = value.map(item => convertQueryValue(item));
+      return;
     }
-    query[key] = convertQueryValue(value);
+    if (value instanceof Date) {
+      query[prefix] = value.toISOString();
+      return;
+    }
+    if (typeof value === 'object') {
+      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+        appendValue(`${prefix}[${key}]`, nested);
+      }
+      return;
+    }
+    query[prefix] = convertQueryValue(value);
+  };
+
+  for (const [key, value] of Object.entries(values)) {
+    appendValue(key, value);
   }
   return query;
 }
 
 function convertQueryValue(value: unknown): string {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (typeof value === 'object') {
-    return JSON.stringify(value);
-  }
   return String(value);
 }

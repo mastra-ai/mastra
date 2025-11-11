@@ -291,14 +291,43 @@ export async function setupWorkflowTests() {
  * Complete setup for memory routes testing
  * Returns a configured memory and mastra instance
  */
-export function setupMemoryTests() {
+export async function setupMemoryTests() {
   const memory = createMockMemory();
+  const agent = createTestAgent({ memory });
+  mockAgentMethods(agent);
 
   const mastra = createTestMastra({
+    agents: { 'test-agent': agent },
     memory,
   });
 
-  return { memory, mastra };
+  await memory.saveThread({
+    thread: {
+      id: 'test-thread',
+      resourceId: 'test-resource',
+      title: 'Test Thread',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+
+  await memory.saveMessages({
+    messages: [
+      {
+        id: 'test-message',
+        role: 'user',
+        content: [{ type: 'text', text: 'hello world' }],
+        type: 'text',
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any,
+    ],
+  });
+
+  return { memory, mastra, agent };
 }
 
 /**

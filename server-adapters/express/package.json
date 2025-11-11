@@ -46,9 +46,11 @@
     "@types/cors": "^2.8.19",
     "cors": "^2.8.5",
     "@ai-sdk/openai": "^2.0.62",
+    "supertest": "^6.3.4",
     "zod": "^3.25.0",
     "swagger-ui-express": "^5.0.1",
-    "@types/swagger-ui-express": "^4.1.6"
+    "@types/swagger-ui-express": "^4.1.6",
+    "superagent": "^8.1.2"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

@@ -99,7 +99,8 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
       return params;
     }
 
-    return queryParamSchema.parseAsync(params);
+    const normalized = this.normalizeQueryParams(params);
+    return queryParamSchema.parseAsync(normalized);
   }
 
   async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {
@@ -109,5 +110,68 @@ export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
     }
 
     return bodySchema.parseAsync(body);
+  }
+
+  private normalizeQueryParams(params: Record<string, string>): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    const assignNested = (target: Record<string, any>, keys: string[], value: string) => {
+      const [currentKey, ...rest] = keys;
+      if (!currentKey) {
+        return;
+      }
+
+      if (rest.length === 0) {
+        target[currentKey] = this.coerceQueryValue(value);
+        return;
+      }
+
+      if (typeof target[currentKey] !== 'object' || target[currentKey] === null) {
+        target[currentKey] = {};
+      }
+
+      assignNested(target[currentKey], rest, value);
+    };
+
+    for (const [key, value] of Object.entries(params)) {
+      const parts = key
+        .replace(/\]/g, '')
+        .split(/[.[\[]+/)
+        .filter(Boolean);
+
+      if (parts.length === 0) {
+        continue;
+      }
+
+      assignNested(result, parts, value);
+    }
+
+    return result;
+  }
+
+  private coerceQueryValue(value: string): unknown {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return '';
+    }
+
+    if (trimmed === 'true') return true;
+    if (trimmed === 'false') return false;
+
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      return Number.isNaN(numeric) ? value : numeric;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'object' || Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // ignore parse errors
+    }
+
+    return value;
   }
 }
