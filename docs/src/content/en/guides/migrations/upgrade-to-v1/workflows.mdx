@@ -114,6 +114,16 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 + const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-list-runs .
+```
+
+:::
+
 ## Removed
 
 ### Legacy workflows export

@@ -111,6 +111,16 @@ To migrate, rename `query()` to `recall()` and update code that expects the old 
 + const messages = result.messages;
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-query-to-recall .
+```
+
+:::
+
 ### `Memory.recall()` parameter changes
 
 The `Memory.recall()` method now uses `StorageListMessagesInput` format with pagination, and the `vectorMessageSearch` parameter has been renamed to `vectorSearchString`. These changes align the memory API with the storage pagination API and provide more consistent naming.
@@ -132,6 +142,16 @@ To migrate, update method name, query parameters, and the vector search paramete
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-vector-search-param .
+```
+
+:::
+
 ### `MastraMessageV2` type renamed to `MastraDBMessage`
 
 The `MastraMessageV2` type has been renamed to `MastraDBMessage` for clarity. This change better describes the purpose of this type as the database message format.
@@ -145,7 +165,15 @@ To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
 + function yourCustomFunction(input: MastraDBMessage) {}
 ```
 
+:::tip[Codemod]
 
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-message-v2-type .
+```
+
+:::
 
 ## Removed
 

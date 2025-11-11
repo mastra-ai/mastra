@@ -40,9 +40,10 @@ export default createTransformer((fileInfo, api, options, context) => {
       if (args.length === 0 || args[0]?.type !== 'ObjectExpression') return;
 
       const configObj = args[0];
+      if (!configObj.properties) return;
 
       // Find the execute property
-      configObj.properties?.forEach((prop: any) => {
+      configObj.properties.forEach((prop: any) => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
           prop.key?.type === 'Identifier' &&
