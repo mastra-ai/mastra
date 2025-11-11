@@ -96,7 +96,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | unknown,
   ): Promise<TOutput> {
-    const value: {
+    const base: {
       status: WorkflowStepStatus;
       steps: Record<string, StepResult<any, any, any, any>>;
       input?: StepResult<any, any, any, any>;
@@ -110,14 +110,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
 
     if (lastOutput.status === 'success') {
-      value.result = lastOutput.output;
+      base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
       const errorSource = error || lastOutput.error;
       const errorInstance = getErrorFromUnknown(errorSource, {
         serializeStack: false,
         fallbackMessage: 'Unknown workflow error',
       });
-      value.error = errorInstance;
+      base.error = errorInstance;
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -127,10 +127,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         return [];
       });
-      value.suspended = suspendedStepIds;
+      base.suspended = suspendedStepIds;
     }
 
-    return value as TOutput;
+    return base as TOutput;
   }
 
   /**
