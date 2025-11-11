@@ -5,7 +5,7 @@ export default defineConfig([
     entry: ['src/index.ts'],
     outDir: 'dist',
     treeshake: true,
-    format: ['cjs'],
+    format: ['esm'],
     dts: false,
     clean: true,
     sourcemap: true,
@@ -13,7 +13,7 @@ export default defineConfig([
   {
     entry: ['src/codemods/**/*.ts'],
     outDir: 'dist/codemods',
-    format: ['cjs'],
+    format: ['esm'],
     dts: false,
     clean: true,
     sourcemap: true,
