@@ -1,6 +1,7 @@
 {
   "name": "@mastra/codemod",
-  "version": "0.1.0-beta.0",
+  "type": "module",
+  "version": "0.1.0-beta.1",
   "license": "Apache-2.0",
   "description": "Codemod CLI for Mastra",
   "bin": {
@@ -52,6 +53,6 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   }
 }

@@ -1,8 +1,37 @@
 import path from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import process from 'process';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'localhost:3000';
+
+// Strip locale pattern from URL for validation
+const stripLocalePattern = url => {
+  // Strip /:path(ja)? or /:locale(ja)? pattern from the beginning
+  return url.replace(/^\/:[^/]+\([^)]+\)\?/, '');
+};
+
+// Check if a file exists locally for a given URL path
+const checkLocalFile = urlPath => {
+  // Remove anchor links and leading slash
+  const cleanPath = urlPath
+    .replace(/#.*$/, '')
+    .replace(/^\//, '')
+    .replace(/\/(v\d+|v\d+\.\d+)\//g, '/');
+
+  // Try different possible file locations
+  const possiblePaths = [
+    path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '.mdx'),
+    path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '/index.mdx'),
+    path.resolve(__dirname, '../../docs/src/content/en', cleanPath, 'index.mdx'),
+  ];
+
+  return possiblePaths.some(filePath => existsSync(filePath));
+};
 
 const loadRedirects = async () => {
   process.chdir('docs');
@@ -25,7 +54,7 @@ const checkRedirects = async () => {
   for (const redirect of redirects) {
     if (!redirect || typeof redirect !== 'object') continue;
 
-    const { source, destination } = redirect;
+    const { source } = redirect;
     if (!source) continue;
 
     if (sourceMap.has(source)) {
@@ -53,15 +82,11 @@ const checkRedirects = async () => {
       continue;
     }
 
-    const destinationUrl = `${baseUrl}${destination}`;
-    let destinationOk = false;
+    const cleanDestination = stripLocalePattern(destination);
+    const destinationUrl = `${baseUrl}${cleanDestination}`;
 
-    try {
-      const destRes = await fetch(destinationUrl, { redirect: 'follow' });
-      destinationOk = destRes.status !== 404;
-    } catch {
-      destinationOk = false;
-    }
+    // Check if the destination file exists locally
+    const destinationOk = checkLocalFile(cleanDestination);
 
     if (destinationOk) {
       console.log('├──OK──', destinationUrl);

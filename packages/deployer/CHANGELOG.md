@@ -1,5 +1,23 @@
 # @mastra/deployer
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Updated dependencies [[`465ac05`](https://github.com/mastra-ai/mastra/commit/465ac0526a91d175542091c675181f1a96c98c46)]:
+  - @mastra/core@1.0.0-beta.2
+  - @mastra/server@1.0.0-beta.2
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- dependencies updates: ([#9851](https://github.com/mastra-ai/mastra/pull/9851))
+  - Updated dependency [`@rollup/plugin-node-resolve@16.0.3` ↗︎](https://www.npmjs.com/package/@rollup/plugin-node-resolve/v/16.0.3) (from `16.0.2`, in `dependencies`)
+- Updated dependencies [[`910db9e`](https://github.com/mastra-ai/mastra/commit/910db9e0312888495eb5617b567f247d03303814), [`e7266a2`](https://github.com/mastra-ai/mastra/commit/e7266a278db02035c97a5e9cd9d1669a6b7a535d)]:
+  - @mastra/core@1.0.0-beta.1
+  - @mastra/server@1.0.0-beta.1
+
 ## 1.0.0-beta.0
 
 ### Major Changes

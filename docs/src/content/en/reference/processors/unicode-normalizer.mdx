@@ -1,5 +1,5 @@
 ---
-title: "Reference: Unicode Normalizer | Processors | Mastra Docs"
+title: "Reference: Unicode Normalizer | Processors"
 description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
 ---
 
@@ -71,10 +71,16 @@ const processor = new UnicodeNormalizer({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'unicode-normalizer'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'unicode-normalizer'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
