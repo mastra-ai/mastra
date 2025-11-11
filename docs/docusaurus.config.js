@@ -84,6 +84,32 @@ const config = {
   ],
 
   plugins: [
+    // Custom webpack configuration plugin to handle process.env polyfill
+    function customWebpackPlugin(context, options) {
+      return {
+        name: "custom-webpack-config",
+        configureWebpack(config, isServer) {
+          return {
+            resolve: {
+              fallback: {
+                // Polyfill process for browser to prevent "process is undefined" errors
+                process: require.resolve("process/browser"),
+              },
+            },
+            plugins: [
+              // Provide process globally so gt-react can check process.env
+              new (require("webpack")).ProvidePlugin({
+                process: "process/browser",
+              }),
+              // Define process.env.NEXT_RUNTIME to prevent "Cannot read properties of undefined" errors
+              new (require("webpack")).DefinePlugin({
+                "process.env.NEXT_RUNTIME": JSON.stringify(undefined),
+              }),
+            ],
+          };
+        },
+      };
+    },
     // PostHog analytics is initialized manually in src/theme/Root.tsx
     // to support PostHog React hooks for cookie consent and feature flags
     // Vercel Analytics (automatically enabled in production on Vercel)
