@@ -237,7 +237,7 @@ describe('ModelRouter Integration Tests', () => {
   });
 
   // Azure uses deployment names encoded in the model ID (e.g. "azure/gpt-5-mini"), so
-  // only AZURE_API_KEY and AZURE_RESOURCE_NAME are required. We gate all tests on those.
+  // only AZURE_API_KEY and AZURE_RESOURCE_NAME are required.
   describe('azure/gpt-5-mini', () => {
     const modelId = 'azure/gpt-5-mini' as const;
     const skipAzure = !hasAzureEnv();

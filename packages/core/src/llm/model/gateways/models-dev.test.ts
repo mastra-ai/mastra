@@ -348,7 +348,6 @@ describe('ModelsDevGateway', () => {
 
         expect(providers.azure).toBeDefined();
         expect(providers.azure.name).toBe('Azure');
-        // Azure uses second env var (index [1]) for API key, which is AZURE_API_KEY
         expect(providers.azure.apiKeyEnvVar).toBe('AZURE_API_KEY');
         expect(providers.azure.models).toContain('gpt-4.1-mini');
         expect(providers.azure.url).toBeUndefined();
@@ -364,7 +363,6 @@ describe('ModelsDevGateway', () => {
 
     describe('getApiKey', () => {
       it('should throw error when AZURE_API_KEY is missing', () => {
-        // Ensure env var is unset before test
         vi.unstubAllEnvs();
         delete process.env.AZURE_API_KEY;
 
