@@ -1,6 +1,8 @@
 CLAUDE.md
 .history/
 **/.next
+**/.docusaurus
+**/.turbo
 **/dist
 */public/**
 **/node_modules/**
@@ -13,13 +15,14 @@ pnpm-workspace.yaml
 .mastra/
 .changeset/
 packages/cli/src/commands/init/init.test.ts
-packages/cli/dist
 **/integrations/**
 packages/create-mastra/rollup.config.js
 docs/**/*.mdx
+docs/build/**
 explorations/longmemeval/data/**/*.json
 explorations/longmemeval/prepared-data/**/*.json
 explorations/longmemeval/.embedding-cache/**/*.json
 explorations/longmemeval/.temp-longmemeval/**/*.json
 e2e-tests/kitchen-sink/tests/**/*.aria.yml
 packages/codemod/src/test/__fixtures__/**/*.ts
+packages/mcp-docs-server/.docs/**
