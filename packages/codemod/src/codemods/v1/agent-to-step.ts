@@ -59,8 +59,14 @@ export default createTransformer((fileInfo, api, options, context) => {
       }
 
       if (parent && parent.value) {
-        // Add FIXME comment to the parent statement
-        const added = insertCommentOnce(parent.value, j, COMMENT_MESSAGE);
+        // Check if this statement is wrapped in an export declaration
+        let targetNode = parent.value;
+        if (parent.parent && parent.parent.value.type === 'ExportNamedDeclaration') {
+          targetNode = parent.parent.value;
+        }
+
+        // Add FIXME comment to the statement (or export if it's exported)
+        const added = insertCommentOnce(targetNode, j, COMMENT_MESSAGE);
         if (added) {
           context.hasChanges = true;
         }
