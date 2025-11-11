@@ -1,0 +1,11 @@
+#!/bin/bash -e
+
+# Import Hooks
+# - specifier-resolution-node/register -- allow extensionless imports in ESM
+# - instrumentation-hook.js -- OpenTelemetry init hook that lets import-in-the-middle hook work
+# - ./dist/telemetry/init.js -- Sets up our actual telemetry code
+
+source /scripts/with-bigcontenv
+exec s6-setuidgid ${NOT_ROOT_USER} \
+    cd /usr/src/node-app \
+    node --import=specifier-resolution-node/register --import=./instrumentation-hook.mjs --import=./dist/core/telemetry/init.js dist/server.js

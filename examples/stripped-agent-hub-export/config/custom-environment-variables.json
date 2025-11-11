@@ -1,0 +1,15 @@
+{
+  "log": {
+    "level": "LOG_LEVEL",
+    "pretty": "LOG_PRETTY"
+  },
+  "azureOpenai": {
+    "apiKey": "AZURE_OPENAI_API_KEY",
+    "resourceName": "AZURE_OPENAI_DEPLOYMENT_NAME",
+    "endpoint": "AZURE_OPENAI_ENDPOINT"
+  },
+  "storage": {
+    "type": "STORAGE_TYPE",
+    "url": "STORAGE_URL"
+  }
+}

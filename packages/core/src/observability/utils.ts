@@ -27,18 +27,52 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     });
   }
 
-  // Otherwise, try to create a new root span
+  // Get instance once - used for both bridge access and span creation
   const instance = options.mastra?.observability?.getSelectedInstance({ requestContext });
+  if (!instance) {
+    return undefined;
+  }
 
-  return instance?.startSpan<T>({
+  // Try to get OTEL context from bridge if no explicit traceId
+  let finalTracingOptions = tracingOptions;
+
+  if (!tracingOptions?.traceId) {
+    const bridge = instance.getBridge();
+
+    if (bridge) {
+      try {
+        const bridgeContext = bridge.getCurrentContext(requestContext);
+
+        if (bridgeContext) {
+          // Respect OTEL sampling decision
+          if (!bridgeContext.isSampled) {
+            return undefined; // Don't create span
+          }
+
+          // Inject OTEL context
+          finalTracingOptions = {
+            ...tracingOptions,
+            traceId: bridgeContext.traceId,
+            parentSpanId: bridgeContext.parentSpanId,
+          };
+        }
+      } catch (error) {
+        // Log warning and continue with new trace
+        instance.getLogger().warn('Failed to get OTEL context from bridge, creating new trace:', error);
+      }
+    }
+  }
+
+  // Create new root span with potentially enhanced options
+  return instance.startSpan<T>({
     type,
     attributes,
     ...rest,
     metadata,
     requestContext,
-    tracingOptions,
-    traceId: tracingOptions?.traceId,
-    parentSpanId: tracingOptions?.parentSpanId,
+    tracingOptions: finalTracingOptions,
+    traceId: finalTracingOptions?.traceId,
+    parentSpanId: finalTracingOptions?.parentSpanId,
     customSamplerOptions: {
       requestContext,
       metadata,

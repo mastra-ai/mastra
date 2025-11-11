@@ -1,0 +1,5 @@
+{
+  "server": {
+    "cors": true
+  }
+}

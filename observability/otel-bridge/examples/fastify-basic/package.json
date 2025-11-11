@@ -1,0 +1,20 @@
+{
+  "name": "otel-bridge-example-fastify-basic",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch server.ts",
+    "start": "tsx server.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/otel-bridge": "workspace:*",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2"
+  }
+}

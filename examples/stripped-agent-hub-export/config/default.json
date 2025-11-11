@@ -1,0 +1,22 @@
+{
+  "azureOpenai": {
+    "apiKey": null,
+    "resourceName": null,
+    "endpoint": null
+  },
+  "debug": {
+    "enableModelLogging": false
+  },
+  "log": {
+    "level": "info",
+    "pretty": false
+  },
+  "server": {
+    "cors": false,
+    "enforceAuthHeaders": false
+  },
+  "storage": {
+    "type": "libsql",
+    "url": "file:./mastra.db"
+  }
+}

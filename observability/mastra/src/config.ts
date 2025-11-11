@@ -9,6 +9,7 @@ import type { RequestContext } from '@mastra/core/di';
 import type {
   ObservabilityInstance,
   ObservabilityExporter,
+  ObservabilityBridge,
   SpanOutputProcessor,
   ConfigSelector,
 } from '@mastra/core/observability';
@@ -61,6 +62,8 @@ export interface ObservabilityInstanceConfig {
   sampling?: SamplingStrategy;
   /** Custom exporters */
   exporters?: ObservabilityExporter[];
+  /** Observability bridge (e.g., OpenTelemetry bridge for context extraction) */
+  bridge?: ObservabilityBridge;
   /** Custom span output processors */
   spanOutputProcessors?: SpanOutputProcessor[];
   /** Set to `true` if you want to see spans internal to the operation of mastra */
@@ -113,7 +116,7 @@ export const samplingStrategySchema = z.discriminatedUnion('type', [
 
 /**
  * Zod schema for ObservabilityInstanceConfig
- * Note: exporters, spanOutputProcessors, and configSelector are validated as any
+ * Note: exporters, spanOutputProcessors, bridge, and configSelector are validated as any
  * since they're complex runtime objects
  */
 export const observabilityInstanceConfigSchema = z.object({
@@ -121,6 +124,7 @@ export const observabilityInstanceConfigSchema = z.object({
   serviceName: z.string().min(1, 'Service name is required'),
   sampling: samplingStrategySchema.optional(),
   exporters: z.array(z.any()).optional(),
+  bridge: z.any().optional(),
   spanOutputProcessors: z.array(z.any()).optional(),
   includeInternalSpans: z.boolean().optional(),
   requestContextKeys: z.array(z.string()).optional(),
@@ -134,6 +138,7 @@ export const observabilityConfigValueSchema = z.object({
   serviceName: z.string().min(1, 'Service name is required'),
   sampling: samplingStrategySchema.optional(),
   exporters: z.array(z.any()).optional(),
+  bridge: z.any().optional(),
   spanOutputProcessors: z.array(z.any()).optional(),
   includeInternalSpans: z.boolean().optional(),
   requestContextKeys: z.array(z.string()).optional(),

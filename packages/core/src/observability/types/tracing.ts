@@ -439,7 +439,7 @@ export interface ObservabilityInstance {
   /**
    * Get current configuration
    */
-  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>;
+  getConfig(): Readonly<Required<Omit<ObservabilityInstanceConfig, 'bridge'>> & { bridge?: ObservabilityBridge }>;
 
   /**
    * Get all exporters
@@ -455,6 +455,11 @@ export interface ObservabilityInstance {
    * Get the logger instance (for exporters and other components)
    */
   getLogger(): IMastraLogger;
+
+  /**
+   * Get the bridge instance if configured
+   */
+  getBridge(): ObservabilityBridge | undefined;
 
   /**
    * Start a new span of a specific SpanType
@@ -716,6 +721,8 @@ export interface ObservabilityInstanceConfig {
   exporters?: ObservabilityExporter[];
   /** Custom processors */
   spanOutputProcessors?: SpanOutputProcessor[];
+  /** OpenTelemetry bridge for integration with existing OTEL infrastructure */
+  bridge?: ObservabilityBridge;
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
   /**
@@ -797,6 +804,11 @@ export interface InitExporterOptions {
   config?: ObservabilityInstanceConfig;
 }
 
+export interface InitBridgeOptions {
+  mastra?: Mastra;
+  config?: ObservabilityInstanceConfig;
+}
+
 /**
  * Interface for tracing exporters
  */
@@ -807,7 +819,7 @@ export interface ObservabilityExporter {
   /** Initialize exporter with tracing configuration and/or access to Mastra */
   init?(options: InitExporterOptions): void;
 
-  /** Sets logger instance throughout Observability, including all configured exporters, processors, etc..  */
+  /** Sets logger instance on the exporter.  */
   __setLogger?(logger: IMastraLogger): void;
 
   /** Export tracing events */
@@ -830,6 +842,46 @@ export interface ObservabilityExporter {
   }): Promise<void>;
 
   /** Shutdown exporter */
+  shutdown(): Promise<void>;
+}
+
+/**
+ * Interface for observability bridges
+ */
+export interface ObservabilityBridge {
+  /** Bridge name */
+  name: string;
+
+  /** Initialize bridge with observability configuration and/or access to Mastra */
+  init?(options: InitBridgeOptions): void;
+
+  /** Sets logger instance on the bridge  */
+  __setLogger?(logger: IMastraLogger): void;
+
+  /**
+   * Get current OTEL context for span creation
+   * Called by getOrCreateSpan() when creating root spans
+   *
+   * @param requestContext - Optional request context with headers/metadata
+   * @returns OTEL context or undefined if not available
+   */
+  getCurrentContext(requestContext?: RequestContext):
+    | {
+        traceId: string;
+        parentSpanId?: string;
+        isSampled: boolean;
+      }
+    | undefined;
+
+  /**
+   * Export Mastra tracing events to OTEL infrastructure
+   * Called for SPAN_STARTED, SPAN_UPDATED, SPAN_ENDED events
+   *
+   * @param event - Tracing event with exported span
+   */
+  exportTracingEvent(event: TracingEvent): Promise<void>;
+
+  /** Shutdown bridge and cleanup resources */
   shutdown(): Promise<void>;
 }
 

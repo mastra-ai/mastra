@@ -1,0 +1,26 @@
+{
+  "name": "@mastra/otel-bridge-example-nextjs-basic",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3459",
+    "build": "next build",
+    "start": "next start --port 3459"
+  },
+  "dependencies": {
+    "@mastra/core": "workspace:*",
+    "@mastra/observability": "workspace:*",
+    "@mastra/otel-bridge": "workspace:*",
+    "dotenv": "^16.4.7",
+    "next": "^15.1.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.7.2"
+  }
+}

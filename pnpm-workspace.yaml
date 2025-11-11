@@ -10,6 +10,7 @@ packages:
   - examples/dane
   - auth/*
   - observability/*
+  - observability/otel-bridge/examples/*
   - explorations/longmemeval
   - explorations/agent-builder-gh-repro
 
