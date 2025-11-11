@@ -46,7 +46,10 @@ export default createTransformer((fileInfo, api, options, context) => {
       );
     })
     .forEach(path => {
-      (path.value.callee as any).property.name = 'listMessages';
+      const callee = path.value.callee;
+      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
+        callee.property.name = 'listMessages';
+      }
 
       const args = path.value.arguments;
       const firstArg = args[0];

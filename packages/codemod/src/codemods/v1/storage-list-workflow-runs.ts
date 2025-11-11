@@ -38,8 +38,11 @@ export default createTransformer((fileInfo, api, options, context) => {
       );
     })
     .forEach(path => {
-      (path.value.callee as any).property.name = 'listWorkflowRuns';
-      context.hasChanges = true;
+      const callee = path.value.callee;
+      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
+        callee.property.name = 'listWorkflowRuns';
+        context.hasChanges = true;
+      }
     });
 
   if (context.hasChanges) {

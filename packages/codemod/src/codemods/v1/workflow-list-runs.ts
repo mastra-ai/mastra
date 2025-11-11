@@ -50,9 +50,11 @@ export default createTransformer((fileInfo, api, options, context) => {
       return callee.property.name === oldMethodName;
     })
     .forEach(path => {
-      const callee = path.value.callee as any;
-      callee.property.name = newMethodName;
-      context.hasChanges = true;
+      const callee = path.value.callee;
+      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
+        callee.property.name = newMethodName;
+        context.hasChanges = true;
+      }
     });
 
   if (context.hasChanges) {
