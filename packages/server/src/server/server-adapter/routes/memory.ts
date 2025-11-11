@@ -119,7 +119,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     method: 'POST',
     responseType: 'json',
     handler: saveMessagesHandler as unknown as ServerRouteHandler,
-    path: '/api/memory/messages',
+    path: '/api/memory/save-messages',
     queryParamSchema: agentIdQuerySchema,
     bodySchema: saveMessagesBodySchema,
     responseSchema: saveMessagesResponseSchema,
