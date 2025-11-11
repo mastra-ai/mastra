@@ -45,6 +45,7 @@ import { NonRetriableError, RetryAfterError } from 'inngest';
 import type { Inngest, BaseContext, InngestFunction, RegisterOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
+import { getErrorFromUnknown } from '@mastra/core/error';
 
 // Extract Inngest's native flow control configuration types
 type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
@@ -1146,7 +1147,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    emitter: Emitter,
+    _emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
@@ -1158,12 +1159,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      base.error =
-        error instanceof Error
-          ? (error?.stack ?? error.message)
-          : lastOutput?.error instanceof Error
-            ? lastOutput.error.message
-            : (lastOutput.error ?? error ?? 'Unknown error');
+      const errorSource = error || lastOutput.error;
+      const errorInstance = getErrorFromUnknown(errorSource, {
+        serializeStack: false,
+        fallbackMessage: 'Unknown workflow error',
+      });
+      base.error = errorInstance;
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -1897,7 +1898,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     executionContext: ExecutionContext;
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
     result?: Record<string, any>;
-    error?: string | Error;
+    error?: Error;
     requestContext: RequestContext;
   }) {
     await this.inngestStep.run(
