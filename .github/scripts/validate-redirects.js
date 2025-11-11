@@ -11,7 +11,8 @@ const baseUrl = process.env.MASTRA_DEPLOYMENT_URL || 'https://mastra.ai'; //'loc
 
 // Strip locale pattern from URL for validation
 const stripLocalePattern = url => {
-  return url.replace(/^\/:[^/]+\//, '/');
+  // Strip /:path(ja)? or /:locale(ja)? pattern from the beginning
+  return url.replace(/^\/:[^/]+\([^)]+\)\?/, '');
 };
 
 // Check if a file exists locally for a given URL path
