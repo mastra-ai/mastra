@@ -30,7 +30,7 @@ const config = {
     },
     parseFrontMatter: async (params) => {
       const result = await params.defaultParseFrontMatter(params);
-      result.frontMatter.description = `Mastra v1 BETA: ${result.frontMatter.description}`
+      result.frontMatter.description = `Mastra v1 BETA: ${result.frontMatter.description}`;
       return result;
     },
   },
