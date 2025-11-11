@@ -1,5 +1,3 @@
-"use client";
-
 import { Button } from "@site/src/components/ui/button";
 import { cn } from "@site/src/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
@@ -50,7 +48,7 @@ export const ConversationEmptyState = ({
   <div
     className={cn(
       "flex flex-col gap-3 justify-center items-center p-8 text-center size-full",
-      className
+      className,
     )}
     {...props}
   >
@@ -85,7 +83,7 @@ export const ConversationScrollButton = ({
       <Button
         className={cn(
           "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full",
-          className
+          className,
         )}
         onClick={handleScrollToBottom}
         size="icon"
