@@ -84,6 +84,13 @@ const agent = new Agent({
 });
 
 /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+export const agent2 = new Agent({
+  name: 'Support Agent',
+  instructions: 'Help users',
+  model: 'openai/gpt-4',
+});
+
+/* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
 const workflow = createWorkflow({
   execute: async ({ step }) => {
     return await step.run('process', async () => {

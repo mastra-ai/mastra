@@ -72,6 +72,12 @@ const agent = new Agent({
   model: 'openai/gpt-4',
 });
 
+export const agent2 = new Agent({
+  name: 'Support Agent',
+  instructions: 'Help users',
+  model: 'openai/gpt-4',
+});
+
 const workflow = createWorkflow({
   execute: async ({ step }) => {
     return await step.run('process', async () => {

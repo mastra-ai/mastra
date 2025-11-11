@@ -6,4 +6,8 @@ const mastra = new Mastra({
   memory: new Memory(),
 });
 
-const mastra2 = new Mastra({});
+export const mastra2 = new Mastra({
+  memory: new Memory(),
+});
+
+const mastra3 = new Mastra({});
