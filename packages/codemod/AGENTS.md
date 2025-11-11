@@ -9,7 +9,8 @@ This guide helps AI agents efficiently create codemods. Follow this structured a
 ## Step 1: Scaffold the Codemod
 
 ```bash
-cd /Users/lejoe/code/work/mastra/packages/codemod
+# From repository root:
+cd packages/codemod
 pnpm scaffold <codemod-name>
 ```
 
