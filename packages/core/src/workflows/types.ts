@@ -5,6 +5,7 @@ import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
+import type { MastraError } from '../error';
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -33,7 +34,7 @@ export type StepSuccess<P, R, S, T> = {
 
 export type StepFailure<P, R, S> = {
   status: 'failed';
-  error: string | Error;
+  error: Error;
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
@@ -181,7 +182,7 @@ export interface WorkflowState {
   >;
   result?: Record<string, any>;
   payload?: Record<string, any>;
-  error?: string | Error;
+  error?: Record<string, any>;
 }
 
 export interface WorkflowRunState {
@@ -189,7 +190,7 @@ export interface WorkflowRunState {
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
-  error?: string | Error;
+  error?: Record<string, any>;
   requestContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
