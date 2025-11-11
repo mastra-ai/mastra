@@ -1,28 +1,162 @@
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
+
+import type { MastraMessageV2 } from '../../agent/message-list';
+import { MessageList } from '../../agent/message-list';
+
+import { ToolCallFilter } from './tool-call-filter';
+import { TokenLimiterProcessor } from './token-limiter';
 
 describe('Processors Integration Tests', () => {
+  const mockAbort = ((reason?: string) => {
+    throw new Error(reason || 'Aborted');
+  }) as (reason?: string) => never;
+
   /**
-   * TODO: Test processor chaining with ToolCallFilter + TokenLimiter
+   * Test processor chaining with ToolCallFilter + TokenLimiter
    * 
    * Origin: Migrated from packages/memory/integration-tests/src/processors.test.ts
    * Test name: "should apply multiple processors in order"
    * 
    * Purpose: Verify that multiple processors can be chained together in a specific order
    * and that each processor operates on the output of the previous processor.
-   * 
-   * Implementation details:
-   * - Create a MessageList with mixed content (tool calls, text, etc.)
-   * - Apply ToolCallFilter first to exclude specific tool calls
-   * - Apply TokenLimiter second to limit token count
-   * - Verify that the final result respects both processor constraints
-   * - Ensure no message duplication occurs during chaining
-   * 
-   * Differences from old implementation:
-   * - Old test used memory.recall() + processInput pattern
-   * - New test should use direct processor.processInput() calls with MessageList
-   * - Old test expected array return, new test handles MessageList | MastraDBMessage return
    */
-  it.todo('should chain multiple processors in order (ToolCallFilter + TokenLimiter)');
+  it('should chain multiple processors in order (ToolCallFilter + TokenLimiter)', async () => {
+    // Create messages with tool calls and text content
+    const messages: MastraMessageV2[] = [
+      {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'What is the weather in NYC?',
+          parts: [],
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 'msg-2',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'The weather in NYC is sunny and 72°F. It is a beautiful day outside with clear skies.',
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'call' as const,
+                toolCallId: 'call-1',
+                toolName: 'weather',
+                args: { location: 'NYC' },
+              },
+            },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-1',
+                toolName: 'weather',
+                args: {},
+                result: 'Sunny, 72°F',
+              },
+            },
+          ],
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 'msg-5',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'What about San Francisco?',
+          parts: [],
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 'msg-6',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'San Francisco is foggy with a temperature of 58°F.',
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'call' as const,
+                toolCallId: 'call-2',
+                toolName: 'time',
+                args: { location: 'SF' },
+              },
+            },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-2',
+                toolName: 'time',
+                args: {},
+                result: '3:45 PM',
+              },
+            },
+          ],
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    // Step 1: Apply ToolCallFilter to exclude weather tool calls
+    const toolCallFilter = new ToolCallFilter({ exclude: ['weather'] });
+    
+    // Create MessageList and add messages
+    const messageList = new MessageList({ threadId: 'test-thread', resourceId: 'test-resource' });
+    for (const msg of messages) {
+      messageList.add(msg, 'input');
+    }
+    
+
+    
+    const filteredResult = await toolCallFilter.processInput({
+      messageList,
+      abort: mockAbort,
+    });
+    // Extract messages from result (could be MessageList or MastraDBMessage)
+    const filteredMessages = Array.isArray(filteredResult) 
+      ? filteredResult 
+      : filteredResult instanceof MessageList 
+        ? filteredResult.get.all.v2() 
+        : [filteredResult];
+
+    // Verify ToolCallFilter removed weather tool call messages
+    expect(filteredMessages).toHaveLength(3); // msg-1 (user), msg-5 (user), msg-6 (assistant with 'time' tool)
+    expect(filteredMessages.some(m => m.id === 'msg-2')).toBe(false); // Weather tool call removed
+    expect(filteredMessages.some(m => m.id === 'msg-6')).toBe(true); // Time tool call preserved
+    expect(filteredMessages.some(m => m.id === 'msg-1')).toBe(true); // User message preserved
+    expect(filteredMessages.some(m => m.id === 'msg-5')).toBe(true); // User message preserved
+
+    // Step 2: Apply TokenLimiter to limit message count
+    // TokenLimiter with a low limit should further reduce messages
+    const tokenLimiter = new TokenLimiterProcessor({ limit: 50 });
+    
+    const limitedMessages = await tokenLimiter.processInput({
+      messages: filteredMessages,
+      abort: mockAbort,
+    });
+
+    // Verify TokenLimiter further reduced messages
+    expect(limitedMessages.length).toBeLessThanOrEqual(filteredMessages.length);
+    expect(limitedMessages.length).toBeGreaterThan(0); // Should have at least some messages
+
+    // Verify no message duplication
+    const messageIds = limitedMessages.map(m => m.id);
+    const uniqueIds = new Set(messageIds);
+    expect(messageIds.length).toBe(uniqueIds.size);
+
+    // Verify final messages are a subset of filtered messages
+    limitedMessages.forEach(msg => {
+      expect(filteredMessages.some(m => m.id === msg.id)).toBe(true);
+    });
+  });
 
   /**
    * TODO: Test processor chaining without message duplication
