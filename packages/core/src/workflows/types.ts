@@ -9,6 +9,8 @@ import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
+export type WorkflowEngineType = string;
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;
@@ -170,6 +172,7 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 
 export interface WorkflowState {
   status: WorkflowRunStatus;
+  activeStepsPath: Record<string, number[]>;
   steps: Record<
     string,
     {
@@ -199,7 +202,8 @@ export interface WorkflowRunState {
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
-  activePaths: Array<unknown>;
+  activePaths: Array<number>;
+  activeStepsPath: Record<string, number[]>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

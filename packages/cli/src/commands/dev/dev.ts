@@ -29,6 +29,25 @@ interface StartOptions {
   https?: HTTPSOptions;
 }
 
+const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
+  try {
+    await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    devLogger.error(`Failed to restart all active workflow runs: ${error}`);
+    // Retry after another second
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+        method: 'POST',
+      });
+    } catch {
+      // Ignore retry errors
+    }
+  }
+};
+
 const startServer = async (
   dotMastraPath: string,
   {
@@ -131,6 +150,8 @@ const startServer = async (
         serverIsReady = true;
         devLogger.ready(host, port, serverStartTime, startOptions.https);
         devLogger.watching();
+
+        await restartAllActiveWorkflowRuns({ host, port });
 
         // Send refresh signal
         try {
