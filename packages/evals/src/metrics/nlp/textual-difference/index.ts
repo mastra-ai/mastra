@@ -1,6 +1,6 @@
 import { Metric } from '@mastra/core/eval';
 import type { MetricResult } from '@mastra/core/eval';
-import { SequenceMatcher } from 'difflib';
+import { calculateRatio, countChanges } from '../../../ratio';
 
 interface TextualDifferenceResult extends MetricResult {
   info: {
@@ -13,12 +13,11 @@ interface TextualDifferenceResult extends MetricResult {
 
 export class TextualDifferenceMetric extends Metric {
   async measure(input: string, output: string): Promise<TextualDifferenceResult> {
-    const matcher = new SequenceMatcher(null, input, output);
-    const ratio = matcher.ratio();
+    // Calculate similarity ratio using LCS approach (similar to SequenceMatcher.ratio())
+    const ratio = calculateRatio(input, output);
 
-    // Get detailed operations
-    const ops = matcher.getOpcodes();
-    const changes = ops.filter(([op]) => op !== 'equal').length;
+    // Count changes by comparing words
+    const changes = countChanges(input, output);
 
     // Calculate confidence based on text length difference
     const maxLength = Math.max(input.length, output.length);

@@ -22,6 +22,11 @@ export async function build({
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
 
+  logger.warn(`Important: Mastra v1.0.0 will go stable soon.
+
+Please update to the latest v0.x and try out the v1.0.0-beta releases! Follow the migration guide:
+https://mastra.ai/guides/v1/migrations/upgrade-to-v1/overview`);
+
   // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
   const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
   const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
