@@ -161,7 +161,7 @@
   --ifm-footer-background-color: #050505;
   --ifm-code-background: var(--mastra-surface-2);
 
-  --ifm-navbar-height: calc(58px);
+  --ifm-navbar-height: 47px;
 
   /* Code blocks */
   --docusaurus-highlighted-code-line-bg: color-mix(
@@ -1302,7 +1302,7 @@ p {
   }
 
   .toc-wrapper {
-    @apply sticky overflow-y-auto;
+    @apply overflow-y-auto sticky;
     top: calc(var(--ifm-navbar-height) + 1rem);
     max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
   }
