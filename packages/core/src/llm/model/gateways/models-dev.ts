@@ -115,7 +115,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         // Convert hyphens to underscores for env var naming convention
         const apiKeyEnvVar =
           providerInfo.id === 'azure'
-            ? providerInfo.env?.[1] || `AZURE_API_KEY` // if not in env, use AZURE_API_KEY
+            ? 'AZURE_API_KEY'
             : providerInfo.env?.[0] || `${normalizedId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
 
         // Determine the API key header (special case for Anthropic)

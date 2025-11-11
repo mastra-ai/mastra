@@ -639,7 +639,7 @@
       "gateway": "models.dev"
     },
     "azure": {
-      "apiKeyEnvVar": "AZURE_RESOURCE_NAME",
+      "apiKeyEnvVar": "AZURE_API_KEY",
       "name": "Azure",
       "models": [
         "codex-mini",
