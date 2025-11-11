@@ -13,6 +13,12 @@ const step = createStep({
       throw new Error('Too many retries');
     }
     
+    // Should transform - optional chaining
+    const optionalCount = context?.runCount;
+    if (context?.runCount !== undefined) {
+      console.log('Has run count');
+    }
+    
     return { result: 'success' };
   },
 });

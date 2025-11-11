@@ -64,9 +64,9 @@ export default createTransformer((fileInfo, api, options, context) => {
     });
 
   // Rename context.runCount to context.retryCount
-  root.find(j.MemberExpression).forEach(path => {
-    const node = path.value;
-
+  const renameMemberProperty = (
+    node: ReturnType<typeof j.memberExpression> | ReturnType<typeof j.optionalMemberExpression>,
+  ) => {
     // Check if accessing .runCount on a context parameter
     if (
       node.object.type === 'Identifier' &&
@@ -77,6 +77,16 @@ export default createTransformer((fileInfo, api, options, context) => {
       node.property.name = newPropertyName;
       context.hasChanges = true;
     }
+  };
+
+  // Handle regular member expressions (context.runCount)
+  root.find(j.MemberExpression).forEach(path => {
+    renameMemberProperty(path.value);
+  });
+
+  // Handle optional member expressions (context?.runCount)
+  root.find(j.OptionalMemberExpression).forEach(path => {
+    renameMemberProperty(path.value);
   });
 
   if (context.hasChanges) {
