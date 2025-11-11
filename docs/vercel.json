@@ -1,6 +1,11 @@
 {
   "redirects": [
     {
+      "source": "/:path(ja)?/examples/memory/memory-with-mongodb",
+      "destination": "/:path/docs/memory/storage/memory-with-mongodb",
+      "permanent": true
+    },
+    {
       "source": "/:path(ja)?/docs/getting-started/model-providers",
       "destination": "/:path/models",
       "permanent": true
