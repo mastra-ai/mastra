@@ -33,7 +33,9 @@ export default function Layout(props: Props): ReactNode {
 
   const location = useLocation();
   const { siteConfig } = useDocusaurusContext();
-  const cleanPath = location.pathname.replace(/^\/ja(\/|$)/, "/");
+  const cleanPath = location.pathname
+    .replace(/^\/ja(\/|$)/, "/")
+    .replace(/^\/([a-z]+)\/v1(\/|$)/, "/$1$2");
   const canonicalUrl = `${siteConfig.url}${cleanPath}`;
 
   return (
@@ -45,7 +47,7 @@ export default function Layout(props: Props): ReactNode {
         <link rel="alternate" hrefLang="en" href={canonicalUrl} />
         <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
         {/* IMPORTANT: Remove the next line when v1 gets stable and docs are moved to the url without `v1` prefix */}
-        <meta name="robots" content="noindex" />
+        <meta name="robots" content="noindex, follow" />
       </Head>
 
       <SkipToContent />
