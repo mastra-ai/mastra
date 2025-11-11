@@ -23,6 +23,8 @@ export default function Root({ children }: { children: React.ReactNode }) {
           locale={i18n?.currentLocale}
           defaultLocale={i18n?.defaultLocale}
           loadTranslations={loadTranslations}
+          // Explicitly disable SSR detection to prevent process.env.NEXT_RUNTIME errors
+          ssr={false}
         >
           <Toaster />
           <CookieConsent />
