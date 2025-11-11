@@ -89,8 +89,7 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
   ) {
     const error = originalError
       ? getErrorFromUnknown(originalError, {
-          includeStack: true,
-          supportSerialization: true,
+          serializeStack: false,
           fallbackMessage: 'Unknown error',
         })
       : undefined;
@@ -127,7 +126,7 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
       category: this.category,
       code: this.id,
       details: this.details,
-      cause: this.cause,
+      cause: this.cause?.toJSON?.() ?? this.cause,
     };
   }
 
