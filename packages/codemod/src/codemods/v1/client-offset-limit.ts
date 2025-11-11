@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, transformObjectProperties } from '../lib/utils';
 
 /**
  * Renames pagination properties from offset/limit to page/perPage.
@@ -12,7 +13,7 @@ import { createTransformer } from '../lib/create-transformer';
  * await client.listMemoryThreads({ page: 0, perPage: 20 });
  * await client.getTraces({ pagination: { page: 0, perPage: 40 } });
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
   // Map of old property names to new property names
@@ -21,82 +22,43 @@ export default createTransformer((fileInfo, api, options, context) => {
     limit: 'perPage',
   };
 
-  // Track MastraClient instances and objects returned from client methods
-  const clientInstances = new Set<string>();
+  // Track MastraClient instances and objects returned from client methods in a single pass
+  const clientInstances = trackClassInstances(j, root, 'MastraClient');
   const clientObjects = new Set<string>();
 
-  // First pass: Find MastraClient instances
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: 'MastraClient',
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        clientInstances.add(parent.id.name);
-      }
-    });
+  // Early return if no client instances found
+  if (clientInstances.size === 0) return;
 
-  // Second pass: Find objects returned from client method calls
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
+  // Single pass: Find objects returned from client method calls AND transform properties
+  root.find(j.CallExpression).forEach(path => {
+    const { callee } = path.value;
+    if (callee.type !== 'MemberExpression') return;
+    if (callee.object.type !== 'Identifier') return;
 
-      // Check if it's called on a MastraClient instance
-      return clientInstances.has(callee.object.name);
-    })
-    .forEach(path => {
+    // Check if it's called on a MastraClient instance or tracked client object
+    const isClientInstance = clientInstances.has(callee.object.name);
+    const isClientObject = clientObjects.has(callee.object.name);
+
+    if (isClientInstance) {
+      // Track objects returned from client method calls
       const parent = path.parent.value;
       if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
         clientObjects.add(parent.id.name);
       }
-    });
+    }
 
-  // Third pass: Transform offset/limit in calls to client methods and client objects
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-
-      // Check if it's called on a MastraClient instance or object returned from client
-      return clientInstances.has(callee.object.name) || clientObjects.has(callee.object.name);
-    })
-    .forEach(path => {
+    if (isClientInstance || isClientObject) {
       // Transform offset/limit properties in the arguments of this call
       path.value.arguments.forEach(arg => {
         if (arg.type === 'ObjectExpression') {
-          transformObjectProperties(arg);
+          const count = transformObjectProperties(arg, propertyRenames);
+          if (count > 0) {
+            context.hasChanges = true;
+          }
         }
       });
-    });
-
-  // Helper function to transform properties recursively
-  function transformObjectProperties(obj: any) {
-    obj.properties?.forEach((prop: any) => {
-      if ((prop.type === 'Property' || prop.type === 'ObjectProperty') && prop.key && prop.key.type === 'Identifier') {
-        const oldName = prop.key.name;
-        const newName = propertyRenames[oldName];
-
-        if (newName) {
-          prop.key.name = newName;
-          context.hasChanges = true;
-        }
-
-        // Recursively transform nested objects
-        if (prop.value && prop.value.type === 'ObjectExpression') {
-          transformObjectProperties(prop.value);
-        }
-      }
-    });
-  }
+    }
+  });
 
   if (context.hasChanges) {
     context.messages.push('Renamed pagination properties from offset/limit to page/perPage');

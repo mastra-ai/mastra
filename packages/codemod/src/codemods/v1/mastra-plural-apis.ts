@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, renameMethods } from '../lib/utils';
 
 /**
  * Renames Mastra plural API methods from get* to list*.
@@ -14,7 +15,7 @@ import { createTransformer } from '../lib/create-transformer';
  * const workflows = mastra.listWorkflows();
  * const logs = await mastra.listLogs('transportId');
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
   // Map of old method names to new method names
@@ -28,53 +29,12 @@ export default createTransformer((fileInfo, api, options, context) => {
     getLogs: 'listLogs',
   };
 
-  // Track Mastra instances
-  const mastraInstances = new Set<string>();
+  // Track Mastra instances and rename all methods in a single optimized pass
+  const mastraInstances = trackClassInstances(j, root, 'Mastra');
+  const count = renameMethods(j, root, mastraInstances, methodRenames);
 
-  // Find Mastra instances
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: 'Mastra',
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        mastraInstances.add(parent.id.name);
-      }
-    });
-
-  // Find and rename method calls on Mastra instances
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-      if (callee.property.type !== 'Identifier') return false;
-
-      // Only process if called on a Mastra instance
-      if (!mastraInstances.has(callee.object.name)) return false;
-
-      // Only process if it's one of the methods we want to rename
-      return methodRenames.hasOwnProperty(callee.property.name);
-    })
-    .forEach(path => {
-      const callee = path.value.callee;
-      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
-        const oldName = callee.property.name;
-        const newName = methodRenames[oldName];
-
-        if (newName) {
-          callee.property.name = newName;
-          context.hasChanges = true;
-        }
-      }
-    });
-
-  if (context.hasChanges) {
+  if (count > 0) {
+    context.hasChanges = true;
     context.messages.push('Renamed Mastra plural API methods from get* to list*');
   }
 });

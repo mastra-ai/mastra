@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, renameMethod } from '../lib/utils';
 
 /**
  * Renames memory.query() to memory.recall().
@@ -10,54 +11,15 @@ import { createTransformer } from '../lib/create-transformer';
  * After:
  * const result = await memory.recall({ threadId: 'thread-123' });
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
-  const oldMethodName = 'query';
-  const newMethodName = 'recall';
+  // Track Memory instances and rename query to recall in a single optimized pass
+  const memoryInstances = trackClassInstances(j, root, 'Memory');
+  const count = renameMethod(j, root, memoryInstances, 'query', 'recall');
 
-  // Track Memory instances
-  const memoryInstances = new Set<string>();
-
-  // Find Memory instances
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: 'Memory',
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        memoryInstances.add(parent.id.name);
-      }
-    });
-
-  // Find and rename method calls on Memory instances
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-      if (callee.property.type !== 'Identifier') return false;
-
-      // Only process if called on a Memory instance
-      if (!memoryInstances.has(callee.object.name)) return false;
-
-      // Only process if it's the method we want to rename
-      return callee.property.name === oldMethodName;
-    })
-    .forEach(path => {
-      const callee = path.value.callee;
-      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
-        callee.property.name = newMethodName;
-        context.hasChanges = true;
-      }
-    });
-
-  if (context.hasChanges) {
+  if (count > 0) {
+    context.hasChanges = true;
     context.messages.push('Renamed query to recall on Memory instances');
   }
 });

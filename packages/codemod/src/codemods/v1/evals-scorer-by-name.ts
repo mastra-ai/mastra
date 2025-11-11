@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, renameMethod } from '../lib/utils';
 
 /**
  * Renames mastra.getScorerByName() to mastra.getScorerById().
@@ -10,54 +11,15 @@ import { createTransformer } from '../lib/create-transformer';
  * After:
  * const scorer = mastra.getScorerById('helpfulness-scorer');
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
-  const oldMethodName = 'getScorerByName';
-  const newMethodName = 'getScorerById';
+  // Track Mastra instances and rename method in a single optimized pass
+  const mastraInstances = trackClassInstances(j, root, 'Mastra');
+  const count = renameMethod(j, root, mastraInstances, 'getScorerByName', 'getScorerById');
 
-  // Track Mastra instances
-  const mastraInstances = new Set<string>();
-
-  // Find Mastra instances
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: 'Mastra',
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        mastraInstances.add(parent.id.name);
-      }
-    });
-
-  // Find and rename method calls on Mastra instances
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-      if (callee.property.type !== 'Identifier') return false;
-
-      // Only process if called on a Mastra instance
-      if (!mastraInstances.has(callee.object.name)) return false;
-
-      // Only process if it's the method we want to rename
-      return callee.property.name === oldMethodName;
-    })
-    .forEach(path => {
-      const callee = path.value.callee;
-      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
-        callee.property.name = newMethodName;
-        context.hasChanges = true;
-      }
-    });
-
-  if (context.hasChanges) {
+  if (count > 0) {
+    context.hasChanges = true;
     context.messages.push('Renamed getScorerByName to getScorerById on Mastra instances');
   }
 });

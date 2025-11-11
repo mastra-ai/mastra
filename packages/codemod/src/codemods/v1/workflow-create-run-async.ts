@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, renameMethod } from '../lib/utils';
 
 /**
  * Renames workflow.createRunAsync() to workflow.createRun().
@@ -10,54 +11,15 @@ import { createTransformer } from '../lib/create-transformer';
  * After:
  * await workflow.createRun({ input: { ... } });
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
-  const oldMethodName = 'createRunAsync';
-  const newMethodName = 'createRun';
+  // Track Workflow instances and rename method in a single optimized pass
+  const workflowInstances = trackClassInstances(j, root, 'Workflow');
+  const count = renameMethod(j, root, workflowInstances, 'createRunAsync', 'createRun');
 
-  // Track Workflow instances
-  const workflowInstances = new Set<string>();
-
-  // Find Workflow instances
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: 'Workflow',
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        workflowInstances.add(parent.id.name);
-      }
-    });
-
-  // Find and rename method calls on Workflow instances
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-      if (callee.property.type !== 'Identifier') return false;
-
-      // Only process if called on a Workflow instance
-      if (!workflowInstances.has(callee.object.name)) return false;
-
-      // Only process if it's the method we want to rename
-      return callee.property.name === oldMethodName;
-    })
-    .forEach(path => {
-      const callee = path.value.callee;
-      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
-        callee.property.name = newMethodName;
-        context.hasChanges = true;
-      }
-    });
-
-  if (context.hasChanges) {
+  if (count > 0) {
+    context.hasChanges = true;
     context.messages.push('Renamed createRunAsync to createRun on Workflow instances');
   }
 });

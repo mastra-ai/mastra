@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances } from '../lib/utils';
 
 /**
  * Transforms Agent property access to method calls.
@@ -8,7 +9,7 @@ import { createTransformer } from '../lib/create-transformer';
  *
  * Only transforms properties on variables that were instantiated with `new Agent(...)`
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
   // Map of property names to their corresponding method names
@@ -19,23 +20,7 @@ export default createTransformer((fileInfo, api, options, context) => {
   };
 
   // Track variable names that are Agent instances
-  const agentVariables = new Set<string>();
-
-  // Find all variable declarations with new Agent() assignments
-  root.find(j.VariableDeclarator).forEach(path => {
-    const node = path.node;
-
-    // Check if the init is a new Agent() expression
-    if (
-      node.init &&
-      node.init.type === 'NewExpression' &&
-      node.init.callee.type === 'Identifier' &&
-      node.init.callee.name === 'Agent' &&
-      node.id.type === 'Identifier'
-    ) {
-      agentVariables.add(node.id.name);
-    }
-  });
+  const agentVariables = trackClassInstances(j, root, 'Agent');
 
   // Early return if no Agent instances found
   if (agentVariables.size === 0) return;
