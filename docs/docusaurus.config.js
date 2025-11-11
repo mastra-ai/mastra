@@ -29,7 +29,6 @@ const config = {
     },
     parseFrontMatter: async (params) => {
       const result = await params.defaultParseFrontMatter(params);
-      result.frontMatter.title = `${result.frontMatter.title} | Mastra v0 STABLE`;
       result.frontMatter.description = `Mastra v0 STABLE: ${result.frontMatter.description}`;
       return result;
     },
