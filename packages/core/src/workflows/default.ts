@@ -122,7 +122,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    _emitter: Emitter, // TODO: Can we remove this or make it optional
+    _emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | unknown,
@@ -333,7 +333,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           e,
         );
-
         this.logger?.trackException(error);
         this.logger?.error('Error executing step: ' + error?.stack);
 
