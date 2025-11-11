@@ -1,10 +1,29 @@
 # AI Agent Guide for Creating Codemods
 
-This guide helps AI agents efficiently create codemods. Follow this structured approach to implement codemods with high quality and consistency.
+This guide helps AI agents efficiently create codemods with optimal performance and consistency.
 
 ## Quick Reference: Codemod Creation Workflow
 
 1. **Scaffold** → 2. **Create Fixtures** → 3. **Run Failing Test** → 4. **Implement** → 5. **Verify**
+
+## Performance Best Practices
+
+**Always optimize for minimal AST traversals:**
+
+- Use shared utility functions from `src/codemods/lib/utils.ts`
+- Combine multiple operations into single passes
+- Add early returns when no changes needed
+- Track instances once, reuse the Set
+
+**Available Utility Functions:**
+
+- `trackClassInstances()` - Track single class instantiations
+- `trackMultipleClassInstances()` - Track multiple classes in one pass
+- `renameMethod()` / `renameMethods()` - Rename methods efficiently
+- `transformMethodCalls()` - Generic method call transformer
+- `renameImportAndUsages()` - Handle import+usage renames in one pass
+- `transformConstructorProperties()` - Transform constructor properties
+- `transformObjectProperties()` - Recursive property transformation
 
 ## Step 1: Scaffold the Codemod
 
@@ -113,7 +132,7 @@ This validates:
 
 ### Common Codemod Patterns
 
-#### Pattern 1: Method Rename on Tracked Instances
+#### Pattern 1: Method Rename on Tracked Instances (Using Utils)
 
 **Use Case:** Rename a method on specific class instances (Mastra, Workflow, Memory, Agent, Storage, etc.)
 
@@ -121,55 +140,38 @@ This validates:
 
 ```typescript
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, renameMethod } from '../lib/utils';
 
 export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
-  const oldMethodName = 'getScorers';
-  const newMethodName = 'listScorers';
+  // Track instances efficiently using shared utility
+  const instances = trackClassInstances(j, root, 'Mastra');
 
-  // Track instances of the specific class
-  const instanceSet = new Set<string>();
+  // Early return if no instances found
+  if (instances.size === 0) return;
 
-  // Find instances: new ClassName(...)
-  root
-    .find(j.NewExpression, {
-      callee: {
-        type: 'Identifier',
-        name: 'Mastra', // or Workflow, Memory, etc.
-      },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        instanceSet.add(parent.id.name);
-      }
-    });
+  // Rename method efficiently
+  const count = renameMethod(j, root, instances, 'getScorers', 'listScorers');
 
-  // Find and rename method calls ONLY on tracked instances
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-      if (callee.property.type !== 'Identifier') return false;
-
-      // Only process if called on tracked instance
-      if (!instanceSet.has(callee.object.name)) return false;
-
-      // Only process if it's the method we want to rename
-      return callee.property.name === oldMethodName;
-    })
-    .forEach(path => {
-      const callee = path.value.callee as any;
-      callee.property.name = newMethodName;
-      context.hasChanges = true;
-    });
-
-  if (context.hasChanges) {
-    context.messages.push('Renamed getScorers to listScorers on Mastra instances');
+  if (count > 0) {
+    context.hasChanges = true;
+    context.messages.push(`Renamed getScorers to listScorers on ${count} Mastra instance(s)`);
   }
+});
+```
+
+**For multiple method renames:**
+
+```typescript
+import { trackClassInstances, renameMethods } from '../lib/utils';
+
+const instances = trackClassInstances(j, root, 'Agent');
+if (instances.size === 0) return;
+
+const count = renameMethods(j, root, instances, {
+  generateVNext: 'generate',
+  streamVNext: 'stream',
 });
 ```
 
@@ -177,6 +179,7 @@ export default createTransformer((fileInfo, api, options, context) => {
 
 - Renaming methods on specific class instances
 - Need to avoid transforming methods with same name on other objects
+- **Always prefer utilities over manual tracking**
 
 #### Pattern 2: Import Path Transformation
 
@@ -214,7 +217,7 @@ export default createTransformer((fileInfo, api, options, context) => {
 - Consolidating import paths
 - Renaming package paths
 
-#### Pattern 3: Import + Usage Rename
+#### Pattern 3: Import + Usage Rename (Using Utils)
 
 **Use Case:** Rename both import and all usages of imported identifier
 
@@ -222,61 +225,16 @@ export default createTransformer((fileInfo, api, options, context) => {
 
 ```typescript
 import { createTransformer } from '../lib/create-transformer';
+import { renameImportAndUsages } from '../lib/utils';
 
 export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
-  const oldName = 'runExperiment';
-  const newName = 'runEvals';
+  // Single utility function handles import + all usages efficiently
+  const count = renameImportAndUsages(j, root, '@mastra/core/evals', 'runExperiment', 'runEvals');
 
-  // Track the local name imported from the specific package
-  let localNameToReplace: string | null = null;
-
-  // Transform import specifiers from @mastra/core/evals
-  root
-    .find(j.ImportDeclaration)
-    .filter(path => {
-      const source = path.value.source.value;
-      return typeof source === 'string' && source === '@mastra/core/evals';
-    })
-    .forEach(path => {
-      path.value.specifiers?.forEach((specifier: any) => {
-        if (
-          specifier.type === 'ImportSpecifier' &&
-          specifier.imported.type === 'Identifier' &&
-          specifier.imported.name === oldName
-        ) {
-          // Track the local name BEFORE renaming (could be aliased)
-          localNameToReplace = specifier.local?.name || oldName;
-
-          // Rename the imported name
-          specifier.imported.name = newName;
-
-          // Also update the local name if it matches (not aliased)
-          if (specifier.local && specifier.local.name === oldName) {
-            specifier.local.name = newName;
-          }
-
-          context.hasChanges = true;
-        }
-      });
-    });
-
-  // Only transform usages if it was imported from the specific package
-  if (localNameToReplace) {
-    root.find(j.Identifier, { name: localNameToReplace }).forEach(path => {
-      // Skip identifiers that are part of import declarations
-      const parent = path.parent;
-      if (parent && parent.value.type === 'ImportSpecifier') {
-        return;
-      }
-
-      path.value.name = newName;
-      context.hasChanges = true;
-    });
-  }
-
-  if (context.hasChanges) {
+  if (count > 0) {
+    context.hasChanges = true;
     context.messages.push('Renamed runExperiment to runEvals');
   }
 });
@@ -287,8 +245,7 @@ export default createTransformer((fileInfo, api, options, context) => {
 - Renaming function/class imports and their usages
 - Need to handle aliased imports correctly
 - Must avoid transforming same-named imports from other packages
-
-**Critical:** Check `parent.value.type === 'ImportSpecifier'` to avoid transforming identifiers in OTHER import statements
+- **Always use `renameImportAndUsages()` utility for this pattern**
 
 #### Pattern 4: Type Rename
 
@@ -366,7 +323,7 @@ export default createTransformer((fileInfo, api, options, context) => {
 - Renaming TypeScript types
 - Handling both value and type imports
 
-#### Pattern 5: Property Rename in Method Calls
+#### Pattern 5: Property Rename in Method Calls (Using Utils)
 
 **Use Case:** Rename object properties in method call arguments
 
@@ -374,59 +331,32 @@ export default createTransformer((fileInfo, api, options, context) => {
 
 ```typescript
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, transformMethodCalls, transformObjectProperties } from '../lib/utils';
 
 export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
-  const oldParamName = 'vectorMessageSearch';
-  const newParamName = 'vectorSearchString';
+  // Track instances efficiently
+  const memoryInstances = trackClassInstances(j, root, 'Memory');
+  if (memoryInstances.size === 0) return;
 
-  // Track Memory instances
-  const memoryInstances = new Set<string>();
+  // Transform method calls efficiently
+  const count = transformMethodCalls(j, root, memoryInstances, 'recall', path => {
+    const args = path.value.arguments;
+    if (args.length === 0 || args[0].type !== 'ObjectExpression') return;
 
-  root
-    .find(j.NewExpression, {
-      callee: { type: 'Identifier', name: 'Memory' },
-    })
-    .forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        memoryInstances.add(parent.id.name);
-      }
+    // Use utility for property transformation
+    const renamed = transformObjectProperties(args[0], {
+      vectorMessageSearch: 'vectorSearchString',
     });
 
-  // Find memory.recall() calls and rename the parameter
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-      if (callee.property.type !== 'Identifier') return false;
-
-      return memoryInstances.has(callee.object.name) && callee.property.name === 'recall';
-    })
-    .forEach(path => {
-      const args = path.value.arguments;
-      if (args.length === 0 || args[0].type !== 'ObjectExpression') return;
-
-      const objArg = args[0];
-
-      // Find and rename the property
-      objArg.properties?.forEach((prop: any) => {
-        if (
-          (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-          prop.key?.type === 'Identifier' &&
-          prop.key.name === oldParamName
-        ) {
-          prop.key.name = newParamName;
-          context.hasChanges = true;
-        }
-      });
-    });
+    if (renamed > 0) {
+      context.hasChanges = true;
+    }
+  });
 
   if (context.hasChanges) {
-    context.messages.push('Renamed vectorMessageSearch to vectorSearchString');
+    context.messages.push(`Renamed vectorMessageSearch in ${count} recall() call(s)`);
   }
 });
 ```
@@ -435,8 +365,9 @@ export default createTransformer((fileInfo, api, options, context) => {
 
 - Renaming parameters in method calls
 - Updating property names in object arguments
+- **Use utilities for instance tracking and property transformation**
 
-#### Pattern 6: Property Rename in Constructor
+#### Pattern 6: Property Rename in Constructor (Using Utils)
 
 **Use Case:** Rename constructor properties
 
@@ -444,40 +375,37 @@ export default createTransformer((fileInfo, api, options, context) => {
 
 ```typescript
 import { createTransformer } from '../lib/create-transformer';
+import { transformConstructorProperties } from '../lib/utils';
 
 export default createTransformer((fileInfo, api, options, context) => {
   const { j, root } = context;
 
-  root
-    .find(j.NewExpression, {
-      callee: { type: 'Identifier', name: 'PostgresStore' },
-    })
-    .forEach(path => {
-      const args = path.value.arguments;
-      if (args.length === 0 || args[0].type !== 'ObjectExpression') return;
+  // Use utility for efficient property transformation
+  const count = transformConstructorProperties(j, root, 'PostgresStore', {
+    schema: 'schemaName',
+  });
 
-      args[0].properties?.forEach((prop: any) => {
-        if (
-          (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-          prop.key?.type === 'Identifier' &&
-          prop.key.name === 'schema'
-        ) {
-          prop.key.name = 'schemaName';
-          context.hasChanges = true;
-        }
-      });
-    });
-
-  if (context.hasChanges) {
-    context.messages.push('Renamed schema to schemaName in PostgresStore');
+  if (count > 0) {
+    context.hasChanges = true;
+    context.messages.push(`Renamed schema to schemaName in ${count} PostgresStore constructor(s)`);
   }
+});
+```
+
+**For multiple property renames:**
+
+```typescript
+const count = transformConstructorProperties(j, root, 'ClassName', {
+  oldProp1: 'newProp1',
+  oldProp2: 'newProp2',
+  oldProp3: 'newProp3',
 });
 ```
 
 **When to use:**
 
 - Renaming properties in constructor calls
-- Simple property renames
+- **Always use utility for constructor property transforms**
 
 #### Pattern 7: Context Property Access Rename
 
@@ -620,6 +548,57 @@ pnpm test
 - ✅ Fix the codemod implementation instead
 - ✅ Review the test output diff carefully to understand what's wrong
 
+## Performance Guidelines
+
+### DO: Use Shared Utilities
+
+```typescript
+// ✅ GOOD - Uses utility (1 pass)
+import { trackClassInstances, renameMethods } from '../lib/utils';
+
+const instances = trackClassInstances(j, root, 'Agent');
+if (instances.size === 0) return;
+renameMethods(j, root, instances, { oldMethod: 'newMethod' });
+```
+
+```typescript
+// ❌ BAD - Manual implementation (2 passes)
+const instances = new Set<string>();
+root.find(j.NewExpression).forEach(/* ... */);
+root.find(j.CallExpression).forEach(/* ... */);
+```
+
+### DO: Combine Operations
+
+```typescript
+// ✅ GOOD - Single pass
+root.find(j.CallExpression).forEach(path => {
+  // Check all conditions inline
+  if (callee.type !== 'MemberExpression') return;
+  if (!instances.has(callee.object.name)) return;
+  // Transform immediately
+});
+```
+
+```typescript
+// ❌ BAD - Multiple passes
+root.find(j.CallExpression).filter(/* ... */).forEach(/* ... */);
+```
+
+### DO: Add Early Returns
+
+```typescript
+// ✅ GOOD - Early return saves work
+const instances = trackClassInstances(j, root, 'ClassName');
+if (instances.size === 0) return; // Exit immediately if nothing to do
+```
+
+```typescript
+// ❌ BAD - Continues even when nothing to transform
+const instances = trackClassInstances(j, root, 'ClassName');
+root.find(j.CallExpression).forEach(/* ... */); // Runs even if instances is empty
+```
+
 ## Common Pitfalls & Solutions
 
 ### Pitfall 1: Transforming Too Much
@@ -692,21 +671,12 @@ const other = { getScorers: () => [] };
 other.getScorers(); // Should NOT transform
 ```
 
-**Solution:** Track specific class instances:
+**Solution:** Use the tracking utility:
 
 ```typescript
-const mastraInstances = new Set<string>();
+import { trackClassInstances } from '../lib/utils';
 
-root
-  .find(j.NewExpression, {
-    callee: { type: 'Identifier', name: 'Mastra' },
-  })
-  .forEach(path => {
-    const parent = path.parent.value;
-    if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-      mastraInstances.add(parent.id.name);
-    }
-  });
+const mastraInstances = trackClassInstances(j, root, 'Mastra');
 
 // Only transform if called on tracked instance
 if (!mastraInstances.has(callee.object.name)) return false;
@@ -872,10 +842,29 @@ $ pnpm test
 
 ## Remember
 
-1. **Never use UPDATE_SNAPSHOT** - Fix the code, not the tests
-2. **Always include negative tests** - Avoid false positives
-3. **Base on migration guides** - Don't hallucinate transformations
-4. **Track instances** - Only transform what should be transformed
-5. **Check parent types** - Avoid transforming import identifiers
-6. **Test thoroughly** - Multiple occurrences, edge cases, negative cases
-7. **Follow TDD** - Test should fail first, then pass after implementation
+1. **Use shared utilities first** - Check `src/codemods/lib/utils.ts` before implementing
+2. **Optimize for single passes** - Combine operations, add early returns
+3. **Never use UPDATE_SNAPSHOT** - Fix the code, not the tests
+4. **Always include negative tests** - Avoid false positives
+5. **Base on migration guides** - Don't hallucinate transformations
+6. **Track instances efficiently** - Use `trackClassInstances()` utility
+7. **Check parent types** - Avoid transforming import identifiers
+8. **Test thoroughly** - Multiple occurrences, edge cases, negative cases
+9. **Follow TDD** - Test should fail first, then pass after implementation
+
+## Utility Function Reference
+
+Located in `src/codemods/lib/utils.ts`:
+
+| Function                           | Purpose                           | Example Usage                                                      |
+| ---------------------------------- | --------------------------------- | ------------------------------------------------------------------ |
+| `trackClassInstances()`            | Track single class instantiations | `trackClassInstances(j, root, 'Mastra')`                           |
+| `trackMultipleClassInstances()`    | Track multiple classes at once    | `trackMultipleClassInstances(j, root, ['Pg', 'Postgres'])`         |
+| `renameMethod()`                   | Rename one method                 | `renameMethod(j, root, instances, 'old', 'new')`                   |
+| `renameMethods()`                  | Rename multiple methods           | `renameMethods(j, root, instances, { old: 'new' })`                |
+| `transformMethodCalls()`           | Generic method transformer        | `transformMethodCalls(j, root, instances, 'method', callback)`     |
+| `renameImportAndUsages()`          | Import + usages in one pass       | `renameImportAndUsages(j, root, '@pkg', 'Old', 'New')`             |
+| `transformConstructorProperties()` | Constructor property renames      | `transformConstructorProperties(j, root, 'Class', { old: 'new' })` |
+| `transformObjectProperties()`      | Recursive property renames        | `transformObjectProperties(obj, { old: 'new' })`                   |
+
+**Always check existing utilities before writing custom transformation logic!**
