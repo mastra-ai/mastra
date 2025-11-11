@@ -112,7 +112,7 @@ async function checkShortPath(page: Page) {
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-    `1{2  \"text\": \"AABAACSABDDDDDDDDDDD\",3  \"iterationCount\": 114}`,
+    `1{2  \"reason\": \"Please provide user input to continue\"3}`,
   );
 }
 
@@ -122,7 +122,7 @@ async function checkLongPath(page: Page) {
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-testid="suspended-payload"]').locator('pre')).toHaveText(
-    `1{2  \"text\": \"SuperLongTextToStartWithABSuperLongTextToStartWithACLABD\",3  \"iterationCount\": 14}`,
+    `1{2  \"reason\": \"Please provide user input to continue\"3}`,
   );
 }
 

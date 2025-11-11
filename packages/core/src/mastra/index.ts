@@ -1529,6 +1529,9 @@ export class Mastra<
       logger: this.getLogger(),
       storage: this.getStorage(),
     });
+    if (!workflow.committed) {
+      workflow.commit();
+    }
     workflows[workflowKey] = workflow;
   }
 

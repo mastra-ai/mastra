@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 export interface WorkflowStepActionBarProps {
   input?: any;
   output?: any;
+  suspendOutput?: any;
   resumeData?: any;
   error?: any;
   stepName: string;
@@ -22,6 +23,7 @@ export const WorkflowStepActionBar = ({
   input,
   output,
   resumeData,
+  suspendOutput,
   error,
   mapConfig,
   stepName,
@@ -104,7 +106,7 @@ export const WorkflowStepActionBar = ({
             </>
           )}
 
-          {output && (
+          {(output ?? suspendOutput) && (
             <>
               <Button onClick={() => setIsOutputOpen(true)}>Output</Button>
 
@@ -112,7 +114,7 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogTitle className={dialogTitleClass}>{stepName} output</DialogTitle>
                   <div className="px-4 overflow-hidden">
-                    <CodeDialogContent data={output} />
+                    <CodeDialogContent data={output ?? suspendOutput} />
                   </div>
                 </DialogContent>
               </Dialog>
