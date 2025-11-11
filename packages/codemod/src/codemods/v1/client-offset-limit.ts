@@ -25,7 +25,7 @@ export default createTransformer((fileInfo, api, options, context) => {
   const clientInstances = new Set<string>();
   const clientObjects = new Set<string>();
 
-  // Find MastraClient instances
+  // First pass: Find MastraClient instances
   root
     .find(j.NewExpression, {
       callee: {
@@ -40,7 +40,7 @@ export default createTransformer((fileInfo, api, options, context) => {
       }
     });
 
-  // First pass: Find objects returned from client method calls
+  // Second pass: Find objects returned from client method calls
   root
     .find(j.CallExpression)
     .filter(path => {
@@ -58,7 +58,7 @@ export default createTransformer((fileInfo, api, options, context) => {
       }
     });
 
-  // Second pass: Transform offset/limit in calls to client methods and client objects
+  // Third pass: Transform offset/limit in calls to client methods and client objects
   root
     .find(j.CallExpression)
     .filter(path => {

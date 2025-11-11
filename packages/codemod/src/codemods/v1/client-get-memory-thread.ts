@@ -53,42 +53,31 @@ export default createTransformer((fileInfo, api, options, context) => {
 
         if (!threadIdArg || !agentIdArg) return;
 
-        // Create object properties
-        const properties: any = [];
+        // Skip if arguments are spread elements
+        if (threadIdArg.type === 'SpreadElement' || agentIdArg.type === 'SpreadElement') return;
+
+        // Helper to create property with proper typing
+        type ExpressionKind = Exclude<typeof threadIdArg, { type: 'SpreadElement' }>;
+        type PropertyNode = ReturnType<typeof j.property>;
+
+        const createProperty = (key: string, value: ExpressionKind, useShorthand: boolean): PropertyNode => {
+          const prop = j.property('init', j.identifier(key), value);
+          if (useShorthand) {
+            prop.shorthand = true;
+          }
+          return prop;
+        };
+
+        // Create object properties using jscodeshift builders
+        const properties: PropertyNode[] = [];
 
         // Check if we can use shorthand for threadId
-        if (threadIdArg.type === 'Identifier' && threadIdArg.name === 'threadId') {
-          properties.push({
-            type: 'ObjectProperty',
-            key: j.identifier('threadId'),
-            value: threadIdArg,
-            shorthand: true,
-          });
-        } else {
-          properties.push({
-            type: 'ObjectProperty',
-            key: j.identifier('threadId'),
-            value: threadIdArg,
-            shorthand: false,
-          });
-        }
+        const threadIdShorthand = threadIdArg.type === 'Identifier' && threadIdArg.name === 'threadId';
+        properties.push(createProperty('threadId', threadIdArg, threadIdShorthand));
 
         // Check if we can use shorthand for agentId
-        if (agentIdArg.type === 'Identifier' && agentIdArg.name === 'agentId') {
-          properties.push({
-            type: 'ObjectProperty',
-            key: j.identifier('agentId'),
-            value: agentIdArg,
-            shorthand: true,
-          });
-        } else {
-          properties.push({
-            type: 'ObjectProperty',
-            key: j.identifier('agentId'),
-            value: agentIdArg,
-            shorthand: false,
-          });
-        }
+        const agentIdShorthand = agentIdArg.type === 'Identifier' && agentIdArg.name === 'agentId';
+        properties.push(createProperty('agentId', agentIdArg, agentIdShorthand));
 
         // Replace with single object argument
         path.value.arguments = [j.objectExpression(properties)];
