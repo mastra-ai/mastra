@@ -93,13 +93,14 @@ const config = {
             resolve: {
               fallback: {
                 // Polyfill process for browser to prevent "process is undefined" errors
-                process: require.resolve("process/browser"),
+                // Use .js extension for ESM compatibility
+                process: require.resolve("process/browser.js"),
               },
             },
             plugins: [
               // Provide process globally so gt-react can check process.env
               new (require("webpack")).ProvidePlugin({
-                process: "process/browser",
+                process: "process/browser.js",
               }),
               // Define process.env.NEXT_RUNTIME to prevent "Cannot read properties of undefined" errors
               new (require("webpack")).DefinePlugin({
