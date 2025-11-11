@@ -128,3 +128,26 @@ const mcpServer = new MCPServer({
     weather: tool,
   },
 });
+
+function getAgent() {
+  /* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+  return new Agent({
+    name: 'Function Agent',
+    instructions: 'Help users',
+    model: 'openai/gpt-4',
+  });
+}
+
+/* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+export default new Agent({
+  name: 'Default Agent',
+  instructions: 'Default agent',
+  model: 'openai/gpt-4',
+});
+
+/* FIXME(mastra): Add a unique `id` parameter. See: https://mastra.ai/guides/v1/migrations/upgrade-to-v1/mastra#required-id-parameter-for-all-mastra-primitives */
+export default createTool({
+  description: 'Default tool',
+  inputSchema: z.object({}),
+  execute: async () => ({}),
+});

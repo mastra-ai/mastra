@@ -112,3 +112,23 @@ const mcpServer = new MCPServer({
     weather: tool,
   },
 });
+
+function getAgent() {
+  return new Agent({
+    name: 'Function Agent',
+    instructions: 'Help users',
+    model: 'openai/gpt-4',
+  });
+}
+
+export default new Agent({
+  name: 'Default Agent',
+  instructions: 'Default agent',
+  model: 'openai/gpt-4',
+});
+
+export default createTool({
+  description: 'Default tool',
+  inputSchema: z.object({}),
+  execute: async () => ({}),
+});

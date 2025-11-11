@@ -9,7 +9,7 @@ function processMessage(message: MastraDBMessage) {
 }
 
 const messages: MastraDBMessage[] = [];
-const aliasedMessage: MastraDBMessage = {} as any;
+const aliasedMessage: V2Message = {} as any;
 
 // Should NOT transform - different package
 import { MastraMessageV2 as OtherV2 } from 'other-package';

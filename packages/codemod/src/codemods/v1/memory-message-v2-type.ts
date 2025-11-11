@@ -18,8 +18,8 @@ export default createTransformer((fileInfo, api, options, context) => {
   const oldTypeName = 'MastraMessageV2';
   const newTypeName = 'MastraDBMessage';
 
-  // Track which local names were imported from @mastra/core
-  const importedLocalNames = new Set<string>();
+  // Track which local names should be rewritten (only non-aliased imports)
+  const localNamesToRewrite = new Set<string>();
 
   // Transform import specifiers from @mastra/core
   root
@@ -35,28 +35,32 @@ export default createTransformer((fileInfo, api, options, context) => {
           specifier.imported.type === 'Identifier' &&
           specifier.imported.name === oldTypeName
         ) {
-          // Track the local name (could be aliased)
           const localName = specifier.local?.name || oldTypeName;
-          importedLocalNames.add(localName);
+          const isAliased = localName !== oldTypeName;
 
           // Rename the imported name
           specifier.imported.name = newTypeName;
 
-          // Also update the local name if it matches the imported name (not aliased)
-          if (specifier.local && specifier.local.name === oldTypeName) {
-            specifier.local.name = newTypeName;
+          // Only update local name and track for rewriting if not aliased
+          if (!isAliased) {
+            if (specifier.local) {
+              specifier.local.name = newTypeName;
+            }
+            // Track the old local name (oldTypeName) to rewrite all its usages
+            localNamesToRewrite.add(oldTypeName);
           }
+          // If aliased, leave the local name intact and don't track for rewriting
 
           context.hasChanges = true;
         }
       });
     });
 
-  // Only transform usages if it was imported from @mastra/core
-  if (importedLocalNames.size > 0) {
-    // Transform all references to the imported types
-    importedLocalNames.forEach(localName => {
-      root.find(j.Identifier, { name: localName }).forEach(path => {
+  // Only transform usages for non-aliased imports
+  if (localNamesToRewrite.size > 0) {
+    // Transform all references that need to be rewritten
+    localNamesToRewrite.forEach(oldLocalName => {
+      root.find(j.Identifier, { name: oldLocalName }).forEach(path => {
         // Skip identifiers that are part of import declarations
         const parent = path.parent;
         if (parent && parent.value.type === 'ImportSpecifier') {

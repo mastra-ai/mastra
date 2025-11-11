@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { Mastra } from '@mastra/core';
+import { Mastra, Memory } from '@mastra/core';
 
 const mastra = new Mastra({
   memory: new Memory(),

@@ -63,14 +63,29 @@ export default createTransformer((fileInfo, api, options, context) => {
         if (!hasId) {
           // Find the parent statement to add comment
           let parent = path.parent;
-          while (parent && parent.value.type !== 'VariableDeclaration' && parent.value.type !== 'ExpressionStatement') {
+          const statementTypes = new Set([
+            'VariableDeclaration',
+            'ExpressionStatement',
+            'ReturnStatement',
+            'ExportDefaultDeclaration',
+            'ExportNamedDeclaration',
+            'Program',
+          ]);
+
+          while (parent && !statementTypes.has(parent.value.type)) {
             parent = parent.parent;
           }
 
           if (parent && parent.value) {
-            // Check if this statement is wrapped in an export declaration
+            // For export declarations, add comment to the export itself
             let targetNode = parent.value;
-            if (parent.parent && parent.parent.value.type === 'ExportNamedDeclaration') {
+            if (
+              targetNode.type !== 'ExportDefaultDeclaration' &&
+              targetNode.type !== 'ExportNamedDeclaration' &&
+              parent.parent &&
+              (parent.parent.value.type === 'ExportDefaultDeclaration' ||
+                parent.parent.value.type === 'ExportNamedDeclaration')
+            ) {
               targetNode = parent.parent.value;
             }
 
@@ -106,14 +121,29 @@ export default createTransformer((fileInfo, api, options, context) => {
         if (!hasId) {
           // Find the parent statement to add comment
           let parent = path.parent;
-          while (parent && parent.value.type !== 'VariableDeclaration' && parent.value.type !== 'ExpressionStatement') {
+          const statementTypes = new Set([
+            'VariableDeclaration',
+            'ExpressionStatement',
+            'ReturnStatement',
+            'ExportDefaultDeclaration',
+            'ExportNamedDeclaration',
+            'Program',
+          ]);
+
+          while (parent && !statementTypes.has(parent.value.type)) {
             parent = parent.parent;
           }
 
           if (parent && parent.value) {
-            // Check if this statement is wrapped in an export declaration
+            // For export declarations, add comment to the export itself
             let targetNode = parent.value;
-            if (parent.parent && parent.parent.value.type === 'ExportNamedDeclaration') {
+            if (
+              targetNode.type !== 'ExportDefaultDeclaration' &&
+              targetNode.type !== 'ExportNamedDeclaration' &&
+              parent.parent &&
+              (parent.parent.value.type === 'ExportDefaultDeclaration' ||
+                parent.parent.value.type === 'ExportNamedDeclaration')
+            ) {
               targetNode = parent.parent.value;
             }
 
