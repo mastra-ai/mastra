@@ -5623,6 +5623,10 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
           inputData: {
             city: messages[messages.length - 1].parts[0].text,
           },
+          //Or resumeData for resuming a suspended workflow
+          resumeData: {
+            confirmation: messages[messages.length - 1].parts[0].text
+          }
         },
       };
     },
@@ -77345,6 +77349,55 @@ The description for this generated tool will be: "Ask agent `<agent.name>` a que
 **Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
 
 This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
+
+### Accessing MCP Context in Tools
+
+Tools exposed through `MCPServer` can access MCP request context (authentication, session IDs, etc.) via two different properties depending on how the tool is invoked:
+
+| Call Pattern | Access Method |
+|-------------|---------------|
+| Direct tool call | `context?.mcp?.extra` |
+| Agent tool call | `context?.requestContext?.get("mcp.extra")` |
+
+**Universal pattern** (works in both contexts):
+```typescript
+const mcpExtra = context?.mcp?.extra ?? context?.requestContext?.get("mcp.extra");
+const authInfo = mcpExtra?.authInfo;
+```
+
+#### Example: Tool that works in both contexts
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const fetchUserData = createTool({
+  id: "fetchUserData",
+  description: "Fetches user data using authentication from MCP context",
+  inputSchema: z.object({
+    userId: z.string().describe("The ID of the user to fetch"),
+  }),
+  execute: async (inputData, context) => {
+    // Access MCP authentication context
+    // When called directly via MCP: context.mcp.extra
+    // When called via agent: context.requestContext.get('mcp.extra')
+    const mcpExtra = context?.mcp?.extra || context?.requestContext?.get("mcp.extra");
+    const authInfo = mcpExtra?.authInfo;
+
+    if (!authInfo?.token) {
+      throw new Error("Authentication required");
+    }
+
+    const response = await fetch(`https://api.example.com/users/${inputData.userId}`, {
+      headers: {
+        Authorization: `Bearer ${authInfo.token}`,
+      },
+    });
+
+    return response.json();
+  },
+});
+```
 
 ## Methods
 
