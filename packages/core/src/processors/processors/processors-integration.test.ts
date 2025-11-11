@@ -179,7 +179,66 @@ describe('Processors Integration Tests', () => {
    * - New test should verify processor-level deduplication behavior
    * - Need to account for MessageList's internal message management
    */
-  it.todo('should apply multiple processors without duplicating messages');
+  it('should apply multiple processors without duplicating messages', async () => {
+    // Create test messages
+    const messages: MastraMessageV2[] = [
+      { id: 'msg-1', role: 'user', content: [{ type: 'text', text: 'Hello' }], createdAt: new Date() },
+      { id: 'msg-2', role: 'assistant', content: [
+        { type: 'tool-call', toolCallId: 'tc-1', toolName: 'weather', args: { location: 'NYC' } },
+        { type: 'tool-result', toolCallId: 'tc-1', toolName: 'weather', result: 'Sunny' },
+        { type: 'text', text: 'Weather is sunny' }
+      ], createdAt: new Date() },
+      { id: 'msg-3', role: 'user', content: [{ type: 'text', text: 'What time is it?' }], createdAt: new Date() },
+      { id: 'msg-4', role: 'assistant', content: [
+        { type: 'tool-call', toolCallId: 'tc-2', toolName: 'time', args: {} },
+        { type: 'tool-result', toolCallId: 'tc-2', toolName: 'time', result: '3:45 PM' },
+        { type: 'text', text: 'It is 3:45 PM' }
+      ], createdAt: new Date() },
+      { id: 'msg-5', role: 'user', content: [{ type: 'text', text: 'Thanks' }], createdAt: new Date() },
+    ];
+
+    // Create MessageList and add messages
+    const messageList = new MessageList({
+      threadId: 'test-thread',
+      resourceId: 'test-resource',
+    });
+
+    for (const msg of messages) {
+      messageList.add(msg, 'input');
+    }
+
+    // Apply ToolCallFilter (exclude 'weather')
+    const toolCallFilter = new ToolCallFilter({ excludeTools: ['weather'] });
+    const filteredResult = await toolCallFilter.processInput({ messageList });
+    
+    const filteredMessages = Array.isArray(filteredResult) 
+      ? filteredResult 
+      : filteredResult instanceof MessageList 
+        ? filteredResult.get.all.db() 
+        : [filteredResult];
+
+    // Apply TokenLimiter
+    const tokenLimiter = new TokenLimiterProcessor({ maxTokens: 100 });
+    const limitedMessages = await tokenLimiter.processInput({ messages: filteredMessages });
+
+    // Verify no duplicates by checking unique IDs
+    const messageIds = limitedMessages.map(m => m.id);
+    const uniqueIds = new Set(messageIds);
+    
+    expect(uniqueIds.size).toBe(messageIds.length);
+    
+    // Verify all messages are unique by content
+    const messageContents = limitedMessages.map(m => JSON.stringify(m));
+    const uniqueContents = new Set(messageContents);
+    
+    expect(uniqueContents.size).toBe(messageContents.length);
+    
+    // Verify final messages are subset of filtered messages
+    const filteredIds = new Set(filteredMessages.map(m => m.id));
+    for (const msg of limitedMessages) {
+      expect(filteredIds.has(msg.id)).toBe(true);
+    }
+  });
 
   /**
    * TODO: Test processors with a real Mastra agent integration
