@@ -10,6 +10,18 @@ const sidebars = {
     "index",
     {
       type: "category",
+      label: "Quickstarts",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "quickstarts/nextjs",
+          label: "Next.js",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Guides",
       collapsed: false,
       items: [

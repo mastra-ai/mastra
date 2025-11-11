@@ -72,6 +72,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Memory overview | Memory | Mastra Docs](https://mastra.ai/en/docs/memory/overview): Learn how Mastras memory system works with working memory, conversation history, and semantic recall.
 - [Semantic Recall | Memory | Mastra Docs](https://mastra.ai/en/docs/memory/semantic-recall): Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings.
 - [Memory with LibSQL | Memory | Mastra Docs](https://mastra.ai/en/docs/memory/storage/memory-with-libsql): Example for how to use Mastras memory system with LibSQL storage and vector database backend.
+- [Example: Memory with MongoDB | Memory | Mastra Docs](https://mastra.ai/en/docs/memory/storage/memory-with-mongodb): Example for how to use Mastras memory system with MongoDB storage and vector capabilities.
 - [Memory with Postgres | Memory | Mastra Docs](https://mastra.ai/en/docs/memory/storage/memory-with-pg): Example for how to use Mastras memory system with PostgreSQL storage and vector capabilities.
 - [Memory with Upstash | Memory | Mastra Docs](https://mastra.ai/en/docs/memory/storage/memory-with-upstash): Example for how to use Mastras memory system with Upstash Redis storage and vector capabilities.
 - [Memory threads and resources | Memory | Mastra Docs](https://mastra.ai/en/docs/memory/threads-and-resources): Learn how Mastras memory system works with working memory, conversation history, and semantic recall.
@@ -128,7 +129,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Example: WhatsApp Chat Bot | Agents | Mastra Docs](https://mastra.ai/en/examples/agents/whatsapp-chat-bot): Example of creating a WhatsApp chat bot using Mastra agents and workflows to handle incoming messages and respond naturally via text messages.
 - [Example: Running Scorers in CI | Evals | Mastra Docs](https://mastra.ai/en/examples/evals/running-in-ci): Example of using runEvals to test agents in a CI/CD pipeline with Vitest.
 - [Examples List: Workflows, Agents, RAG | Mastra Docs](https://mastra.ai/en/examples): Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini.
-- [Example: Memory with MongoDB | Memory | Mastra Docs](https://mastra.ai/en/examples/memory/memory-with-mongodb): Example for how to use Mastras memory system with MongoDB storage and vector capabilities.
 - [Example: Working Memory with Schema | Memory | Mastra Docs](https://mastra.ai/en/examples/memory/working-memory-schema): Example showing how to use Zod schema to structure and validate working memory data.
 - [Example: Working Memory with Template | Memory | Mastra Docs](https://mastra.ai/en/examples/memory/working-memory-template): Example showing how to use Markdown template to structure working memory data.
 - [Example: Basic Tracing Example | Observability | Mastra Docs](https://mastra.ai/en/examples/observability/basic-tracing): Get started with Tracing in your Mastra application
@@ -191,6 +191,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Voice | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/voice): Learn how to migrate voice package changes when upgrading to v1.
 - [Workflows | v1 Migration Guide](https://mastra.ai/en/guides/migrations/upgrade-to-v1/workflows): Learn how to migrate workflow-related changes when upgrading to v1.
 - [Migration: VNext to Standard APIs | Migration Guide](https://mastra.ai/en/guides/migrations/vnext-to-standard-apis): Learn how to migrate from VNext methods to the new standard agent APIs in Mastra.
+- [Next.js Quickstart](https://mastra.ai/en/guides/quickstarts/nextjs): Get started with Mastra, Next.js, and AS SDK UI. Quickly.
 
 ## EN - models
 - [Embedding Models](https://mastra.ai/en/models/embeddings): Use embedding models through Mastras model router for semantic search and RAG.

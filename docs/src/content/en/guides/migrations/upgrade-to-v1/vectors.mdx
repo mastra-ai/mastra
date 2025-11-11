@@ -5,9 +5,33 @@ description: "Learn how to migrate vector-related changes when upgrading to v1."
 
 # Vectors
 
-Vector store methods have been renamed to follow consistent naming conventions.
+Vector store constructors now require an `id` property, and vector store methods have been renamed to follow consistent naming conventions.
 
 ## Changed
+
+### Required `id` property for vector store instances
+
+Vector store instances now require an `id` property. This unique identifier is used for tracking and managing vector store instances within Mastra. The `id` should be a descriptive, unique string for each vector store in your application.
+
+To migrate, add an `id` field to your vector store constructor.
+
+```diff
+  const vectorStore = new PgVector({
++   id: 'main-vector-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+  });
+
+  const chromaStore = new ChromaVector({
++   id: 'chroma-embeddings',
+    url: process.env.CHROMA_URL,
+  });
+
+  const pineconeStore = new PineconeVector({
++   id: 'pinecone-production',
+    apiKey: process.env.PINECONE_API_KEY,
+    environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
 
 ### `getVectors` to `listVectors`
 

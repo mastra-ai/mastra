@@ -5623,6 +5623,10 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
           inputData: {
             city: messages[messages.length - 1].parts[0].text,
           },
+          //Or resumeData for resuming a suspended workflow
+          resumeData: {
+            confirmation: messages[messages.length - 1].parts[0].text
+          }
         },
       };
     },
@@ -9086,7 +9090,7 @@ npm install @mastra/core@beta zod@^4
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm init -y
+pnpm init
 pnpm add -D typescript @types/node mastra@beta
 pnpm add @mastra/core@beta zod@^4
 ```
@@ -10547,7 +10551,7 @@ All memory types are [resource-scoped](./working-memory#resource-scoped-memory-d
 
 To persist and recall information between conversations, memory requires a storage adapter.
 
-Supported options include [LibSQL](/docs/v1/memory/storage/memory-with-libsql), [MongoDB](/examples/v1/memory/memory-with-mongodb), [Postgres](/docs/v1/memory/storage/memory-with-pg), and [Upstash](/docs/v1/memory/storage/memory-with-upstash)
+Supported options include [LibSQL](/docs/v1/memory/storage/memory-with-libsql), [MongoDB](/docs/v1/memory/storage/memory-with-mongodb), [Postgres](/docs/v1/memory/storage/memory-with-pg), and [Upstash](/docs/v1/memory/storage/memory-with-upstash)
 
 We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with Studio.
 
@@ -10696,7 +10700,7 @@ const agent = new Agent({
 **Storage/vector code Examples**:
 
 - [LibSQL](/docs/v1/memory/storage/memory-with-libsql)
-- [MongoDB](/examples/v1/memory/memory-with-mongodb)
+- [MongoDB](/docs/v1/memory/storage/memory-with-mongodb)
 - [Postgres](/docs/v1/memory/storage/memory-with-pg)
 - [Upstash](/docs/v1/memory/storage/memory-with-upstash)
 
@@ -10979,6 +10983,161 @@ for await (const chunk of stream.textStream) {
 ## Related
 
 - [Calling Agents](/examples/v1/agents/calling-agents)
+
+
+---
+title: "Example: Memory with MongoDB | Memory | Mastra Docs"
+description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
+---
+
+# Memory with MongoDB
+[EN] Source: https://mastra.ai/en/docs/memory/storage/memory-with-mongodb
+
+This example demonstrates how to use Mastra's memory system with MongoDB as the storage backend.
+
+## Prerequisites
+
+This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
+
+```bash title=".env" copy
+OPENAI_API_KEY=<your-api-key>
+MONGODB_URI=<your-connection-string>
+MONGODB_DB_NAME=<your-db-name>
+```
+
+And install the following package:
+
+```bash copy
+npm install @mastra/mongodb@beta
+```
+
+## Adding memory to an agent
+
+To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore } from "@mastra/mongodb";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      threads: {
+        generateTitle: true,
+      },
+    },
+  }),
+});
+```
+
+## Vector embeddings with MongoDB
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
+
+> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
+To use this, install `@mastra/fastembed`:
+
+```bash copy
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: openai("gpt-4o"),
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // generates descriptive thread titles automatically
+      },
+    },
+  }),
+});
+```
+
+## Usage example
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mongodbAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Related
+
+- [Calling Agents](/docs/v1/agents/overview)
 
 
 ---
@@ -23688,10 +23847,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
         title: "Memory with Schema",
         href: "/examples/v1/memory/working-memory-schema",
       },
-      {
-        title: "Memory with MongoDB",
-        href: "/examples/v1/memory/memory-with-mongodb",
-      },
     ],
     RAG: [
       { title: "Chunk Text", href: "/examples/v1/rag/chunking/chunk-text" },
@@ -23765,161 +23920,6 @@ The Examples section is a short list of example projects demonstrating basic AI 
     ],
   }}
 />
-
-
----
-title: "Example: Memory with MongoDB | Memory | Mastra Docs"
-description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
----
-
-# Memory with MongoDB
-[EN] Source: https://mastra.ai/en/examples/memory/memory-with-mongodb
-
-This example demonstrates how to use Mastra's memory system with MongoDB as the storage backend.
-
-## Prerequisites
-
-This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-MONGODB_URI=<your-connection-string>
-MONGODB_DB_NAME=<your-db-name>
-```
-
-And install the following package:
-
-```bash copy
-npm install @mastra/mongodb@beta
-```
-
-## Adding memory to an agent
-
-To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
-
-```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { MongoDBStore } from "@mastra/mongodb";
-
-export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
-  name: "mongodb-agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
-  memory: new Memory({
-    storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    options: {
-      threads: {
-        generateTitle: true,
-      },
-    },
-  }),
-});
-```
-
-## Vector embeddings with MongoDB
-
-Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
-
-> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
-
-This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
-To use this, install `@mastra/fastembed`:
-
-```bash copy
-npm install @mastra/fastembed@beta
-```
-
-Add the following to your agent:
-
-```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
-import { fastembed } from "@mastra/fastembed";
-
-export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
-  name: "mongodb-agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
-  memory: new Memory({
-    storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    vector: new MongoDBVector({
-      uri: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-      threads: {
-        generateTitle: true, // generates descriptive thread titles automatically
-      },
-    },
-  }),
-});
-```
-
-## Usage example
-
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
-
-```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const threadId = "123";
-const resourceId = "user-456";
-
-const agent = mastra.getAgent("mongodbAgent");
-
-const message = await agent.stream("My name is Mastra", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-});
-
-await message.textStream.pipeTo(new WritableStream());
-
-const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-## Related
-
-- [Calling Agents](/docs/v1/agents/overview)
 
 
 ---
@@ -33836,6 +33836,26 @@ Storage APIs have been standardized with consistent pagination and naming patter
 
 ## Changed
 
+### Required `id` property for storage instances
+
+Storage instances now require an `id` property. This unique identifier is used for tracking and managing storage instances within Mastra. The `id` should be a descriptive, unique string for each storage instance in your application.
+
+To migrate, add an `id` field to your storage constructor.
+
+```diff
+  const storage = new PostgresStore({
++   id: 'main-postgres-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+    schemaName: 'public',
+  });
+
+  const upstashStore = new UpstashStore({
++   id: 'upstash-cache-store',
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
+```
+
 ### Pagination from `offset/limit` to `page/perPage`
 
 All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`. This change provides a more intuitive pagination model that aligns with common web pagination patterns.
@@ -34506,9 +34526,33 @@ description: "Learn how to migrate vector-related changes when upgrading to v1."
 # Vectors
 [EN] Source: https://mastra.ai/en/guides/migrations/upgrade-to-v1/vectors
 
-Vector store methods have been renamed to follow consistent naming conventions.
+Vector store constructors now require an `id` property, and vector store methods have been renamed to follow consistent naming conventions.
 
 ## Changed
+
+### Required `id` property for vector store instances
+
+Vector store instances now require an `id` property. This unique identifier is used for tracking and managing vector store instances within Mastra. The `id` should be a descriptive, unique string for each vector store in your application.
+
+To migrate, add an `id` field to your vector store constructor.
+
+```diff
+  const vectorStore = new PgVector({
++   id: 'main-vector-store',
+    connectionString: process.env.POSTGRES_CONNECTION_STRING,
+  });
+
+  const chromaStore = new ChromaVector({
++   id: 'chroma-embeddings',
+    url: process.env.CHROMA_URL,
+  });
+
+  const pineconeStore = new PineconeVector({
++   id: 'pinecone-production',
+    apiKey: process.env.PINECONE_API_KEY,
+    environment: process.env.PINECONE_ENVIRONMENT,
+  });
+```
 
 ### `getVectors` to `listVectors`
 
@@ -35116,6 +35160,283 @@ See the following API references for more information:
 - [Agent.generate()](/reference/v1/agents/generate)
 - [Agent.stream()](/reference/v1/streaming/agents/stream)
 
+
+---
+title: "Next.js Quickstart"
+description: "Get started with Mastra, Next.js, and AS SDK UI. Quickly."
+---
+
+# Next.js Quickstart
+[EN] Source: https://mastra.ai/en/guides/quickstarts/nextjs
+
+In this quickstart, you'll build an AI agent with tool-calling capabilities using [Mastra](/docs/v1), then connect it to Next.js by importing and calling the agent directly within your routes. 
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience. 
+
+In ~5 minutes, you'll have a functional AI-powered app ready to extend with your own tools and logic.
+
+<figure>
+![Screenshot of a chat-style web app displaying a completed "weatherTool" tool call, answering "What is the weather in London?" with a JSON result. A message suggests offering activity ideas, and a text input field is at the bottom.](/img/nextjs-quickstart.png)
+<figcaption class="text-sm text-center">What you'll build: an agent that can call a weather tool, display the JSON result, stream a weather summary in the chat UI, and persist conversation history across reloads.</figcaption>
+</figure>
+
+## Before you begin
+
+* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](https://platform.openai.com/api-keys).
+
+## Create a new Next.js app
+
+Run the following command to [create a new Next.js app](https://nextjs.org/docs/app/getting-started/installation):
+
+```bash
+npx create-next-app \
+    my-nextjs-agent \
+    --yes \
+    --ts \
+    --eslint \
+    --tailwind \
+    --src-dir \
+    --app \
+    --turbopack \
+    --no-react-compiler \
+    --no-import-alias
+```
+
+This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
+
+## Initialize Mastra
+`cd` and run [`mastra init`](/reference/v1/cli/create-mastra). 
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+```bash
+cd my-nextjs-agent
+npx --force mastra@beta init
+```
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your Next.js routes in the next steps.
+
+
+## Install AI SDK UI and AI Elements
+
+Install AI SDK UI along with the Mastra adapter:
+
+```bash
+npm install \
+    @mastra/ai-sdk \
+    @ai-sdk/react 
+```
+
+Next, initialize AI Elements. When prompted, choose the default options:
+
+```bash
+npx ai-elements@latest
+```
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+
+
+## Create a chat route
+
+Create `src/app/api/chat/route.ts`:
+
+```ts title="src/app/api/chat/route.ts"
+import { mastra } from "@/mastra";
+import { NextResponse } from "next/server";
+import { toAISdkFormat } from "@mastra/ai-sdk";
+import { convertMessages } from "@mastra/core/agent";
+import { createUIMessageStreamResponse } from "ai";
+
+const weatherAgent = mastra.getAgent("weatherAgent");
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const stream = await weatherAgent.stream(messages, {
+    memory: {
+      thread: "example-user-id",
+      resource: "weather-chat",
+    },
+  });
+
+  return createUIMessageStreamResponse({
+    stream: toAISdkFormat(stream, { from: "agent" }),
+  })
+}
+
+export async function GET() {
+  const memory = await weatherAgent.getMemory();
+  const response = await memory?.query({
+    threadId: "example-user-id",
+    resourceId: "weather-chat",
+  });
+
+  const uiMessages = 
+    convertMessages(response?.uiMessages ?? []).to("AIV5.UI");
+  return NextResponse.json(uiMessages);
+}
+```
+
+The POST route accepts a prompt and streams the agent's response back in AI SDK format, while the GET route fetches message history from memory so the UI can be hydrated when the client reloads.
+
+## Create a chat page
+
+Create `src/app/chat/page.tsx`:
+
+```tsx title="src/app/chat/page.tsx"
+'use client';
+
+import '@/app/globals.css';
+import { useEffect, useState } from 'react';
+import { DefaultChatTransport } from 'ai';
+import { useChat } from '@ai-sdk/react';
+
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+} from '@/components/ai-elements/prompt-input';
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool';
+
+
+function Chat() {
+  const [input, setInput] = useState<string>('');
+
+  const { messages, setMessages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  });
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      const res = await fetch('/api/chat');
+      const data = await res.json();
+      setMessages([...data]);
+    };
+    fetchMessages();
+  }, [setMessages]);
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+
+    sendMessage({ text: input });
+    setInput('');
+  };
+
+  return (
+    <div className="w-full p-6 relative size-full h-screen">
+      <div className="flex flex-col h-full">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map((message: any) => (
+              <div key={message.id}>
+                {message.parts?.map((part: any, i: number) => {
+                  if (part.type === 'text') {
+                    return (
+                      <Message 
+                        key={`${message.id}-${i}`} 
+                        from={message.role}>
+                          <MessageContent>
+                            <MessageResponse>{part.text}</MessageResponse>
+                          </MessageContent>
+                      </Message>
+                    );
+                  }
+
+                  if (part.type?.startsWith('tool-')) {
+                    return (
+                      <Tool key={`${message.id}-${i}`}>
+                        <ToolHeader
+                          type={part.type}
+                          state={part.state || 'output-available'}
+                          className="cursor-pointer"
+                        />
+                        <ToolContent>
+                          <ToolInput input={part.input || part.args || {}} />
+                          <ToolOutput
+                            output={part.output || part.result}
+                            errorText={part.errorText || part.error}
+                          />
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
+            ))}
+            <ConversationScrollButton />
+          </ConversationContent>
+        </Conversation>
+
+        <PromptInput onSubmit={handleSubmit} className="mt-20">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={(e: any) => setInput(e.target.value)}
+              className="md:leading-10"
+              value={input}
+              placeholder="Type your message..."
+              disabled={status !== 'ready'}
+            />
+          </PromptInputBody>
+        </PromptInput>
+      </div>
+    </div>
+  );
+}
+
+export default Chat;
+```
+
+This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+
+It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
+
+
+## Test your agent 
+1. Run your Next.js app with `npm run dev`
+
+2. Open the chat at http://localhost:3000/chat
+
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response.
+
+## Next steps
+
+Congratulations on building your Mastra agent with Next.js! 🎉 
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK and Next.js, and how to deploy to Vercel:
+
+- Integrate Mastra with [AI SDK](/docs/v1/frameworks/agentic-uis/ai-sdk)
+- Use Mastra in your [Next.js app](/docs/v1/frameworks/web-frameworks/next-js)
+- Deploy your agent to [Vercel](/docs/v1/deployment/serverless-platforms/vercel-deployer)
 
 ---
 title: "Embedding Models"
@@ -36077,9 +36398,6 @@ description: "Use Alibaba (China) models with Mastra. 61 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/alibaba-cn.svg" alt="Alibaba (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba (China)
@@ -36902,9 +37220,6 @@ description: "Use Alibaba models with Mastra. 39 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/alibaba.svg" alt="Alibaba logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba
@@ -37486,9 +37801,6 @@ description: "Use Anthropic models with Mastra. 19 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -37885,9 +38197,6 @@ description: "Use Baseten models with Mastra. 3 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/baseten.svg" alt="Baseten logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Baseten
@@ -38013,9 +38322,6 @@ description: "Use Cerebras models with Mastra. 4 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -38165,9 +38471,6 @@ description: "Use Chutes models with Mastra. 52 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -38906,9 +39209,6 @@ description: "Use Cortecs models with Mastra. 11 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
@@ -39131,9 +39431,6 @@ description: "Use Deep Infra models with Mastra. 6 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -39307,9 +39604,6 @@ description: "Use DeepSeek models with Mastra. 2 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/deepseek.svg" alt="DeepSeek logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DeepSeek
@@ -39423,9 +39717,6 @@ description: "Use FastRouter models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -39685,9 +39976,6 @@ description: "Use Fireworks AI models with Mastra. 11 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/fireworks-ai.svg" alt="Fireworks AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Fireworks AI
@@ -39909,9 +40197,6 @@ description: "Use GitHub Models models with Mastra. 55 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -40686,9 +40971,6 @@ description: "Use Google models with Mastra. 24 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -41152,9 +41434,6 @@ description: "Use Groq models with Mastra. 17 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -41460,9 +41739,6 @@ description: "Use Hugging Face models with Mastra. 14 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
@@ -41720,9 +41996,6 @@ description: "Use iFlow models with Mastra. 17 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42017,9 +42290,6 @@ description: "Use Inception models with Mastra. 2 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -42383,9 +42653,6 @@ description: "Use Inference models with Mastra. 9 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/inference.svg" alt="Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Inference
@@ -42584,9 +42851,6 @@ description: "Use Llama models with Mastra. 7 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/llama.svg" alt="Llama logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Llama
@@ -42761,9 +43025,6 @@ description: "Use LMStudio models with Mastra. 3 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/lmstudio.svg" alt="LMStudio logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LMStudio
@@ -42890,9 +43151,6 @@ description: "Use LucidQuery AI models with Mastra. 2 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/lucidquery.svg" alt="LucidQuery AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LucidQuery AI
@@ -43006,9 +43264,6 @@ description: "Use Mistral models with Mastra. 19 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -43333,9 +43588,6 @@ description: "Use ModelScope models with Mastra. 7 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/modelscope.svg" alt="ModelScope logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ModelScope
@@ -43510,9 +43762,6 @@ description: "Use Moonshot AI (China) models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/moonshotai-cn.svg" alt="Moonshot AI (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Moonshot AI (China)
@@ -43662,9 +43911,6 @@ description: "Use Moonshot AI models with Mastra. 5 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -43816,9 +44062,6 @@ description: "Use Morph models with Mastra. 3 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/morph.svg" alt="Morph logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Morph
@@ -43944,9 +44187,6 @@ description: "Use Nebius Token Factory models with Mastra. 15 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44217,9 +44457,6 @@ description: "Use Nvidia models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -44573,9 +44810,6 @@ description: "Use OpenAI models with Mastra. 31 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -45166,9 +45400,6 @@ description: "Use OpenCode Zen models with Mastra. 14 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
@@ -45427,9 +45658,6 @@ description: "Use Perplexity models with Mastra. 4 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -45578,9 +45806,6 @@ description: "Use Requesty models with Mastra. 13 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -45828,9 +46053,6 @@ description: "Use Scaleway models with Mastra. 13 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/scaleway.svg" alt="Scaleway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Scaleway
@@ -46077,9 +46299,6 @@ description: "Use submodel models with Mastra. 9 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/submodel.svg" alt="submodel logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />submodel
@@ -46277,9 +46496,6 @@ description: "Use Synthetic models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -46647,9 +46863,6 @@ description: "Use Together AI models with Mastra. 6 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
@@ -46823,9 +47036,6 @@ description: "Use Upstage models with Mastra. 2 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/upstage.svg" alt="Upstage logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Upstage
@@ -46939,9 +47149,6 @@ description: "Use Venice AI models with Mastra. 14 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -47201,9 +47408,6 @@ description: "Use Vultr models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/vultr.svg" alt="Vultr logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Vultr
@@ -47353,9 +47557,6 @@ description: "Use Weights & Biases models with Mastra. 10 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -47566,9 +47767,6 @@ description: "Use xAI models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
@@ -47937,9 +48135,6 @@ description: "Use Z.AI Coding Plan models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
@@ -48090,9 +48285,6 @@ description: "Use Z.AI models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/zai.svg" alt="Z.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI
@@ -48242,9 +48434,6 @@ description: "Use ZenMux models with Mastra. 18 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -48552,9 +48741,6 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 
 
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
@@ -48704,9 +48890,6 @@ description: "Use Zhipu AI models with Mastra. 5 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
-
-import ProviderModelsTable from "@site/src/components/ProviderModelsTable";
-import PropertiesTable from "@site/src/components/PropertiesTable";
 
 
 
@@ -48964,13 +49147,13 @@ export const agent = new Agent({
       type: "string",
       isOptional: true,
       description:
-        "Optional unique identifier for the agent. Defaults to `name` if not provided.",
+        "Unique identifier for the agent. Defaults to `name` if not provided.",
     },
     {
       name: "name",
       type: "string",
       isOptional: false,
-      description: "Unique identifier for the agent.",
+      description: "Display name for the agent. Used as the identifier if `id` is not provided.",
     },
     {
       name: "description",
@@ -57770,8 +57953,11 @@ Mastra provides a unified `createScorer` factory that allows you to define custo
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
 
 ```typescript
+import { createScorer } from "@mastra/core/evals";
+
 const scorer = createScorer({
-  name: "My Custom Scorer",
+  id: "my-custom-scorer",
+  name: "My Custom Scorer", // Optional, defaults to id
   description: "Evaluates responses based on custom criteria",
   type: "agent", // Optional: for agent evaluation with automatic typing
   judge: {
@@ -57798,28 +57984,34 @@ const scorer = createScorer({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      isOptional: false,
+      description: "Unique identifier for the scorer. Used as the name if `name` is not provided.",
+    },
+    {
       name: "name",
       type: "string",
-      required: true,
-      description: "Name of the scorer.",
+      isOptional: true,
+      description: "Name of the scorer. Defaults to `id` if not provided.",
     },
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what the scorer does.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Optional judge configuration for LLM-based steps. See Judge Object section below.",
     },
     {
       name: "type",
       type: "string",
-      required: false,
+      isOptional: true,
       description:
         "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
     },
@@ -57835,13 +58027,13 @@ This function returns a scorer builder that you can chain step methods onto. See
     {
       name: "model",
       type: "LanguageModel",
-      required: true,
+      isOptional: false,
       description: "The LLM model instance to use for evaluation.",
     },
     {
       name: "instructions",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "System prompt/instructions for the LLM.",
     },
   ]}
@@ -57856,7 +58048,7 @@ You can specify input/output types when creating scorers for better type inferen
 For evaluating agents, use `type: 'agent'` to automatically get the correct types for agent input/output:
 
 ```typescript
-import { createScorer } from "@mastra/core/scorers";
+import { createScorer } from "@mastra/core/evals";
 
 // Agent scorer with automatic typing
 const agentScorer = createScorer({
@@ -57881,7 +58073,7 @@ const agentScorer = createScorer({
 For custom input/output types, use the generic approach:
 
 ```typescript
-import { createScorer } from "@mastra/core/scorers";
+import { createScorer } from "@mastra/core/evals";
 
 type CustomInput = { query: string; context: string[] };
 type CustomOutput = { answer: string; confidence: number };
@@ -57943,34 +58135,34 @@ Function: `({ run, results }) => any`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results",
       type: "object",
-      required: true,
+      isOptional: false,
       description: "Empty object (no previous steps).",
     },
   ]}
@@ -57986,26 +58178,26 @@ The method can return any value. The returned value will be available to subsequ
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this preprocessing step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description: "Zod schema for the expected output of the preprocess step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -58024,34 +58216,34 @@ Function: `({ run, results }) => any`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
   ]}
@@ -58067,26 +58259,26 @@ The method can return any value. The returned value will be available to subsequ
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this analysis step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description: "Zod schema for the expected output of the analyze step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -58105,40 +58297,40 @@ Function: `({ run, results }) => number`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
     {
       name: "results.analyzeStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from analyze step, if defined (optional).",
     },
   ]}
@@ -58154,27 +58346,27 @@ The method must return a numerical score.
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this scoring step does.",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
-      required: true,
+      isOptional: false,
       description:
         "Zod schema for the expected output of the generateScore step.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -58188,7 +58380,7 @@ When using prompt object mode, you must also provide a `calculateScore` function
     {
       name: "calculateScore",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results, analyzeStepResult }) => number. Converts the LLM's structured output into a numerical score.",
     },
@@ -58207,46 +58399,46 @@ Function: `({ run, results, score }) => string`
     {
       name: "run.input",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
     },
     {
       name: "run.output",
       type: "any",
-      required: true,
+      isOptional: false,
       description:
         "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
     },
     {
       name: "run.runId",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Unique identifier for this scoring run.",
     },
     {
       name: "run.requestContext",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "Request Context from the agent or workflow step being evaluated (optional).",
     },
     {
       name: "results.preprocessStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from preprocess step, if defined (optional).",
     },
     {
       name: "results.analyzeStepResult",
       type: "any",
-      required: false,
+      isOptional: true,
       description: "Result from analyze step, if defined (optional).",
     },
     {
       name: "score",
       type: "number",
-      required: true,
+      isOptional: false,
       description: "Score computed by the generateScore step.",
     },
   ]}
@@ -58262,20 +58454,20 @@ The method must return a string explaining the score.
     {
       name: "description",
       type: "string",
-      required: true,
+      isOptional: false,
       description: "Description of what this reasoning step does.",
     },
     {
       name: "createPrompt",
       type: "function",
-      required: true,
+      isOptional: false,
       description:
         "Function: ({ run, results, score }) => string. Returns the prompt for the LLM.",
     },
     {
       name: "judge",
       type: "object",
-      required: false,
+      isOptional: true,
       description:
         "(Optional) LLM judge for this step (can override main judge). See Judge Object section.",
     },
@@ -59033,6 +59225,8 @@ The `MastraScorer` class is the base class for all scorers in Mastra. It provide
 Use the `createScorer` factory function, which returns a `MastraScorer` instance:
 
 ```typescript
+import { createScorer } from "@mastra/core/evals";
+
 const scorer = createScorer({
   name: "My Custom Scorer",
   description: "Evaluates responses based on custom criteria",
@@ -66529,10 +66723,16 @@ const processor = new BatchPartsProcessor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'batch-parts'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'batch-parts'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -66684,10 +66884,16 @@ const processor = new LanguageDetector({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'language-detector'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'language-detector'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -66825,10 +67031,16 @@ const processor = new ModerationProcessor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'moderation'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'moderation'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -67005,10 +67217,16 @@ const processor = new PIIDetector({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'pii-detector'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'pii-detector'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -67172,10 +67390,16 @@ const processor = new PromptInjectionDetector({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'prompt-injection-detector'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'prompt-injection-detector'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -67311,10 +67535,16 @@ const processor = new SystemPromptScrubber({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'system-prompt-scrubber'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'system-prompt-scrubber'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -67440,10 +67670,16 @@ const processor = new TokenLimiterProcessor({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'token-limiter'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'token-limiter'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processOutputStream",
@@ -67577,10 +67813,16 @@ const processor = new UnicodeNormalizer({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'unicode-normalizer'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'unicode-normalizer'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -77108,6 +77350,55 @@ The description for this generated tool will be: "Ask agent `<agent.name>` a que
 
 This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
 
+### Accessing MCP Context in Tools
+
+Tools exposed through `MCPServer` can access MCP request context (authentication, session IDs, etc.) via two different properties depending on how the tool is invoked:
+
+| Call Pattern | Access Method |
+|-------------|---------------|
+| Direct tool call | `context?.mcp?.extra` |
+| Agent tool call | `context?.requestContext?.get("mcp.extra")` |
+
+**Universal pattern** (works in both contexts):
+```typescript
+const mcpExtra = context?.mcp?.extra ?? context?.requestContext?.get("mcp.extra");
+const authInfo = mcpExtra?.authInfo;
+```
+
+#### Example: Tool that works in both contexts
+
+```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const fetchUserData = createTool({
+  id: "fetchUserData",
+  description: "Fetches user data using authentication from MCP context",
+  inputSchema: z.object({
+    userId: z.string().describe("The ID of the user to fetch"),
+  }),
+  execute: async (inputData, context) => {
+    // Access MCP authentication context
+    // When called directly via MCP: context.mcp.extra
+    // When called via agent: context.requestContext.get('mcp.extra')
+    const mcpExtra = context?.mcp?.extra || context?.requestContext?.get("mcp.extra");
+    const authInfo = mcpExtra?.authInfo;
+
+    if (!authInfo?.token) {
+      throw new Error("Authentication required");
+    }
+
+    const response = await fetch(`https://api.example.com/users/${inputData.userId}`, {
+      headers: {
+        Authorization: `Bearer ${authInfo.token}`,
+      },
+    });
+
+    return response.json();
+  },
+});
+```
+
 ## Methods
 
 These are the functions you can call on an `MCPServer` instance to control its behavior and get information.
@@ -79431,10 +79722,11 @@ npm install @mastra/couchbase@beta
 
 ## Usage Example
 
-```typescript copy showLineNumbers
+```typescript copy
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
+  id: 'couchbase-vector',
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
   username: process.env.COUCHBASE_USERNAME,
   password: process.env.COUCHBASE_PASSWORD,
@@ -79448,6 +79740,11 @@ const store = new CouchbaseVector({
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
     {
       name: "connectionString",
       type: "string",
@@ -80590,6 +80887,7 @@ npm install @mastra/mongodb@beta
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
+  id: 'mongodb-vector',
   url: process.env.MONGODB_URL,
   database: process.env.MONGODB_DATABASE,
 });
@@ -80599,6 +80897,11 @@ const store = new MongoDBVector({
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
     {
       name: "url",
       type: "string",

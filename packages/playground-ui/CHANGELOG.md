@@ -1,5 +1,22 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.1
+
+### Patch Changes
+
+- Make MainSidebar toggle button sticky to bottom, always visible ([#9682](https://github.com/mastra-ai/mastra/pull/9682))
+
+- Removing uneeded files ([#9877](https://github.com/mastra-ai/mastra/pull/9877))
+
+- Explicitly set color of line number in CodeMirror ([#9878](https://github.com/mastra-ai/mastra/pull/9878))
+
+- Add visual styles and labels for more workflow node types ([#9777](https://github.com/mastra-ai/mastra/pull/9777))
+
+- Updated dependencies [[`910db9e`](https://github.com/mastra-ai/mastra/commit/910db9e0312888495eb5617b567f247d03303814), [`dbd9db0`](https://github.com/mastra-ai/mastra/commit/dbd9db0d5c2797a210b9098e7e3e613718e5442f), [`e7266a2`](https://github.com/mastra-ai/mastra/commit/e7266a278db02035c97a5e9cd9d1669a6b7a535d)]:
+  - @mastra/core@1.0.0-beta.1
+  - @mastra/client-js@1.0.0-beta.1
+  - @mastra/react@0.1.0-beta.1
+
 ## 7.0.0-beta.0
 
 ### Major Changes

@@ -764,7 +764,15 @@ export class MCPServer extends MCPServerBase {
             `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
           );
           try {
-            const response = await agent.generate(inputData.message, context);
+            const proxiedContext = context?.requestContext || new RequestContext();
+            if (context?.mcp?.extra) {
+              proxiedContext.set('mcp.extra', context.mcp.extra);
+            }
+
+            const response = await agent.generate(inputData.message, {
+              ...(context ?? {}),
+              requestContext: proxiedContext,
+            });
             return response;
           } catch (error) {
             this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);

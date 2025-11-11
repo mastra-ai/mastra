@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Make MainSidebar toggle button sticky to bottom, always visible ([#9682](https://github.com/mastra-ai/mastra/pull/9682))
+
 ## 1.0.0-beta.0
 
 ### Major Changes
