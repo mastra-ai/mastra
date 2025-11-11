@@ -3113,6 +3113,82 @@ If you have specific questions about how the Apache License 2.0 applies to your 
 
 
 ---
+title: "Building Mastra | Deployment | Mastra Docs"
+description: "Learn how to build a Mastra server with build settings and deployment options."
+---
+
+# Building Mastra
+[EN] Source: https://mastra.ai/en/docs/deployment/building-mastra
+
+Mastra runs as a standard Node.js server and can be deployed across a wide range of environments.
+
+## Default project structure
+
+The [getting started guide](/docs/v1/getting-started/installation) scaffolds a project with sensible defaults to help you begin quickly. By default, the CLI organizes application files under the `src/mastra/` directory, resulting in a structure similar to the following:
+
+```
+src/
+└── mastra/
+    ├── agents/
+    ├── tools/
+    ├── workflows/
+    └── index.ts
+package.json
+tsconfig.json
+```
+
+## Building
+
+The `mastra build` command starts the build process:
+
+```bash copy
+mastra build
+```
+
+### Customizing the input directory
+
+If your Mastra files are located elsewhere, use the `--dir` flag to specify the custom location. The `--dir` flag tells Mastra where to find your entry point file (`index.ts` or `index.js`) and related directories.
+
+```bash copy
+mastra build --dir ./my-project/mastra
+```
+
+## Build process
+
+The build process follows these steps:
+
+1. **Locates entry file**: Finds `index.ts` or `index.js` in your specified directory (default: `src/mastra/`).
+2. **Creates build directory**: Generates a `.mastra/` directory containing:
+   - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
+   - **`output`**: Contains the production-ready application bundle with `index.mjs` and project-specific files.
+3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
+4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
+5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.
+
+### Build output structure
+
+After building, Mastra creates a `.mastra/` directory with the following structure:
+
+```
+.mastra/
+├── .build/
+└── output/
+```
+
+### `public` folder
+
+If a `public` folder exists in `src/mastra`, its contents are copied into the `.build/output` directory during the build process.
+
+## Running the Server
+
+Start the HTTP server:
+
+```bash copy
+node .mastra/output/index.mjs
+```
+
+
+---
 title: "Amazon EC2 | Deployment | Mastra Docs"
 description: "Deploy your Mastra applications to Amazon EC2."
 ---
@@ -3468,7 +3544,7 @@ Once deployed, test your Lambda function:
 2. Visit the URL in your browser to see your Mastra's server home screen
 3. Test your agents and workflows using the generated API endpoints
 
-For more information about available API endpoints, see the [Server documentation](/docs/v1/deployment/server-deployment).
+For more information about available API endpoints, see the [Server documentation](/docs/v1/deployment/building-mastra).
 
 ## Connecting your client
 
@@ -3712,6 +3788,95 @@ such as `LibSQLStore` with a file URL. Consider using cloud-based storage soluti
 - [Configure custom domains](https://docs.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain)
 - [Enable HTTPS](https://docs.microsoft.com/en-us/azure/app-service/configure-ssl-bindings)
 - [Azure App Service documentation](https://docs.microsoft.com/en-us/azure/app-service/)
+
+
+---
+title: "CloudflareDeployer | Deployment | Mastra Docs"
+description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
+---
+
+# CloudflareDeployer
+[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/cloudflare-deployer
+
+The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Cloudflare specific functionality.
+
+## Installation
+
+```bash copy
+npm install @mastra/deployer-cloudflare@beta
+```
+
+## Usage example
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new CloudflareDeployer({
+    projectName: "hello-mastra",
+    env: {
+      NODE_ENV: "production",
+    },
+  }),
+});
+```
+
+> See the [CloudflareDeployer](/reference/v1/deployer/cloudflare) API reference for all available configuration options.
+
+## Manual deployment
+
+Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
+
+With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
+
+```bash copy
+npx wrangler login
+```
+
+Run the following to build and deploy your application to Cloudflare
+
+```bash copy
+npm run build && wrangler deploy --config .mastra/output/wrangler.json
+```
+
+> You can also run `wrangler dev --config .mastra/output/wrangler.json` from your project root to test your Mastra application locally.
+
+## Build output
+
+The build output for Mastra applications using the `CloudflareDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Cloudflare.
+
+```
+.mastra/
+└── output/
+    ├── index.mjs
+    └── wrangler.json
+package.json
+```
+
+The `CloudflareDeployer` automatically generates a `wrangler.json` configuration file in `.mastra/output` with the following settings:
+
+```json
+{
+  "name": "hello-mastra",
+  "main": "./index.mjs",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
+  "observability": { "logs": { "enabled": true } },
+  "vars": {
+    "OPENAI_API_KEY": "...",
+    "CLOUDFLARE_API_TOKEN": "..."
+  }
+}
+```
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
 
 
 ---
@@ -3966,10 +4131,14 @@ Standalone Mastra applications can be deployed to popular cloud providers, see o
 
 - [Amazon EC2](/docs/v1/deployment/cloud-providers/amazon-ec2)
 - [AWS Lambda](/docs/v1/deployment/cloud-providers/aws-lambda)
-- [Digital Ocean](/docs/v1/deployment/cloud-providers/digital-ocean)
 - [Azure App Services](/docs/v1/deployment/cloud-providers/azure-app-services)
+- [Cloudflare](/docs/v1/deployment/cloud-providers/cloudflare-deployer)
+- [Digital Ocean](/docs/v1/deployment/cloud-providers/digital-ocean)
+- [Netlify](/docs/v1/deployment/cloud-providers/netlify-deployer)
+- [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
 
-For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/server-deployment) guide.
+
+For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/building-mastra) guide.
 
 ## Prerequisites
 
@@ -4016,423 +4185,12 @@ export const weatherAgent = new Agent({
 
 
 ---
-title: "Monorepo Deployment | Deployment | Mastra Docs"
-description: Learn how to deploy Mastra applications that are part of a monorepo setup
----
-
-# Monorepo Deployment
-[EN] Source: https://mastra.ai/en/docs/deployment/monorepo
-
-Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./serverless-platforms/) providers may introduce extra requirements, the core setup is the same.
-
-## Example monorepo
-
-In this example, the Mastra application is located at `apps/api`.
-
-```
-apps/
-├── api/
-│   ├── src/
-│   │   └── mastra/
-│   │       ├── agents/
-│   │       ├── tools/
-│   │       ├── workflows/
-│   │       └── index.ts
-│   ├── package.json
-│   └── tsconfig.json
-└── web/
-packages/
-├── ui/
-└── utils/
-package.json
-```
-
-## Environment variables
-
-Environment variables like `OPENAI_API_KEY` should be stored in an `.env` file at the root of the Mastra application `(apps/api)`, for example:
-
-```
-api/
-├── src/
-│   └── mastra/
-├── .env
-├── package.json
-└── tsconfig.json
-```
-
-## Deployment configuration
-
-The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](../mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
-
-![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
-
-## Dependency management
-
-In a monorepo, keep dependencies consistent to avoid version conflicts and build errors.
-
-- Use a **single lockfile** at the project root so all packages resolve the same versions.
-- Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates.
-
-## Deployment pitfalls
-
-Common issues to watch for when deploying Mastra in a monorepo:
-
-- **Wrong project root**: make sure the correct package (e.g. `apps/api`) is selected as the deploy target.
-
-## Bundler options
-
-Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  // ...
-  bundler: {
-    transpilePackages: ["utils"],
-    externals: ["ui"],
-    sourcemap: true,
-  },
-});
-```
-
-> See [Mastra Class](/reference/v1/core/mastra-class) for more configuration options.
-
-## Supported monorepos
-
-Mastra works with:
-
-- npm workspaces
-- pnpm workspaces
-- Yarn workspaces
-- Turborepo
-
-Known limitations:
-
-- Bun workspaces — partial support; known issues
-- Nx — You can use Nx's [supported dependency strategies](https://nx.dev/concepts/decisions/dependency-management) but you need to have `package.json` files inside your workspace packages
-
-> If you are experiencing issues with monorepos see our: [Monorepos Support mega issue](https://github.com/mastra-ai/mastra/issues/6852).
-
-
----
-title: "Deployment Overview | Deployment | Mastra Docs"
-description: Learn about different deployment options for your Mastra applications
----
-
-# Deployment Overview
-[EN] Source: https://mastra.ai/en/docs/deployment/overview
-
-Mastra offers multiple deployment options to suit your application's needs, from fully-managed solutions to self-hosted options, and web framework integrations. This guide will help you understand the available deployment paths and choose the right one for your project.
-
-## Choosing a Deployment Option
-
-| Option                   | Best For                                                      | Key Benefits                                                         |
-| ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **Mastra Cloud**         | Teams wanting to ship quickly without infrastructure concerns | Fully-managed, automatic scaling, built-in observability             |
-| **Framework Deployment** | Teams already using Next.js, Astro etc                        | Simplify deployment with a unified codebase for frontend and backend |
-| **Server Deployment**    | Teams needing maximum control and customization               | Full control, custom middleware, integrate with existing apps        |
-| **Serverless Platforms** | Teams already using Vercel, Netlify, or Cloudflare            | Platform integration, simplified deployment, automatic scaling       |
-
-## Deployment Options
-
-### Runtime support
-
-- Node.js `v22.13.0` or later
-- Bun
-- Deno
-- [Cloudflare](../deployment/serverless-platforms/cloudflare-deployer)
-
-### Mastra Cloud
-
-Mastra Cloud is a deployment platform that connects to your GitHub repository, automatically deploys on code changes, and provides monitoring tools. It includes:
-
-- GitHub repository integration
-- Deployment on git push
-- Agent testing interface
-- Comprehensive logs and traces
-- Custom domains for each project
-
-[View Mastra Cloud documentation →](../mastra-cloud/overview)
-
-### With a Web Framework
-
-Mastra can be integrated with a variety of web frameworks. For example, see one of the following for a detailed guide.
-
-- [With Next.js](../frameworks/web-frameworks/next-js)
-- [With Astro](../frameworks/web-frameworks/astro)
-
-When integrated with a framework, Mastra typically requires no additional configuration for deployment.
-
-[View Web Framework Integration →](./web-framework)
-
-### With a Server
-
-You can deploy Mastra as a standard Node.js HTTP server, which gives you full control over your infrastructure and deployment environment.
-
-- Custom API routes and middleware
-- Configurable CORS and authentication
-- Deploy to VMs, containers, or PaaS platforms
-- Ideal for integrating with existing Node.js applications
-
-[Server deployment guide →](./server-deployment)
-
-### Serverless Platforms
-
-Mastra provides platform-specific deployers for popular serverless platforms, enabling you to deploy your application with minimal configuration.
-
-- Deploy to Cloudflare Workers, Vercel, or Netlify
-- Platform-specific optimizations
-- Simplified deployment process
-- Automatic scaling through the platform
-
-[Serverless deployment guide →](./server-deployment)
-
-## Client Configuration
-
-Once your Mastra application is deployed, you'll need to configure your client to communicate with it. The Mastra Client SDK provides a simple and type-safe interface for interacting with your Mastra server.
-
-- Type-safe API interactions
-- Authentication and request handling
-- Retries and error handling
-- Support for streaming responses
-
-[Client configuration guide →](/docs/v1/server-db/mastra-client)
-
-
----
-title: "Deploy a Mastra Server | Deployment | Mastra Docs"
-description: "Learn how to deploy a Mastra server with build settings and deployment options."
----
-
-# Deploy a Mastra Server
-[EN] Source: https://mastra.ai/en/docs/deployment/server-deployment
-
-Mastra runs as a standard Node.js server and can be deployed across a wide range of environments.
-
-## Default project structure
-
-The [getting started guide](/docs/v1/getting-started/installation) scaffolds a project with sensible defaults to help you begin quickly. By default, the CLI organizes application files under the `src/mastra/` directory, resulting in a structure similar to the following:
-
-```
-src/
-└── mastra/
-    ├── agents/
-    ├── tools/
-    ├── workflows/
-    └── index.ts
-package.json
-tsconfig.json
-```
-
-## Building
-
-The `mastra build` command starts the build process:
-
-```bash copy
-mastra build
-```
-
-### Customizing the input directory
-
-If your Mastra files are located elsewhere, use the `--dir` flag to specify the custom location. The `--dir` flag tells Mastra where to find your entry point file (`index.ts` or `index.js`) and related directories.
-
-```bash copy
-mastra build --dir ./my-project/mastra
-```
-
-## Build process
-
-The build process follows these steps:
-
-1. **Locates entry file**: Finds `index.ts` or `index.js` in your specified directory (default: `src/mastra/`).
-2. **Creates build directory**: Generates a `.mastra/` directory containing:
-   - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
-   - **`output`**: Contains the production-ready application bundle with `index.mjs` and project-specific files.
-3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
-4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
-5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.
-
-### Build output structure
-
-After building, Mastra creates a `.mastra/` directory with the following structure:
-
-```
-.mastra/
-├── .build/
-└── output/
-```
-
-### `public` folder
-
-If a `public` folder exists in `src/mastra`, its contents are copied into the `.build/output` directory during the build process.
-
-## Running the Server
-
-Start the HTTP server:
-
-```bash copy
-node .mastra/output/index.mjs
-```
-
-
----
-title: "CloudflareDeployer | Deployment | Mastra Docs"
-description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
----
-
-# CloudflareDeployer
-[EN] Source: https://mastra.ai/en/docs/deployment/serverless-platforms/cloudflare-deployer
-
-The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Cloudflare specific functionality.
-
-## Installation
-
-```bash copy
-npm install @mastra/deployer-cloudflare@beta
-```
-
-## Usage example
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
-
-export const mastra = new Mastra({
-  // ...
-  deployer: new CloudflareDeployer({
-    projectName: "hello-mastra",
-    env: {
-      NODE_ENV: "production",
-    },
-  }),
-});
-```
-
-> See the [CloudflareDeployer](/reference/v1/deployer/cloudflare) API reference for all available configuration options.
-
-## Manual deployment
-
-Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
-
-With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
-
-```bash copy
-npx wrangler login
-```
-
-Run the following to build and deploy your application to Cloudflare
-
-```bash copy
-npm run build && wrangler deploy --config .mastra/output/wrangler.json
-```
-
-> You can also run `wrangler dev --config .mastra/output/wrangler.json` from your project root to test your Mastra application locally.
-
-## Build output
-
-The build output for Mastra applications using the `CloudflareDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Cloudflare.
-
-```
-.mastra/
-└── output/
-    ├── index.mjs
-    └── wrangler.json
-package.json
-```
-
-The `CloudflareDeployer` automatically generates a `wrangler.json` configuration file in `.mastra/output` with the following settings:
-
-```json
-{
-  "name": "hello-mastra",
-  "main": "./index.mjs",
-  "compatibility_date": "2025-04-01",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "nodejs_compat_populate_process_env"
-  ],
-  "observability": { "logs": { "enabled": true } },
-  "vars": {
-    "OPENAI_API_KEY": "...",
-    "CLOUDFLARE_API_TOKEN": "..."
-  }
-}
-```
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-
-
----
-title: "Serverless Deployment | Deployment | Mastra Docs"
-description: "Build and deploy Mastra applications using platform-specific deployers or standard HTTP servers"
----
-
-# Serverless Deployment
-[EN] Source: https://mastra.ai/en/docs/deployment/serverless-platforms
-
-Standalone Mastra applications can be deployed to popular serverless platforms using one of our deployer packages:
-
-- [Cloudflare](/docs/v1/deployment/serverless-platforms/cloudflare-deployer)
-- [Netlify](/docs/v1/deployment/serverless-platforms/netlify-deployer)
-- [Vercel](/docs/v1/deployment/serverless-platforms/vercel-deployer)
-
-Deployers **aren't** required when integrating Mastra with a framework. See [Web Framework Integration](/docs/v1/deployment/web-framework) for more information.
-
-For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/server-deployment) guide.
-
-## Prerequisites
-
-Before you begin, ensure you have:
-
-- Node.js `v22.13.0` or later
-- If using a platform-specific deployer:
-  - An account with your chosen platform
-  - Required API keys or credentials
-
-## LibSQLStore
-
-`LibSQLStore` writes to the local filesystem, which is not supported in serverless environments due to their ephemeral nature. If you're deploying to a platform like Vercel, Netlify or Cloudflare, you **must remove** all usage of `LibSQLStore`.
-
-Specifically, ensure you've removed it from both `src/mastra/index.ts` and `src/mastra/agents/weather-agent.ts`:
-
-```typescript title="src/mastra/index.ts" showLineNumbers
-export const mastra = new Mastra({
-  // ...
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    // [!code --]
-    // stores telemetry, scorer results, ... into memory storage, if it needs to persist, change to file:../mastra.db // [!code --]
-    url: ":memory:", // [!code --]
-  }), //[!code --]
-});
-```
-
-```typescript title="src/mastra/agents/weather-agent.ts" showLineNumbers
-export const weatherAgent = new Agent({
-  id: "weather-agent",
-  // ..
-  memory: new Memory({
-    // [!code --]
-    storage: new LibSQLStore({
-      id: 'mastra-storage',
-      // [!code --]
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory // [!code --]
-    }), // [!code --]
-  }), //  [!code --]
-});
-```
-
-
----
 title: "NetlifyDeployer | Deployment | Mastra Docs"
 description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
 ---
 
 # NetlifyDeployer
-[EN] Source: https://mastra.ai/en/docs/deployment/serverless-platforms/netlify-deployer
+[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/netlify-deployer
 
 The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Netlify specific functionality.
 
@@ -4520,7 +4278,7 @@ description: "Learn how to deploy a Mastra application to Vercel using the Mastr
 ---
 
 # VercelDeployer
-[EN] Source: https://mastra.ai/en/docs/deployment/serverless-platforms/vercel-deployer
+[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/vercel-deployer
 
 The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
 
@@ -4617,6 +4375,524 @@ The `VercelDeployer` automatically generates a `config.json` configuration file 
 ## Next steps
 
 - [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+
+
+---
+title: "Navigating the Dashboard | Mastra Cloud | Mastra Docs"
+description: Details of each feature available in Mastra Cloud
+---
+
+import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
+
+# Navigating the Dashboard
+[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/dashboard
+
+This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Studio](/docs/v1/deployment/mastra-cloud/dashboard#studio).
+
+<MastraCloudCallout />
+
+## Overview
+
+The **Overview** page provides details about your application, including its domain URL, status, latest deployment, and connected agents and workflows.
+
+![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+Key features:
+
+Each project shows its current deployment status, active domains, and environment variables, so you can quickly understand how your application is running.
+
+## Deployments
+
+The **Deployments** page shows recent builds and gives you quick access to detailed build logs. Click any row to view more information about a specific deployment.
+
+![Dashboard deployment](/img/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
+
+Key features:
+
+Each deployment includes its current status, the Git branch it was deployed from, and a title generated from the commit hash.
+
+## Logs
+
+The **Logs** page is where you'll find detailed information to help debug and monitor your application's behavior in the production environment.
+
+![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+Key features:
+
+Each log includes a severity level and detailed messages showing agent, workflow, and storage activity.
+
+## Settings
+
+On the **Settings** page you can modify the configuration of your application.
+
+![Dashboard settings](/img/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
+
+Key features:
+
+You can manage environment variables, edit key project settings like the name and branch, configure storage with LibSQLStore, and set a stable URL for your endpoints.
+
+> Changes to configuration require a new deployment before taking effect.
+
+## Studio
+
+### Agents
+
+On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
+
+![Dashboard Studio agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
+
+Key features:
+
+Test your agents in real time using the chat interface, review traces of each interaction, and see evaluation scores for every response.
+
+### Workflows
+
+On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
+
+![Dashboard Studio workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
+
+Key features:
+
+Visualize your workflow with a step-by-step graph, view execution traces, and run workflows directly using the built-in runner.
+
+### Tools
+
+On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
+
+![Dashboard Studio tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
+
+Key features:
+
+Test your tools by providing an input that matches the schema and viewing the structured output.
+
+## MCP Servers
+
+The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
+
+![Dashboard Studio mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
+
+Key features:
+
+Each MCP Server includes API endpoints for HTTP and SSE, along with IDE configuration snippets for tools like Cursor and Windsurf.
+
+## Next steps
+
+- [Understanding Tracing and Logs](/docs/v1/deployment/mastra-cloud/observability)
+
+
+---
+title: "Understanding Tracing and Logs | Mastra Cloud | Mastra Docs"
+description: Monitoring and debugging tools for Mastra Cloud deployments
+---
+
+import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
+
+# Understanding Tracing and Logs
+[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/observability
+
+Mastra Cloud captures execution data to help you monitor your application's behavior in the production environment.
+
+<MastraCloudCallout />
+
+## Logs
+
+You can view detailed logs for debugging and monitoring your application's behavior on the [Logs](/docs/v1/deployment/mastra-cloud/dashboard#logs) page of the Dashboard.
+
+![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+Key features:
+
+Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
+
+## Traces
+
+More detailed traces are available for both agents and workflows by using a [logger](/docs/v1/logging) or enabling [observability](/docs/v1/observability/tracing/overview) using one of our [supported providers](/docs/v1/observability/tracing/overview#exporters).
+
+### Agents
+
+With a [logger](/docs/v1/logging) enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
+
+![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
+
+Key features:
+
+Tools passed to the agent during generation are standardized using `convertTools`. This includes retrieving client-side tools, memory tools, and tools exposed from workflows.
+
+### Workflows
+
+With a [logger](/docs/v1/logging) enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
+
+![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
+
+Key features:
+
+Workflows are created using `createWorkflow`, which sets up steps, metadata, and tools. You can run them with `runWorkflow` by passing input and options.
+
+## Next steps
+
+- [Logging](/docs/v1/logging)
+- [Tracing](/docs/v1/observability/tracing/overview)
+
+
+---
+title: "Mastra Cloud | Mastra Cloud | Mastra Docs"
+description: Deployment and monitoring service for Mastra applications
+---
+
+import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
+
+# Mastra Cloud
+[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/overview
+
+[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/v1/deployment/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
+
+<MastraCloudCallout />
+
+## Platform features
+
+Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
+
+![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
+
+Key features:
+
+Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
+
+## Project Dashboard
+
+Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
+
+![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+Key features:
+
+The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
+
+## Project structure
+
+Use a standard Mastra project structure for proper detection and deployment.
+
+```shell
+src
+└── mastra
+    ├── agents
+    │   └── agent-name.ts
+    ├── tools
+    │   └── tool-name.ts
+    ├── workflows
+    │   └── workflow-name.ts
+    └── index.ts
+package.json
+```
+
+Mastra Cloud scans your repository for:
+
+- **Agents**: Defined using: `new Agent({...})`
+- **Tools**: Defined using: `createTool({...})`
+- **Workflows**: Defined using: `createWorkflow({...})`
+- **Steps**: Defined using: `createStep({...})`
+- **Environment Variables**: API keys and configuration variables
+
+## Technical implementation
+
+Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
+
+## Next steps
+
+- [Setting Up and Deploying](/docs/v1/deployment/mastra-cloud/setting-up)
+
+
+---
+title: "Setting Up and Deploying | Mastra Cloud | Mastra Docs"
+description: Configuration steps for Mastra Cloud projects
+---
+
+import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Setting Up and Deploying
+[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/setting-up
+
+This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
+
+<MastraCloudCallout />
+
+## Prerequisites
+
+- A [Mastra Cloud](https://mastra.ai/cloud) account
+- A GitHub account / repository containing a Mastra application
+
+> See our [Getting started](/docs/v1/getting-started/installation) guide to scaffold out a new Mastra project with sensible defaults.
+
+## Setup and Deploy process
+
+<Steps>
+
+<StepItem>
+
+Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
+
+- **GitHub**
+- **Google**
+
+</StepItem>
+
+<StepItem>
+
+When prompted, install the Mastra GitHub app.
+
+![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
+
+</StepItem>
+
+<StepItem>
+
+Click the **Create new project** button to create a new project.
+
+![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
+
+</StepItem>
+
+<StepItem>
+
+Search for a repository, then click **Import**.
+
+![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
+
+</StepItem>
+
+<StepItem>
+
+Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
+
+![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
+
+- **Importing from GitHub**: The GitHub repository name
+- **Project name**: Customize the project name
+- **Branch**: The branch to deploy from
+- **Project root**: The root directory of your project
+- **Mastra directory**: Where Mastra files are located
+- **Environment variables**: Add environment variables used by the application
+- **Build and Store settings**:
+  - **Install command**: Runs pre-build to install project dependencies
+  - **Project setup command**: Runs pre-build to prepare any external dependencies
+  - **Port**: The network port the server will use
+  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/v1/server-db/storage) storage
+- **Deploy Project**: Starts the deployment process
+
+</StepItem>
+
+<StepItem>
+
+Click **Deploy Project** to create and deploy your application using the configuration you've set.
+
+</StepItem>
+
+</Steps>
+
+## Successful deployment
+
+After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
+
+![Successful deployment](/img/mastra-cloud/mastra-cloud-successful-deployment.jpg)
+
+## Continuous integration
+
+Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
+
+## Testing your application
+
+After a successful deployment you can test your agents and workflows [Studio](/docs/v1/deployment/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/v1/server-db/mastra-client).
+
+## Next steps
+
+- [Navigating the Dashboard](/docs/v1/deployment/mastra-cloud/dashboard)
+
+
+---
+title: "Monorepo Deployment | Deployment | Mastra Docs"
+description: Learn how to deploy Mastra applications that are part of a monorepo setup
+---
+
+# Monorepo Deployment
+[EN] Source: https://mastra.ai/en/docs/deployment/monorepo
+
+Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./cloud-providers/) providers may introduce extra requirements, the core setup is the same.
+
+## Example monorepo
+
+In this example, the Mastra application is located at `apps/api`.
+
+```
+apps/
+├── api/
+│   ├── src/
+│   │   └── mastra/
+│   │       ├── agents/
+│   │       ├── tools/
+│   │       ├── workflows/
+│   │       └── index.ts
+│   ├── package.json
+│   └── tsconfig.json
+└── web/
+packages/
+├── ui/
+└── utils/
+package.json
+```
+
+## Environment variables
+
+Environment variables like `OPENAI_API_KEY` should be stored in an `.env` file at the root of the Mastra application `(apps/api)`, for example:
+
+```
+api/
+├── src/
+│   └── mastra/
+├── .env
+├── package.json
+└── tsconfig.json
+```
+
+## Deployment configuration
+
+The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](./mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
+
+![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
+
+## Dependency management
+
+In a monorepo, keep dependencies consistent to avoid version conflicts and build errors.
+
+- Use a **single lockfile** at the project root so all packages resolve the same versions.
+- Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates.
+
+## Deployment pitfalls
+
+Common issues to watch for when deploying Mastra in a monorepo:
+
+- **Wrong project root**: make sure the correct package (e.g. `apps/api`) is selected as the deploy target.
+
+## Bundler options
+
+Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ...
+  bundler: {
+    transpilePackages: ["utils"],
+    externals: ["ui"],
+    sourcemap: true,
+  },
+});
+```
+
+> See [Mastra Class](/reference/v1/core/mastra-class) for more configuration options.
+
+## Supported monorepos
+
+Mastra works with:
+
+- npm workspaces
+- pnpm workspaces
+- Yarn workspaces
+- Turborepo
+
+Known limitations:
+
+- Bun workspaces — partial support; known issues
+- Nx — You can use Nx's [supported dependency strategies](https://nx.dev/concepts/decisions/dependency-management) but you need to have `package.json` files inside your workspace packages
+
+> If you are experiencing issues with monorepos see our: [Monorepos Support mega issue](https://github.com/mastra-ai/mastra/issues/6852).
+
+
+---
+title: "Deployment Overview | Deployment | Mastra Docs"
+description: Learn about different deployment options for your Mastra applications
+---
+
+# Deployment Overview
+[EN] Source: https://mastra.ai/en/docs/deployment/overview
+
+Mastra offers multiple deployment options to suit your application's needs, from fully-managed solutions to self-hosted options, and web framework integrations. This guide will help you understand the available deployment paths and choose the right one for your project.
+
+## Choosing a Deployment Option
+
+| Option                   | Best For                                                      | Key Benefits                                                         |
+| ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Mastra Cloud**         | Teams wanting to ship quickly without infrastructure concerns | Fully-managed, automatic scaling, built-in observability             |
+| **Framework Deployment** | Teams already using Next.js, Astro etc                        | Simplify deployment with a unified codebase for frontend and backend |
+| **Server Deployment**    | Teams needing maximum control and customization               | Full control, custom middleware, integrate with existing apps        |
+| **Serverless Platforms** | Teams already using Vercel, Netlify, or Cloudflare            | Platform integration, simplified deployment, automatic scaling       |
+
+## Deployment Options
+
+### Runtime support
+
+- Node.js `v22.13.0` or later
+- Bun
+- Deno
+- [Cloudflare](../deployment/cloud-providers/cloudflare-deployer)
+
+### Mastra Cloud
+
+Mastra Cloud is a deployment platform that connects to your GitHub repository, automatically deploys on code changes, and provides monitoring tools. It includes:
+
+- GitHub repository integration
+- Deployment on git push
+- Agent testing interface
+- Comprehensive logs and traces
+- Custom domains for each project
+
+[View Mastra Cloud documentation →](./mastra-cloud/overview)
+
+### With a Web Framework
+
+Mastra can be integrated with a variety of web frameworks. For example, see one of the following for a detailed guide.
+
+- [With Next.js](../frameworks/web-frameworks/next-js)
+- [With Astro](../frameworks/web-frameworks/astro)
+
+When integrated with a framework, Mastra typically requires no additional configuration for deployment.
+
+[View Web Framework Integration →](./web-framework)
+
+### With a Server
+
+You can deploy Mastra as a standard Node.js HTTP server, which gives you full control over your infrastructure and deployment environment.
+
+- Custom API routes and middleware
+- Configurable CORS and authentication
+- Deploy to VMs, containers, or PaaS platforms
+- Ideal for integrating with existing Node.js applications
+
+[Building Mastra →](./building-mastra)
+
+### Serverless Platforms
+
+Mastra provides platform-specific deployers for popular serverless platforms, enabling you to deploy your application with minimal configuration.
+
+- Deploy to Cloudflare Workers, Vercel, or Netlify
+- Platform-specific optimizations
+- Simplified deployment process
+- Automatic scaling through the platform
+
+[Building Mastra →](./building-mastra)
+
+## Client Configuration
+
+Once your Mastra application is deployed, you'll need to configure your client to communicate with it. The Mastra Client SDK provides a simple and type-safe interface for interacting with your Mastra server.
+
+- Type-safe API interactions
+- Authentication and request handling
+- Retries and error handling
+- Support for streaming responses
+
+[Client configuration guide →](/docs/v1/server-db/mastra-client)
 
 
 ---
@@ -9678,7 +9954,7 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 ## REST API
 
-The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [production server](/docs/v1/server-db/production-server), allowing you to develop and test against it with full parity.
+The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [Mastra Server](/docs/v1/server-db/mastra-server), allowing you to develop and test against it with full parity.
 
 You can explore all available endpoints in the OpenAPI specification at http://localhost:4111/openapi.json, which details every endpoint and its request and response schemas.
 
@@ -9876,7 +10152,7 @@ description: Learn how to use logging in Mastra to monitor execution, capture ap
 
 Mastra's logging system captures function execution, input data, and output responses in a structured format.
 
-When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/v1/mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/v1/deployment/mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## PinoLogger
 
@@ -9977,339 +10253,6 @@ export const testWorkflow = createWorkflow({...})
   .then(step1)
   .commit();
 ```
-
-
----
-title: "Navigating the Dashboard | Mastra Cloud | Mastra Docs"
-description: Details of each feature available in Mastra Cloud
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-
-# Navigating the Dashboard
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/dashboard
-
-This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Studio](/docs/v1/mastra-cloud/dashboard#studio).
-
-<MastraCloudCallout />
-
-## Overview
-
-The **Overview** page provides details about your application, including its domain URL, status, latest deployment, and connected agents and workflows.
-
-![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
-
-Key features:
-
-Each project shows its current deployment status, active domains, and environment variables, so you can quickly understand how your application is running.
-
-## Deployments
-
-The **Deployments** page shows recent builds and gives you quick access to detailed build logs. Click any row to view more information about a specific deployment.
-
-![Dashboard deployment](/img/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
-
-Key features:
-
-Each deployment includes its current status, the Git branch it was deployed from, and a title generated from the commit hash.
-
-## Logs
-
-The **Logs** page is where you'll find detailed information to help debug and monitor your application's behavior in the production environment.
-
-![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
-
-Each log includes a severity level and detailed messages showing agent, workflow, and storage activity.
-
-## Settings
-
-On the **Settings** page you can modify the configuration of your application.
-
-![Dashboard settings](/img/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
-
-Key features:
-
-You can manage environment variables, edit key project settings like the name and branch, configure storage with LibSQLStore, and set a stable URL for your endpoints.
-
-> Changes to configuration require a new deployment before taking effect.
-
-## Studio
-
-### Agents
-
-On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
-
-![Dashboard Studio agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
-
-Key features:
-
-Test your agents in real time using the chat interface, review traces of each interaction, and see evaluation scores for every response.
-
-### Workflows
-
-On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
-
-![Dashboard Studio workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
-
-Key features:
-
-Visualize your workflow with a step-by-step graph, view execution traces, and run workflows directly using the built-in runner.
-
-### Tools
-
-On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
-
-![Dashboard Studio tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
-
-Key features:
-
-Test your tools by providing an input that matches the schema and viewing the structured output.
-
-## MCP Servers
-
-The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
-
-![Dashboard Studio mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
-
-Key features:
-
-Each MCP Server includes API endpoints for HTTP and SSE, along with IDE configuration snippets for tools like Cursor and Windsurf.
-
-## Next steps
-
-- [Understanding Tracing and Logs](/docs/v1/mastra-cloud/observability)
-
-
----
-title: "Understanding Tracing and Logs | Mastra Cloud | Mastra Docs"
-description: Monitoring and debugging tools for Mastra Cloud deployments
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-
-# Understanding Tracing and Logs
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/observability
-
-Mastra Cloud captures execution data to help you monitor your application's behavior in the production environment.
-
-<MastraCloudCallout />
-
-## Logs
-
-You can view detailed logs for debugging and monitoring your application's behavior on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page of the Dashboard.
-
-![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
-
-Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
-
-## Traces
-
-More detailed traces are available for both agents and workflows by using a [logger](/docs/v1/logging) or enabling [observability](/docs/v1/observability/tracing/overview) using one of our [supported providers](/docs/v1/observability/tracing/overview#exporters).
-
-### Agents
-
-With a [logger](/docs/v1/logging) enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
-
-![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
-
-Key features:
-
-Tools passed to the agent during generation are standardized using `convertTools`. This includes retrieving client-side tools, memory tools, and tools exposed from workflows.
-
-### Workflows
-
-With a [logger](/docs/v1/logging) enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
-
-![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
-
-Key features:
-
-Workflows are created using `createWorkflow`, which sets up steps, metadata, and tools. You can run them with `runWorkflow` by passing input and options.
-
-## Next steps
-
-- [Logging](/docs/v1/logging)
-- [Tracing](/docs/v1/observability/tracing/overview)
-
-
----
-title: "Mastra Cloud | Mastra Cloud | Mastra Docs"
-description: Deployment and monitoring service for Mastra applications
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-
-# Mastra Cloud
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/overview
-
-[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/v1/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
-
-<MastraCloudCallout />
-
-## Platform features
-
-Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
-
-![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
-
-Key features:
-
-Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
-
-## Project Dashboard
-
-Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
-
-![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
-
-Key features:
-
-The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
-
-## Project structure
-
-Use a standard Mastra project structure for proper detection and deployment.
-
-```shell
-src
-└── mastra
-    ├── agents
-    │   └── agent-name.ts
-    ├── tools
-    │   └── tool-name.ts
-    ├── workflows
-    │   └── workflow-name.ts
-    └── index.ts
-package.json
-```
-
-Mastra Cloud scans your repository for:
-
-- **Agents**: Defined using: `new Agent({...})`
-- **Tools**: Defined using: `createTool({...})`
-- **Workflows**: Defined using: `createWorkflow({...})`
-- **Steps**: Defined using: `createStep({...})`
-- **Environment Variables**: API keys and configuration variables
-
-## Technical implementation
-
-Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
-
-## Next steps
-
-- [Setting Up and Deploying](/docs/v1/mastra-cloud/setting-up)
-
-
----
-title: "Setting Up and Deploying | Mastra Cloud | Mastra Docs"
-description: Configuration steps for Mastra Cloud projects
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
-# Setting Up and Deploying
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/setting-up
-
-This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
-
-<MastraCloudCallout />
-
-## Prerequisites
-
-- A [Mastra Cloud](https://mastra.ai/cloud) account
-- A GitHub account / repository containing a Mastra application
-
-> See our [Getting started](/docs/v1/getting-started/installation) guide to scaffold out a new Mastra project with sensible defaults.
-
-## Setup and Deploy process
-
-<Steps>
-
-<StepItem>
-
-Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
-
-- **GitHub**
-- **Google**
-
-</StepItem>
-
-<StepItem>
-
-When prompted, install the Mastra GitHub app.
-
-![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Click the **Create new project** button to create a new project.
-
-![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Search for a repository, then click **Import**.
-
-![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
-
-![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
-
-- **Importing from GitHub**: The GitHub repository name
-- **Project name**: Customize the project name
-- **Branch**: The branch to deploy from
-- **Project root**: The root directory of your project
-- **Mastra directory**: Where Mastra files are located
-- **Environment variables**: Add environment variables used by the application
-- **Build and Store settings**:
-  - **Install command**: Runs pre-build to install project dependencies
-  - **Project setup command**: Runs pre-build to prepare any external dependencies
-  - **Port**: The network port the server will use
-  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/v1/server-db/storage) storage
-- **Deploy Project**: Starts the deployment process
-
-</StepItem>
-
-<StepItem>
-
-Click **Deploy Project** to create and deploy your application using the configuration you've set.
-
-</StepItem>
-
-</Steps>
-
-## Successful deployment
-
-After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
-
-![Successful deployment](/img/mastra-cloud/mastra-cloud-successful-deployment.jpg)
-
-## Continuous integration
-
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
-## Testing your application
-
-After a successful deployment you can test your agents and workflows [Studio](/docs/v1/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/v1/server-db/mastra-client).
-
-## Next steps
-
-- [Navigating the Dashboard](/docs/v1/mastra-cloud/dashboard)
 
 
 ---
@@ -15566,7 +15509,7 @@ import TabItem from "@theme/TabItem";
 # Mastra Client SDK
 [EN] Source: https://mastra.ai/en/docs/server-db/mastra-client
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/server-db/production-server) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/server-db/mastra-server) from your client environment.
 
 ## Prerequisites
 
@@ -15836,6 +15779,98 @@ export async function action() {
 
 
 ---
+title: "Mastra Server | Server & DB | Mastra Docs"
+description: "Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more"
+---
+
+# Mastra Server
+[EN] Source: https://mastra.ai/en/docs/server-db/mastra-server
+
+When deploying your Mastra application to production, it runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. This page covers how to configure and customize the server for a production environment.
+
+## Server architecture
+
+Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. When you build a Mastra application using `mastra build`, it generates a Hono-based HTTP server in the `.mastra` directory.
+
+The server provides:
+
+- API endpoints for all registered agents
+- API endpoints for all registered workflows
+- Custom API route support
+- Custom middleware support
+- Configuration of timeout
+- Configuration of port
+- Configuration of body limit
+
+See the [Middleware](/docs/v1/server-db/middleware) and
+[Custom API Routes](/docs/v1/server-db/custom-api-routes) pages for details on
+adding additional server behaviour.
+
+## Server configuration
+
+You can configure server `port` and `timeout` in the Mastra instance.
+
+```typescript title="src/mastra/index.ts" copy showLineNumbers
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    port: 3000, // Defaults to 4111
+    timeout: 10000, // Defaults to 30000 (30s)
+  },
+});
+```
+
+The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
+`"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
+invoked for any HTTP method that matches the path.
+
+## TypeScript configuration
+
+Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
+
+```json {4-5} title="tsconfig.json" copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
+}
+```
+
+> This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
+
+## CORS configuration
+
+Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
+
+```typescript title="src/mastra/index.ts" copy showLineNumbers
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ...
+  server: {
+    cors: {
+      origin: ["https://example.com"], // Allow specific origins or '*' for all
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
+      credentials: false,
+    },
+  },
+});
+```
+
+
+---
 title: "Middleware | Server & DB | Mastra Docs"
 description: "Apply custom middleware functions to intercept requests."
 ---
@@ -16013,98 +16048,6 @@ export const mastra = new Mastra({
 # Related
 
 - [Request Context](./request-context)
-
-
----
-title: "Create a Mastra Production Server | Server & DB | Mastra Docs"
-description: "Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more"
----
-
-# Create a Mastra Production Server
-[EN] Source: https://mastra.ai/en/docs/server-db/production-server
-
-When deploying your Mastra application to production, it runs as an HTTP server that exposes your agents, workflows, and other functionality as API endpoints. This page covers how to configure and customize the server for a production environment.
-
-## Server architecture
-
-Mastra uses [Hono](https://hono.dev) as its underlying HTTP server framework. When you build a Mastra application using `mastra build`, it generates a Hono-based HTTP server in the `.mastra` directory.
-
-The server provides:
-
-- API endpoints for all registered agents
-- API endpoints for all registered workflows
-- Custom API route support
-- Custom middleware support
-- Configuration of timeout
-- Configuration of port
-- Configuration of body limit
-
-See the [Middleware](/docs/v1/server-db/middleware) and
-[Custom API Routes](/docs/v1/server-db/custom-api-routes) pages for details on
-adding additional server behaviour.
-
-## Server configuration
-
-You can configure server `port` and `timeout` in the Mastra instance.
-
-```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  // ...
-  server: {
-    port: 3000, // Defaults to 4111
-    timeout: 10000, // Defaults to 30000 (30s)
-  },
-});
-```
-
-The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
-`"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
-invoked for any HTTP method that matches the path.
-
-## TypeScript configuration
-
-Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
-
-```json {4-5} title="tsconfig.json" copy
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"]
-}
-```
-
-> This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
-
-## CORS configuration
-
-Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
-
-```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  // ...
-  server: {
-    cors: {
-      origin: ["https://example.com"], // Allow specific origins or '*' for all
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization"],
-      credentials: false,
-    },
-  },
-});
-```
 
 
 ---
@@ -32458,7 +32401,7 @@ To migrate, replace all calls to `mastra.getAgents()` with `mastra.listAgents()`
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/agent-get-agents .
+npx @mastra/codemod@beta v1/mastra-plural-apis .
 ```
 
 :::
@@ -32609,6 +32552,16 @@ To migrate, move `abortSignal` from `modelSettings` to the top level.
 +   abortSignal: abortController.signal,
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/agent-abort-signal .
+```
+
+:::
 
 ### `output` to `structuredOutput.schema`
 
@@ -32780,6 +32733,16 @@ To migrate, update type imports to use the new naming pattern.
 + } from '@mastra/client-js';
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-sdk-types .
+```
+
+:::
+
 ### Pagination parameters from `offset/limit` to `page/perPage`
 
 All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
@@ -32796,6 +32759,16 @@ To migrate, update pagination parameters in all client SDK method calls. Example
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-offset-limit .
+```
+
+:::
+
 ### `getMemoryThread` parameter structure
 
 The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
@@ -32803,9 +32776,19 @@ The `getMemoryThread` method parameter structure has been updated. This change p
 To migrate, update the method call with the new parameter structure. Check the updated API documentation for the specific changes.
 
 ```diff
-- const thread = await client.memory.getMemoryThread(threadId, agentId);
-+ const thread = await client.memory.getMemoryThread({ threadId, agentId });
+- const thread = await client.getMemoryThread(threadId, agentId);
++ const thread = await client.getMemoryThread({ threadId, agentId });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-get-memory-thread .
+```
+
+:::
 
 ## Removed
 
@@ -32821,6 +32804,16 @@ To migrate, use `toAISdkStream()` instead.
 + import { toAISdkStream } from '@mastra/ai-sdk';
 + const stream = toAISdkStream(agentStream, { from: 'agent' });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-to-ai-sdk-format .
+```
+
+:::
 
 ### Network memory methods
 
@@ -32933,7 +32926,7 @@ To migrate, replace all calls to `getScorers()` with `listScorers()`.
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/evals-get-scorers .
+npx @mastra/codemod@beta v1/mastra-plural-apis .
 ```
 
 :::
@@ -32958,6 +32951,16 @@ To migrate, update function calls from `runExperiment` to `runEvals`.
 + const result = await runEvals({ target: myAgent, scorers: [scorer], data: inputs });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/evals-run-experiment .
+```
+
+:::
+
 ### `getScorerByName` to `getScorerById`
 
 The `getScorerByName()` method has been renamed to `getScorerById()`. Scorers now require an `id` field instead of `name`. This change aligns with the broader API pattern of using `id` for entity identification.
@@ -32974,6 +32977,16 @@ To migrate, update method calls and scorer configuration to use `id` instead of 
 - const scorer = mastra.getScorerByName('helpfulness-scorer');
 + const scorer = mastra.getScorerById('helpfulness-scorer');
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/evals-scorer-by-name .
+```
+
+:::
 
 ### Scorer configuration from `name` to `id`
 
@@ -33027,6 +33040,16 @@ To migrate, update import statements to use the new `scorers/prebuilt` path.
 + import { createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
 + import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/evals-prebuilt-imports .
+```
+
+:::
 
 ### Scorer message types from `UIMessage` to `MastraDBMessage`
 
@@ -33201,9 +33224,9 @@ npx @mastra/codemod@beta v1/experimental-auth .
 
 ### Required `id` parameter for all mastra primitives
 
-All storage, vector stores, agents, workflows, mcpServers, processors, scorers, tools now require an `id` parameter during initialization. This enables the standardized Mastra API and prevents ID conflicts.
+All storages, vector stores, agents, workflows, mcpServers, processors, scorers, and tools now require an `id` parameter during initialization. This enables the standardized Mastra API and prevents ID conflicts.
 
-All these primitives also now have a `get`, `list`, and `add` functions.
+All these primitives also now have `get`, `list`, and `add` functions.
 
 To migrate, add an `id` parameter to all storage and vector store instantiations. When using the same storage/vector class multiple times, ensure each instance has a unique ID.
 
@@ -33246,10 +33269,34 @@ When using separate instances for different purposes, use descriptive unique IDs
 
 ### Primitive plural APIs changes from `get<primitives>` to `list<primitive>`
 
+`get*` functions that returned all instances of a primitive have been renamed to `list*` to better reflect their purpose.
+
 ```diff
+- const agents = mastra.getAgents();
++ const agents = mastra.listAgents();
+- const vectors = mastra.getVectors();
++ const vectors = mastra.listVectors();
+- const workflows = mastra.getWorkflows();
++ const workflows = mastra.listWorkflows();
+- const scorers = mastra.getScorers();
++ const scorers = mastra.listScorers();
 - const mcpServers = mastra.getMCPServers();
 + const mcpServers = mastra.listMCPServers();
+- const logsByRunId = await mastra.getLogsByRunId({ runId: 'id', transportId: 'id' });
++ const logsByRunId = await mastra.listLogsByRunId({ runId: 'id', transportId: 'id' });
+- const logs = await mastra.getLogs('transportId');
++ const logs = await mastra.listLogs('transportId');
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/mastra-plural-apis .
+```
+
+:::
 
 ### Each primtive has a `getById` and a `get` function
 
@@ -33340,7 +33387,7 @@ To migrate, replace all calls to `mastra.getMCPServers()` with `mastra.listMCPSe
 You can use Mastra's codemod CLI to update your code automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/mcp-get-mcp-servers .
+npx @mastra/codemod@beta v1/mastra-plural-apis .
 ```
 
 :::
@@ -33543,6 +33590,16 @@ To migrate, rename `query()` to `recall()` and update code that expects the old 
 + const messages = result.messages;
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-query-to-recall .
+```
+
+:::
+
 ### `Memory.recall()` parameter changes
 
 The `Memory.recall()` method now uses `StorageListMessagesInput` format with pagination, and the `vectorMessageSearch` parameter has been renamed to `vectorSearchString`. These changes align the memory API with the storage pagination API and provide more consistent naming.
@@ -33564,6 +33621,16 @@ To migrate, update method name, query parameters, and the vector search paramete
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-vector-search-param .
+```
+
+:::
+
 ### `MastraMessageV2` type renamed to `MastraDBMessage`
 
 The `MastraMessageV2` type has been renamed to `MastraDBMessage` for clarity. This change better describes the purpose of this type as the database message format.
@@ -33577,7 +33644,15 @@ To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
 + function yourCustomFunction(input: MastraDBMessage) {}
 ```
 
+:::tip[Codemod]
 
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-message-v2-type .
+```
+
+:::
 
 ## Removed
 
@@ -33695,7 +33770,21 @@ Use your package manager to update your project's versions. Be sure to update **
 
 ### Update Node.js version
 
-Mastra v1 requires Node.js 22.13.0 or higher. Update your development and production environments accordingly.
+Mastra v1 requires Node.js **22.13.0** or higher. Update your development and production environments accordingly.
+
+### Go through migration checklist
+
+Work through the [migration checklist](#migration-checklist) below to update your codebase. Each item links to a detailed guide for that specific change.
+
+:::info[Codemods]
+
+We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod) for you. If you want, you can run all v1 codemods at once:
+
+```sh
+npx @mastra/codemod@beta v1
+```
+
+:::
 
 ## Breaking Changes by Area
 
@@ -33717,7 +33806,7 @@ Mastra v1 requires Node.js 22.13.0 or higher. Update your development and produc
 
 Work through this checklist in order, starting with high-impact changes that affect most applications.
 
-:::info[Codemod]
+:::info[Codemods]
 
 We prepared automated [codemods](https://github.com/mastra-ai/mastra/tree/main/packages/codemod) for you. Throughout the migration guide you'll find instructions on how to use them for specific changes.
 
@@ -33897,6 +33986,16 @@ To migrate, rename the method and update pagination parameters. You can now use 
 + });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-get-messages-paginated .
+```
+
+:::
+
 ### `getThreadsByResourceId` to `listThreadsByResourceId`
 
 The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
@@ -33911,6 +34010,16 @@ To migrate, rename the method call and update pagination parameters.
 +   perPage: 20,
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-get-threads-by-resource .
+```
+
+:::
 
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
@@ -33928,6 +34037,16 @@ To migrate, rename the method call and update pagination parameters.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-list-workflow-runs .
+```
+
+:::
+
 ### `getMessagesById` to `listMessagesById`
 
 The `getMessagesById()` method has been renamed to `listMessagesById()`. This change aligns with the convention that `list*` methods return collections.
@@ -33940,6 +34059,16 @@ To migrate, rename the method call.
     messageIds: ['msg-1', 'msg-2'],
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-list-messages-by-id .
+```
+
+:::
 
 ### Storage `getMessages` and `saveMessages` signatures
 
@@ -34016,6 +34145,16 @@ To migrate, pass the connection string as an object property.
 + });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/vector-pg-constructor .
+```
+
+:::
+
 ### PGVector `defineIndex` to `buildIndex`
 
 The `defineIndex()` method has been removed in favor of `buildIndex()`. This change provides clearer naming for the index building operation.
@@ -34044,6 +34183,16 @@ To migrate, rename the parameter.
 +   schemaName: customSchema,
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-postgres-schema-name .
+```
+
+:::
 
 ### Score storage methods to `listScoresBy*` pattern
 
@@ -34638,7 +34787,7 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflows-get-workflows .
+npx @mastra/codemod@beta v1/mastra-plural-apis .
 ```
 
 :::
@@ -34681,6 +34830,16 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 + await workflow.createRun({ input: { ... } });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-create-run-async .
+```
+
+:::
+
 ### `runCount` to `retryCount` (deprecated)
 
 The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. This change provides clearer naming that better describes retry behavior. The old `runCount` still works but shows deprecation warnings.
@@ -34696,6 +34855,16 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-run-count .
+```
+
+:::
+
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
@@ -34706,6 +34875,16 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 - const runs = await workflow.getWorkflowRuns({ fromDate, toDate });
 + const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-list-runs .
+```
+
+:::
 
 ## Removed
 
@@ -35169,9 +35348,9 @@ description: "Get started with Mastra, Next.js, and AS SDK UI. Quickly."
 # Next.js Quickstart
 [EN] Source: https://mastra.ai/en/guides/quickstarts/nextjs
 
-In this quickstart, you'll build an AI agent with tool-calling capabilities using [Mastra](/docs/v1), then connect it to Next.js by importing and calling the agent directly within your routes. 
+In this quickstart, you'll build an AI agent with tool-calling capabilities using [Mastra](/docs/v1), then connect it to Next.js by importing and calling the agent directly within your routes.
 
-You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience. 
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
 In ~5 minutes, you'll have a functional AI-powered app ready to extend with your own tools and logic.
 
@@ -35205,7 +35384,7 @@ npx create-next-app \
 This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
 
 ## Initialize Mastra
-`cd` and run [`mastra init`](/reference/v1/cli/create-mastra). 
+`cd` and run [`mastra init`](/reference/v1/cli/create-mastra).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
@@ -35229,7 +35408,7 @@ Install AI SDK UI along with the Mastra adapter:
 ```bash
 npm install \
     @mastra/ai-sdk \
-    @ai-sdk/react 
+    @ai-sdk/react
 ```
 
 Next, initialize AI Elements. When prompted, choose the default options:
@@ -35276,7 +35455,7 @@ export async function GET() {
     resourceId: "weather-chat",
   });
 
-  const uiMessages = 
+  const uiMessages =
     convertMessages(response?.uiMessages ?? []).to("AIV5.UI");
   return NextResponse.json(uiMessages);
 }
@@ -35354,8 +35533,8 @@ function Chat() {
                 {message.parts?.map((part: any, i: number) => {
                   if (part.type === 'text') {
                     return (
-                      <Message 
-                        key={`${message.id}-${i}`} 
+                      <Message
+                        key={`${message.id}-${i}`}
                         from={message.role}>
                           <MessageContent>
                             <MessageResponse>{part.text}</MessageResponse>
@@ -35415,7 +35594,7 @@ This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-u
 It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
 
 
-## Test your agent 
+## Test your agent
 1. Run your Next.js app with `npm run dev`
 
 2. Open the chat at http://localhost:3000/chat
@@ -35424,7 +35603,7 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 ## Next steps
 
-Congratulations on building your Mastra agent with Next.js! 🎉 
+Congratulations on building your Mastra agent with Next.js! 🎉
 
 From here, you can extend the project with your own tools and logic:
 
@@ -35436,7 +35615,8 @@ When you're ready, read more about how Mastra integrates with AI SDK and Next.js
 
 - Integrate Mastra with [AI SDK](/docs/v1/frameworks/agentic-uis/ai-sdk)
 - Use Mastra in your [Next.js app](/docs/v1/frameworks/web-frameworks/next-js)
-- Deploy your agent to [Vercel](/docs/v1/deployment/serverless-platforms/vercel-deployer)
+- Deploy your agent to [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
+
 
 ---
 title: "Embedding Models"
@@ -36058,7 +36238,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 49+ AI providers and 888+ models through Mastra's model router."
+description: "Access 49+ AI providers and 889+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36071,7 +36251,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 888 models from 49 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 889 models from 49 providers through a single API.
 
 ## Features
 
@@ -42565,7 +42745,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="14 models"
+      description="15 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -45395,7 +45575,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 14 models available."
+description: "Use OpenCode Zen models with Mastra. 15 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -45405,7 +45585,7 @@ description: "Use OpenCode Zen models with Mastra. 14 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 14 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 15 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -45582,6 +45762,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "opencode/kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
     "inputCost": 0.6,
@@ -52729,7 +52921,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/docs/v1/deployment/serverless-platforms) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/docs/v1/deployment/cloud-providers) you need to install the correct deployer in order to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -53192,7 +53384,7 @@ description: Learn how to interact with Mastra using the client-js SDK.
 # Mastra Client SDK
 [EN] Source: https://mastra.ai/en/reference/client-js/mastra-client
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/deployment/server-deployment) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/deployment/building-mastra) from your client environment.
 
 ## Usage example
 
@@ -54419,7 +54611,7 @@ This method does not accept any parameters.
 
 ## Related
 
-- [Server deployment](/docs/v1/deployment/server-deployment)
+- [Server deployment](/docs/v1/deployment/building-mastra)
 - [Server configuration](/docs/v1/server-db/custom-api-routes)
 
 
@@ -62371,7 +62563,7 @@ description: Documentation for PinoLogger, which provides methods to record even
 
 A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
 
-When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/deployment/mastra-cloud/dashboard#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Usage example
 

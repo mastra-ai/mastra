@@ -507,6 +507,7 @@ export type ProviderModelsMap = {
     'gpt-5-codex',
     'grok-code',
     'kimi-k2',
+    'kimi-k2-thinking',
     'minimax-m2',
     'qwen3-coder',
   ];
