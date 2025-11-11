@@ -20,4 +20,9 @@ export const BUNDLE = [
   'v1/client-offset-limit',
   'v1/client-get-memory-thread',
   'v1/experimental-auth',
+  'v1/evals-run-experiment',
+  'v1/evals-scorer-by-name',
+  'v1/evals-prebuilt-imports',
+  'v1/workflow-create-run-async',
+  'v1/workflow-run-count',
 ];

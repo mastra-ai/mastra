@@ -50,6 +50,16 @@ To migrate, update function calls from `runExperiment` to `runEvals`.
 + const result = await runEvals({ target: myAgent, scorers: [scorer], data: inputs });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/evals-run-experiment .
+```
+
+:::
+
 ### `getScorerByName` to `getScorerById`
 
 The `getScorerByName()` method has been renamed to `getScorerById()`. Scorers now require an `id` field instead of `name`. This change aligns with the broader API pattern of using `id` for entity identification.
@@ -66,6 +76,16 @@ To migrate, update method calls and scorer configuration to use `id` instead of 
 - const scorer = mastra.getScorerByName('helpfulness-scorer');
 + const scorer = mastra.getScorerById('helpfulness-scorer');
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/evals-scorer-by-name .
+```
+
+:::
 
 ### Scorer configuration from `name` to `id`
 
@@ -119,6 +139,16 @@ To migrate, update import statements to use the new `scorers/prebuilt` path.
 + import { createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
 + import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/evals-prebuilt-imports .
+```
+
+:::
 
 ### Scorer message types from `UIMessage` to `MastraDBMessage`
 

@@ -1,0 +1,80 @@
+import { createTransformer } from '../lib/create-transformer';
+
+/**
+ * Renames context.runCount to context.retryCount in step execution functions.
+ * This provides clearer naming that better describes retry behavior.
+ *
+ * Before:
+ * createStep({
+ *   execute: async (inputData, context) => {
+ *     console.log(`Step run ${context.runCount} times`);
+ *   },
+ * });
+ *
+ * After:
+ * createStep({
+ *   execute: async (inputData, context) => {
+ *     console.log(`Step retry count: ${context.retryCount}`);
+ *   },
+ * });
+ */
+export default createTransformer((fileInfo, api, options, context) => {
+  const { j, root } = context;
+
+  const oldPropertyName = 'runCount';
+  const newPropertyName = 'retryCount';
+
+  // Track context parameter names in createStep execute functions
+  const contextParamNames = new Set<string>();
+
+  // Find createStep calls and extract context parameter names
+  root
+    .find(j.CallExpression, {
+      callee: {
+        type: 'Identifier',
+        name: 'createStep',
+      },
+    })
+    .forEach(path => {
+      const args = path.value.arguments;
+      if (args.length === 0 || args[0]?.type !== 'ObjectExpression') return;
+
+      const configObj = args[0];
+
+      // Find the execute property
+      configObj.properties?.forEach((prop: any) => {
+        if (
+          (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+          prop.key?.type === 'Identifier' &&
+          prop.key.name === 'execute' &&
+          (prop.value?.type === 'ArrowFunctionExpression' || prop.value?.type === 'FunctionExpression')
+        ) {
+          // Extract the second parameter name (context)
+          const params = prop.value.params;
+          if (params && params.length >= 2 && params[1].type === 'Identifier') {
+            contextParamNames.add(params[1].name);
+          }
+        }
+      });
+    });
+
+  // Rename context.runCount to context.retryCount
+  root.find(j.MemberExpression).forEach(path => {
+    const node = path.value;
+
+    // Check if accessing .runCount on a context parameter
+    if (
+      node.object.type === 'Identifier' &&
+      contextParamNames.has(node.object.name) &&
+      node.property.type === 'Identifier' &&
+      node.property.name === oldPropertyName
+    ) {
+      node.property.name = newPropertyName;
+      context.hasChanges = true;
+    }
+  });
+
+  if (context.hasChanges) {
+    context.messages.push('Renamed context.runCount to context.retryCount in step execution functions');
+  }
+});

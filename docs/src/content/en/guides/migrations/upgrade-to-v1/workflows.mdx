@@ -68,6 +68,16 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 + await workflow.createRun({ input: { ... } });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-create-run-async .
+```
+
+:::
+
 ### `runCount` to `retryCount` (deprecated)
 
 The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. This change provides clearer naming that better describes retry behavior. The old `runCount` still works but shows deprecation warnings.
@@ -82,6 +92,16 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
     },
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-run-count .
+```
+
+:::
 
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
