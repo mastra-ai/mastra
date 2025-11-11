@@ -77,8 +77,7 @@
    =====================================================================
 */
 
-/* Import Google Fonts */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+@import "./fonts.css";
 @import "tailwindcss";
 
 @custom-variant dark (&:is([data-theme="dark"] *));
