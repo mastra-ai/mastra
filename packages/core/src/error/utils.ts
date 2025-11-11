@@ -68,7 +68,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
 
   if (unknown && unknown instanceof Error) {
     if (supportSerialization) {
-      addErrorToJSON(unknown, { serializeStack: serializeStack });
+      addErrorToJSON(unknown, { serializeStack });
     }
     return unknown as SERIALIZABLE extends true ? SerializableError : Error;
   }
