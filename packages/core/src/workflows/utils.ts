@@ -2,6 +2,7 @@ import { isEmpty } from 'radash';
 import type z from 'zod';
 import type { IMastraLogger } from '../logger';
 import type { Step } from './step';
+import type { StepFlowEntry } from './types';
 
 export function getZodErrors(error: z.ZodError) {
   // zod v4 returns issues instead of errors
@@ -38,6 +39,28 @@ export async function validateStepInput({
   }
 
   return { inputData, validationError };
+}
+
+export async function validateStepResumeData({ resumeData, step }: { resumeData?: any; step: Step<string, any, any> }) {
+  if (!resumeData) {
+    return { resumeData: undefined, validationError: undefined };
+  }
+
+  let validationError: Error | undefined;
+
+  const resumeSchema = step.resumeSchema;
+
+  if (resumeSchema) {
+    const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
+    if (!validatedResumeData.success) {
+      const errors = getZodErrors(validatedResumeData.error);
+      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new Error('Step resume data validation failed: \n' + errorMessages);
+    } else {
+      resumeData = validatedResumeData.data;
+    }
+  }
+  return { resumeData, validationError };
 }
 
 export function getResumeLabelsByStepId(
@@ -96,3 +119,16 @@ export function createDeprecationProxy<T extends Record<string, any>>(
     },
   });
 }
+
+export const getStepIds = (entry: StepFlowEntry): string[] => {
+  if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
+    return [entry.step.id];
+  }
+  if (entry.type === 'parallel' || entry.type === 'conditional') {
+    return entry.steps.map(s => s.step.id);
+  }
+  if (entry.type === 'sleep' || entry.type === 'sleepUntil') {
+    return [entry.id];
+  }
+  return [];
+};

@@ -87,6 +87,24 @@ export type StepResult<P, R, S, T> =
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>;
 
+export type TimeTravelContext<P, R, S, T> = Record<
+  string,
+  {
+    status: WorkflowRunStatus;
+    payload: P;
+    output: T;
+    error?: string | Error;
+    resumePayload?: R;
+    suspendPayload?: S;
+    suspendOutput?: T;
+    startedAt?: number;
+    endedAt?: number;
+    suspendedAt?: number;
+    resumedAt?: number;
+    metadata?: StepMetadata;
+  }
+>;
+
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
