@@ -260,7 +260,12 @@ for await (const chunk of result.stream) {
   </TabItem>
 </Tabs>
 
-## Workflow output
+
+### Workflow status types
+
+When running a workflow, its `status` can be `running`, `suspended`, `success`, or `failed`.
+
+### Workflow output
 
 The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
 
@@ -330,3 +335,6 @@ Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with diffe
 
 For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
+- [Control Flow](/docs/v1/workflows/control-flow)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Error Handling](/docs/v1/workflows/error-handling)
