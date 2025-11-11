@@ -25,7 +25,8 @@
 /* Inter Regular */
 @font-face {
   font-family: 'Inter';
-  src:
+  src: local('Inter Regular'),
+       local('Inter-Regular'),
        url('/fonts/Inter_28pt-Regular.woff2') format('woff2'),
        url('/fonts/Inter_28pt-Regular.woff') format('woff');
   font-weight: 400;
