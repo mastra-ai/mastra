@@ -250,7 +250,7 @@ describe('ModelRouter Integration Tests', () => {
         model: modelId,
       });
 
-      const response = await agent.generate('Say "Hello from Azure!" and nothing else.');
+      const response = await agent.generate('Say "Hello from Azure!"');
 
       expect(response).toBeDefined();
       expect(response.text).toBeDefined();
