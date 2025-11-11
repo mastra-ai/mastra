@@ -23,7 +23,7 @@ const step1 = createStep({
     userEmail: z.string()
   }),
   outputSchema: z.object({
-    message: z.string()
+    output: z.string()
   }),
   resumeSchema: z.object({
     approved: z.boolean()
@@ -42,7 +42,7 @@ const step1 = createStep({
     }
 
     return {
-      message: `Email sent to ${userEmail}`
+      output: `Email sent to ${userEmail}`
     };
   }
 });
