@@ -9,7 +9,7 @@ Workflows can be paused at any step to collect additional data, wait for API cal
 
 ## Pausing a workflow with `suspend()`
 
-Use `suspend()` to pause workflow execution at a specific step. You can define a condition in the step’s `execute` block using values from `resumeData`.
+Use `suspend()` to pause workflow execution at a specific step. You can define a suspend condition in the step’s `execute` block using values from `resumeData`.
 
 - If the condition isn’t met, the workflow pauses and returns `suspend()`.
 - If the condition is met, the workflow continues with the remaining logic in the step.
@@ -26,13 +26,13 @@ const step1 = createStep({
     output: z.string()
   }),
   resumeSchema: z.object({
-    okToSend: z.boolean()
+    approved: z.boolean()
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
     const { userEmail } = inputData;
-    const { okToSend } = resumeData ?? {};
+    const { approved } = resumeData ?? {};
 
-    if (!okToSend) {
+    if (!approved) {
       return await suspend({});
     }
 
@@ -74,12 +74,10 @@ await run.start({
 const handleResume = async () => {
   const result = await run.resume({
     step: 'step-1',
-    resumeData: { okToSend: true }
+    resumeData: { approved: true }
   });
 };
 ```
-
-### Ways to resume a workflow
 
 You can resume a suspended workflow using different triggers, including [human input](/docs/workflows/human-in-the-loop), external events from your application, or time-based conditions.
 
@@ -87,7 +85,7 @@ You can resume a suspended workflow using different triggers, including [human i
 const handleResume = async () => {
   const result = await run.resume({
     step: 'step-1',
-    resumeData: { okToSend: true }
+    resumeData: { approved: true }
   });
 };
 
@@ -114,7 +112,7 @@ if (result.status === "suspended") {
   console.log(result.suspended[0]);
   await run.resume({
     step: result.suspended[0],
-    resumeData: { okToSend: true }
+    resumeData: { approved: true }
   });
 }
 ```

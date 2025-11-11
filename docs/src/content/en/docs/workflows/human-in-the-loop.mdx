@@ -26,16 +26,16 @@ const step1 = createStep({
     message: z.string()
   }),
   resumeSchema: z.object({
-    okToSend: z.boolean()
+    approved: z.boolean()
   }),
   suspendSchema: z.object({
     reason: z.string()
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
     const { userEmail } = inputData;
-    const { okToSend } = resumeData ?? {};
+    const { approved } = resumeData ?? {};
 
-    if (!okToSend) {
+    if (!approved) {
       return await suspend({
         reason: "Human approval required."
       });
@@ -108,7 +108,7 @@ await run.start({
 const handleResume = async () => {
   const result = await run.resume({
     step: "step-1",
-    resumeData: { okToSend: true }
+    resumeData: { approved: true }
   });
 };
 ```
@@ -122,15 +122,15 @@ const step1 = createStep({
   // ...
   execute: async ({ inputData, resumeData, suspend, bail }) => {
     const { userEmail } = inputData;
-    const { okToSend } = resumeData ?? {};
+    const { approved } = resumeData ?? {};
 
-    if (okToSend === false) {
+    if (approved === false) {
       return bail({
-        reason: "User rejected the request"
+        reason: "User rejected the request."
       });
     }
 
-    if (!okToSend) {
+    if (!approved) {
       return await suspend({
         reason: "Human approval required."
       });
@@ -145,7 +145,7 @@ const step1 = createStep({
 
 ## Multi-turn human input
 
-For workflows that require input at multiple stages, the suspend pattern remains the same. Each step typically defines a unique `resumeSchema`, while using the same `suspendSchema` to make it easier to surface consistent feedback in the UI.
+For workflows that require input at multiple stages, the suspend pattern remains the same. Each step defines a `resumeSchema`, and `suspendSchema` typically with a reason that can be used to provide user feedback.
 
 ```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
@@ -159,18 +159,18 @@ const step2 = createStep({
     output: z.string()
   }),
   resumeSchema: z.object({
-    okToDelete: z.boolean()
+    approved: z.boolean()
   }),
   suspendSchema: z.object({
     reason: z.string()
   }),
   execute: async ({ inputData, resumeData, suspend }) => {
     const { message } = inputData;
-    const { okToDelete } = resumeData ?? {};
+    const { approved } = resumeData ?? {};
 
-    if (!okToDelete) {
+    if (!approved) {
       return await suspend({
-        reason: "Deletion confirmation required."
+        reason: "Human approval required."
       });
     }
 
@@ -200,14 +200,14 @@ Each step must be resumed in sequence, with a separate call to `resume()` for ea
 const handleResume = async () => {
   const result = await run.resume({
     step: "step-1",
-    resumeData: { okToSend: true }
+    resumeData: { approved: true }
   });
 };
 
 const handleDelete = async () => {
   const result = await run.resume({
     step: "step-2",
-    resumeData: { okToDelete: true }
+    resumeData: { approved: true }
   });
 };
 ```
