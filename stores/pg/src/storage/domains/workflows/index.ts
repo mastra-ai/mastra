@@ -1,4 +1,10 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
+import type {
+  StepResult,
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  WorkflowRunState,
+} from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
@@ -205,14 +211,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     limit,
     offset,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const values: any[] = [];
@@ -221,6 +221,12 @@ export class WorkflowsPG extends WorkflowsStorage {
       if (workflowName) {
         conditions.push(`workflow_name = $${paramIndex}`);
         values.push(workflowName);
+        paramIndex++;
+      }
+
+      if (status) {
+        conditions.push(`snapshot::jsonb ->> 'status' = $${paramIndex}`);
+        values.push(status);
         paramIndex++;
       }
 

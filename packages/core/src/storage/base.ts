@@ -49,6 +49,7 @@ import type {
   StorageIndexStats,
   UpdateAISpanRecord,
   CreateAISpanRecord,
+  StorageListWorkflowRunsInput,
 } from './types';
 
 export type StorageDomains = {
@@ -535,14 +536,7 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]>;
 
-  abstract getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns>;
+  abstract getWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
 

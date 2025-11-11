@@ -1,5 +1,5 @@
 import type { WritableStream } from 'node:stream/web';
-import type { Mastra, SerializedStepFlowEntry } from '..';
+import type { Mastra, RestartExecutionParams, SerializedStepFlowEntry } from '..';
 import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
@@ -57,6 +57,7 @@ export abstract class ExecutionEngine extends MastraBase {
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     initialState?: TState;
+    restart?: RestartExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;

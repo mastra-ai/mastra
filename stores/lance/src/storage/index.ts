@@ -16,6 +16,7 @@ import type {
   StorageDomains,
   StorageGetTracesPaginatedArg,
   StorageResourceType,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -370,14 +371,7 @@ export class LanceStorage extends MastraStorage {
     return this.stores.legacyEvals.getEvals(options);
   }
 
-  async getWorkflowRuns(args?: {
-    namespace?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
+  async getWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     return this.stores.workflows.getWorkflowRuns(args);
   }
 
