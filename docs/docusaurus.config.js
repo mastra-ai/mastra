@@ -26,7 +26,7 @@ const config = {
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: "warn",
-    }
+    },
   },
 
   // Internationalization
