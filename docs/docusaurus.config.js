@@ -10,7 +10,7 @@ import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Mastra Documentation",
+  title: "Mastra v0 Documentation",
   tagline: "TypeScript agent framework",
   favicon: "/favicon.ico",
 
@@ -26,6 +26,11 @@ const config = {
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: "warn",
+    },
+    parseFrontMatter: async (params) => {
+      const result = await params.defaultParseFrontMatter(params);
+      result.frontMatter.description = `Mastra v0: ${result.frontMatter.description}`;
+      return result;
     },
   },
 
