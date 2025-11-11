@@ -636,6 +636,7 @@ export type ProviderModelsMap = {
     'google/gemma-3-27b-it',
     'google/gemma-3n-e4b-it',
     'google/gemma-3n-e4b-it:free',
+    'kwaipilot/kat-coder-pro:free',
     'meta-llama/llama-3.2-11b-vision-instruct',
     'meta-llama/llama-3.3-70b-instruct:free',
     'meta-llama/llama-4-scout:free',

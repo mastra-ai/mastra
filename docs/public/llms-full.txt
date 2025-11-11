@@ -1,5 +1,5 @@
 ---
-title: "Adding Voice to Agents | Agents | Mastra Docs"
+title: "Adding Voice to Agents | Agents"
 ---
 
 # Adding Voice to Agents
@@ -308,7 +308,7 @@ For more details on voice capabilities, see the [Voice API Reference](/reference
 
 
 ---
-title: "Agent Memory | Agents | Mastra Docs"
+title: "Agent Memory | Agents"
 description: Learn how to add memory to agents to store conversation history and maintain context across interactions.
 ---
 
@@ -493,7 +493,7 @@ See [Request Context](/docs/v1/server-db/request-context) docs for more informat
 
 
 ---
-title: "Guardrails | Agents | Mastra Docs"
+title: "Guardrails | Agents"
 description: "Learn how to implement guardrails using input and output processors to secure and control AI interactions."
 ---
 
@@ -866,7 +866,7 @@ Available examples:
 
 
 ---
-title: "Agent Networks | Agents | Mastra Docs"
+title: "Agent Networks | Agents"
 description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 ---
 
@@ -1112,7 +1112,7 @@ network-execution-event-step-finish
 
 
 ---
-title: "Using Agents | Agents | Mastra Docs"
+title: "Using Agents | Agents"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 ---
 
@@ -1583,7 +1583,7 @@ Use [Studio](/docs/v1/getting-started/studio) to test agents with different mess
 
 
 ---
-title: "Using Tools | Agents | Mastra Docs"
+title: "Using Tools | Agents"
 description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 ---
 
@@ -1683,7 +1683,7 @@ export const weatherAgent = new Agent({
 
 
 ---
-title: "MastraAuthAuth0 Class | Auth | Mastra Docs"
+title: "MastraAuthAuth0 Class | Auth"
 description: "Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
 ---
 
@@ -1922,7 +1922,7 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 
 
 ---
-title: "MastraAuthClerk Class | Auth | Mastra Docs"
+title: "MastraAuthClerk Class | Auth"
 description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
 ---
 
@@ -2069,7 +2069,7 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 
 
 ---
-title: "MastraAuthFirebase Class | Auth | Mastra Docs"
+title: "MastraAuthFirebase Class | Auth"
 description: "Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
 ---
 
@@ -2360,7 +2360,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
 
 ---
-title: "Auth Overview | Auth | Mastra Docs"
+title: "Auth Overview | Auth"
 description: Learn about different Auth options for your Mastra applications
 ---
 
@@ -2382,7 +2382,7 @@ You can start with simple shared secret JWT authentication and switch to provide
 
 
 ---
-title: "MastraJwtAuth Class | Auth | Mastra Docs"
+title: "MastraJwtAuth Class | Auth"
 description: "Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
 ---
 
@@ -2488,7 +2488,7 @@ The easiest way to generate one is using [jwt.io](https://www.jwt.io/):
 
 
 ---
-title: "MastraAuthSupabase Class | Auth | Mastra Docs"
+title: "MastraAuthSupabase Class | Auth"
 description: "Documentation for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
 ---
 
@@ -2621,7 +2621,7 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
 
 
 ---
-title: "MastraAuthWorkos Class | Auth | Mastra Docs"
+title: "MastraAuthWorkos Class | Auth"
 description: "Documentation for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
 ---
 
@@ -2828,7 +2828,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
 
 ---
-title: "Contributing Templates | Community | Mastra Docs"
+title: "Contributing Templates | Community"
 description: "How to contribute your own templates to the Mastra ecosystem"
 ---
 
@@ -3024,7 +3024,7 @@ Your contributions help grow the Mastra ecosystem and provide valuable resources
 
 
 ---
-title: "Discord Community | Community | Mastra Docs"
+title: "Discord Community | Community"
 description: Information about the Mastra Discord community and MCP bot.
 ---
 
@@ -3039,7 +3039,7 @@ In addition to community members, we have an (experimental!) Discord bot that ca
 
 
 ---
-title: "License | Community | Mastra Docs"
+title: "License | Community"
 description: "Mastra License"
 ---
 
@@ -3113,7 +3113,7 @@ If you have specific questions about how the Apache License 2.0 applies to your 
 
 
 ---
-title: "Building Mastra | Deployment | Mastra Docs"
+title: "Building Mastra | Deployment"
 description: "Learn how to build a Mastra server with build settings and deployment options."
 ---
 
@@ -3189,7 +3189,7 @@ node .mastra/output/index.mjs
 
 
 ---
-title: "Amazon EC2 | Deployment | Mastra Docs"
+title: "Amazon EC2 | Deployment"
 description: "Deploy your Mastra applications to Amazon EC2."
 ---
 
@@ -3326,7 +3326,7 @@ const mastraClient = new MastraClient({
 
 
 ---
-title: "AWS Lambda | Deployment | Mastra Docs"
+title: "AWS Lambda | Deployment"
 description: "Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter."
 ---
 
@@ -3623,7 +3623,7 @@ For production deployments:
 
 
 ---
-title: "Azure App Services | Deployment | Mastra Docs"
+title: "Azure App Services | Deployment"
 description: "Deploy your Mastra applications to Azure App Services."
 ---
 
@@ -3791,7 +3791,7 @@ such as `LibSQLStore` with a file URL. Consider using cloud-based storage soluti
 
 
 ---
-title: "CloudflareDeployer | Deployment | Mastra Docs"
+title: "CloudflareDeployer | Deployment"
 description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
 ---
 
@@ -3880,7 +3880,7 @@ The `CloudflareDeployer` automatically generates a `wrangler.json` configuration
 
 
 ---
-title: "Digital Ocean | Deployment | Mastra Docs"
+title: "Digital Ocean | Deployment"
 description: "Deploy your Mastra applications to Digital Ocean."
 ---
 
@@ -4120,7 +4120,7 @@ const mastraClient = new MastraClient({
 
 
 ---
-title: "Cloud Providers | Deployment | Mastra Docs"
+title: "Cloud Providers | Deployment"
 description: "Deploy your Mastra applications to popular cloud providers."
 ---
 
@@ -4185,7 +4185,7 @@ export const weatherAgent = new Agent({
 
 
 ---
-title: "NetlifyDeployer | Deployment | Mastra Docs"
+title: "NetlifyDeployer | Deployment"
 description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
 ---
 
@@ -4273,7 +4273,7 @@ The `NetlifyDeployer` automatically generates a `config.json` configuration file
 
 
 ---
-title: "VercelDeployer | Deployment | Mastra Docs"
+title: "VercelDeployer | Deployment"
 description: "Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer"
 ---
 
@@ -4378,7 +4378,7 @@ The `VercelDeployer` automatically generates a `config.json` configuration file 
 
 
 ---
-title: "Navigating the Dashboard | Mastra Cloud | Mastra Docs"
+title: "Navigating the Dashboard | Mastra Cloud"
 description: Details of each feature available in Mastra Cloud
 ---
 
@@ -4481,7 +4481,7 @@ Each MCP Server includes API endpoints for HTTP and SSE, along with IDE configur
 
 
 ---
-title: "Understanding Tracing and Logs | Mastra Cloud | Mastra Docs"
+title: "Understanding Tracing and Logs | Mastra Cloud"
 description: Monitoring and debugging tools for Mastra Cloud deployments
 ---
 
@@ -4535,7 +4535,7 @@ Workflows are created using `createWorkflow`, which sets up steps, metadata, and
 
 
 ---
-title: "Mastra Cloud | Mastra Cloud | Mastra Docs"
+title: "Mastra Cloud | Mastra Cloud"
 description: Deployment and monitoring service for Mastra applications
 ---
 
@@ -4603,7 +4603,7 @@ Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handle
 
 
 ---
-title: "Setting Up and Deploying | Mastra Cloud | Mastra Docs"
+title: "Setting Up and Deploying | Mastra Cloud"
 description: Configuration steps for Mastra Cloud projects
 ---
 
@@ -4711,7 +4711,7 @@ After a successful deployment you can test your agents and workflows [Studio](/d
 
 
 ---
-title: "Monorepo Deployment | Deployment | Mastra Docs"
+title: "Monorepo Deployment | Deployment"
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
 ---
 
@@ -4811,7 +4811,7 @@ Known limitations:
 
 
 ---
-title: "Deployment Overview | Deployment | Mastra Docs"
+title: "Deployment Overview | Deployment"
 description: Learn about different deployment options for your Mastra applications
 ---
 
@@ -4896,7 +4896,7 @@ Once your Mastra application is deployed, you'll need to configure your client t
 
 
 ---
-title: "Web Framework Integration | Deployment | Mastra Docs"
+title: "Web Framework Integration | Deployment"
 description: "Learn how Mastra can be deployed when integrated with a Web Framework"
 ---
 
@@ -4962,7 +4962,7 @@ export default defineConfig({
 
 
 ---
-title: "Custom Scorers | Evals | Mastra Docs"
+title: "Custom Scorers | Evals"
 ---
 
 # Custom scorers
@@ -5448,7 +5448,7 @@ console.log("Reason:", result.reason);
 
 
 ---
-title: "Built-in Scorers | Evals | Mastra Docs"
+title: "Built-in Scorers | Evals"
 description: "Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions."
 ---
 
@@ -5501,7 +5501,7 @@ These scorers evaluate adherence to format, style, and safety requirements:
 
 
 ---
-title: "Scorers overview | Evals | Mastra Docs"
+title: "Scorers overview | Evals"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 ---
 
@@ -5643,7 +5643,7 @@ For more details, see [Studio](/docs/v1/getting-started/studio) docs.
 
 
 ---
-title: "Running Scorers in CI | Evals | Mastra Docs"
+title: "Running Scorers in CI | Evals"
 description: "Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function."
 ---
 
@@ -5759,7 +5759,7 @@ describe('Weather Agent Tests', () => {
 
 
 ---
-title: "Using Vercel AI SDK | Frameworks | Mastra Docs"
+title: "Using Vercel AI SDK | Frameworks"
 description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
 ---
 
@@ -6454,7 +6454,7 @@ These type helpers provide full TypeScript support when using Mastra tools with 
 
 
 ---
-title: "Using with Assistant UI | Frameworks | Mastra Docs"
+title: "Using with Assistant UI | Frameworks"
 description: "Learn how to integrate Assistant UI with Mastra"
 ---
 
@@ -6593,7 +6593,7 @@ Congratulations! You have successfully integrated Mastra with Assistant UI using
 
 
 ---
-title: "Integrate Cedar-OS with Mastra | Frameworks | Mastra Docs"
+title: "Integrate Cedar-OS with Mastra | Frameworks"
 description: "Build AI-native frontends for your Mastra agents with Cedar-OS"
 ---
 
@@ -6719,7 +6719,7 @@ Your backend and frontend are now linked! You're ready to start building AI-nati
 
 
 ---
-title: "Integrate CopilotKit with Mastra | Frameworks | Mastra Docs"
+title: "Integrate CopilotKit with Mastra | Frameworks"
 description: "Learn how Mastra leverages the CopilotKit's AGUI library and how you can leverage it to build user experiences"
 ---
 
@@ -7104,7 +7104,7 @@ Start building the future!
 
 
 ---
-title: "Use OpenRouter with Mastra | Frameworks | Mastra Docs"
+title: "Use OpenRouter with Mastra | Frameworks"
 description: "Learn how to integrate OpenRouter with Mastra"
 ---
 
@@ -7286,7 +7286,7 @@ const response = await assistant.generate([
 
 
 ---
-title: "Integrate Mastra in your Express project | Frameworks | Mastra Docs"
+title: "Integrate Mastra in your Express project | Frameworks"
 description: A step-by-step guide to integrating Mastra with an Express backend.
 ---
 
@@ -7499,7 +7499,7 @@ npm run mastra:dev
 
 
 ---
-title: "Integrate Mastra in your Astro project | Frameworks | Mastra Docs"
+title: "Integrate Mastra in your Astro project | Frameworks"
 description: A step-by-step guide to integrating Mastra with Astro.
 ---
 
@@ -8104,7 +8104,7 @@ Let me know if you need more information!
 
 
 ---
-title: "Integrate Mastra in your Next.js project | Frameworks | Mastra Docs"
+title: "Integrate Mastra in your Next.js project | Frameworks"
 description: A step-by-step guide to integrating Mastra with Next.js.
 ---
 
@@ -8486,7 +8486,7 @@ Let me know if you need more information!
 
 
 ---
-title: "Integrate Mastra in your SvelteKit project | Frameworks | Mastra Docs"
+title: "Integrate Mastra in your SvelteKit project | Frameworks"
 description: A step-by-step guide to integrating Mastra with SvelteKit.
 ---
 
@@ -8991,7 +8991,7 @@ If you need more details or information about a different location, feel free to
 
 
 ---
-title: "Integrate Mastra in your Vite/React project | Frameworks | Mastra Docs"
+title: "Integrate Mastra in your Vite/React project | Frameworks"
 description: A step-by-step guide to integrating Mastra with Vite and React.
 ---
 
@@ -9249,7 +9249,7 @@ The current weather in London is partly cloudy with a temperature of 19.3°C, fe
 
 
 ---
-title: "Install Mastra | Getting Started | Mastra Docs"
+title: "Install Mastra | Getting Started"
 description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 ---
 
@@ -9600,7 +9600,7 @@ bun run dev
 
 
 ---
-title: "Mastra Docs Server | Getting Started | Mastra Docs"
+title: "Mastra Docs Server | Getting Started"
 description: "Learn how to use the Mastra MCP documentation server in your IDE to turn it into an agentic Mastra expert."
 ---
 
@@ -9783,7 +9783,7 @@ Once configured, you can ask your AI tool questions about Mastra or instruct it 
 
 
 ---
-title: "Project Structure | Getting Started | Mastra Docs"
+title: "Project Structure | Getting Started"
 description: Guide on organizing folders and files in Mastra, including best practices and recommended structures.
 ---
 
@@ -9853,7 +9853,7 @@ Top-level files define how your Mastra project is configured, built, and connect
 
 
 ---
-title: "Studio | Getting Started | Mastra Docs"
+title: "Studio | Getting Started"
 description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 ---
 
@@ -10006,7 +10006,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Templates | Getting Started | Mastra Docs"
+title: "Templates | Getting Started"
 description: Pre-built project structures that demonstrate common Mastra use cases and patterns
 ---
 
@@ -10082,7 +10082,7 @@ For detailed information on creating templates, see the [Templates Reference](/r
 
 
 ---
-title: "About Mastra | Mastra Docs"
+title: "About Mastra"
 sidebar_position: 2
 sidebar_label: "Introduction"
 description: "Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack."
@@ -10143,7 +10143,7 @@ We can't wait to see what you build ✌️
 
 
 ---
-title: "Logging | Observability | Mastra Docs"
+title: "Logging | Observability"
 description: Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
 ---
 
@@ -10256,7 +10256,7 @@ export const testWorkflow = createWorkflow({...})
 
 
 ---
-title: "Conversation History | Memory | Mastra Docs"
+title: "Conversation History | Memory"
 description: "Learn how to configure conversation history in Mastra to store recent messages from the current conversation."
 ---
 
@@ -10283,7 +10283,7 @@ export const testAgent = new Agent({
 
 
 ---
-title: "Memory Processors | Memory | Mastra Docs"
+title: "Memory Processors | Memory"
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
 ---
 
@@ -10423,7 +10423,7 @@ When creating custom processors avoid mutating the input `messages` array or its
 
 
 ---
-title: "Memory overview | Memory | Mastra Docs"
+title: "Memory overview | Memory"
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
 ---
 
@@ -10547,7 +10547,7 @@ Alternatively you can visit the [configuration reference](/reference/v1/memory/m
 
 
 ---
-title: "Semantic Recall | Memory | Mastra Docs"
+title: "Semantic Recall | Memory"
 description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
 ---
 
@@ -10781,7 +10781,7 @@ For more info on viewing message traces, see [Viewing Retrieved Messages](./over
 
 
 ---
-title: "Memory with LibSQL | Memory | Mastra Docs"
+title: "Memory with LibSQL | Memory"
 description: Example for how to use Mastra's memory system with LibSQL storage and vector database backend.
 ---
 
@@ -10929,7 +10929,7 @@ for await (const chunk of stream.textStream) {
 
 
 ---
-title: "Example: Memory with MongoDB | Memory | Mastra Docs"
+title: "Example: Memory with MongoDB | Memory"
 description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
 ---
 
@@ -11084,7 +11084,7 @@ for await (const chunk of stream.textStream) {
 
 
 ---
-title: "Memory with Postgres | Memory | Mastra Docs"
+title: "Memory with Postgres | Memory"
 description: Example for how to use Mastra's memory system with PostgreSQL storage and vector capabilities.
 ---
 
@@ -11230,7 +11230,7 @@ for await (const chunk of stream.textStream) {
 
 
 ---
-title: "Memory with Upstash | Memory | Mastra Docs"
+title: "Memory with Upstash | Memory"
 description: Example for how to use Mastra's memory system with Upstash Redis storage and vector capabilities.
 ---
 
@@ -11384,7 +11384,7 @@ for await (const chunk of stream.textStream) {
 
 
 ---
-title: "Memory threads and resources | Memory | Mastra Docs"
+title: "Memory threads and resources | Memory"
 description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
 ---
 
@@ -11482,7 +11482,7 @@ export const testAgent = new Agent({
 
 
 ---
-title: "Working Memory | Memory | Mastra Docs"
+title: "Working Memory | Memory"
 description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
 ---
 
@@ -11868,7 +11868,7 @@ await memory.updateWorkingMemory({
 
 
 ---
-title: "Observability Overview | Observability | Mastra Docs"
+title: "Observability Overview | Observability"
 description: Monitor and debug applications with Mastra's Observability features.
 ---
 
@@ -11924,7 +11924,7 @@ We also support various external tracing providers like Langfuse, Braintrust, an
 
 
 ---
-title: "Arize Exporter | Tracing | Observability | Mastra Docs"
+title: "Arize Exporter | Tracing | Observability"
 description: "Send traces to Arize Phoenix or Arize AX using OpenTelemetry and OpenInference"
 ---
 
@@ -12121,7 +12121,7 @@ This exporter implements the [OpenInference Semantic Conventions](https://github
 
 
 ---
-title: "Braintrust Exporter | Tracing | Observability | Mastra Docs"
+title: "Braintrust Exporter | Tracing | Observability"
 description: "Send traces to Braintrust for evaluation and monitoring"
 ---
 
@@ -12195,7 +12195,7 @@ new BraintrustExporter({
 
 
 ---
-title: "Cloud Exporter | Tracing | Observability | Mastra Docs"
+title: "Cloud Exporter | Tracing | Observability"
 description: "Send traces to Mastra Cloud for production monitoring"
 ---
 
@@ -12309,11 +12309,11 @@ CloudExporter uses intelligent batching to optimize network usage. Traces are bu
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [DefaultExporter](/docs/v1/observability/tracing/exporters/default)
-- [Mastra Cloud Documentation](https://cloud.mastra.ai/docs)
+- [Mastra Cloud Documentation](/docs/v1/deployment/mastra-cloud/overview)
 
 
 ---
-title: "Default Exporter | Tracing | Observability | Mastra Docs"
+title: "Default Exporter | Tracing | Observability"
 description: "Store traces locally for development and debugging"
 ---
 
@@ -12479,7 +12479,7 @@ new DefaultExporter({
 
 
 ---
-title: "Langfuse Exporter | Tracing | Observability | Mastra Docs"
+title: "Langfuse Exporter | Tracing | Observability"
 description: "Send traces to Langfuse for LLM observability and analytics"
 ---
 
@@ -12595,7 +12595,7 @@ new LangfuseExporter({
 
 
 ---
-title: "LangSmith Exporter | Tracing | Observability | Mastra Docs"
+title: "LangSmith Exporter | Tracing | Observability"
 description: "Send traces to LangSmith for LLM observability and evaluation"
 ---
 
@@ -12677,7 +12677,7 @@ new LangSmithExporter({
 
 
 ---
-title: "OpenTelemetry Exporter | Tracing | Observability | Mastra Docs"
+title: "OpenTelemetry Exporter | Tracing | Observability"
 description: "Send traces to any OpenTelemetry-compatible observability platform"
 ---
 
@@ -12934,7 +12934,7 @@ Install the suggested package for your provider.
 
 
 ---
-title: "Tracing | Observability | Mastra Docs"
+title: "Tracing | Observability"
 description: "Set up Tracing for Mastra applications"
 ---
 
@@ -13714,7 +13714,7 @@ Mastra automatically creates spans for:
 
 
 ---
-title: "Sensitive Data Filter | Processors | Observability | Mastra Docs"
+title: "Sensitive Data Filter | Processors | Observability"
 description: "Protect sensitive information in your traces with automatic data redaction"
 ---
 
@@ -14226,7 +14226,7 @@ For more details on vector databases and embeddings, see:
 
 
 ---
-title: "RAG (Retrieval-Augmented Generation) in Mastra | RAG | Mastra Docs"
+title: "RAG (Retrieval-Augmented Generation) in Mastra | RAG"
 description: Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
 ---
 
@@ -14306,7 +14306,7 @@ Mastra supports multiple vector stores for embedding persistence and similarity 
 
 
 ---
-title: "Retrieval, Semantic Search, Reranking | RAG | Mastra Docs"
+title: "Retrieval, Semantic Search, Reranking | RAG"
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
 ---
 
@@ -14882,7 +14882,7 @@ For an example of how to use the graph-based retrieval method, see the [Graph-ba
 
 
 ---
-title: "Storing Embeddings in A Vector Database | RAG | Mastra Docs"
+title: "Storing Embeddings in A Vector Database | RAG"
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
 ---
 
@@ -15429,7 +15429,7 @@ Key metadata considerations:
 
 
 ---
-title: "Custom API Routes | Server & DB | Mastra Docs"
+title: "Custom API Routes | Server & DB"
 description: "Expose additional HTTP endpoints from your Mastra server."
 ---
 
@@ -15499,7 +15499,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Mastra Client SDK | Server & DB | Mastra Docs"
+title: "Mastra Client SDK | Server & DB"
 description: "Learn how to set up and use the Mastra Client SDK"
 ---
 
@@ -15779,7 +15779,7 @@ export async function action() {
 
 
 ---
-title: "Mastra Server | Server & DB | Mastra Docs"
+title: "Mastra Server | Server & DB"
 description: "Learn how to configure and deploy a production-ready Mastra server with custom settings for APIs, CORS, and more"
 ---
 
@@ -15871,7 +15871,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Middleware | Server & DB | Mastra Docs"
+title: "Middleware | Server & DB"
 description: "Apply custom middleware functions to intercept requests."
 ---
 
@@ -16051,7 +16051,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Request Context | Server & DB | Mastra Docs"
+title: "Request Context | Server & DB"
 description: Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
 ---
 
@@ -16248,7 +16248,7 @@ export const weatherTool = createTool({
 
 
 ---
-title: "MastraStorage | Server & DB | Mastra Docs"
+title: "MastraStorage | Server & DB"
 description: Overview of Mastra's storage system and data persistence capabilities.
 ---
 
@@ -16769,7 +16769,7 @@ Mastra supports the following providers:
 
 
 ---
-title: "Streaming Events | Streaming | Mastra Docs"
+title: "Streaming Events | Streaming"
 description: "Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications."
 ---
 
@@ -17003,7 +17003,7 @@ for await (const chunk of networkStream) {
 
 
 ---
-title: "Streaming Overview | Streaming | Mastra Docs"
+title: "Streaming Overview | Streaming"
 description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
 ---
 
@@ -17182,7 +17182,7 @@ A workflow stream provides access to various response properties:
 
 
 ---
-title: "Tool streaming | Streaming | Mastra Docs"
+title: "Tool streaming | Streaming"
 description: "Learn how to use tool streaming in Mastra, including handling tool calls, tool results, and tool execution events during streaming."
 ---
 
@@ -17328,7 +17328,7 @@ export const testTool = createTool({
 
 
 ---
-title: "Workflow streaming | Streaming | Mastra Docs"
+title: "Workflow streaming | Streaming"
 description: "Learn how to use workflow streaming in Mastra, including handling workflow execution events, step streaming, and workflow integration with agents and tools."
 ---
 
@@ -17457,7 +17457,7 @@ export const testStep = createStep({
 
 
 ---
-title: "Advanced Tool Usage | Tools & MCP | Mastra Docs"
+title: "Advanced Tool Usage | Tools & MCP"
 description: This page covers advanced features for Mastra tools, including abort signals and compatibility with the Vercel AI SDK tool format.
 ---
 
@@ -17589,7 +17589,7 @@ Mastra supports both tool formats, allowing you to mix and match as needed.
 
 
 ---
-title: "MCP Overview | Tools & MCP | Mastra Docs"
+title: "MCP Overview | Tools & MCP"
 description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
 ---
 
@@ -17965,7 +17965,7 @@ As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so 
 
 
 ---
-title: "Using Tools | Tools & MCP | Mastra Docs"
+title: "Using Tools | Tools & MCP"
 description: Understand what tools are in Mastra, how to add them to agents, and best practices for designing effective tools.
 ---
 
@@ -18056,7 +18056,7 @@ Use [Studio](/docs/v1/getting-started/studio) to test tools with different input
 
 
 ---
-title: "Voice in Mastra | Voice | Mastra Docs"
+title: "Voice in Mastra | Voice"
 description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
 ---
 
@@ -19046,7 +19046,7 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 
 
 ---
-title: "Speech-to-Speech Capabilities in Mastra | Voice | Mastra Docs"
+title: "Speech-to-Speech Capabilities in Mastra | Voice"
 description: Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
 ---
 
@@ -19158,7 +19158,7 @@ Note:
 
 
 ---
-title: "Speech-to-Text (STT) | Voice | Mastra Docs"
+title: "Speech-to-Text (STT) | Voice"
 description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
 ---
 
@@ -19248,7 +19248,7 @@ Check out the [Adding Voice to Agents](/docs/v1/agents/adding-voice) documentati
 
 
 ---
-title: "Text-to-Speech (TTS) | Voice | Mastra Docs"
+title: "Text-to-Speech (TTS) | Voice"
 description: Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
 ---
 
@@ -19342,7 +19342,7 @@ Check out the [Adding Voice to Agents](/docs/v1/agents/adding-voice) documentati
 
 
 ---
-title: "Agents and Tools | Workflows | Mastra Docs"
+title: "Agents and Tools | Workflows"
 description: "Learn how to call agents and tools from workflow steps and choose between execute functions and step composition."
 ---
 
@@ -19487,11 +19487,11 @@ export const testWorkflow = createWorkflow({
 ## Related
 
 - [Using Agents](/docs/v1/agents/overview)
-- [Using Tools](../tools-mcp/overview)
+- [Using Tools](/docs/v1/tools-mcp/overview)
 
 
 ---
-title: "Control Flow | Workflows | Mastra Docs"
+title: "Control Flow | Workflows"
 description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
 ---
 
@@ -19800,9 +19800,14 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+## Related
+
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+
 
 ---
-title: "Error Handling | Workflows | Mastra Docs"
+title: "Error Handling | Workflows"
 description: "Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring."
 ---
 
@@ -19991,287 +19996,234 @@ for await (const chunk of stream.stream) {
 
 ## Related
 
-- [Control Flow](./control-flow)
-- [Conditional Branching](./control-flow#conditional-logic-with-branch)
-- [Running Workflows](/docs/v1/workflows/overview)
+- [Control Flow](/docs/v1/workflows/control-flow)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
 ---
-title: "Human-in-the-loop | Workflows | Mastra Docs"
-description: Example of using Mastra to create workflows with multi-turn human/agent interaction points using suspend/resume and dountil methods.
+title: "Human-in-the-loop (HITL) | Workflows"
+description: "Human-in-the-loop workflows in Mastra allow you to pause execution for manual approvals, reviews, or user input before continuing."
 ---
 
-import GithubLink from "@site/src/components/GithubLink";
-
-# Human-in-the-loop
+# Human-in-the-loop (HITL)
 [EN] Source: https://mastra.ai/en/docs/workflows/human-in-the-loop
 
-Human-in-the-loop workflows enable ongoing interaction between humans and AI agents, allowing for complex decision-making processes that require multiple rounds of input and response. These workflows can suspend execution at specific points, wait for human input, and continue processing based on the responses received.
+Some workflows need to pause for human input before continuing. When a workflow is [suspended](/docs/v1/workflows/suspend-and-resume#pausing-a-workflow-with-suspend), it can return a message explaining why it paused and what’s needed to proceed. The workflow can then either [resume](#resuming-workflows-with-human-input) or [bail](#handling-human-rejection-with-bail) based on the input received. This approach works well for manual approvals, rejections, gated decisions, or any step that requires human oversight.
 
-In this example, the multi-turn workflow is used to create a Heads Up game that demonstrates how to create interactive workflows using suspend/resume functionality and conditional logic with `dountil` to repeat a workflow step until a specific condition is met.
+## Pausing workflows for human input
 
-This example consists of three main components:
+Human-in-the-loop input works much like [pausing a workflow](/docs/v1/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
-1. A [**Famous Person Agent**](#famous-person-agent) that generates a famous person's name.
-2. A [**Game Agent**](#game-agent) that handles the gameplay.
-3. A [**Multi-Turn Workflow**](#multi-turn-workflow) that orchestrates the interaction.
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
 
-## Prerequisites
-
-This example uses the `openai` model. Make sure to add the following to your `.env` file:
-
-```bash title=".env" copy
-OPENAI_API_KEY=<your-api-key>
-```
-
-## Famous person agent
-
-The `famousPersonAgent` generates a unique name each time the game is played, using semantic memory to avoid repeating suggestions.
-
-```typescript title="src/mastra/agents/example-famous-person-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLVector } from "@mastra/libsql";
-
-export const famousPersonAgent = new Agent({
-  id: "famous-person-generator",
-  name: "Famous Person Generator",
-  instructions: `You are a famous person generator for a "Heads Up" guessing game.
-
-Generate the name of a well-known famous person who:
-- Is recognizable to most people
-- Has distinctive characteristics that can be described with yes/no questions
-- Is appropriate for all audiences
-- Has a clear, unambiguous name
-
-IMPORTANT: Use your memory to check what famous people you've already suggested and NEVER repeat a person you've already suggested.
-
-Examples: Albert Einstein, Beyoncé, Leonardo da Vinci, Oprah Winfrey, Michael Jordan
-
-Return only the person's name, nothing else.`,
-  model: openai("gpt-4o"),
-  memory: new Memory({
-    vector: new LibSQLVector({
-      id: 'workflow-vector',
-      connectionUrl: "file:../mastra.db",
-    }),
-    embedder: openai.embedding("text-embedding-3-small"),
-    options: {
-      lastMessages: 5,
-      semanticRecall: {
-        topK: 10,
-        messageRange: 1,
-      },
-    },
-  }),
-});
-```
-
-> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
-
-## Game agent
-
-The `gameAgent` handles user interactions by responding to questions and validating guesses.
-
-```typescript title="src/mastra/agents/example-game-agent.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
-
-export const gameAgent = new Agent({
-  id: "game-agent",
-  name: "Game Agent",
-  instructions: `You are a helpful game assistant for a "Heads Up" guessing game.
-
-CRITICAL: You know the famous person's name but you must NEVER reveal it in any response.
-
-When a user asks a question about the famous person:
-- Answer truthfully based on the famous person provided
-- Keep responses concise and friendly
-- NEVER mention the person's name, even if it seems natural
-- NEVER reveal gender, nationality, or other characteristics unless specifically asked about them
-- Answer yes/no questions with clear "Yes" or "No" responses
-- Be consistent - same question asked differently should get the same answer
-- Ask for clarification if a question is unclear
-- If multiple questions are asked at once, ask them to ask one at a time
-
-When they make a guess:
-- If correct: Congratulate them warmly
-- If incorrect: Politely correct them and encourage them to try again
-
-Encourage players to make a guess when they seem to have enough information.
-
-You must return a JSON object with:
-- response: Your response to the user
-- gameWon: true if they guessed correctly, false otherwise`,
-  model: openai("gpt-4o"),
-});
-```
-
-## Multi-turn workflow
-
-The workflow coordinates the full interaction using `suspend`/`resume` to pause for human input and `dountil` to repeat the game loop until a condition is met.
-
-The `startStep` generates a name using the `famousPersonAgent`, while the `gameStep` runs the interaction through the `gameAgent`, which handles both questions and guesses and produces structured output that includes a `gameWon` boolean.
-
-```typescript title="src/mastra/workflows/example-heads-up-workflow.ts" showLineNumbers copy
+```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const startStep = createStep({
-  id: "start-step",
-  description: "Get the name of a famous person",
+const step1 = createStep({
+  id: "step-1",
   inputSchema: z.object({
-    start: z.boolean(),
+    userEmail: z.string()
   }),
   outputSchema: z.object({
-    famousPerson: z.string(),
-    guessCount: z.number(),
-  }),
-  execute: async ({ mastra }) => {
-    const agent = mastra.getAgent("famousPersonAgent");
-    const response = await agent.generate("Generate a famous person's name", {
-      temperature: 1.2,
-      topP: 0.9,
-      memory: {
-        resource: "heads-up-game",
-        thread: "famous-person-generator",
-      },
-    });
-    const famousPerson = response.text.trim();
-    return { famousPerson, guessCount: 0 };
-  },
-});
-
-const gameStep = createStep({
-  id: "game-step",
-  description: "Handles the question-answer-continue loop",
-  inputSchema: z.object({
-    famousPerson: z.string(),
-    guessCount: z.number(),
+    output: z.string()
   }),
   resumeSchema: z.object({
-    userMessage: z.string(),
+    approved: z.boolean()
   }),
   suspendSchema: z.object({
-    suspendResponse: z.string(),
+    reason: z.string()
   }),
-  outputSchema: z.object({
-    famousPerson: z.string(),
-    gameWon: z.boolean(),
-    agentResponse: z.string(),
-    guessCount: z.number(),
-  }),
-  execute: async ({ inputData, mastra, resumeData, suspend }) => {
-    let { famousPerson, guessCount } = inputData;
-    const { userMessage } = resumeData ?? {};
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { userEmail } = inputData;
+    const { approved } = resumeData ?? {};
 
-    if (!userMessage) {
+    if (!approved) {
       return await suspend({
-        suspendResponse:
-          "I'm thinking of a famous person. Ask me yes/no questions to figure out who it is!",
+        reason: "Human approval required."
       });
     }
 
-    const agent = mastra.getAgent("gameAgent");
-    const response = await agent.generate(
-      `
-        The famous person is: ${famousPerson}
-        The user said: "${userMessage}"
-        Please respond appropriately. If this is a guess, tell me if it's correct.
-      `,
-      {
-        structuredOutput: {
-          schema: z.object({
-            response: z.string(),
-            gameWon: z.boolean(),
-          }),
-        },
-      },
-    );
-
-    const { response: agentResponse, gameWon } = response.object;
-
-    guessCount++;
-
-    return { famousPerson, gameWon, agentResponse, guessCount };
-  },
+    return {
+      output: `Email sent to ${userEmail}`
+    };
+  }
 });
 
-const winStep = createStep({
-  id: "win-step",
-  description: "Handle game win logic",
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
   inputSchema: z.object({
-    famousPerson: z.string(),
-    gameWon: z.boolean(),
-    agentResponse: z.string(),
-    guessCount: z.number(),
+    userEmail: z.string()
   }),
   outputSchema: z.object({
-    famousPerson: z.string(),
-    gameWon: z.boolean(),
-    guessCount: z.number(),
-  }),
-  execute: async ({ inputData }) => {
-    const { famousPerson, gameWon, guessCount } = inputData;
-
-    console.log("famousPerson: ", famousPerson);
-    console.log("gameWon: ", gameWon);
-    console.log("guessCount: ", guessCount);
-
-    return { famousPerson, gameWon, guessCount };
-  },
-});
-
-export const headsUpWorkflow = createWorkflow({
-  id: "heads-up-workflow",
-  inputSchema: z.object({
-    start: z.boolean(),
-  }),
-  outputSchema: z.object({
-    famousPerson: z.string(),
-    gameWon: z.boolean(),
-    guessCount: z.number(),
-  }),
+    output: z.string()
+  })
 })
-  .then(startStep)
-  .dountil(gameStep, async ({ inputData: { gameWon } }) => gameWon)
-  .then(winStep)
+  .then(step1)
   .commit();
 ```
 
-> See [Workflow](/reference/v1/workflows/workflow) for a full list of configuration options.
+## Providing user feedback
 
-## Registering the agents and workflow
+When a workflow is suspended, you can access the payload returned by `suspend()` by identifying the suspended step and reading its `suspendPayload`.
 
-To use a workflow or an agent, register them in your main Mastra instance.
+```typescript {12} title="src/test-workflow.ts" showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+const result = await run.start({
+  inputData: {
+    userEmail: "alex@example.com"
+  }
+});
 
-import { headsUpWorkflow } from "./workflows/example-heads-up-workflow";
-import { famousPersonAgent } from "./agents/example-famous-person-agent";
-import { gameAgent } from "./agents/example-game-agent";
+if (result.status === "suspended") {
+  const suspendStep = result.suspended[0];
+  const suspendedPayload = result.steps[suspendStep[0]].suspendPayload;
 
-export const mastra = new Mastra({
-  workflows: { headsUpWorkflow },
-  agents: { famousPersonAgent, gameAgent },
+  console.log(suspendedPayload);
+}
+```
+**Example output**
+
+The data returned by the step can include a reason and help the user understand what’s needed to resume the workflow.
+
+```typescript
+{ reason: 'Confirm to send email.' }
+```
+
+## Resuming workflows with human input
+
+As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
+
+![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+
+```typescript {13} showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
+
+await run.start({
+  inputData: {
+    userEmail: "alex@example.com"
+  }
+});
+
+const handleResume = async () => {
+  const result = await run.resume({
+    step: "step-1",
+    resumeData: { approved: true }
+  });
+};
+```
+
+### Handling human rejection with `bail()`
+
+Use `bail()` to stop workflow execution at a step without triggering an error. This can be useful when a human explicitly rejects an action. The workflow completes with a `success` status, and any logic after the call to `bail()` is skipped.
+
+```typescript {7-11} showLineNumbers copy
+const step1 = createStep({
+  // ...
+  execute: async ({ inputData, resumeData, suspend, bail }) => {
+    const { userEmail } = inputData;
+    const { approved } = resumeData ?? {};
+
+    if (approved === false) {
+      return bail({
+        reason: "User rejected the request."
+      });
+    }
+
+    if (!approved) {
+      return await suspend({
+        reason: "Human approval required."
+      });
+    }
+
+    return {
+      message: `Email sent to ${userEmail}`
+    };
+  }
 });
 ```
 
-<GithubLink
-  marginTop="mt-16"
-  link="https://github.com/mastra-ai/mastra/blob/main/examples/heads-up-game/"
-/>
+## Multi-turn human input
+
+For workflows that require input at multiple stages, the suspend pattern remains the same. Each step defines a `resumeSchema`, and `suspendSchema` typically with a reason that can be used to provide user feedback.
+
+```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  id: "step-2",
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string()
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { message } = inputData;
+    const { approved } = resumeData ?? {};
+
+    if (!approved) {
+      return await suspend({
+        reason: "Human approval required."
+      });
+    }
+
+    return {
+      output: `${message} - Deleted`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  inputSchema: z.object({
+    userEmail: z.string()
+  }),
+  outputSchema: z.object({
+    output: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+Each step must be resumed in sequence, with a separate call to `resume()` for each suspended step. This approach helps manage multi-step approvals with consistent UI feedback and clear input handling at each stage.
+
+```typescript {4,11} showLineNumbers copy
+const handleResume = async () => {
+  const result = await run.resume({
+    step: "step-1",
+    resumeData: { approved: true }
+  });
+};
+
+const handleDelete = async () => {
+  const result = await run.resume({
+    step: "step-2",
+    resumeData: { approved: true }
+  });
+};
+```
 
 ## Related
 
-- [Running Workflows](./overview#running-workflows)
 - [Control Flow](/docs/v1/workflows/control-flow)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
 
 
 ---
-title: "Inngest Workflow | Workflows | Mastra Docs"
+title: "Inngest Workflow | Workflows"
 description: "Inngest workflow allows you to run Mastra workflows with Inngest"
 ---
 
@@ -20637,7 +20589,7 @@ This allows you to combine Mastra's workflow orchestration with your existing In
 
 
 ---
-title: "Input Data Mapping | Workflows | Mastra Docs"
+title: "Input Data Mapping | Workflows"
 description: "Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows."
 ---
 
@@ -20747,7 +20699,7 @@ testWorkflow
 
 
 ---
-title: "Workflows overview | Workflows | Mastra Docs"
+title: "Workflows overview | Workflows"
 description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
 ---
 
@@ -21009,7 +20961,12 @@ for await (const chunk of result.stream) {
   </TabItem>
 </Tabs>
 
-## Workflow output
+
+### Workflow status types
+
+When running a workflow, its `status` can be `running`, `suspended`, `success`, or `failed`.
+
+### Workflow output
 
 The workflow output includes the full execution lifecycle, showing the input and output for each step. It also includes the status of each step, the overall workflow status, and the final result. This gives you clear insight into how data moved through the workflow, what each step produced, and how the workflow completed.
 
@@ -21079,10 +21036,13 @@ Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with diffe
 
 For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
+- [Control Flow](/docs/v1/workflows/control-flow)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Error Handling](/docs/v1/workflows/error-handling)
 
 
 ---
-title: "Snapshots | Workflows | Mastra Docs"
+title: "Snapshots | Workflows"
 description: "Learn how to save and resume workflow execution state with snapshots in Mastra"
 ---
 
@@ -21350,297 +21310,141 @@ if (result.status === "suspended") {
 
 ## Related
 
-- [Suspend and resume](/docs/v1/workflows/suspend-and-resume)
-- [Human in the loop example](/docs/v1/workflows/human-in-the-loop)
+- [Control Flow](/docs/v1/workflows/control-flow)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
 
 
 ---
-title: "Suspend & Resume | Workflows | Mastra Docs"
+title: "Suspend & Resume | Workflows"
 description: "Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources."
 ---
 
 # Suspend & Resume
 [EN] Source: https://mastra.ai/en/docs/workflows/suspend-and-resume
 
-Workflows can be paused at any step, with their current state persisted as a [snapshot](./snapshots) in storage. Execution can then be resumed from this saved snapshot when ready. Persisting the snapshot ensures the workflow state is maintained across sessions, deployments, and server restarts, essential for workflows that may remain suspended while awaiting external input or resources.
+Workflows can be paused at any step to collect additional data, wait for API callbacks, throttle costly operations, or request [human-in-the-loop](/docs/v1/workflows/human-in-the-loop) input. When a workflow is suspended, its current execution state is saved as a snapshot. You can later resume the workflow from a [specific step ID](/docs/v1/workflows/snapshots#retrieving-snapshots), restoring the exact state captured in that snapshot. [Snapshots](/docs/v1/workflows/snapshots) are stored in your configured storage provider and across deployments and application restarts.
+## Pausing a workflow with `suspend()`
 
-Common scenarios for suspending workflows include:
+Use `suspend()` to pause workflow execution at a specific step. You can define a suspend condition in the step’s `execute` block using values from `resumeData`.
 
-- Waiting for human approval or input
-- Pausing until external API resources become available
-- Collecting additional data needed for later steps
-- Rate limiting or throttling expensive operations
-- Handling event-driven processes with external triggers
+- If the condition isn’t met, the workflow pauses and returns `suspend()`.
+- If the condition is met, the workflow continues with the remaining logic in the step.
 
-> **New to suspend and resume?** Watch these official video tutorials:
->
-> - **[Mastering Human-in-the-Loop with Suspend & Resume](https://youtu.be/aORuNG8Tq_k)** - Learn how to suspend workflows and accept user inputs
-> - **[Building Multi-Turn Chat Interfaces with React](https://youtu.be/UMVm8YZwlxc)** - Implement multi-turn human-involved interactions with a React chat interface
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
 
-## Workflow status types
-
-When running a workflow, its `status` can be one of the following:
-
-- `running` - The workflow is currently running
-- `suspended` - The workflow is suspended
-- `success` - The workflow has completed
-- `failed` - The workflow has failed
-
-## Suspending a workflow with `suspend()`
-
-To pause execution at a specific step until user input is received, use the `⁠suspend` function to temporarily halt the workflow, allowing it to resume only when the necessary data is provided.
-
-![Suspending a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
-
-```typescript {16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
-    input: z.string(),
+    userEmail: z.string()
   }),
   outputSchema: z.object({
-    output: z.string(),
+    output: z.string()
   }),
   resumeSchema: z.object({
-    city: z.string(),
+    approved: z.boolean()
   }),
-  execute: async ({ resumeData, suspend }) => {
-    const { city } = resumeData ?? {};
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { userEmail } = inputData;
+    const { approved } = resumeData ?? {};
 
-    if (!city) {
+    if (!approved) {
       return await suspend({});
     }
 
-    return { output: "" };
-  },
+    return {
+      output: `Email sent to ${userEmail}`
+    };
+  }
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
-})
-  .then(step1)
-  .commit();
-```
-
-> For more details, check out the [Suspend & Resume documentation](/docs/v1/workflows/suspend-and-resume).
-
-### Identifying suspended steps
-
-To resume a suspended workflow, inspect the `suspended` array in the result to determine which step needs input:
-
-```typescript {15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
-
-const run = await mastra.getWorkflow("testWorkflow").createRun();
-
-const result = await run.start({
-  inputData: {
-    city: "London",
-  },
-});
-
-console.log(JSON.stringify(result, null, 2));
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    step: result.suspended[0],
-    resumeData: {
-      city: "Berlin",
-    },
-  });
-}
-```
-
-In this case, the logic resumes the first step listed in the `suspended` array. A `step` can also be defined using it's `id`, for example: 'step-1'.
-
-```json
-{
-  "status": "suspended",
-  "steps": {
-    // ...
-    "step-1": {
-      // ...
-      "status": "suspended"
-    }
-  },
-  "suspended": [["step-1"]]
-}
-```
-
-> See [Workflow Output](./overview#workflow-output) for more details.
-
-## Providing user feedback with suspend
-
-When a workflow is suspended, feedback can be surfaced to the user through the `suspendSchema`. Include a reason in the `suspend` payload to explain why the workflow paused.
-
-```typescript {13,23} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const step1 = createStep({
-  id: "step-1",
+  id: "test-workflow",
   inputSchema: z.object({
-    value: z.string(),
-  }),
-  resumeSchema: z.object({
-    confirm: z.boolean(),
-  }),
-  suspendSchema: z.object({
-    reason: z.string(),
+    userEmail: z.string()
   }),
   outputSchema: z.object({
-    value: z.string(),
-  }),
-  execute: async ({ resumeData, suspend }) => {
-    const { confirm } = resumeData ?? {};
-
-    if (!confirm) {
-      return await suspend({
-        reason: "Confirm to continue",
-      });
-    }
-
-    return { value: "" };
-  },
-});
-
-export const testWorkflow = createWorkflow({
-  // ...
+    output: z.string()
+  })
 })
   .then(step1)
   .commit();
 ```
 
-In this case, the reason provided explains that the user must confirm to continue.
+## Restarting a workflow with `resume()`
 
-```json
-{
-  "step-1": {
-    // ...
-    "status": "suspended",
-    "suspendPayload": {
-      "reason": "Confirm to continue"
-    }
+Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
+
+![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+
+```typescript {13} showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
+
+await run.start({
+  inputData: {
+    userEmail: "alex@example.com"
   }
-}
+});
+
+const handleResume = async () => {
+  const result = await run.resume({
+    step: 'step-1',
+    resumeData: { approved: true }
+  });
+};
 ```
 
-> See [Workflow Output](./overview#workflow-output) for more details.
+You can resume a suspended workflow using different triggers, including [human input](/docs/v1/workflows/human-in-the-loop), external events from your application, or time-based conditions.
 
-## Resuming a workflow with `resume()`
+```typescript {10} showLineNumbers copy
+const handleResume = async () => {
+  const result = await run.resume({
+    step: 'step-1',
+    resumeData: { approved: true }
+  });
+};
 
-A workflow can be resumed by calling `resume` and providing the required `resumeData`. You can either explicitly specify which step to resume from, or when exactly one step is suspended, omit the `step` parameter and the workflow will automatically resume that step.
+const midnight = new Date();
+midnight.setUTCHours(24, 0, 0, 0);
+setTimeout(handleResume, midnight.getTime() - Date.now());
+```
 
-```typescript {16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { mastra } from "./mastra";
+## Identifying suspended executions
 
-const run = await mastra.getWorkflow("testWorkflow").createRun();
+When a workflow is suspended, it restarts from the step where it paused. You can check the workflow's `status` to confirm it's suspended, and use `suspended` to identify the paused step or [nested workflow](/docs/v1/workflows/overview#workflows-as-steps).
+
+```typescript {11} showLineNumbers copy
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
-    city: "London",
-  },
+    userEmail: "alex@example.com"
+  }
 });
 
-console.log(JSON.stringify(result, null, 2));
-
 if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    step: "step-1",
-    resumeData: {
-      city: "Berlin",
-    },
+  console.log(result.suspended[0]);
+  await run.resume({
+    step: result.suspended[0],
+    resumeData: { approved: true }
   });
-
-  console.log(JSON.stringify(resumedResult, null, 2));
 }
 ```
 
-You can also omit the `step` parameter when exactly one step is suspended:
+**Example output**
 
-```typescript {5} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const resumedResult = await run.resume({
-  resumeData: {
-    city: "Berlin",
-  },
-  // step parameter omitted - automatically resumes the single suspended step
-});
-```
+The `suspended` array contains the IDs of any suspended workflows and steps from the run. These can be passed to the `step` parameter when calling `resume()` to target and resume the suspended execution path.
 
-You can pass `requestContext` as an argument to both the `start` and `resume` commands.
-
-```typescript title="src/mastra/workflows/test-workflow.ts"
-import { RequestContext } from "@mastra/core/request-context";
-
-const requestContext = new RequestContext();
-
-const result = await run.start({
-  step: "step-1",
-  inputData: {
-    city: "London",
-  },
-  requestContext,
-});
-
-const resumedResult = await run.resume({
-  step: "step-1",
-  resumeData: {
-    city: "New York",
-  },
-  requestContext,
-});
-```
-
-> See [Request Context](/docs/v1/server-db/request-context) for more information.
-
-### Resuming nested workflows
-
-To resume a suspended nested workflow pass the workflow instance to the `step` parameter of the `resume` function.
-
-```typescript {33-34} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const dowhileWorkflow = createWorkflow({
-  id: "dowhile-workflow",
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ value: z.number() }),
-})
-  .dountil(
-    createWorkflow({
-      id: "simple-resume-workflow",
-      inputSchema: z.object({ value: z.number() }),
-      outputSchema: z.object({ value: z.number() }),
-      steps: [incrementStep, resumeStep],
-    })
-      .then(incrementStep)
-      .then(resumeStep)
-      .commit(),
-    async ({ inputData }) => inputData.value >= 10,
-  )
-  .then(
-    createStep({
-      id: "final",
-      inputSchema: z.object({ value: z.number() }),
-      outputSchema: z.object({ value: z.number() }),
-      execute: async ({ inputData }) => ({ value: inputData.value }),
-    }),
-  )
-  .commit();
-
-const run = await dowhileWorkflow.createRun();
-const result = await run.start({ inputData: { value: 0 } });
-
-if (result.status === "suspended") {
-  const resumedResult = await run.resume({
-    resumeData: { value: 2 },
-    step: ["simple-resume-workflow", "resume"],
-  });
-
-  console.log(JSON.stringify(resumedResult, null, 2));
-}
+```typescript
+[ 'nested-workflow', 'step-1' ]
 ```
 
 ## Sleep & Events
 
-Workflows can also pause execution for timed delays or external events. These methods set the workflow status to `waiting` rather than `suspended`, and are useful for polling, delayed retries, or event-driven processes.
+Sleep and event methods can be used to pause execution at the workflow level, which sets the status to `waiting`. By comparison, `suspend()` pauses execution within a specific step and sets the status to `suspended`.
 
 **Available methods:**
 
@@ -21649,9 +21453,14 @@ Workflows can also pause execution for timed delays or external events. These me
 - [`.waitForEvent()`](/reference/v1/workflows/workflow-methods/waitForEvent): Pause until an external event is received
 - [`.sendEvent()`](/reference/v1/workflows/workflow-methods/sendEvent) : Send an event to resume a waiting workflow
 
+## Related
+
+- [Control Flow](/docs/v1/workflows/control-flow)
+- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+
 
 ---
-title: "Example: AI SDK v5 Integration | Agents | Mastra Docs"
+title: "Example: AI SDK v5 Integration | Agents"
 description: Example of integrating Mastra agents with AI SDK v5 for streaming chat interfaces with memory and tool integration.
 ---
 
@@ -21974,7 +21783,7 @@ pnpm dev
 
 
 ---
-title: "Example: Calling Agents | Agents | Mastra Docs"
+title: "Example: Calling Agents | Agents"
 description: Example for how to call agents.
 ---
 
@@ -22091,7 +21900,7 @@ Plus, it's where we plan all our adventures!
 
 
 ---
-title: "Example: Deploying an MCPServer | Agents | Mastra Docs"
+title: "Example: Deploying an MCPServer | Agents"
 description: Example of setting up, building, and deploying a Mastra MCPServer using the stdio transport and publishing it to NPM.
 ---
 
@@ -22199,7 +22008,7 @@ Note: If you published without an organization scope, the `args` might just be `
 
 
 ---
-title: "Example: Image Analysis | Agents | Mastra Docs"
+title: "Example: Image Analysis | Agents"
 description: Example of using a Mastra AI Agent to analyze images from Unsplash to identify objects, determine species, and describe locations.
 ---
 
@@ -22331,7 +22140,7 @@ console.log(response.text);
 
 
 ---
-title: "Example: Request Context | Agents | Mastra Docs"
+title: "Example: Request Context | Agents"
 description: Learn how to create and configure dynamic agents using request context to adapt behavior based on user subscription tiers.
 ---
 
@@ -22626,7 +22435,7 @@ This request context approach provides:
 
 
 ---
-title: "Example: Supervisor Agent | Agents | Mastra Docs"
+title: "Example: Supervisor Agent | Agents"
 description: Example of creating a supervisor agent using Mastra, where agents interact through tool functions.
 ---
 
@@ -22812,7 +22621,7 @@ console.log(response.text);
 
 
 ---
-title: "Example: Changing the System Prompt | Agents | Mastra Docs"
+title: "Example: Changing the System Prompt | Agents"
 description: Example of creating an AI agent in Mastra with a system prompt to define its personality and capabilities.
 ---
 
@@ -22925,7 +22734,7 @@ console.log(response.text);
 
 
 ---
-title: "Example: WhatsApp Chat Bot | Agents | Mastra Docs"
+title: "Example: WhatsApp Chat Bot | Agents"
 description: Example of creating a WhatsApp chat bot using Mastra agents and workflows to handle incoming messages and respond naturally via text messages.
 ---
 
@@ -23351,7 +23160,7 @@ The bot maintains conversation context through memory and delivers responses tha
 
 
 ---
-title: "Example: Running Scorers in CI | Evals | Mastra Docs"
+title: "Example: Running Scorers in CI | Evals"
 description: Example of using runEvals to test agents in a CI/CD pipeline with Vitest.
 ---
 
@@ -23716,7 +23525,7 @@ You can assert on these values in your tests to ensure your agent meets quality 
 
 
 ---
-title: "Examples List: Workflows, Agents, RAG | Mastra Docs"
+title: "Examples List: Workflows, Agents, RAG"
 description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
 ---
 
@@ -23866,7 +23675,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
 
 
 ---
-title: "Example: Working Memory with Schema | Memory | Mastra Docs"
+title: "Example: Working Memory with Schema | Memory"
 description: Example showing how to use Zod schema to structure and validate working memory data.
 ---
 
@@ -24065,7 +23874,7 @@ Working memory stores data in `.json` format, which would look similar to the be
 
 
 ---
-title: "Example: Working Memory with Template | Memory | Mastra Docs"
+title: "Example: Working Memory with Template | Memory"
 description: Example showing how to use Markdown template to structure working memory data.
 ---
 
@@ -24253,7 +24062,7 @@ Working memory stores data in `.json` format, which would look similar to the be
 
 
 ---
-title: "Example: Basic Tracing Example | Observability | Mastra Docs"
+title: "Example: Basic Tracing Example | Observability"
 description: Get started with Tracing in your Mastra application
 ---
 
@@ -24412,7 +24221,7 @@ const result = await agent.generate("What time is it?", {
 
 
 ---
-title: "Example: Message Length Limiter | Processors | Mastra Docs"
+title: "Example: Message Length Limiter | Processors"
 description: Example of creating a custom input processor that limits message length before sending to the language model.
 ---
 
@@ -24732,7 +24541,7 @@ This processor is particularly useful for:
 
 
 ---
-title: "Example: Response Length Limiter | Processors | Mastra Docs"
+title: "Example: Response Length Limiter | Processors"
 description: Example of creating a custom output processor that limits AI response length during streaming to prevent excessively long outputs.
 ---
 
@@ -25052,7 +24861,7 @@ This processor is particularly valuable for applications that need predictable r
 
 
 ---
-title: "Example: Response Validator | Processors | Mastra Docs"
+title: "Example: Response Validator | Processors"
 description: Example of creating a custom output processor that validates AI responses contain required keywords before returning them to users.
 ---
 
@@ -25401,7 +25210,7 @@ This processor is particularly useful for applications that need to guarantee re
 
 
 ---
-title: "Example: Adjust Chunk Delimiters | RAG | Mastra Docs"
+title: "Example: Adjust Chunk Delimiters | RAG"
 description: Adjust chunk delimiters in Mastra to better match your content structure.
 ---
 
@@ -25435,7 +25244,7 @@ const chunks = await doc.chunk({
 
 
 ---
-title: "Example: Adjust Chunk Size | RAG | Mastra Docs"
+title: "Example: Adjust Chunk Size | RAG"
 description: Adjust chunk size in Mastra to better match your content and memory requirements.
 ---
 
@@ -25469,7 +25278,7 @@ const chunks = await doc.chunk({
 
 
 ---
-title: "Example: Semantically Chunking HTML | RAG | Mastra Docs"
+title: "Example: Semantically Chunking HTML | RAG"
 description: Chunk HTML content in Mastra to semantically chunk the document.
 ---
 
@@ -25515,7 +25324,7 @@ console.log(chunks);
 
 
 ---
-title: "Example: Semantically Chunking JSON | RAG | Mastra Docs"
+title: "Example: Semantically Chunking JSON | RAG"
 description: Chunk JSON data in Mastra to semantically chunk the document.
 ---
 
@@ -25557,7 +25366,7 @@ console.log(chunks);
 
 
 ---
-title: "Example: Chunk Markdown | RAG | Mastra Docs"
+title: "Example: Chunk Markdown | RAG"
 description: Example of using Mastra to chunk markdown documents for search or retrieval purposes.
 ---
 
@@ -25589,7 +25398,7 @@ const chunks = await doc.chunk();
 
 
 ---
-title: "Example: Chunk Text | RAG | Mastra Docs"
+title: "Example: Chunk Text | RAG"
 description: Example of using Mastra to split large text documents into smaller chunks for processing.
 ---
 
@@ -25621,7 +25430,7 @@ const chunks = await doc.chunk();
 
 
 ---
-title: "Example: Embed Chunk Array | RAG | Mastra Docs"
+title: "Example: Embed Chunk Array | RAG"
 description: Example of using Mastra to generate embeddings for an array of text chunks for similarity search.
 ---
 
@@ -25660,7 +25469,7 @@ const { embeddings } = await embedMany({
 
 
 ---
-title: "Example: Embed Text Chunk | RAG | Mastra Docs"
+title: "Example: Embed Text Chunk | RAG"
 description: Example of using Mastra to generate an embedding for a single text chunk for similarity search.
 ---
 
@@ -25699,7 +25508,7 @@ const { embedding } = await embed({
 
 
 ---
-title: "Example: Embed Text with Cohere | RAG | Mastra Docs"
+title: "Example: Embed Text with Cohere | RAG"
 description: Example of using Mastra to generate embeddings using Cohere's embedding model.
 ---
 
@@ -25738,7 +25547,7 @@ const { embeddings } = await embedMany({
 
 
 ---
-title: "Example: Metadata Extraction | RAG | Mastra Docs"
+title: "Example: Metadata Extraction | RAG"
 description: Example of extracting and utilizing metadata from documents in Mastra for enhanced document processing and retrieval.
 ---
 
@@ -25862,7 +25671,7 @@ console.log("Chunk Metadata:", metaTwo);
 
 
 ---
-title: "Example: Hybrid Vector Search | RAG | Mastra Docs"
+title: "Example: Hybrid Vector Search | RAG"
 description: Example of using metadata filters with PGVector to enhance vector search results in Mastra.
 ---
 
@@ -25962,7 +25771,7 @@ console.log("Results:", result);
 
 
 ---
-title: "Example: Retrieving Top-K Results | RAG | Mastra Docs"
+title: "Example: Retrieving Top-K Results | RAG"
 description: Example of using Mastra to query a vector database and retrieve semantically similar chunks.
 ---
 
@@ -26032,7 +25841,7 @@ console.log(results);
 
 
 ---
-title: "Example: Re-ranking Results with Tools | RAG | Mastra Docs"
+title: "Example: Re-ranking Results with Tools | RAG"
 description: Example of implementing a RAG system with re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -26227,7 +26036,7 @@ console.log("Response:", answerThree.text);
 
 
 ---
-title: "Example: Re-ranking Results | RAG | Mastra Docs"
+title: "Example: Re-ranking Results | RAG"
 description: Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -26412,7 +26221,7 @@ The re-ranked results show how combining vector similarity with semantic underst
 
 
 ---
-title: "Example: Reranking with Cohere | RAG | Mastra Docs"
+title: "Example: Reranking with Cohere | RAG"
 description: Example of using Mastra to improve document retrieval relevance with Cohere's reranking service.
 ---
 
@@ -26451,7 +26260,7 @@ const results = rerank({
 
 
 ---
-title: "Example: Reranking with ZeroEntropy | RAG | Mastra Docs"
+title: "Example: Reranking with ZeroEntropy | RAG"
 description: Example of using Mastra to improve document retrieval relevance with ZeroEntropy's reranking service.
 ---
 
@@ -26486,7 +26295,7 @@ const results = rerank({
 
 
 ---
-title: "Example: Upsert Embeddings | RAG | Mastra Docs"
+title: "Example: Upsert Embeddings | RAG"
 description: Examples of using Mastra to store embeddings in various vector databases for similarity search.
 ---
 
@@ -27007,7 +26816,7 @@ await lance.upsert({
 
 
 ---
-title: "Example: Using the Vector Query Tool | RAG | Mastra Docs"
+title: "Example: Using the Vector Query Tool | RAG"
 description: Example of implementing a basic RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -27125,7 +26934,7 @@ console.log(completion.text);
 
 
 ---
-title: "Example: Optimizing Information Density | RAG | Mastra Docs"
+title: "Example: Optimizing Information Density | RAG"
 description: Example of implementing a RAG system in Mastra to optimize information density and deduplicate data using LLM-based processing.
 ---
 
@@ -27355,7 +27164,7 @@ console.log("Response:", cleanedResponse.text);
 
 
 ---
-title: "Example: Chain of Thought Prompting | RAG | Mastra Docs"
+title: "Example: Chain of Thought Prompting | RAG"
 description: Example of implementing a RAG system in Mastra with chain-of-thought reasoning using OpenAI and PGVector.
 ---
 
@@ -27545,7 +27354,7 @@ console.log("Response:", answerThree.text);
 
 
 ---
-title: "Example: Structured Reasoning with Workflows | RAG | Mastra Docs"
+title: "Example: Structured Reasoning with Workflows | RAG"
 description: Example of implementing structured reasoning in a RAG system using Mastra's workflow capabilities.
 ---
 
@@ -27896,7 +27705,7 @@ console.log(workflowResult.results);
 
 
 ---
-title: "Example: Database-Specific Configurations | RAG | Mastra Docs"
+title: "Example: Database-Specific Configurations | RAG"
 description: Learn how to use database-specific configurations to optimize vector search performance and leverage unique features of different vector stores.
 ---
 
@@ -28367,7 +28176,7 @@ This approach allows you to optimize vector search for your specific use case wh
 
 
 ---
-title: "Example: Agent-Driven Metadata Filtering | RAG | Mastra Docs"
+title: "Example: Agent-Driven Metadata Filtering | RAG"
 description: Example of using a Mastra agent in a RAG system to construct and apply metadata filters for document retrieval.
 ---
 
@@ -28606,7 +28415,7 @@ console.log("Response:", answerThree.text);
 
 
 ---
-title: "Example: Graph RAG | RAG | Mastra Docs"
+title: "Example: Graph RAG | RAG"
 description: Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -28796,7 +28605,7 @@ console.log("Response:", answerFour.text);
 
 
 ---
-title: "Example: Call Analysis with Mastra | Voice | Mastra Docs"
+title: "Example: Call Analysis with Mastra | Voice"
 description: Example of using Mastra to create a speech to speech application.
 ---
 
@@ -29032,7 +28841,7 @@ To view the full example code, see the [Github repository](https://github.com/ma
 
 
 ---
-title: "Example: Smart Voice Memo App | Voice | Mastra Docs"
+title: "Example: Smart Voice Memo App | Voice"
 description: Example of using Mastra to create a speech to text application.
 ---
 
@@ -29127,7 +28936,7 @@ You can view the complete implementation of the Smart Voice Memo App on our GitH
 
 
 ---
-title: "Example: Interactive Story Generator | Voice | Mastra Docs"
+title: "Example: Interactive Story Generator | Voice"
 description: Example of using Mastra to create a text to speech application.
 ---
 
@@ -29290,7 +29099,7 @@ You can view the complete implementation of the Interactive Story Generator on o
 
 
 ---
-title: "Example: AI Debate with Turn Taking | Voice | Mastra Docs"
+title: "Example: AI Debate with Turn Taking | Voice"
 description: Example of using Mastra to create a multi-agent debate with turn-taking conversation flow.
 ---
 
@@ -29767,7 +29576,7 @@ You can view the complete implementation of the AI Debate with Turn Taking on ou
 
 
 ---
-title: "Example: Inngest Workflow | Workflows | Mastra Docs"
+title: "Example: Inngest Workflow | Workflows"
 description: Example of building an inngest workflow with Mastra
 ---
 
@@ -35820,7 +35629,7 @@ Gateway providers aggregate multiple model providers and add features like cachi
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="121 models"
+      description="122 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -35934,7 +35743,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 121 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 122 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -36007,6 +35816,7 @@ ANTHROPIC_API_KEY=ant-...
 | `google/gemma-3-27b-it` |
 | `google/gemma-3n-e4b-it` |
 | `google/gemma-3n-e4b-it:free` |
+| `kwaipilot/kat-coder-pro:free` |
 | `meta-llama/llama-3.2-11b-vision-instruct` |
 | `meta-llama/llama-3.3-70b-instruct:free` |
 | `meta-llama/llama-4-scout:free` |
@@ -36238,7 +36048,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 49+ AI providers and 889+ models through Mastra's model router."
+description: "Access 49+ AI providers and 890+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36251,7 +36061,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 889 models from 49 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 890 models from 49 providers through a single API.
 
 ## Features
 
@@ -49227,7 +49037,7 @@ const agent = new Agent({
 
 
 ---
-title: "Reference: Agent Class | Agents | Mastra Docs"
+title: "Reference: Agent Class | Agents"
 description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
 ---
 
@@ -49478,7 +49288,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Agent.generate() | Agents | Mastra Docs"
+title: "Reference: Agent.generate() | Agents"
 description: "Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities."
 ---
 
@@ -50164,7 +49974,7 @@ const aiSdkResult = await agent.generate("message for agent", {
 
 
 ---
-title: "Reference: Agent.generateLegacy() (Legacy) | Agents | Mastra Docs"
+title: "Reference: Agent.generateLegacy() (Legacy) | Agents"
 description: "Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
 ---
 
@@ -50777,7 +50587,7 @@ await agent.generateLegacy(
 
 
 ---
-title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents | Mastra Docs"
+title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents"
 description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls."
 ---
 
@@ -50855,7 +50665,7 @@ await agent.getDefaultGenerateOptionsLegacy({
 
 
 ---
-title: "Reference: Agent.getDefaultOptions() | Agents | Mastra Docs"
+title: "Reference: Agent.getDefaultOptions() | Agents"
 description: "Documentation for the `Agent.getDefaultOptions()` method in Mastra agents, which retrieves the default options used for stream and generate calls."
 ---
 
@@ -50927,7 +50737,7 @@ await agent.getDefaultOptions({
 
 
 ---
-title: "Reference: Agent.getDefaultStreamOptionsLegacy() | Agents | Mastra Docs"
+title: "Reference: Agent.getDefaultStreamOptionsLegacy() | Agents"
 description: "Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls."
 ---
 
@@ -51005,7 +50815,7 @@ await agent.getDefaultStreamOptionsLegacy({
 
 
 ---
-title: "Reference: Agent.getDescription() | Agents | Mastra Docs"
+title: "Reference: Agent.getDescription() | Agents"
 description: "Documentation for the `Agent.getDescription()` method in Mastra agents, which retrieves the agent's description."
 ---
 
@@ -51043,7 +50853,7 @@ This method takes no parameters.
 
 
 ---
-title: "Reference: Agent.getInstructions() | Agents | Mastra Docs"
+title: "Reference: Agent.getInstructions() | Agents"
 description: "Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
 ---
 
@@ -51115,7 +50925,7 @@ await agent.getInstructions({
 
 
 ---
-title: "Reference: Agent.getLLM() | Agents | Mastra Docs"
+title: "Reference: Agent.getLLM() | Agents"
 description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance."
 ---
 
@@ -51196,7 +51006,7 @@ await agent.getLLM({
 
 
 ---
-title: "Reference: Agent.getMemory() | Agents | Mastra Docs"
+title: "Reference: Agent.getMemory() | Agents"
 description: "Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent."
 ---
 
@@ -51268,7 +51078,7 @@ await agent.getMemory({
 
 
 ---
-title: "Reference: Agent.getModel() | Agents | Mastra Docs"
+title: "Reference: Agent.getModel() | Agents"
 description: "Documentation for the `Agent.getModel()` method in Mastra agents, which retrieves the language model that powers the agent."
 ---
 
@@ -51340,7 +51150,7 @@ await agent.getModel({
 
 
 ---
-title: "Reference: Agent.getVoice() | Agents | Mastra Docs"
+title: "Reference: Agent.getVoice() | Agents"
 description: "Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities."
 ---
 
@@ -51412,7 +51222,7 @@ await agent.getVoice({
 
 
 ---
-title: "Reference: Agent.listAgents() | Agents | Mastra Docs"
+title: "Reference: Agent.listAgents() | Agents"
 description: "Documentation for the `Agent.listAgents()` method in Mastra agents, which retrieves the sub-agents that the agent can access."
 ---
 
@@ -51485,7 +51295,7 @@ await agent.listAgents({
 
 
 ---
-title: "Reference: Agent.listScorers() | Agents | Mastra Docs"
+title: "Reference: Agent.listScorers() | Agents"
 description: "Documentation for the `Agent.listScorers()` method in Mastra agents, which retrieves the scoring configuration."
 ---
 
@@ -51557,7 +51367,7 @@ await agent.listScorers({
 
 
 ---
-title: "Reference: Agent.listTools() | Agents | Mastra Docs"
+title: "Reference: Agent.listTools() | Agents"
 description: "Documentation for the `Agent.listTools()` method in Mastra agents, which retrieves the tools that the agent can use."
 ---
 
@@ -51629,7 +51439,7 @@ await agent.listTools({
 
 
 ---
-title: "Reference: Agent.listWorkflows() | Agents | Mastra Docs"
+title: "Reference: Agent.listWorkflows() | Agents"
 description: "Documentation for the `Agent.listWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute."
 ---
 
@@ -51701,7 +51511,7 @@ await agent.listWorkflows({
 
 
 ---
-title: "Reference: Agent.network() | Agents | Mastra Docs"
+title: "Reference: Agent.network() | Agents"
 description: "Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing."
 ---
 
@@ -52050,7 +51860,7 @@ await agent.network(`
 
 
 ---
-title: "Reference: MastraAuthAuth0 Class | Auth | Mastra Docs"
+title: "Reference: MastraAuthAuth0 Class | Auth"
 description: "API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
 ---
 
@@ -52174,7 +51984,7 @@ The exact properties available depend on your Auth0 configuration, scopes reques
 
 
 ---
-title: "Reference: MastraAuthClerk Class | Auth | Mastra Docs"
+title: "Reference: MastraAuthClerk Class | Auth"
 description: "API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
 ---
 
@@ -52251,7 +52061,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Reference: MastraAuthFirebase Class | Auth | Mastra Docs"
+title: "Reference: MastraAuthFirebase Class | Auth"
 description: "API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
 ---
 
@@ -52389,7 +52199,7 @@ The `FirebaseUser` type used in the `authorizeUser` function corresponds to Fire
 
 
 ---
-title: "Reference: MastraJwtAuth Class | Auth | Mastra Docs"
+title: "Reference: MastraJwtAuth Class | Auth"
 description: "API reference for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
 ---
 
@@ -52434,7 +52244,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Reference: MastraAuthSupabase Class | Auth | Mastra Docs"
+title: "Reference: MastraAuthSupabase Class | Auth"
 description: "API reference for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
 ---
 
@@ -52502,7 +52312,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Reference: MastraAuthWorkos Class | Auth | Mastra Docs"
+title: "Reference: MastraAuthWorkos Class | Auth"
 description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
 ---
 
@@ -52637,7 +52447,7 @@ The properties with `urn:myapp:` prefixes are custom claims configured in your W
 
 
 ---
-title: "Reference: create-mastra | CLI | Mastra Docs"
+title: "Reference: create-mastra | CLI"
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
 ---
 
@@ -52834,7 +52644,7 @@ MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@beta
 
 
 ---
-title: "Reference: CLI Commands | CLI | Mastra Docs"
+title: "Reference: CLI Commands | CLI"
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 ---
 
@@ -53095,7 +52905,7 @@ MASTRA_TELEMETRY_DISABLED=1 mastra dev
 
 
 ---
-title: "Reference: Agents API | Client SDK | Mastra Docs"
+title: "Reference: Agents API | Client SDK"
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
 ---
 
@@ -53319,7 +53129,7 @@ const response = await agent.generate("Hello, how are you?", {
 
 
 ---
-title: "Reference: Error Handling | Client SDK | Mastra Docs"
+title: "Reference: Error Handling | Client SDK"
 description: Learn about the built-in retry mechanism and error handling capabilities in the Mastra client-js SDK.
 ---
 
@@ -53345,7 +53155,7 @@ try {
 
 
 ---
-title: "Reference: Logs API | Client SDK | Mastra Docs"
+title: "Reference: Logs API | Client SDK"
 description: Learn how to access and query system logs and debugging information in Mastra using the client-js SDK.
 ---
 
@@ -53377,7 +53187,7 @@ const runLogs = await mastraClient.getLogForRun({
 
 
 ---
-title: "Reference: Mastra Client SDK | Client SDK | Mastra Docs"
+title: "Reference: Mastra Client SDK | Client SDK"
 description: Learn how to interact with Mastra using the client-js SDK.
 ---
 
@@ -53545,7 +53355,7 @@ export const mastraClient = new MastraClient({
 
 
 ---
-title: "Reference: Memory API | Client SDK | Mastra Docs"
+title: "Reference: Memory API | Client SDK"
 description: Learn how to manage conversation threads and message history in Mastra using the client-js SDK.
 ---
 
@@ -53690,7 +53500,7 @@ const status = await mastraClient.getMemoryStatus("agent-id");
 
 
 ---
-title: "Reference: Observability API | Client SDK | Mastra Docs"
+title: "Reference: Observability API | Client SDK"
 description: Learn how to retrieve traces, monitor application performance, and score traces using the client-js SDK.
 ---
 
@@ -53770,7 +53580,7 @@ const scores = await mastraClient.listScoresBySpan({
 
 
 ---
-title: "Reference: Telemetry API | Client SDK | Mastra Docs"
+title: "Reference: Telemetry API | Client SDK"
 description: Learn how to retrieve and analyze traces from your Mastra application for monitoring and debugging using the client-js SDK.
 ---
 
@@ -53798,7 +53608,7 @@ const telemetry = await mastraClient.getTelemetry({
 
 
 ---
-title: "Reference: Tools API | Client SDK | Mastra Docs"
+title: "Reference: Tools API | Client SDK"
 description: Learn how to interact with and execute tools available in the Mastra platform using the client-js SDK.
 ---
 
@@ -53850,7 +53660,7 @@ const result = await tool.execute({
 
 
 ---
-title: "Reference: Vectors API | Client SDK | Mastra Docs"
+title: "Reference: Vectors API | Client SDK"
 description: Learn how to work with vector embeddings for semantic search and similarity matching in Mastra using the client-js SDK.
 ---
 
@@ -53937,7 +53747,7 @@ const result = await vector.delete("index-name");
 
 
 ---
-title: "Reference: Workflows API | Client SDK | Mastra Docs"
+title: "Reference: Workflows API | Client SDK"
 description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
 ---
 
@@ -54087,7 +53897,7 @@ A workflow run result yields the following:
 
 
 ---
-title: "Reference: Mastra.getAgent() | Core | Mastra Docs"
+title: "Reference: Mastra.getAgent() | Core"
 description: "Documentation for the `Agent.getAgent()` method in Mastra, which retrieves an agent by name."
 ---
 
@@ -54134,7 +53944,7 @@ mastra.getAgent("testAgent");
 
 
 ---
-title: "Reference: Mastra.getAgentById() | Core | Mastra Docs"
+title: "Reference: Mastra.getAgentById() | Core"
 description: "Documentation for the `Mastra.getAgentById()` method in Mastra, which retrieves an agent by its ID."
 ---
 
@@ -54181,7 +53991,7 @@ mastra.getAgentById("test-agent-123");
 
 
 ---
-title: "Reference: Mastra.getDeployer() | Core | Mastra Docs"
+title: "Reference: Mastra.getDeployer() | Core"
 description: "Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance."
 ---
 
@@ -54220,7 +54030,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: Mastra.getLogger() | Core | Mastra Docs"
+title: "Reference: Mastra.getLogger() | Core"
 description: "Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance."
 ---
 
@@ -54259,7 +54069,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: Mastra.getMCPServer() | Core | Mastra Docs"
+title: "Reference: Mastra.getMCPServer() | Core"
 description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version."
 ---
 
@@ -54330,7 +54140,7 @@ const serverById = mastra.getMCPServerById('my-mcp-server');
 
 
 ---
-title: "Reference: Mastra.getMCPServerById() | Core | Mastra Docs"
+title: "Reference: Mastra.getMCPServerById() | Core"
 description: "Documentation for the `Mastra.getMCPServerById()` method in Mastra, which retrieves a specific MCP server instance by its intrinsic id property."
 ---
 
@@ -54414,7 +54224,7 @@ const serverByKey = mastra.getMCPServer('customKey');
 
 
 ---
-title: "Reference: getScorer() | Core | Mastra Docs"
+title: "Reference: getScorer() | Core"
 description: "Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key."
 ---
 
@@ -54495,7 +54305,7 @@ try {
 
 
 ---
-title: "Reference: getScorerById() | Core | Mastra Docs"
+title: "Reference: getScorerById() | Core"
 description: "Documentation for the `getScorerById()` method in Mastra, which retrieves a scorer by its id property rather than registration key."
 ---
 
@@ -54577,7 +54387,7 @@ try {
 
 
 ---
-title: "Reference: Mastra.getServer() | Core | Mastra Docs"
+title: "Reference: Mastra.getServer() | Core"
 description: "Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration."
 ---
 
@@ -54616,7 +54426,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: Mastra.getStorage() | Core | Mastra Docs"
+title: "Reference: Mastra.getStorage() | Core"
 description: "Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance."
 ---
 
@@ -54655,7 +54465,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: Mastra.getTelemetry() | Core | Mastra Docs"
+title: "Reference: Mastra.getTelemetry() | Core"
 description: "Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance."
 ---
 
@@ -54694,7 +54504,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: Mastra.getVector() | Core | Mastra Docs"
+title: "Reference: Mastra.getVector() | Core"
 description: "Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name."
 ---
 
@@ -54742,7 +54552,7 @@ mastra.getVector("testVectorStore");
 
 
 ---
-title: "Reference: Mastra.getWorkflow() | Core | Mastra Docs"
+title: "Reference: Mastra.getWorkflow() | Core"
 description: "Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID."
 ---
 
@@ -54796,7 +54606,7 @@ mastra.getWorkflow("testWorkflow");
 
 
 ---
-title: "Reference: Mastra.listAgents() | Core | Mastra Docs"
+title: "Reference: Mastra.listAgents() | Core"
 description: "Documentation for the `Mastra.listAgents()` method in Mastra, which retrieves all configured agents."
 ---
 
@@ -54834,7 +54644,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: Mastra.listLogs() | Core | Mastra Docs"
+title: "Reference: Mastra.listLogs() | Core"
 description: "Documentation for the `Mastra.listLogs()` method in Mastra, which retrieves all logs for a specific transport ID."
 ---
 
@@ -54933,7 +54743,7 @@ mastra.listLogs("456");
 
 
 ---
-title: "Reference: Mastra.listLogsByRunId() | Core | Mastra Docs"
+title: "Reference: Mastra.listLogsByRunId() | Core"
 description: "Documentation for the `Mastra.listLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID."
 ---
 
@@ -55023,7 +54833,7 @@ mastra.listLogsByRunId({ runId: "123", transportId: "456" });
 
 
 ---
-title: "Reference: Mastra.listMCPServers() | Core | Mastra Docs"
+title: "Reference: Mastra.listMCPServers() | Core"
 description: "Documentation for the `Mastra.listMCPServers()` method in Mastra, which retrieves all registered MCP server instances."
 ---
 
@@ -55091,7 +54901,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: listScorers() | Core | Mastra Docs"
+title: "Reference: listScorers() | Core"
 description: "Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
 ---
 
@@ -55137,7 +54947,7 @@ This method takes no parameters.
 
 
 ---
-title: "Reference: Mastra.listVectors() | Core | Mastra Docs"
+title: "Reference: Mastra.listVectors() | Core"
 description: "Documentation for the `Mastra.listVectors()` method in Mastra, which retrieves all configured vector stores."
 ---
 
@@ -55176,7 +54986,7 @@ This method does not accept any parameters.
 
 
 ---
-title: "Reference: Mastra.listWorkflows() | Core | Mastra Docs"
+title: "Reference: Mastra.listWorkflows() | Core"
 description: "Documentation for the `Mastra.listWorkflows()` method in Mastra, which retrieves all configured workflows."
 ---
 
@@ -55224,7 +55034,7 @@ mastra.listWorkflows();
 
 
 ---
-title: "Reference: Mastra Class | Core | Mastra Docs"
+title: "Reference: Mastra Class | Core"
 description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
 ---
 
@@ -55371,7 +55181,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Reference: Mastra.setLogger() | Core | Mastra Docs"
+title: "Reference: Mastra.setLogger() | Core"
 description: "Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.)."
 ---
 
@@ -55423,7 +55233,7 @@ This method does not return a value.
 
 
 ---
-title: "Reference: Mastra.setStorage() | Core | Mastra Docs"
+title: "Reference: Mastra.setStorage() | Core"
 description: "Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance."
 ---
 
@@ -55466,7 +55276,7 @@ This method does not return a value.
 
 
 ---
-title: "Reference: Mastra.setTelemetry() | Core | Mastra Docs"
+title: "Reference: Mastra.setTelemetry() | Core"
 description: "Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components."
 ---
 
@@ -55505,7 +55315,7 @@ This method does not return a value.
 
 
 ---
-title: "Reference: CloudflareDeployer | Deployer | Mastra Docs"
+title: "Reference: CloudflareDeployer | Deployer"
 description: "Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers."
 ---
 
@@ -55603,7 +55413,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Reference: Deployer | Deployer | Mastra Docs"
+title: "Reference: Deployer | Deployer"
 description: Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
 asIndexPage: true
 ---
@@ -55766,7 +55576,7 @@ The Deployer class extends the Bundler class, establishing a clear relationship 
 
 
 ---
-title: "Reference: NetlifyDeployer | Deployer | Mastra Docs"
+title: "Reference: NetlifyDeployer | Deployer"
 description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions."
 ---
 
@@ -55789,7 +55599,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Reference: VercelDeployer | Deployer | Mastra Docs"
+title: "Reference: VercelDeployer | Deployer"
 description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
 ---
 
@@ -55838,7 +55648,7 @@ export const mastra = new Mastra({
 
 
 ---
-title: "Reference: Answer Relevancy Scorer | Evals | Mastra Docs"
+title: "Reference: Answer Relevancy Scorer | Evals"
 description: Documentation for the Answer Relevancy Scorer in Mastra, which evaluates how well LLM outputs address the input query.
 ---
 
@@ -56068,7 +55878,7 @@ The output receives a score of 0 because it fails to answer the query or provide
 
 
 ---
-title: "Reference: Answer Similarity Scorer | Evals | Mastra Docs"
+title: "Reference: Answer Similarity Scorer | Evals"
 description: Documentation for the Answer Similarity Scorer in Mastra, which compares agent outputs against ground truth answers for CI/CD testing.
 ---
 
@@ -56510,7 +56320,7 @@ console.log("Lenient scorer:", result.scores["Answer Similarity Scorer"].score);
 
 
 ---
-title: "Reference: Bias Scorer | Evals | Mastra Docs"
+title: "Reference: Bias Scorer | Evals"
 description: Documentation for the Bias Scorer in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
 ---
 
@@ -56741,7 +56551,7 @@ The output receives a low score because it does not exhibit biased language or r
 
 
 ---
-title: "Reference: Completeness Scorer | Evals | Mastra Docs"
+title: "Reference: Completeness Scorer | Evals"
 description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
 ---
 
@@ -56958,7 +56768,7 @@ The output receives a low score because it only briefly mentions cost and enviro
 
 
 ---
-title: "Reference: Content Similarity Scorer | Evals | Mastra Docs"
+title: "Reference: Content Similarity Scorer | Evals"
 description: Documentation for the Content Similarity Scorer in Mastra, which measures textual similarity between strings and provides a matching score.
 ---
 
@@ -57158,7 +56968,7 @@ A similarity score between 0 and 1:
 
 
 ---
-title: "Reference: Context Precision Scorer | Evals | Mastra Docs"
+title: "Reference: Context Precision Scorer | Evals"
 description: Documentation for the Context Precision Scorer in Mastra. Evaluates the relevance and precision of retrieved context for generating expected outputs using Mean Average Precision.
 ---
 
@@ -57513,7 +57323,7 @@ Choose the right scorer for your needs:
 
 
 ---
-title: "Reference: Context Relevance Scorer | Evals | Mastra Docs"
+title: "Reference: Context Relevance Scorer | Evals"
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
 ---
 
@@ -58131,7 +57941,7 @@ Choose the right scorer for your needs:
 
 
 ---
-title: "Reference: createScorer | Evals | Mastra Docs"
+title: "Reference: createScorer | Evals"
 description: Documentation for creating custom scorers in Mastra, allowing users to define their own evaluation logic using either JavaScript functions or LLM-based prompts.
 ---
 
@@ -58670,7 +58480,7 @@ All step functions can be async.
 
 
 ---
-title: "Reference: Faithfulness Scorer | Evals | Mastra Docs"
+title: "Reference: Faithfulness Scorer | Evals"
 description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
 ---
 
@@ -58914,7 +58724,7 @@ Each claim is inaccurate or conflicts with the context, resulting in a score of 
 
 
 ---
-title: "Reference: Hallucination Scorer | Evals | Mastra Docs"
+title: "Reference: Hallucination Scorer | Evals"
 description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 ---
 
@@ -59169,7 +58979,7 @@ The Scorer assigns a score of 1 because every statement in the response conflict
 
 
 ---
-title: "Reference: Keyword Coverage Scorer | Evals | Mastra Docs"
+title: "Reference: Keyword Coverage Scorer | Evals"
 description: Documentation for the Keyword Coverage Scorer in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
 ---
 
@@ -59401,7 +59211,7 @@ const metric = new KeywordCoverageMetric();
 
 
 ---
-title: "Reference: MastraScorer | Evals | Mastra Docs"
+title: "Reference: MastraScorer | Evals"
 description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
 ---
 
@@ -59594,7 +59404,7 @@ See the [createScorer reference](./create-scorer) for detailed information on de
 
 
 ---
-title: "Reference: Noise Sensitivity Scorer | Evals | Mastra Docs"
+title: "Reference: Noise Sensitivity Scorer | Evals"
 description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
 ---
 
@@ -60414,7 +60224,7 @@ jobs:
 
 
 ---
-title: "Reference: Prompt Alignment Scorer | Evals | Mastra Docs"
+title: "Reference: Prompt Alignment Scorer | Evals"
 description: Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
 ---
 
@@ -61085,7 +60895,7 @@ const result = await scorer.run({
 
 
 ---
-title: "Reference: runEvals | Evals | Mastra Docs"
+title: "Reference: runEvals | Evals"
 description: "Documentation for the runEvals function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
 ---
 
@@ -61312,7 +61122,7 @@ const workflowResult = await runEvals({
 
 
 ---
-title: "Reference: Textual Difference Scorer | Evals | Mastra Docs"
+title: "Reference: Textual Difference Scorer | Evals"
 description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
 ---
 
@@ -61518,7 +61328,7 @@ The scorer returns a low score due to significant differences between the texts.
 
 
 ---
-title: "Reference: Tone Consistency Scorer | Evals | Mastra Docs"
+title: "Reference: Tone Consistency Scorer | Evals"
 description: Documentation for the Tone Consistency Scorer in Mastra, which evaluates emotional tone and sentiment consistency in text.
 ---
 
@@ -61732,7 +61542,7 @@ The scorer returns a low score due to the noticeable differences in emotional to
 
 
 ---
-title: "Reference: Tool Call Accuracy Scorers | Evals | Mastra Docs"
+title: "Reference: Tool Call Accuracy Scorers | Evals"
 description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
 ---
 
@@ -62308,7 +62118,7 @@ console.log("LLM Reason:", llmResult.reason); // Explains why search-tool is les
 
 
 ---
-title: "Reference: Toxicity Scorer | Evals | Mastra Docs"
+title: "Reference: Toxicity Scorer | Evals"
 description: Documentation for the Toxicity Scorer in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 ---
 
@@ -62554,7 +62364,7 @@ The Reference section provides documentation of Mastra's API, including paramete
 
 
 ---
-title: "Reference: PinoLogger | Observability | Mastra Docs"
+title: "Reference: PinoLogger | Observability"
 description: Documentation for PinoLogger, which provides methods to record events at various severity levels.
 ---
 
@@ -62703,7 +62513,7 @@ export const sentryLogger = new PinoLogger({
 
 
 ---
-title: "Reference: Memory.createThread() | Memory | Mastra Docs"
+title: "Reference: Memory.createThread() | Memory"
 description: "Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system."
 ---
 
@@ -62825,7 +62635,7 @@ console.log(response.text);
 
 
 ---
-title: "Reference: Memory.deleteMessages() | Memory | Mastra Docs"
+title: "Reference: Memory.deleteMessages() | Memory"
 description: "Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs."
 ---
 
@@ -62890,7 +62700,7 @@ await memory?.deleteMessages([...messageIds]);
 
 
 ---
-title: "Reference: Memory.getThreadById() | Memory | Mastra Docs"
+title: "Reference: Memory.getThreadById() | Memory"
 description: "Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID."
 ---
 
@@ -62940,7 +62750,7 @@ await memory?.getThreadById({ threadId: "thread-123" });
 
 
 ---
-title: "Reference: Memory.listThreadsByResourceId() | Memory | Mastra Docs"
+title: "Reference: Memory.listThreadsByResourceId() | Memory"
 description: "Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support."
 ---
 
@@ -63053,7 +62863,7 @@ while (hasMorePages) {
 
 
 ---
-title: "Reference: Memory Class | Memory | Mastra Docs"
+title: "Reference: Memory Class | Memory"
 description: "Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage."
 ---
 
@@ -63274,7 +63084,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Memory.query() | Memory | Mastra Docs"
+title: "Reference: Memory.query() | Memory"
 description: "Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
 ---
 
@@ -63466,7 +63276,7 @@ const uiMessages = toAISdkV5Messages(messages);
 
 
 ---
-title: "Reference: Memory.recall() | Memory | Mastra Docs"
+title: "Reference: Memory.recall() | Memory"
 description: "Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
 ---
 
@@ -63654,7 +63464,7 @@ const uiMessages = toAISdkV5Messages(messages);
 
 
 ---
-title: "Reference: Configuration | Observability | Mastra Docs"
+title: "Reference: Configuration | Observability"
 description: Tracing configuration types and registry functions
 ---
 
@@ -63902,7 +63712,7 @@ Shuts down all observability instances and clears the registry.
 
 
 ---
-title: "Reference: ArizeExporter | Observability | Mastra Docs"
+title: "Reference: ArizeExporter | Observability"
 description: Arize exporter for Tracing using OpenInference
 ---
 
@@ -64069,7 +63879,7 @@ The ArizeExporter implements [OpenInference Semantic Conventions](https://github
 
 
 ---
-title: "Reference: BraintrustExporter | Observability | Mastra Docs"
+title: "Reference: BraintrustExporter | Observability"
 description: Braintrust exporter for Tracing
 ---
 
@@ -64187,7 +63997,7 @@ const exporter = new BraintrustExporter({
 
 
 ---
-title: "Reference: CloudExporter | Observability | Mastra Docs"
+title: "Reference: CloudExporter | Observability"
 description: API reference for the CloudExporter
 ---
 
@@ -64373,7 +64183,7 @@ const customExporter = new CloudExporter({
 
 
 ---
-title: "Reference: ConsoleExporter | Observability | Mastra Docs"
+title: "Reference: ConsoleExporter | Observability"
 description: API reference for the ConsoleExporter
 ---
 
@@ -64560,7 +64370,7 @@ const exporterWithLogger = new ConsoleExporter({
 
 
 ---
-title: "Reference: DefaultExporter | Observability | Mastra Docs"
+title: "Reference: DefaultExporter | Observability"
 description: API reference for the DefaultExporter
 ---
 
@@ -64768,7 +64578,7 @@ const customExporter = new DefaultExporter({
 
 
 ---
-title: "Reference: LangfuseExporter | Observability | Mastra Docs"
+title: "Reference: LangfuseExporter | Observability"
 description: Langfuse exporter for Tracing
 ---
 
@@ -64890,7 +64700,7 @@ const exporter = new LangfuseExporter({
 
 
 ---
-title: "Reference: LangSmithExporter | Observability | Mastra Docs"
+title: "Reference: LangSmithExporter | Observability"
 description: LangSmith exporter for Tracing
 ---
 
@@ -65008,7 +64818,7 @@ const exporter = new LangSmithExporter({
 
 
 ---
-title: "Reference: OtelExporter | Observability | Mastra Docs"
+title: "Reference: OtelExporter | Observability"
 description: OpenTelemetry exporter for Tracing
 ---
 
@@ -65380,7 +65190,7 @@ The exporter preserves span hierarchy from Mastra's Tracing:
 
 
 ---
-title: "Reference: Tracing | Observability | Mastra Docs"
+title: "Reference: Tracing | Observability"
 description: Core Tracing classes and methods
 asIndexPage: true
 ---
@@ -65551,7 +65361,7 @@ class CustomObservabilityInstance extends BaseObservabilityInstance {
 
 
 ---
-title: "Reference: Interfaces | Observability | Mastra Docs"
+title: "Reference: Interfaces | Observability"
 description: Tracing type definitions and interfaces
 ---
 
@@ -66267,7 +66077,7 @@ enum InternalSpans {
 
 
 ---
-title: "Reference: SensitiveDataFilter | Observability | Mastra Docs"
+title: "Reference: SensitiveDataFilter | Observability"
 description: API reference for the SensitiveDataFilter processor
 ---
 
@@ -66453,7 +66263,7 @@ Handles nested objects, arrays, and circular references safely.
 
 
 ---
-title: "Reference: Spans | Observability | Mastra Docs"
+title: "Reference: Spans | Observability"
 description: Span interfaces, methods, and lifecycle events
 ---
 
@@ -66848,7 +66658,7 @@ A span that performs no operations. All methods are no-ops:
 
 
 ---
-title: "Reference: Batch Parts Processor | Processors | Mastra Docs"
+title: "Reference: Batch Parts Processor | Processors"
 description: "Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions."
 ---
 
@@ -66967,7 +66777,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Language Detector | Processors | Mastra Docs"
+title: "Reference: Language Detector | Processors"
 description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
 ---
 
@@ -67128,7 +66938,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Moderation Processor | Processors | Mastra Docs"
+title: "Reference: Moderation Processor | Processors"
 description: "Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories."
 ---
 
@@ -67307,7 +67117,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: PII Detector | Processors | Mastra Docs"
+title: "Reference: PII Detector | Processors"
 description: "Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses."
 ---
 
@@ -67494,7 +67304,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Prompt Injection Detector | Processors | Mastra Docs"
+title: "Reference: Prompt Injection Detector | Processors"
 description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
 ---
 
@@ -67631,7 +67441,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: System Prompt Scrubber | Processors | Mastra Docs"
+title: "Reference: System Prompt Scrubber | Processors"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
 ---
 
@@ -67789,7 +67599,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Token Limiter Processor | Processors | Mastra Docs"
+title: "Reference: Token Limiter Processor | Processors"
 description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses."
 ---
 
@@ -67932,7 +67742,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Unicode Normalizer | Processors | Mastra Docs"
+title: "Reference: Unicode Normalizer | Processors"
 description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
 ---
 
@@ -68054,7 +67864,7 @@ export const agent = new Agent({
 
 
 ---
-title: "Reference: Reference: .chunk() | RAG | Mastra Docs"
+title: "Reference: Reference: .chunk() | RAG"
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
 ---
 
@@ -68513,7 +68323,7 @@ interface DocumentNode {
 
 
 ---
-title: "Reference: DatabaseConfig | RAG | Mastra Docs"
+title: "Reference: DatabaseConfig | RAG"
 description: API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
 ---
 
@@ -68868,7 +68678,7 @@ const vectorTool = createVectorQueryTool({
 
 
 ---
-title: "Reference: MDocument | Document Processing | RAG | Mastra Docs"
+title: "Reference: MDocument | Document Processing | RAG"
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
 ---
 
@@ -69002,7 +68812,7 @@ const metadata = doc.getMetadata();
 
 
 ---
-title: "Reference: Embed | RAG | Mastra Docs"
+title: "Reference: Embed | RAG"
 description: Documentation for embedding functionality in Mastra using the AI SDK.
 ---
 
@@ -69173,7 +68983,7 @@ For more detailed information about embeddings in the Vercel AI SDK, see:
 
 
 ---
-title: "Reference: ExtractParams | RAG | Mastra Docs"
+title: "Reference: ExtractParams | RAG"
 description: Documentation for metadata extraction configuration in Mastra.
 ---
 
@@ -69430,7 +69240,7 @@ await doc.extractMetadata({ title: true });
 
 
 ---
-title: "Reference: GraphRAG | RAG | Mastra Docs"
+title: "Reference: GraphRAG | RAG"
 description: Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.
 ---
 
@@ -69619,7 +69429,7 @@ const results = await graphRag.query({
 
 
 ---
-title: "Reference: Metadata Filters | RAG | Mastra Docs"
+title: "Reference: Metadata Filters | RAG"
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
 ---
 
@@ -69969,7 +69779,7 @@ const results = await store.query({
 
 
 ---
-title: "Reference: rerank() | RAG | Mastra Docs"
+title: "Reference: rerank() | RAG"
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 ---
 
@@ -70185,7 +69995,7 @@ The function returns an array of `RerankResult` objects:
 
 
 ---
-title: "Reference: rerankWithScorer() | RAG | Mastra Docs"
+title: "Reference: rerankWithScorer() | RAG"
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
 ---
 
@@ -70401,7 +70211,7 @@ The function returns an array of `RerankResult` objects:
 
 
 ---
-title: "Reference: Cloudflare D1 Storage | Storage | Mastra Docs"
+title: "Reference: Cloudflare D1 Storage | Storage"
 description: Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 ---
 
@@ -70508,7 +70318,7 @@ Tables are created automatically when storage is initialized (and can be isolate
 
 
 ---
-title: "Reference: Cloudflare Storage | Storage | Mastra Docs"
+title: "Reference: Cloudflare Storage | Storage"
 description: Documentation for the Cloudflare KV storage implementation in Mastra.
 ---
 
@@ -70606,7 +70416,7 @@ For Workers deployments, `keyPrefix` is used to isolate data within a namespace;
 
 
 ---
-title: "Reference: DynamoDB Storage | Storage | Mastra Docs"
+title: "Reference: DynamoDB Storage | Storage"
 description: "Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB."
 ---
 
@@ -70805,7 +70615,7 @@ This implementation uses a single-table design pattern with ElectroDB, which off
 
 
 ---
-title: "Reference: LanceDB Storage | Storage | Mastra Docs"
+title: "Reference: LanceDB Storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
 ---
 
@@ -70909,7 +70719,7 @@ LanceStorage provides methods for managing tables:
 
 
 ---
-title: "Reference: LibSQL Storage | Storage | Mastra Docs"
+title: "Reference: LibSQL Storage | Storage"
 description: Documentation for the LibSQL storage implementation in Mastra.
 ---
 
@@ -70988,7 +70798,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 
 ---
-title: "Reference: MongoDB Storage | Storage | Mastra Docs"
+title: "Reference: MongoDB Storage | Storage"
 description: Documentation for the MongoDB storage implementation in Mastra.
 ---
 
@@ -71136,7 +70946,7 @@ const results = await vectorStore.query({
 
 
 ---
-title: "Reference: MSSQL Storage | Storage | Mastra Docs"
+title: "Reference: MSSQL Storage | Storage"
 description: Documentation for the MSSQL storage implementation in Mastra.
 ---
 
@@ -71257,7 +71067,7 @@ This approach is intended for advanced scenarios where low-level access is requi
 
 
 ---
-title: "Reference: PostgreSQL Storage | Storage | Mastra Docs"
+title: "Reference: PostgreSQL Storage | Storage"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 ---
 
@@ -71573,7 +71383,7 @@ PostgreSQL offers different index types optimized for specific scenarios:
 
 
 ---
-title: "Reference: Upstash Storage | Storage | Mastra Docs"
+title: "Reference: Upstash Storage | Storage"
 description: Documentation for the Upstash storage implementation in Mastra.
 ---
 
@@ -71669,7 +71479,7 @@ For optimal performance:
 
 
 ---
-title: "Reference: ChunkType | Streaming | Mastra Docs"
+title: "Reference: ChunkType | Streaming"
 description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
 ---
 
@@ -73000,7 +72810,7 @@ for await (const chunk of stream.fullStream) {
 
 
 ---
-title: "Reference: MastraModelOutput | Streaming | Mastra Docs"
+title: "Reference: MastraModelOutput | Streaming"
 description: "Complete reference for MastraModelOutput - the stream object returned by agent.stream() with streaming and promise-based access to model outputs."
 ---
 
@@ -73480,7 +73290,7 @@ if (stream.error) {
 
 
 ---
-title: "Reference: Agent.stream() | Streaming | Mastra Docs"
+title: "Reference: Agent.stream() | Streaming"
 description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
 ---
 
@@ -74290,7 +74100,7 @@ await agent.stream("message for agent", {
 
 
 ---
-title: "Reference: Agent.streamLegacy() (Legacy) | Streaming | Mastra Docs"
+title: "Reference: Agent.streamLegacy() (Legacy) | Streaming"
 description: "Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
 ---
 
@@ -74879,7 +74689,7 @@ const result = await agent.stream("message", {
 
 
 ---
-title: "Reference: Run.observeStream() | Streaming | Mastra Docs"
+title: "Reference: Run.observeStream() | Streaming"
 description: Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 
@@ -74931,7 +74741,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 
 ---
-title: "Reference: Run.observeStreamVNext() (Experimental) | Streaming | Mastra Docs"
+title: "Reference: Run.observeStreamVNext() (Experimental) | Streaming"
 description: Documentation for the `Run.observeStreamVNext()` method in workflows, which enables reopening the stream of an already active workflow run.
 ---
 
@@ -74981,7 +74791,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 
 ---
-title: "Reference: Run.resumeStreamVNext() (Experimental) | Streaming | Mastra Docs"
+title: "Reference: Run.resumeStreamVNext() (Experimental) | Streaming"
 description: Documentation for the `Run.resumeStreamVNext()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
 ---
 
@@ -75106,7 +74916,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 
 ---
-title: "Reference: Run.stream() | Streaming | Mastra Docs"
+title: "Reference: Run.stream() | Streaming"
 description: Documentation for the `Run.stream()` method in workflows, which allows you to monitor the execution of a workflow run as a stream.
 ---
 
@@ -75243,7 +75053,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 
 ---
-title: "Reference: Run.streamVNext() (Experimental) | Streaming | Mastra Docs"
+title: "Reference: Run.streamVNext() (Experimental) | Streaming"
 description: Documentation for the `Run.streamVNext()` method in workflows, which enables real-time streaming of responses.
 ---
 
@@ -75399,7 +75209,7 @@ The stream emits various event types during workflow execution. Each event has a
 
 
 ---
-title: "Reference: LLM provider API keys (choose one or more) | Templates | Mastra Docs"
+title: "Reference: LLM provider API keys (choose one or more) | Templates"
 description: "Complete guide to creating, using, and contributing Mastra templates"
 ---
 
@@ -75607,7 +75417,7 @@ Templates provide an excellent way to learn Mastra patterns and accelerate devel
 
 
 ---
-title: "Reference: MastraMCPClient (Deprecated) | Tools & MCP | Mastra Docs"
+title: "Reference: MastraMCPClient (Deprecated) | Tools & MCP"
 description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 ---
 
@@ -75946,7 +75756,7 @@ Without `eventSourceInit`, authentication headers specified in `requestInit` won
 
 
 ---
-title: "Reference: createTool() | Tools & MCP | Mastra Docs"
+title: "Reference: createTool() | Tools & MCP"
 description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
 ---
 
@@ -76106,7 +75916,7 @@ The `createTool()` function returns a `Tool` object.
 
 
 ---
-title: "Reference: createDocumentChunkerTool() | Tools & MCP | Mastra Docs"
+title: "Reference: createDocumentChunkerTool() | Tools & MCP"
 description: Documentation for the Document Chunker Tool in Mastra, which splits documents into smaller chunks for efficient processing and retrieval.
 ---
 
@@ -76250,7 +76060,7 @@ The chunker is created as a Mastra tool with the following properties:
 
 
 ---
-title: "Reference: createGraphRAGTool() | Tools & MCP | Mastra Docs"
+title: "Reference: createGraphRAGTool() | Tools & MCP"
 description: Documentation for the Graph RAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
 ---
 
@@ -76515,7 +76325,7 @@ For more information on request context, please see:
 
 
 ---
-title: "Reference: MCPClient | Tools & MCP | Mastra Docs"
+title: "Reference: MCPClient | Tools & MCP"
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
 ---
 
@@ -77354,7 +77164,7 @@ const sseClient = new MCPClient({
 
 
 ---
-title: "Reference: MCPServer | Tools & MCP | Mastra Docs"
+title: "Reference: MCPServer | Tools & MCP"
 description: API Reference for MCPServer - A class for exposing Mastra tools and capabilities as a Model Context Protocol server.
 ---
 
@@ -78582,7 +78392,7 @@ The `extra` object contains:
 
 
 ---
-title: "Reference: createVectorQueryTool() | Tools & MCP | Mastra Docs"
+title: "Reference: createVectorQueryTool() | Tools & MCP"
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
 ---
 
@@ -79200,7 +79010,7 @@ The tool is created with:
 
 
 ---
-title: "Reference: Astra Vector Store | Vectors | Mastra Docs"
+title: "Reference: Astra Vector Store | Vectors"
 description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
 ---
 
@@ -79461,7 +79271,7 @@ Required environment variables:
 
 
 ---
-title: "Reference: Chroma Vector Store | Vectors | Mastra Docs"
+title: "Reference: Chroma Vector Store | Vectors"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
 ---
 
@@ -79892,7 +79702,7 @@ try {
 
 
 ---
-title: "Reference: Couchbase Vector Store | Vectors | Mastra Docs"
+title: "Reference: Couchbase Vector Store | Vectors"
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
 ---
 
@@ -80246,7 +80056,7 @@ try {
 
 
 ---
-title: "Reference: Lance Vector Store | Vectors | Mastra Docs"
+title: "Reference: Lance Vector Store | Vectors"
 description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
 ---
 
@@ -80699,7 +80509,7 @@ try {
 
 
 ---
-title: "Reference: LibSQLVector Store | Vectors | Mastra Docs"
+title: "Reference: LibSQLVector Store | Vectors"
 description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
 ---
 
@@ -81058,7 +80868,7 @@ Common error cases include:
 
 
 ---
-title: "Reference: MongoDB Vector Store | Vectors | Mastra Docs"
+title: "Reference: MongoDB Vector Store | Vectors"
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
 ---
 
@@ -81376,7 +81186,7 @@ try {
 
 
 ---
-title: "Reference: OpenSearch Vector Store | Vectors | Mastra Docs"
+title: "Reference: OpenSearch Vector Store | Vectors"
 description: Documentation for the OpenSearchVector class in Mastra, which provides vector search using OpenSearch.
 ---
 
@@ -81579,7 +81389,7 @@ Deletes specific vector entries by their IDs from the index.
 
 
 ---
-title: "Reference: PG Vector Store | Vectors | Mastra Docs"
+title: "Reference: PG Vector Store | Vectors"
 description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
 ---
 
@@ -82221,7 +82031,7 @@ This design supports advanced use cases but requires careful resource management
 
 
 ---
-title: "Reference: Pinecone Vector Store | Vectors | Mastra Docs"
+title: "Reference: Pinecone Vector Store | Vectors"
 description: Documentation for the PineconeVector class in Mastra, which provides an interface to Pinecone's vector database.
 ---
 
@@ -82510,7 +82320,7 @@ Pinecone supports hybrid search by combining dense and sparse vectors. To use hy
 
 
 ---
-title: "Reference: Qdrant Vector Store | Vectors | Mastra Docs"
+title: "Reference: Qdrant Vector Store | Vectors"
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
 ---
 
@@ -82749,7 +82559,7 @@ try {
 
 
 ---
-title: "Reference: Amazon S3 Vectors Store | Vectors | Mastra Docs"
+title: "Reference: Amazon S3 Vectors Store | Vectors"
 description: Documentation for the S3Vectors class in Mastra, which provides vector search using Amazon S3 Vectors (Preview).
 ---
 
@@ -83146,7 +82956,7 @@ Typical environment variables when wiring your app:
 
 
 ---
-title: "Reference: Turbopuffer Vector Store | Vectors | Mastra Docs"
+title: "Reference: Turbopuffer Vector Store | Vectors"
 description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
 ---
 
@@ -83398,7 +83208,7 @@ try {
 
 
 ---
-title: "Reference: Upstash Vector Store | Vectors | Mastra Docs"
+title: "Reference: Upstash Vector Store | Vectors"
 description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
 ---
 
@@ -83764,7 +83574,7 @@ Required environment variables:
 
 
 ---
-title: "Reference: Cloudflare Vector Store | Vectors | Mastra Docs"
+title: "Reference: Cloudflare Vector Store | Vectors"
 description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
 ---
 
@@ -84065,7 +83875,7 @@ Required environment variables:
 
 
 ---
-title: "Reference: Azure | Voice | Mastra Docs"
+title: "Reference: Azure | Voice"
 description: "Documentation for the AzureVoice class, providing text-to-speech and speech-to-text capabilities using Azure Cognitive Services."
 ---
 
@@ -84286,7 +84096,7 @@ Returns an array of available voice options, where each node contains:
 
 
 ---
-title: "Reference: Cloudflare | Voice | Mastra Docs"
+title: "Reference: Cloudflare | Voice"
 description: "Documentation for the CloudflareVoice class, providing text-to-speech capabilities using Cloudflare Workers AI."
 ---
 
@@ -84443,7 +84253,7 @@ If you need speech-to-text capabilities in addition to text-to-speech, consider 
 
 
 ---
-title: "Reference: CompositeVoice | Voice | Mastra Docs"
+title: "Reference: CompositeVoice | Voice"
 description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
 ---
 
@@ -84590,7 +84400,7 @@ Notes:
 
 
 ---
-title: "Reference: Deepgram | Voice | Mastra Docs"
+title: "Reference: Deepgram | Voice"
 description: "Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages."
 ---
 
@@ -84759,7 +84569,7 @@ Returns a list of available voice options.
 
 
 ---
-title: "Reference: ElevenLabs | Voice | Mastra Docs"
+title: "Reference: ElevenLabs | Voice"
 description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
 ---
 
@@ -84980,7 +84790,7 @@ Returns: `Promise<string>` - A Promise that resolves to the transcribed text
 
 
 ---
-title: "Reference: Google Gemini Live Voice | Voice | Mastra Docs"
+title: "Reference: Google Gemini Live Voice | Voice"
 description: "Documentation for the GeminiLiveVoice class, providing real-time multimodal voice interactions using Google's Gemini Live API with support for both Gemini API and Vertex AI."
 ---
 
@@ -85614,7 +85424,7 @@ voice.on("toolCall", ({ name, args, id }) => {
 
 
 ---
-title: "Reference: Google | Voice | Mastra Docs"
+title: "Reference: Google | Voice"
 description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities."
 ---
 
@@ -85820,7 +85630,7 @@ Returns an array of available voice options, where each node contains:
 
 
 ---
-title: "Reference: MastraVoice | Voice | Mastra Docs"
+title: "Reference: MastraVoice | Voice"
 description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities."
 ---
 
@@ -86236,7 +86046,7 @@ MastraVoice includes built-in telemetry support through the `traced` method, whi
 
 
 ---
-title: "Reference: Murf | Voice | Mastra Docs"
+title: "Reference: Murf | Voice"
 description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
 ---
 
@@ -86492,7 +86302,7 @@ This method is not supported by Murf and will throw an error. Murf does not prov
 
 
 ---
-title: "Reference: OpenAI Realtime Voice | Voice | Mastra Docs"
+title: "Reference: OpenAI Realtime Voice | Voice"
 description: "Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets."
 ---
 
@@ -86871,7 +86681,7 @@ The following voice options are available:
 
 
 ---
-title: "Reference: OpenAI | Voice | Mastra Docs"
+title: "Reference: OpenAI | Voice"
 description: "Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities."
 ---
 
@@ -87043,7 +86853,7 @@ Returns an array of available voice options, where each node contains:
 
 
 ---
-title: "Reference: PlayAI | Voice | Mastra Docs"
+title: "Reference: PlayAI | Voice"
 description: "Documentation for the PlayAI voice implementation, providing text-to-speech capabilities."
 ---
 
@@ -87209,7 +87019,7 @@ This method is not supported by PlayAI and will throw an error. PlayAI does not 
 
 
 ---
-title: "Reference: Sarvam | Voice | Mastra Docs"
+title: "Reference: Sarvam | Voice"
 description: "Documentation for the Sarvam class, providing text-to-speech and speech-to-text capabilities."
 ---
 
@@ -87472,7 +87282,7 @@ Returns: `Promise<Array<{voiceId: SarvamVoiceId}>>`
 
 
 ---
-title: "Reference: Speechify | Voice | Mastra Docs"
+title: "Reference: Speechify | Voice"
 description: "Documentation for the Speechify voice implementation, providing text-to-speech capabilities."
 ---
 
@@ -87622,7 +87432,7 @@ This method is not supported by Speechify and will throw an error. Speechify doe
 
 
 ---
-title: "Reference: voice.addInstructions() | Voice | Mastra Docs"
+title: "Reference: voice.addInstructions() | Voice"
 description: "Documentation for the addInstructions() method available in voice providers, which adds instructions to guide the voice model's behavior."
 ---
 
@@ -87697,7 +87507,7 @@ This method does not return a value.
 
 
 ---
-title: "Reference: voice.addTools() | Voice | Mastra Docs"
+title: "Reference: voice.addTools() | Voice"
 description: "Documentation for the addTools() method available in voice providers, which equips voice models with function calling capabilities."
 ---
 
@@ -87783,7 +87593,7 @@ This method does not return a value.
 
 
 ---
-title: "Reference: voice.answer() | Voice | Mastra Docs"
+title: "Reference: voice.answer() | Voice"
 description: "Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response."
 ---
 
@@ -87855,7 +87665,7 @@ Returns a `Promise<void>` that resolves when the response has been triggered.
 
 
 ---
-title: "Reference: voice.close() | Voice | Mastra Docs"
+title: "Reference: voice.close() | Voice"
 description: "Documentation for the close() method available in voice providers, which disconnects from real-time voice services."
 ---
 
@@ -87914,7 +87724,7 @@ This method does not return a value.
 
 
 ---
-title: "Reference: voice.connect() | Voice | Mastra Docs"
+title: "Reference: voice.connect() | Voice"
 description: "Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication."
 ---
 
@@ -88040,7 +87850,7 @@ await voice.connect();
 
 
 ---
-title: "Reference: Voice Events | Voice | Mastra Docs"
+title: "Reference: Voice Events | Voice"
 description: "Documentation for events emitted by voice providers, particularly for real-time voice interactions."
 ---
 
@@ -88128,7 +87938,7 @@ These events are commonly implemented across real-time voice providers:
 
 
 ---
-title: "Reference: voice.getSpeakers() | Voice Providers | Mastra Docs"
+title: "Reference: voice.getSpeakers() | Voice Providers"
 description: "Documentation for the getSpeakers() method available in voice providers, which retrieves available voice options."
 ---
 
@@ -88422,7 +88232,7 @@ Different voice providers return different metadata for their voices:
 
 
 ---
-title: "Reference: voice.listen() | Voice | Mastra Docs"
+title: "Reference: voice.listen() | Voice"
 description: "Documentation for the listen() method available in all Mastra voice providers, which converts speech to text."
 ---
 
@@ -88626,7 +88436,7 @@ const transcript = await voice.listen(audioStream);
 
 
 ---
-title: "Reference: voice.off() | Voice | Mastra Docs"
+title: "Reference: voice.off() | Voice"
 description: "Documentation for the off() method available in voice providers, which removes event listeners for voice events."
 ---
 
@@ -88703,7 +88513,7 @@ This method does not return a value.
 
 
 ---
-title: "Reference: voice.on() | Voice | Mastra Docs"
+title: "Reference: voice.on() | Voice"
 description: "Documentation for the on() method available in voice providers, which registers event listeners for voice events."
 ---
 
@@ -88838,7 +88648,7 @@ voice.on("speaker", (stream) => {
 
 
 ---
-title: "Reference: voice.send() | Voice | Mastra Docs"
+title: "Reference: voice.send() | Voice"
 description: "Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing."
 ---
 
@@ -88922,7 +88732,7 @@ Returns a `Promise<void>` that resolves when the audio data has been accepted by
 
 
 ---
-title: "Reference: voice.speak() | Voice | Mastra Docs"
+title: "Reference: voice.speak() | Voice"
 description: "Documentation for the speak() method available in all Mastra voice providers, which converts text to speech."
 ---
 
@@ -89131,7 +88941,7 @@ const audioStream = await voice.speak("Hello, world!");
 
 
 ---
-title: "Reference: voice.updateConfig() | Voice | Mastra Docs"
+title: "Reference: voice.updateConfig() | Voice"
 description: "Documentation for the updateConfig() method available in voice providers, which updates the configuration of a voice provider at runtime."
 ---
 
@@ -89226,7 +89036,7 @@ Different voice providers support different configuration options:
 
 
 ---
-title: "Reference: Run.cancel() | Workflows | Mastra Docs"
+title: "Reference: Run.cancel() | Workflows"
 description: Documentation for the `Run.cancel()` method in workflows, which cancels a workflow run.
 ---
 
@@ -89288,7 +89098,7 @@ try {
 
 
 ---
-title: "Reference: Run.resume() | Workflows | Mastra Docs"
+title: "Reference: Run.resume() | Workflows"
 description: Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
 ---
 
@@ -89443,7 +89253,7 @@ if (result.status === "suspended") {
 
 
 ---
-title: "Reference: Run.start() | Workflows | Mastra Docs"
+title: "Reference: Run.start() | Workflows"
 description: Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
 ---
 
@@ -89592,7 +89402,7 @@ const result = await run.start({
 
 
 ---
-title: "Reference: Run Class | Workflows | Mastra Docs"
+title: "Reference: Run Class | Workflows"
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
 ---
 
@@ -89689,7 +89499,7 @@ A workflow run's `status` indicates its current execution state. The possible va
 
 
 ---
-title: "Reference: Step Class | Workflows | Mastra Docs"
+title: "Reference: Step Class | Workflows"
 description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 ---
 
@@ -89850,7 +89660,7 @@ const step1 = createStep({
 
 
 ---
-title: "Reference: Workflow.branch() | Workflows | Mastra Docs"
+title: "Reference: Workflow.branch() | Workflows"
 description: Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.
 ---
 
@@ -89901,7 +89711,7 @@ workflow.branch([
 
 
 ---
-title: "Reference: Workflow.commit() | Workflows | Mastra Docs"
+title: "Reference: Workflow.commit() | Workflows"
 description: Documentation for the `Workflow.commit()` method in workflows, which finalizes the workflow and returns the final result.
 ---
 
@@ -89934,7 +89744,7 @@ workflow.then(step1).commit();
 
 
 ---
-title: "Reference: Workflow.createRun() | Workflows | Mastra Docs"
+title: "Reference: Workflow.createRun() | Workflows"
 description: Documentation for the `Workflow.createRun()` method in workflows, which creates a new workflow run instance.
 ---
 
@@ -89996,7 +89806,7 @@ const result = await run.start({
 
 
 ---
-title: "Reference: Workflow.dountil() | Workflows | Mastra Docs"
+title: "Reference: Workflow.dountil() | Workflows"
 description: Documentation for the `Workflow.dountil()` method in workflows, which creates a loop that executes a step until a condition is met.
 ---
 
@@ -90051,7 +89861,7 @@ workflow.dountil(step1, async ({ inputData }) => true);
 
 
 ---
-title: "Reference: Workflow.dowhile() | Workflows | Mastra Docs"
+title: "Reference: Workflow.dowhile() | Workflows"
 description: Documentation for the `Workflow.dowhile()` method in workflows, which creates a loop that executes a step while a condition is met.
 ---
 
@@ -90106,7 +89916,7 @@ workflow.dowhile(step1, async ({ inputData }) => true);
 
 
 ---
-title: "Reference: Workflow.foreach() | Workflows | Mastra Docs"
+title: "Reference: Workflow.foreach() | Workflows"
 description: Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
 ---
 
@@ -90169,7 +89979,7 @@ workflow.foreach(step1, { concurrency: 2 });
 
 
 ---
-title: "Reference: Workflow.map() | Workflows | Mastra Docs"
+title: "Reference: Workflow.map() | Workflows"
 description: Documentation for the `Workflow.map()` method in workflows, which maps output data from a previous step to the input of a subsequent step.
 ---
 
@@ -90291,7 +90101,7 @@ testWorkflow
 
 
 ---
-title: "Reference: Workflow.parallel() | Workflows | Mastra Docs"
+title: "Reference: Workflow.parallel() | Workflows"
 description: Documentation for the `Workflow.parallel()` method in workflows, which executes multiple steps in parallel.
 ---
 
@@ -90337,7 +90147,7 @@ workflow.parallel([step1, step2]);
 
 
 ---
-title: "Reference: Workflow.sendEvent() | Workflows | Mastra Docs"
+title: "Reference: Workflow.sendEvent() | Workflows"
 description: Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
 ---
 
@@ -90410,7 +90220,7 @@ setTimeout(() => {
 
 
 ---
-title: "Reference: Workflow.sleep() | Workflows | Mastra Docs"
+title: "Reference: Workflow.sleep() | Workflows"
 description: Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
 ---
 
@@ -90475,7 +90285,7 @@ export const testWorkflow = createWorkflow({...})
 
 
 ---
-title: "Reference: Workflow.sleepUntil() | Workflows | Mastra Docs"
+title: "Reference: Workflow.sleepUntil() | Workflows"
 description: Documentation for the `Workflow.sleepUntil()` method in workflows, which pauses execution until a specified date.
 ---
 
@@ -90540,7 +90350,7 @@ export const testWorkflow = createWorkflow({...})
 
 
 ---
-title: "Reference: Workflow.then() | Workflows | Mastra Docs"
+title: "Reference: Workflow.then() | Workflows"
 description: Documentation for the `Workflow.then()` method in workflows, which creates sequential dependencies between steps.
 ---
 
@@ -90587,7 +90397,7 @@ workflow.then(step1).then(step2);
 
 
 ---
-title: "Reference: Workflow.waitForEvent() | Workflows | Mastra Docs"
+title: "Reference: Workflow.waitForEvent() | Workflows"
 description: Documentation for the `Workflow.waitForEvent()` method in workflows, which pauses execution until an event is received.
 ---
 
@@ -90656,7 +90466,7 @@ export const testWorkflow = createWorkflow({...})
 
 
 ---
-title: "Reference: Workflow Class | Workflows | Mastra Docs"
+title: "Reference: Workflow Class | Workflows"
 description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
 ---
 
