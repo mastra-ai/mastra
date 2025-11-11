@@ -3,6 +3,7 @@ import { ReadableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, wrapMastra } from '@mastra/core/observability';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
@@ -45,7 +46,6 @@ import { NonRetriableError, RetryAfterError } from 'inngest';
 import type { Inngest, BaseContext, InngestFunction, RegisterOptions } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import { z } from 'zod';
-import { getErrorFromUnknown } from '@mastra/core/error';
 
 // Extract Inngest's native flow control configuration types
 type InngestCreateFunctionConfig = Parameters<Inngest['createFunction']>[0];
