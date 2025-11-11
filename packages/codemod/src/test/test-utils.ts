@@ -8,6 +8,7 @@ import type { API, FileInfo } from 'jscodeshift';
 import jscodeshift from 'jscodeshift';
 import ts from 'typescript';
 import { expect } from 'vitest';
+import { BUNDLE } from '../lib/bundle';
 
 /**
  * Applies a codemod transform to the input code.
@@ -18,7 +19,7 @@ import { expect } from 'vitest';
  * @returns The transformed code or the original input if no changes were made.
  */
 export function applyTransform(
-  transform: (fileInfo: FileInfo, api: API, options: any) => string | null,
+  transform: (fileInfo: FileInfo, api: API, options: Record<string, unknown>) => string | null,
   input: string,
   options = {},
 ): string {
@@ -194,7 +195,7 @@ export function validateSyntax(code: string, extension: string): void {
  * @param fixtureName - The base name of the fixture to test.
  */
 export function testTransform(
-  transformer: (fileInfo: FileInfo, api: API, options: any) => string | null,
+  transformer: (fileInfo: FileInfo, api: API, options: Record<string, unknown>) => string | null,
   fixtureName: string,
 ) {
   // Read input and output fixtures along with their extensions
@@ -209,6 +210,79 @@ export function testTransform(
 
   // Apply the transformer to the input code
   const actualOutput = applyTransform(transformer, input);
+
+  // Validate that output code is syntactically correct
+  validateSyntax(actualOutput, outputExt);
+
+  if (process.env.UPDATE_SNAPSHOT) {
+    // Update the expected output fixture if the environment variable is set
+    const outputPath = join(__dirname, '__fixtures__', `${fixtureName}.output${outputExt}`);
+    writeFileSync(outputPath, actualOutput, 'utf8');
+  } else {
+    // Compare actual output to expected output
+    expect(actualOutput).toBe(expectedOutput);
+  }
+}
+
+/**
+ * Tests the upgrade command by applying all codemods for a specific version sequentially to the input code.
+ * This simulates running the full upgrade process on a fixture.
+ *
+ * Use this helper to test the complete upgrade flow with all codemods from a specific version.
+ * The codemods are applied in the order defined in the BUNDLE array.
+ *
+ * @example
+ * ```typescript
+ * import { describe, it } from 'vitest';
+ * import { testUpgrade } from './test-utils';
+ *
+ * describe('v1 upgrade', () => {
+ *   it('transforms correctly with all v1 codemods', async () => {
+ *     await testUpgrade('v1', 'kitchen-sink-v1');
+ *   });
+ * });
+ * ```
+ *
+ * @param version - The version to upgrade (e.g., 'v1').
+ * @param fixtureName - The base name of the fixture to test.
+ */
+export async function testUpgrade(version: string, fixtureName: string) {
+  // Read input and output fixtures along with their extensions
+  const { content: input, extension: inputExt } = readFixture(fixtureName, 'input');
+  const { content: expectedOutput, extension: outputExt } = readFixture(fixtureName, 'output');
+
+  // Validate that input code is syntactically correct
+  validateSyntax(input, inputExt);
+
+  // Validate that expected output is syntactically correct
+  validateSyntax(expectedOutput, outputExt);
+
+  // Get all codemods for the specified version from the bundle
+  const versionCodemods = BUNDLE.filter(codemod => codemod.startsWith(`${version}/`));
+
+  if (versionCodemods.length === 0) {
+    throw new Error(`No codemods found for version: ${version}`);
+  }
+
+  // Load transformers dynamically in the order specified by BUNDLE
+  const transformers = [];
+  for (const codemodPath of versionCodemods) {
+    // In test environment (vitest), we need to import .ts files
+    // Construct a relative path from the current file
+    const relativeImportPath = `../codemods/${codemodPath}`;
+
+    // Use dynamic import - Node/Vite will resolve the correct extension
+    const module = await import(relativeImportPath);
+    transformers.push(module.default);
+  }
+
+  // Apply all transformers sequentially
+  let currentCode = input;
+  for (const transformer of transformers) {
+    currentCode = applyTransform(transformer, currentCode);
+  }
+
+  const actualOutput = currentCode;
 
   // Validate that output code is syntactically correct
   validateSyntax(actualOutput, outputExt);
