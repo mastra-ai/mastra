@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",

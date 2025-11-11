@@ -12,8 +12,7 @@ import { vi } from 'vitest';
 import { InMemoryTaskStore } from '../../../a2a/store';
 import { WorkflowRegistry } from '../../../utils';
 import { RequestContext } from '@mastra/core/request-context';
-import type { ZodSchema, ZodTypeAny } from 'zod';
-import type { ServerRoute } from '..';
+import type { ZodTypeAny } from 'zod';
 
 vi.mock('@mastra/core/vector');
 
@@ -110,21 +109,14 @@ export function mockAgentMethods(agent: Agent) {
   // Mock agent methods that would normally require API calls
   vi.spyOn(agent, 'generate').mockResolvedValue({ text: 'test response' } as any);
 
-  // Create a reusable mock stream that has ReadableStream interface
+  // Create a reusable mock stream that returns a proper ReadableStream
   const createMockStream = () => {
-    const stream = new ReadableStream({
+    return new ReadableStream({
       start(controller) {
-        controller.enqueue(new TextEncoder().encode('data: {"type":"text-delta","textDelta":"test"}\n\n'));
+        controller.enqueue({ type: 'text-delta', textDelta: 'test' });
         controller.close();
       },
     });
-
-    return {
-      getReader: () => stream.getReader(),
-      [Symbol.asyncIterator]: async function* () {
-        yield { type: 'text-delta', textDelta: 'test' };
-      },
-    };
   };
 
   // Mock stream method
@@ -575,26 +567,6 @@ export async function setupObservabilityTests() {
 }
 
 /**
- * Validate that a value matches a schema
- */
-export function expectValidSchema(schema: ZodSchema, value: unknown) {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    throw new Error(`Schema validation failed: ${JSON.stringify(result.error.issues, null, 2)}`);
-  }
-}
-
-/**
- * Validate that a value does NOT match a schema
- */
-export function expectInvalidSchema(schema: ZodSchema, value: unknown) {
-  const result = schema.safeParse(value);
-  if (result.success) {
-    throw new Error(`Expected schema validation to fail, but it succeeded`);
-  }
-}
-
-/**
  * Create a mock RequestContext
  */
 export function createMockRequestContext(context?: Record<string, any>): RequestContext {
@@ -605,80 +577,6 @@ export function createMockRequestContext(context?: Record<string, any>): Request
     });
   }
   return requestContext;
-}
-
-/**
- * Validate route metadata
- */
-export function validateRouteMetadata(
-  route: ServerRoute,
-  expected: {
-    method?: string;
-    path?: string;
-    responseType?: 'json' | 'stream';
-    hasPathParams?: boolean;
-    hasQueryParams?: boolean;
-    hasBody?: boolean;
-    hasResponse?: boolean;
-    hasOpenAPI?: boolean;
-  },
-) {
-  if (expected.method && route.method !== expected.method) {
-    throw new Error(`Expected method ${expected.method} but got ${route.method}`);
-  }
-
-  if (expected.path && route.path !== expected.path) {
-    throw new Error(`Expected path ${expected.path} but got ${route.path}`);
-  }
-
-  if (expected.responseType && route.responseType !== expected.responseType) {
-    throw new Error(`Expected responseType ${expected.responseType} but got ${route.responseType}`);
-  }
-
-  if (expected.hasPathParams !== undefined) {
-    const hasPathParams = !!route.pathParamSchema;
-    if (hasPathParams !== expected.hasPathParams) {
-      throw new Error(
-        `Expected pathParamSchema to be ${expected.hasPathParams ? 'defined' : 'undefined'} but got ${hasPathParams ? 'defined' : 'undefined'}`,
-      );
-    }
-  }
-
-  if (expected.hasQueryParams !== undefined) {
-    const hasQueryParams = !!route.queryParamSchema;
-    if (hasQueryParams !== expected.hasQueryParams) {
-      throw new Error(
-        `Expected queryParamSchema to be ${expected.hasQueryParams ? 'defined' : 'undefined'} but got ${hasQueryParams ? 'defined' : 'undefined'}`,
-      );
-    }
-  }
-
-  if (expected.hasBody !== undefined) {
-    const hasBody = !!route.bodySchema;
-    if (hasBody !== expected.hasBody) {
-      throw new Error(
-        `Expected bodySchema to be ${expected.hasBody ? 'defined' : 'undefined'} but got ${hasBody ? 'defined' : 'undefined'}`,
-      );
-    }
-  }
-
-  if (expected.hasResponse !== undefined) {
-    const hasResponse = !!route.responseSchema;
-    if (hasResponse !== expected.hasResponse) {
-      throw new Error(
-        `Expected responseSchema to be ${expected.hasResponse ? 'defined' : 'undefined'} but got ${hasResponse ? 'defined' : 'undefined'}`,
-      );
-    }
-  }
-
-  if (expected.hasOpenAPI !== undefined) {
-    const hasOpenAPI = !!route.openapi;
-    if (hasOpenAPI !== expected.hasOpenAPI) {
-      throw new Error(
-        `Expected openapi to be ${expected.hasOpenAPI ? 'defined' : 'undefined'} but got ${hasOpenAPI ? 'defined' : 'undefined'}`,
-      );
-    }
-  }
 }
 
 /**
