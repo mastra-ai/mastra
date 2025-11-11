@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { transformConstructorProperties } from '../lib/utils';
 
 /**
  * Renames schema parameter to schemaName in PostgresStore constructor.
@@ -16,32 +17,13 @@ import { createTransformer } from '../lib/create-transformer';
  *   schemaName: customSchema,
  * });
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
-  root
-    .find(j.NewExpression, {
-      callee: { type: 'Identifier', name: 'PostgresStore' },
-    })
-    .forEach(path => {
-      const args = path.value.arguments;
-      const firstArg = args[0];
-      if (!firstArg || firstArg.type !== 'ObjectExpression' || !firstArg.properties) return;
+  const count = transformConstructorProperties(j, root, 'PostgresStore', { schema: 'schemaName' });
 
-      firstArg.properties.forEach(prop => {
-        if (
-          (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-          prop.key &&
-          prop.key.type === 'Identifier' &&
-          prop.key.name === 'schema'
-        ) {
-          prop.key.name = 'schemaName';
-          context.hasChanges = true;
-        }
-      });
-    });
-
-  if (context.hasChanges) {
+  if (count > 0) {
+    context.hasChanges = true;
     context.messages.push('Renamed schema to schemaName in PostgresStore constructor');
   }
 });

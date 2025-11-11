@@ -8,7 +8,7 @@ import { createTransformer } from '../lib/create-transformer';
  *
  * Only transforms properties within new Agent({ voice: { ... } })
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
   // Map of old property names to new property names
@@ -18,30 +18,29 @@ export default createTransformer((fileInfo, api, options, context) => {
     realtimeProvider: 'realtime',
   };
 
-  // Find all new Agent({ ... }) expressions
+  // Find all new Agent({ ... }) expressions and transform in one pass
   root
     .find(j.NewExpression, {
       callee: { type: 'Identifier', name: 'Agent' },
     })
     .forEach(agentPath => {
       const configArg = agentPath.node.arguments[0];
-      if (!configArg || configArg.type !== 'ObjectExpression') return;
+      if (!configArg || configArg.type !== 'ObjectExpression' || !configArg.properties) return;
 
       // Find the voice property in the Agent config object
-      configArg.properties?.forEach(prop => {
+      configArg.properties.forEach((prop: any) => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-          prop.key &&
-          prop.key.type === 'Identifier' &&
+          prop.key?.type === 'Identifier' &&
           prop.key.name === 'voice' &&
-          prop.value.type === 'ObjectExpression'
+          prop.value?.type === 'ObjectExpression' &&
+          prop.value.properties
         ) {
           // Now rename properties within the voice object
-          prop.value.properties?.forEach(voiceProp => {
+          prop.value.properties.forEach((voiceProp: any) => {
             if (
               (voiceProp.type === 'Property' || voiceProp.type === 'ObjectProperty') &&
-              voiceProp.key &&
-              voiceProp.key.type === 'Identifier'
+              voiceProp.key?.type === 'Identifier'
             ) {
               const oldName = voiceProp.key.name;
               const newName = propertyRenames[oldName];

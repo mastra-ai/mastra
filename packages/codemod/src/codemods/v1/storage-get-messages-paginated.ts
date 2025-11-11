@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackMultipleClassInstances } from '../lib/utils';
 
 /**
  * Renames storage.getMessagesPaginated() to storage.listMessages() and updates pagination parameters.
@@ -18,56 +19,46 @@ import { createTransformer } from '../lib/create-transformer';
  *   perPage: 20,
  * });
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
-  const storageInstances = new Set<string>();
   const storeTypes = ['PostgresStore', 'LibSQLStore', 'PgStore', 'DynamoDBStore', 'MongoDBStore', 'MSSQLStore'];
 
-  storeTypes.forEach(storeType => {
-    root.find(j.NewExpression, { callee: { type: 'Identifier', name: storeType } }).forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        storageInstances.add(parent.id.name);
-      }
-    });
+  // Track all store instances in a single optimized pass
+  const storageInstances = trackMultipleClassInstances(j, root, storeTypes);
+
+  if (storageInstances.size === 0) return;
+
+  // Single pass: rename method and transform properties
+  root.find(j.CallExpression).forEach(path => {
+    const { callee } = path.value;
+    if (callee.type !== 'MemberExpression') return;
+    if (callee.object.type !== 'Identifier') return;
+    if (callee.property.type !== 'Identifier') return;
+    if (!storageInstances.has(callee.object.name)) return;
+    if (callee.property.name !== 'getMessagesPaginated') return;
+
+    // Rename method
+    callee.property.name = 'listMessages';
+
+    // Transform offset/limit to page/perPage
+    const args = path.value.arguments;
+    const firstArg = args[0];
+    if (firstArg && firstArg.type === 'ObjectExpression' && firstArg.properties) {
+      firstArg.properties.forEach((prop: any) => {
+        if (
+          (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+          prop.key &&
+          prop.key.type === 'Identifier'
+        ) {
+          if (prop.key.name === 'offset') prop.key.name = 'page';
+          if (prop.key.name === 'limit') prop.key.name = 'perPage';
+        }
+      });
+    }
+
+    context.hasChanges = true;
   });
-
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      return (
-        callee.type === 'MemberExpression' &&
-        callee.object.type === 'Identifier' &&
-        callee.property.type === 'Identifier' &&
-        storageInstances.has(callee.object.name) &&
-        callee.property.name === 'getMessagesPaginated'
-      );
-    })
-    .forEach(path => {
-      const callee = path.value.callee;
-      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
-        callee.property.name = 'listMessages';
-      }
-
-      const args = path.value.arguments;
-      const firstArg = args[0];
-      if (firstArg && firstArg.type === 'ObjectExpression' && firstArg.properties) {
-        firstArg.properties.forEach(prop => {
-          if (
-            (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-            prop.key &&
-            prop.key.type === 'Identifier'
-          ) {
-            if (prop.key.name === 'offset') prop.key.name = 'page';
-            if (prop.key.name === 'limit') prop.key.name = 'perPage';
-          }
-        });
-      }
-
-      context.hasChanges = true;
-    });
 
   if (context.hasChanges) {
     context.messages.push('Renamed getMessagesPaginated to listMessages and offset/limit to page/perPage');

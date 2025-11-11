@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances, transformMethodCalls } from '../lib/utils';
 
 /**
  * Renames vectorMessageSearch parameter to vectorSearchString in memory.recall() calls.
@@ -16,48 +17,28 @@ import { createTransformer } from '../lib/create-transformer';
  *   vectorSearchString: 'What did we discuss?',
  * });
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
-  const oldParamName = 'vectorMessageSearch';
-  const newParamName = 'vectorSearchString';
+  const memoryInstances = trackClassInstances(j, root, 'Memory');
 
-  const memoryInstances = new Set<string>();
+  transformMethodCalls(j, root, memoryInstances, 'recall', path => {
+    const args = path.value.arguments;
+    const firstArg = args[0];
+    if (!firstArg || firstArg.type !== 'ObjectExpression' || !firstArg.properties) return;
 
-  root.find(j.NewExpression, { callee: { type: 'Identifier', name: 'Memory' } }).forEach(path => {
-    const parent = path.parent.value;
-    if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-      memoryInstances.add(parent.id.name);
-    }
-  });
-
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      if (callee.type !== 'MemberExpression') return false;
-      if (callee.object.type !== 'Identifier') return false;
-      if (callee.property.type !== 'Identifier') return false;
-      if (!memoryInstances.has(callee.object.name)) return false;
-      return callee.property.name === 'recall';
-    })
-    .forEach(path => {
-      const args = path.value.arguments;
-      const firstArg = args[0];
-      if (!firstArg || firstArg.type !== 'ObjectExpression' || !firstArg.properties) return;
-
-      firstArg.properties.forEach(prop => {
-        if (
-          (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
-          prop.key &&
-          prop.key.type === 'Identifier' &&
-          prop.key.name === oldParamName
-        ) {
-          prop.key.name = newParamName;
-          context.hasChanges = true;
-        }
-      });
+    firstArg.properties.forEach((prop: any) => {
+      if (
+        (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+        prop.key &&
+        prop.key.type === 'Identifier' &&
+        prop.key.name === 'vectorMessageSearch'
+      ) {
+        prop.key.name = 'vectorSearchString';
+        context.hasChanges = true;
+      }
     });
+  });
 
   if (context.hasChanges) {
     context.messages.push('Renamed vectorMessageSearch to vectorSearchString in memory.recall() calls');

@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackMultipleClassInstances, renameMethod } from '../lib/utils';
 
 /**
  * Renames storage.getMessagesById() to storage.listMessagesById().
@@ -14,42 +15,17 @@ import { createTransformer } from '../lib/create-transformer';
  *   messageIds: ['msg-1', 'msg-2'],
  * });
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
-  const storageInstances = new Set<string>();
   const storeTypes = ['PostgresStore', 'LibSQLStore', 'PgStore', 'DynamoDBStore', 'MongoDBStore', 'MSSQLStore'];
 
-  storeTypes.forEach(storeType => {
-    root.find(j.NewExpression, { callee: { type: 'Identifier', name: storeType } }).forEach(path => {
-      const parent = path.parent.value;
-      if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
-        storageInstances.add(parent.id.name);
-      }
-    });
-  });
+  // Track all store instances in a single optimized pass
+  const storageInstances = trackMultipleClassInstances(j, root, storeTypes);
+  const count = renameMethod(j, root, storageInstances, 'getMessagesById', 'listMessagesById');
 
-  root
-    .find(j.CallExpression)
-    .filter(path => {
-      const { callee } = path.value;
-      return (
-        callee.type === 'MemberExpression' &&
-        callee.object.type === 'Identifier' &&
-        callee.property.type === 'Identifier' &&
-        storageInstances.has(callee.object.name) &&
-        callee.property.name === 'getMessagesById'
-      );
-    })
-    .forEach(path => {
-      const callee = path.value.callee;
-      if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
-        callee.property.name = 'listMessagesById';
-        context.hasChanges = true;
-      }
-    });
-
-  if (context.hasChanges) {
+  if (count > 0) {
+    context.hasChanges = true;
     context.messages.push('Renamed getMessagesById to listMessagesById on storage instances');
   }
 });

@@ -12,7 +12,7 @@ import { createTransformer } from '../lib/create-transformer';
  * import { MastraDBMessage } from '@mastra/core';
  * function processMessage(message: MastraDBMessage) {}
  */
-export default createTransformer((fileInfo, api, options, context) => {
+export default createTransformer((_fileInfo, _api, _options, context) => {
   const { j, root } = context;
 
   const oldTypeName = 'MastraMessageV2';
@@ -29,7 +29,9 @@ export default createTransformer((fileInfo, api, options, context) => {
       return typeof source === 'string' && source === '@mastra/core';
     })
     .forEach(path => {
-      path.value.specifiers?.forEach(specifier => {
+      if (!path.value.specifiers) return;
+
+      path.value.specifiers.forEach((specifier: any) => {
         if (
           specifier.type === 'ImportSpecifier' &&
           specifier.imported.type === 'Identifier' &&

@@ -32,6 +32,33 @@ export function trackClassInstances(j: JSCodeshift, root: Collection<any>, class
 }
 
 /**
+ * Efficiently tracks instances of multiple classes in a single pass.
+ * This is optimized for codemods that need to track several store types or class variants.
+ *
+ * @param j - JSCodeshift API
+ * @param root - Root collection
+ * @param classNames - Array of class names to track
+ * @returns Set of variable names that are instances of any of the classes
+ */
+export function trackMultipleClassInstances(j: JSCodeshift, root: Collection<any>, classNames: string[]): Set<string> {
+  const instances = new Set<string>();
+  const classNameSet = new Set(classNames);
+
+  root.find(j.NewExpression).forEach(path => {
+    const { callee } = path.value;
+    if (callee.type !== 'Identifier') return;
+    if (!classNameSet.has(callee.name)) return;
+
+    const parent = path.parent.value;
+    if (parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier') {
+      instances.add(parent.id.name);
+    }
+  });
+
+  return instances;
+}
+
+/**
  * Efficiently finds and transforms method calls on tracked instances.
  * This combines finding, filtering, and transforming in a single pass.
  *
@@ -165,7 +192,9 @@ export function transformObjectProperties(obj: any, propertyRenames: Record<stri
   let count = 0;
 
   const recurse = (o: any) => {
-    o.properties?.forEach((prop: any) => {
+    if (!o.properties) return;
+
+    o.properties.forEach((prop: any) => {
       if ((prop.type === 'Property' || prop.type === 'ObjectProperty') && prop.key?.type === 'Identifier') {
         const oldName = prop.key.name;
         const newName = propertyRenames[oldName];
@@ -205,4 +234,118 @@ export function isMemberExpressionOnInstance(node: any, instances: Set<string>, 
   }
 
   return true;
+}
+
+/**
+ * Renames an import and all its usages in a single optimized pass.
+ * Handles aliased imports correctly and only transforms identifiers imported from the specific package.
+ *
+ * @param j - JSCodeshift API
+ * @param root - Root collection
+ * @param packageName - Package to import from (e.g., '@mastra/core/evals')
+ * @param oldName - Current import name
+ * @param newName - New import name
+ * @returns Number of changes made
+ */
+export function renameImportAndUsages(
+  j: JSCodeshift,
+  root: Collection<any>,
+  packageName: string,
+  oldName: string,
+  newName: string,
+): number {
+  let changes = 0;
+  let localNameToReplace: string | null = null;
+
+  // First: Transform import specifiers from the specific package
+  root
+    .find(j.ImportDeclaration)
+    .filter(path => {
+      const source = path.value.source.value;
+      return typeof source === 'string' && source === packageName;
+    })
+    .forEach(path => {
+      if (!path.value.specifiers) return;
+
+      path.value.specifiers.forEach((specifier: any) => {
+        if (
+          specifier.type === 'ImportSpecifier' &&
+          specifier.imported.type === 'Identifier' &&
+          specifier.imported.name === oldName
+        ) {
+          // Track the local name BEFORE renaming (could be aliased)
+          localNameToReplace = specifier.local?.name || oldName;
+
+          // Rename the imported name
+          specifier.imported.name = newName;
+
+          // Also update the local name if it matches (not aliased)
+          if (specifier.local && specifier.local.name === oldName) {
+            specifier.local.name = newName;
+          }
+
+          changes++;
+        }
+      });
+    });
+
+  // Second: Transform usages only if it was imported from the specific package
+  if (localNameToReplace) {
+    root.find(j.Identifier, { name: localNameToReplace }).forEach(path => {
+      // Skip identifiers that are part of import declarations
+      const parent = path.parent;
+      if (parent && parent.value.type === 'ImportSpecifier') {
+        return;
+      }
+
+      path.value.name = newName;
+      changes++;
+    });
+  }
+
+  return changes;
+}
+
+/**
+ * Transforms properties in constructor call arguments.
+ *
+ * @param j - JSCodeshift API
+ * @param root - Root collection
+ * @param className - Name of the class whose constructor to transform
+ * @param propertyRenames - Map of old property names to new property names
+ * @returns Number of properties renamed
+ */
+export function transformConstructorProperties(
+  j: JSCodeshift,
+  root: Collection<any>,
+  className: string,
+  propertyRenames: Record<string, string>,
+): number {
+  let count = 0;
+
+  root
+    .find(j.NewExpression, {
+      callee: { type: 'Identifier', name: className },
+    })
+    .forEach(path => {
+      const args = path.value.arguments;
+      if (args.length === 0) return;
+
+      const firstArg = args[0];
+      if (!firstArg || firstArg.type !== 'ObjectExpression' || !firstArg.properties) return;
+
+      firstArg.properties.forEach((prop: any) => {
+        if ((prop.type === 'Property' || prop.type === 'ObjectProperty') && prop.key?.type === 'Identifier') {
+          const oldName = prop.key.name;
+          const newName = propertyRenames[oldName];
+
+          if (newName) {
+            prop.key.name = newName;
+            count++;
+          }
+        }
+      });
+    });
+
+  return count;
 }
