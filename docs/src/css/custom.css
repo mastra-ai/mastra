@@ -445,6 +445,7 @@ h6 code {
   .menu,
   pre,
   [class*="tableOfContents"],
+  [role="log"],
   .tabs,
   .toc-wrapper {
     padding-inline: 0 !important;
