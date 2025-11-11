@@ -1083,9 +1083,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (execResults.status === 'failed') {
-      parallelSpan?.error({
-        error: execResults.error instanceof Error ? execResults.error : new Error(String(execResults.error)),
-      });
+      parallelSpan?.error({ error: execResults.error });
     } else {
       parallelSpan?.end({
         output: execResults.output || execResults,
@@ -1317,9 +1315,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (execResults.status === 'failed') {
-      conditionalSpan?.error({
-        error: execResults.error instanceof Error ? execResults.error : new Error(String(execResults.error)),
-      });
+      conditionalSpan?.error({ error: execResults.error });
     } else {
       conditionalSpan?.end({
         output: execResults.output || execResults,
