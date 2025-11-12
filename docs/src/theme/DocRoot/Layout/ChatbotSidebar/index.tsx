@@ -206,7 +206,8 @@ export default function ChatbotSidebar({
               </div>
             )}
           </ConversationContent>
-          <ConversationScrollButton className="backdrop-blur-md bg-white/50 dark:bg-black/50 border-none ring-1 ring-(--border-subtle)" />
+          {/* TODO: investigate: running into a react minified error when using this component */}
+          {/* <ConversationScrollButton className="backdrop-blur-md bg-white/50 dark:bg-black/50 border-none ring-1 ring-(--border-subtle)" /> */}
         </Conversation>
       )}
       {/* Chatbot sidebar footer */}
