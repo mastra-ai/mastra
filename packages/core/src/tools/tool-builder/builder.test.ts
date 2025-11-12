@@ -1008,7 +1008,7 @@ describe('CoreToolBuilder Output Schema', () => {
         conditions: z.string(),
         test: z.tuple([z.string(), z.string()]),
       }),
-      execute: async ({ context }) => ({
+      execute: async ({ context: _context }) => ({
         temperature: 72,
         conditions: 'sunny',
         test: ['value1', 'value2'] as [string, string],
