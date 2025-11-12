@@ -1,0 +1,42 @@
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.cardGridItem {
+  display: block;
+  padding: 1.5rem;
+  border: 0.5px solid var(--mastra-border);
+  border-radius: 0.5rem;
+  background: var(--mastra-surface-2);
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.cardGridItem:hover {
+  border-color: var(--mastra-green-accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+}
+
+.cardGridItem h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--mastra-text-primary);
+}
+
+.cardGridItem p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--mastra-text-tertiary);
+}
+
+[data-theme="dark"] .cardGridItem:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}

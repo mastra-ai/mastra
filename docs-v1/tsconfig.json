@@ -1,0 +1,14 @@
+{
+  "extends": "@docusaurus/tsconfig",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "types": ["@docusaurus/module-type-aliases", "@docusaurus/theme-classic"]
+  },
+  "include": [
+    "src/**/*",
+    "scripts/build-llms-text-files.ts",
+    "scripts/build-eval-context.ts",
+    "scripts/build-cursor-context.ts",
+    "config/docs"
+  ]
+}
