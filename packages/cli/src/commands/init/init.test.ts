@@ -15,7 +15,6 @@ vi.mock('./utils', () => ({
   getAPIKey: vi.fn(() => 'OPENAI_API_KEY'),
   createMastraDir: vi.fn(),
   writeCodeSample: vi.fn(),
-  checkDependencies: vi.fn(),
 }));
 
 vi.mock('../../utils/logger', () => ({
@@ -54,9 +53,9 @@ vi.mock('node:util', () => ({
 const utils = await import('./utils');
 const { init } = await import('./init');
 
-vi.mock('../../services/service.deps', () => {
+vi.mock('../../services/service.deps', function () {
   return {
-    DepsService: vi.fn().mockImplementation(() => {
+    DepsService: vi.fn().mockImplementation(function () {
       return {
         checkDependencies: vi.fn(() => Promise.resolve('ok')),
         installPackages: vi.fn(() => Promise.resolve()),
@@ -99,6 +98,8 @@ describe('CLI', () => {
   });
 
   test('generates correct index file content', async () => {
+    DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
+
     vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
@@ -153,50 +154,6 @@ describe('CLI', () => {
     const envFileContent = fs.readFileSync('/mock/.env.development', 'utf-8');
     expect(envFileContent).toContain('OPENAI_API_KEY');
   });
-
-  // test('stops initialization if dependencies are not satisfied', async () => {
-  //   DepsService.prototype.checkDependencies = jest.fn(() => Promise.resolve('No package.json file found in the current directory'));
-
-  //   jest.spyOn(utils, 'createMastraDir').mockImplementation(async () => {
-  //     return { ok: false }; // Simulate failure to create directory
-  //   });
-
-  //   await init({
-  //     directory: '/mock',
-  //     components: [],
-  //     addExample: false,
-  //     llmProvider: 'openai',
-  //     showSpinner: false,
-  //   });
-
-  //   expect(logger.error).toHaveBeenCalledWith('No package.json file found in the current directory');
-  //   expect(utils.createMastraDir).not.toHaveBeenCalled();
-  //   expect(utils.writeIndexFile).not.toHaveBeenCalled();
-
-  //   expect(fs.existsSync('/mock')).toBe(false);
-  // });
-
-  // test('stops initialization if mastra core is not installed', async () => {
-  //   DepsService.prototype.checkDependencies = jest.fn(() => Promise.resolve('Install @mastra/core before running this command (npm install @mastra/core)'));
-
-  //   jest.spyOn(utils, 'createMastraDir').mockImplementation(async () => {
-  //     return { ok: false }; // Simulate failure to create directory
-  //   });
-
-  //   await init({
-  //     directory: '/mock',
-  //     components: ['tools'],
-  //     addExample: false,
-  //     llmProvider: 'anthropic',
-  //     showSpinner: false,
-  //   });
-
-  //   expect(logger.error).toHaveBeenCalledWith('Install @mastra/core before running this command (npm install @mastra/core)');
-  //   expect(utils.createMastraDir).not.toHaveBeenCalled();
-  //   expect(utils.writeIndexFile).not.toHaveBeenCalled();
-
-  //   expect(fs.existsSync('/mock')).toBe(false);
-  // });
 
   test('stops initialization if mastra is already setup', async () => {
     DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));

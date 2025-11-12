@@ -9,7 +9,8 @@
   "scripts": {
     "start": "tsx --env-file=./.env.dev src/index.ts",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",

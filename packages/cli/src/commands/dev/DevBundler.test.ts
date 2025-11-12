@@ -10,19 +10,23 @@ vi.stubGlobal('process', {
 });
 
 // Mock commander to prevent CLI from running
-vi.mock('commander', () => ({
-  Command: vi.fn(() => ({
-    name: vi.fn().mockReturnThis(),
-    version: vi.fn().mockReturnThis(),
-    addHelpText: vi.fn().mockReturnThis(),
-    action: vi.fn().mockReturnThis(),
-    command: vi.fn().mockReturnThis(),
-    description: vi.fn().mockReturnThis(),
-    option: vi.fn().mockReturnThis(),
-    parse: vi.fn(),
-    help: vi.fn(),
-  })),
-}));
+vi.mock('commander', function () {
+  return {
+    Command: vi.fn(function () {
+      return {
+        name: vi.fn().mockReturnThis(),
+        version: vi.fn().mockReturnThis(),
+        addHelpText: vi.fn().mockReturnThis(),
+        action: vi.fn().mockReturnThis(),
+        command: vi.fn().mockReturnThis(),
+        description: vi.fn().mockReturnThis(),
+        option: vi.fn().mockReturnThis(),
+        parse: vi.fn(),
+        help: vi.fn(),
+      };
+    }),
+  };
+});
 
 import { DevBundler } from './DevBundler';
 
