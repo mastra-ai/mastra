@@ -28,6 +28,7 @@ export * from './MemoryIcon';
 export * from './OpenAIIcon';
 export * from './PromptIcon';
 export * from './SettingsIcon';
+export * from './SlackIcon';
 export * from './SlashIcon';
 export * from './ToolsIcon';
 export * from './TraceIcon';

@@ -15,13 +15,16 @@ import {
 import { useMemory } from '@/domains/memory/hooks';
 import { useAgentSettings } from '../../context/agent-context';
 import { AgentSettings } from '../agent-settings';
+import { SlackTab } from '../../integrations/slack-tab';
+import { ReactNode } from 'react';
 
 export interface AgentInformationProps {
   agentId: string;
   threadId: string;
+  integrations?: ReactNode;
 }
 
-export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
+export function AgentInformation({ agentId, threadId, integrations }: AgentInformationProps) {
   const { data: agent, isLoading } = useAgent(agentId);
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
   const { mutateAsync: resetModel } = useResetAgentModel(agentId);
@@ -71,6 +74,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
             <Tab value="overview">Overview</Tab>
             <Tab value="model-settings">Model Settings</Tab>
             {memory?.result && <Tab value="memory">Memory</Tab>}
+            <Tab value="integrations">Integrations</Tab>
           </TabList>
           <TabContent value="overview">
             {isLoading && <Skeleton className="h-full" />}
@@ -100,6 +104,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
           <TabContent value="memory">
             {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} threadId={threadId} />}
           </TabContent>
+          <TabContent value="integrations">{integrations || (agent && <SlackTab agentName={agent.name} />)}</TabContent>
         </PlaygroundTabs>
       </div>
     </div>
