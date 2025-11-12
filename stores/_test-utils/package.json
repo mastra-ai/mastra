@@ -19,6 +19,7 @@
     "@mastra/core": "*"
   },
   "devDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "ulid": "^3.0.1"
   }
 }

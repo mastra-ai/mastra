@@ -1,6 +1,13 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  StoreOperations,
+  TABLE_SPANS,
+  TABLE_DATASET_ROWS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASETS,
+} from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -76,6 +83,27 @@ export class StoreOperationsLibSQL extends StoreOperations {
                     ${columns.join(',\n')},
                     PRIMARY KEY (traceId, spanId)
                 )`;
+      return stmnt;
+    }
+
+    if (tableName === TABLE_DATASET_ROWS) {
+      const datasetTableName = parseSqlIdentifier(TABLE_DATASETS, 'table name');
+      const versionTableName = parseSqlIdentifier(TABLE_DATASET_VERSIONS, 'table name');
+      const stmnt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (
+        ${columns.join(',\n')},
+        PRIMARY KEY (rowId, versionId),
+        FOREIGN KEY (datasetId) REFERENCES ${datasetTableName}(id) ON DELETE CASCADE,
+        FOREIGN KEY (versionId) REFERENCES ${versionTableName}(id) ON DELETE CASCADE
+      )`;
+      return stmnt;
+    }
+
+    if (tableName === TABLE_DATASET_VERSIONS) {
+      const datasetTableName = parseSqlIdentifier(TABLE_DATASETS, 'table name');
+      const stmnt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (
+        ${columns.join(',\n')},
+        FOREIGN KEY (datasetId) REFERENCES ${datasetTableName}(id) ON DELETE CASCADE
+      )`;
       return stmnt;
     }
 

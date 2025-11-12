@@ -12,6 +12,12 @@ import type {
   TABLE_SCORERS,
   TABLE_SPANS,
   SpanRecord,
+  TABLE_DATASETS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_ROWS,
+  DatasetRecord,
+  DatasetVersion,
+  DatasetRow,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -81,6 +87,9 @@ export type RecordTypes = {
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
+  [TABLE_DATASETS]: DatasetRecord;
+  [TABLE_DATASET_VERSIONS]: DatasetVersion;
+  [TABLE_DATASET_ROWS]: DatasetRow;
 };
 
 export type ListOptions = {

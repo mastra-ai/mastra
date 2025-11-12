@@ -7,6 +7,9 @@ export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
+export const TABLE_DATASETS = 'mastra_datasets';
+export const TABLE_DATASET_VERSIONS = 'mastra_dataset_versions';
+export const TABLE_DATASET_ROWS = 'mastra_dataset_rows';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -15,7 +18,10 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  | typeof TABLE_SPANS;
+  | typeof TABLE_SPANS
+  | typeof TABLE_DATASETS
+  | typeof TABLE_DATASET_VERSIONS
+  | typeof TABLE_DATASET_ROWS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -74,6 +80,36 @@ export const SPAN_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
   updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
   isEvent: { type: 'boolean', nullable: false },
+};
+
+export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
+};
+
+export const DATASET_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  datasetId: { type: 'text', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
+};
+
+export const DATASET_ROWS_SCHEMA: Record<string, StorageColumn> = {
+  rowId: { type: 'text', nullable: false },
+  datasetId: { type: 'text', nullable: false },
+  versionId: { type: 'text', nullable: false },
+  input: { type: 'jsonb', nullable: false },
+  groundTruth: { type: 'jsonb', nullable: true },
+  requestContext: { type: 'jsonb', nullable: true },
+  traceId: { type: 'text', nullable: true },
+  spanId: { type: 'text', nullable: true },
+  deleted: { type: 'boolean', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: true },
 };
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
@@ -137,4 +173,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  [TABLE_DATASETS]: DATASETS_SCHEMA,
+  [TABLE_DATASET_VERSIONS]: DATASET_VERSIONS_SCHEMA,
+  [TABLE_DATASET_ROWS]: DATASET_ROWS_SCHEMA,
 };

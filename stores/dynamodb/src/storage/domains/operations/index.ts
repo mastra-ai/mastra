@@ -10,6 +10,9 @@ import {
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_DATASETS,
+  TABLE_DATASET_VERSIONS,
+  TABLE_DATASET_ROWS,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
@@ -49,6 +52,9 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_TRACES]: 'trace',
       [TABLE_RESOURCES]: 'resource',
       [TABLE_SPANS]: 'ai_span',
+      [TABLE_DATASETS]: 'dataset',
+      [TABLE_DATASET_VERSIONS]: 'dataset_version',
+      [TABLE_DATASET_ROWS]: 'dataset_row',
     };
     return mapping[tableName] || null;
   }
