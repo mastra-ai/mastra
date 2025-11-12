@@ -1,15 +1,6 @@
 import z from 'zod';
 import { createPagePaginationSchema, baseLogMessageSchema } from './common';
 
-// Path parameter schemas
-export const transportIdPathParams = z.object({
-  transportId: z.string().describe('Unique identifier for the log transport'),
-});
-
-export const transportRunIdPathParams = transportIdPathParams.extend({
-  runId: z.string().describe('Unique identifier for the run'),
-});
-
 // Query parameter schemas
 export const listLogsQuerySchema = createPagePaginationSchema().extend({
   fromDate: z.coerce.date().optional(),

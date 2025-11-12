@@ -50,10 +50,6 @@ export const scorerIdPathParams = z.object({
   scorerId: z.string().describe('Unique identifier for the scorer'),
 });
 
-export const runIdPathParams = z.object({
-  runId: z.string().describe('Unique identifier for the run'),
-});
-
 export const entityPathParams = z.object({
   entityType: z.string().describe('Type of the entity (AGENT or WORKFLOW)'),
   entityId: z.string().describe('Unique identifier for the entity'),

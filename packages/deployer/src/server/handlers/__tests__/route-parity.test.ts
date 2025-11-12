@@ -30,6 +30,34 @@ function honoPathToOpenAPI(path: string): string {
   return path.replace(/:(\w+)/g, '{$1}');
 }
 
+// Known wrapper functions in server-adapter
+// Maps route path+method to { serverHandler, deployerHandler } for documentation
+const KNOWN_WRAPPERS = new Map<string, { serverHandler: string; deployerHandler: string }>([
+  [
+    'POST /api/tools/:toolId/execute',
+    {
+      serverHandler: 'executeToolHandler2', // Arrow function wrapper
+      deployerHandler: 'executeToolHandler', // Original curried function
+    },
+  ],
+]);
+
+// Helper to check if two handlers are equivalent (same name or documented wrapper)
+function handlersAreEquivalent(routeKey: string, serverHandlerName: string, deployerHandlerName: string): boolean {
+  // Direct match
+  if (serverHandlerName === deployerHandlerName) {
+    return true;
+  }
+
+  // Check if it's a known wrapper
+  const wrapper = KNOWN_WRAPPERS.get(routeKey);
+  if (wrapper) {
+    return wrapper.serverHandler === serverHandlerName && wrapper.deployerHandler === deployerHandlerName;
+  }
+
+  return false;
+}
+
 describe('Deployer Routes → Server Adapter Parity', () => {
   let mastra: Mastra;
   let deployerApp: Hono<{ Variables: { mastra: Mastra } }>;
@@ -178,8 +206,18 @@ describe('Deployer Routes → Server Adapter Parity', () => {
         const handlerExistsInServer = serverHandlerMap.has(route.handlerName);
 
         if (!handlerExistsInServer) {
-          // This handler is completely unique to deployer
-          failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);
+          const routeKey = `${route.method} ${route.path}`;
+
+          // Check if handler exists in server-adapter (either exact match or documented wrapper)
+          const serverRoute = serverRoutes.find(sr => `${sr.method} ${sr.path}` === routeKey);
+
+          if (
+            !serverRoute?.handlerName ||
+            !handlersAreEquivalent(routeKey, serverRoute.handlerName, route.handlerName)
+          ) {
+            // This handler is completely unique to deployer
+            failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);
+          }
         }
       });
 
@@ -201,8 +239,18 @@ describe('Deployer Routes → Server Adapter Parity', () => {
         const handlerExistsInDeployer = deployerHandlerMap.has(route.handlerName);
 
         if (!handlerExistsInDeployer) {
-          // This handler is completely unique to server-adapter
-          failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);
+          const routeKey = `${route.method} ${route.path}`;
+
+          // Check if handler exists in server-adapter (either exact match or documented wrapper)
+          const deployerRoute = uniqueDeployerRoutes.find(sr => `${sr.method} ${sr.path}` === routeKey);
+
+          if (
+            !deployerRoute?.handlerName ||
+            !handlersAreEquivalent(routeKey, route.handlerName, deployerRoute.handlerName)
+          ) {
+            // This handler is completely unique to server-adapter
+            failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);
+          }
         }
       });
 

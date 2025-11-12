@@ -1,13 +1,8 @@
 import { listLogsHandler, listLogsByRunIdHandler, listLogTransports } from '../../handlers/logs';
-import {
-  transportIdPathParams,
-  transportRunIdPathParams,
-  listLogsQuerySchema,
-  listLogsResponseSchema,
-  listLogTransportsResponseSchema,
-} from '../../schemas/logs';
+import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../../schemas/logs';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
+import { runIdPathParams } from '../../schemas/common';
 
 export const LOGS_ROUTES: ServerRoute[] = [
   createRoute({
@@ -24,8 +19,7 @@ export const LOGS_ROUTES: ServerRoute[] = [
     method: 'GET',
     responseType: 'json',
     handler: listLogsHandler as unknown as ServerRouteHandler,
-    path: '/api/logs/:transportId',
-    pathParamSchema: transportIdPathParams,
+    path: '/api/logs',
     queryParamSchema: listLogsQuerySchema,
     responseSchema: listLogsResponseSchema,
     summary: 'List logs',
@@ -37,8 +31,8 @@ export const LOGS_ROUTES: ServerRoute[] = [
     method: 'GET',
     responseType: 'json',
     handler: listLogsByRunIdHandler as unknown as ServerRouteHandler,
-    path: '/api/logs/:transportId/runs/:runId',
-    pathParamSchema: transportRunIdPathParams,
+    path: '/api/logs/:runId',
+    pathParamSchema: runIdPathParams,
     queryParamSchema: listLogsQuerySchema,
     responseSchema: listLogsResponseSchema,
     summary: 'List logs by run ID',

@@ -1,5 +1,10 @@
 import z from 'zod';
 
+// Path parameter schemas
+export const runIdPathParams = z.object({
+  runId: z.string().describe('Unique identifier for the run'),
+});
+
 // ============================================================================
 // Pagination Schemas
 // ============================================================================

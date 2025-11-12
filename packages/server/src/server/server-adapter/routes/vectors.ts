@@ -39,7 +39,7 @@ export const VECTORS_ROUTES: ServerRoute[] = [
     method: 'POST',
     responseType: 'json',
     handler: createIndex as unknown as ServerRouteHandler,
-    path: '/api/vector/:vectorName/indexes',
+    path: '/api/vector/:vectorName/create-index',
     pathParamSchema: vectorNamePathParams,
     bodySchema: createIndexBodySchema,
     responseSchema: createIndexResponseSchema,

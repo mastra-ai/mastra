@@ -1,4 +1,8 @@
-import { getToolByIdHandler, listToolsHandler, executeToolHandler } from '../../handlers/tools';
+import {
+  getToolByIdHandler,
+  listToolsHandler,
+  executeToolHandler as executeToolHandlerWrapped,
+} from '../../handlers/tools';
 import {
   listToolsResponseSchema,
   serializedToolSchema,
@@ -13,9 +17,9 @@ import type { ServerRoute, ServerRouteHandler } from '.';
  * Wrapper for executeToolHandler to properly handle the curried function signature.
  * executeToolHandler is curried: executeToolHandler(tools) returns the actual handler.
  */
-const executeToolHandlerWrapper = async (params: any) => {
+const executeToolHandler = async (params: any) => {
   const { tools } = params;
-  return executeToolHandler(tools);
+  return executeToolHandlerWrapped(tools);
 };
 
 export const TOOLS_ROUTES: ServerRoute[] = [
@@ -43,7 +47,7 @@ export const TOOLS_ROUTES: ServerRoute[] = [
   createRoute({
     method: 'POST',
     responseType: 'json',
-    handler: executeToolHandlerWrapper as unknown as ServerRouteHandler,
+    handler: executeToolHandler as unknown as ServerRouteHandler,
     path: '/api/tools/:toolId/execute',
     pathParamSchema: toolIdPathParams,
     bodySchema: executeToolBodySchema,

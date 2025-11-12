@@ -10,7 +10,6 @@ import {
   listScorersResponseSchema,
   scorerEntrySchema,
   scorerIdPathParams,
-  runIdPathParams,
   entityPathParams,
   listScoresByRunIdQuerySchema,
   listScoresByScorerIdQuerySchema,
@@ -21,6 +20,7 @@ import {
 } from '../../schemas/scores';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
+import { runIdPathParams } from '../../schemas/common';
 
 export const SCORES_ROUTES: ServerRoute[] = [
   createRoute({
