@@ -2,7 +2,7 @@ import { Badge } from '@/ds/components/Badge';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
+import { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
@@ -21,12 +21,12 @@ import {
   useUpdateAgentModel,
   useUpdateModelInModelList,
 } from '../../hooks/use-agents';
+import { useAgent } from '../../hooks/use-agent';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useMemory } from '@/domains/memory/hooks';
 
 export interface AgentMetadataProps {
   agentId: string;
-  agent: GetAgentResponse;
-  hasMemoryEnabled: boolean;
-  modelVersion: string;
 }
 
 export interface AgentMetadataNetworkListProps {
@@ -55,11 +55,22 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
   );
 };
 
-export const AgentMetadata = ({ agentId, agent, hasMemoryEnabled, modelVersion }: AgentMetadataProps) => {
+export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
+  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { mutate: reorderModelList } = useReorderModelList(agentId);
   const { mutateAsync: resetModel } = useResetAgentModel(agentId);
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
   const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
+  const hasMemoryEnabled = Boolean(memory?.result);
+
+  if (isLoading || isMemoryLoading) {
+    return <Skeleton className="h-full" />;
+  }
+
+  if (!agent) {
+    return <div>Agent not found</div>;
+  }
 
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.keys(networkAgentsMap).map(key => ({ ...networkAgentsMap[key], id: key }));
@@ -84,7 +95,7 @@ export const AgentMetadata = ({ agentId, agent, hasMemoryEnabled, modelVersion }
         <AgentMetadataSection
           title={'Model'}
           hint={
-            modelVersion === 'v2'
+            agent.modelVersion === 'v2'
               ? undefined
               : {
                   link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',

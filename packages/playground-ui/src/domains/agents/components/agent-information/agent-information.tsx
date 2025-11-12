@@ -1,5 +1,3 @@
-import { Skeleton } from '@/components/ui/skeleton';
-
 import { AgentMemory } from './agent-memory';
 import { useState, useEffect } from 'react';
 import { AgentEntityHeader } from '../agent-entity-header';
@@ -16,44 +14,30 @@ export interface AgentInformationProps {
 }
 
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { data: memory } = useMemory(agentId);
   const hasMemory = Boolean(memory?.result);
 
   return (
-    <AgentInformationLayout modelId={agent?.modelId}>
-      <AgentEntityHeader agentId={agentId} isLoading={isMemoryLoading} agentName={agent?.name || ''} />
+    <AgentInformationLayout agentId={agentId}>
+      <AgentEntityHeader agentId={agentId} />
 
-      <AgentInformationTabLayout isMemoryLoading={isMemoryLoading} hasMemory={hasMemory}>
+      <AgentInformationTabLayout agentId={agentId}>
         <TabList>
           <Tab value="overview">Overview</Tab>
           <Tab value="model-settings">Model Settings</Tab>
           {hasMemory && <Tab value="memory">Memory</Tab>}
         </TabList>
         <TabContent value="overview">
-          {isLoading && <Skeleton className="h-full" />}
-          {agent && (
-            <AgentMetadata
-              agentId={agentId}
-              agent={agent}
-              hasMemoryEnabled={hasMemory}
-              modelVersion={agent.modelVersion}
-            />
-          )}
+          <AgentMetadata agentId={agentId} />
         </TabContent>
         <TabContent value="model-settings">
-          {isLoading && <Skeleton className="h-full" />}
-          {agent && (
-            <AgentSettings
-              modelVersion={agent.modelVersion}
-              hasMemory={hasMemory}
-              hasSubAgents={Boolean(Object.keys(agent.agents || {}).length > 0)}
-            />
-          )}
+          <AgentSettings agentId={agentId} />
         </TabContent>
-        <TabContent value="memory">
-          {isLoading ? <Skeleton className="h-full" /> : <AgentMemory agentId={agentId} threadId={threadId} />}
-        </TabContent>
+        {hasMemory && (
+          <TabContent value="memory">
+            <AgentMemory agentId={agentId} threadId={threadId} />
+          </TabContent>
+        )}
       </AgentInformationTabLayout>
     </AgentInformationLayout>
   );
@@ -117,11 +101,12 @@ export const useAgentInformationSettings = ({ modelId }: UseAgentInformationSett
 
 export interface AgentInformationLayoutProps {
   children: React.ReactNode;
-  modelId?: string;
+  agentId?: string;
 }
 
-export const AgentInformationLayout = ({ children, modelId }: AgentInformationLayoutProps) => {
-  useAgentInformationSettings({ modelId: modelId || '' });
+export const AgentInformationLayout = ({ children, agentId }: AgentInformationLayoutProps) => {
+  const { data: agent } = useAgent(agentId);
+  useAgentInformationSettings({ modelId: agent?.modelId || '' });
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
@@ -132,10 +117,12 @@ export const AgentInformationLayout = ({ children, modelId }: AgentInformationLa
 
 export interface AgentInformationTabLayoutProps {
   children: React.ReactNode;
-  isMemoryLoading: boolean;
-  hasMemory: boolean;
+  agentId: string;
 }
-export const AgentInformationTabLayout = ({ children, isMemoryLoading, hasMemory }: AgentInformationTabLayoutProps) => {
+export const AgentInformationTabLayout = ({ children, agentId }: AgentInformationTabLayoutProps) => {
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const hasMemory = Boolean(memory?.result);
+
   const { selectedTab, handleTabChange } = useAgentInformationTab({
     isMemoryLoading,
     hasMemory,
