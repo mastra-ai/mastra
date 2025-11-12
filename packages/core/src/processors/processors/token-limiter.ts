@@ -43,8 +43,8 @@ export class TokenLimiterProcessor implements Processor {
   private countMode: 'cumulative' | 'part';
 
   // Token counting constants for input processing
-  private static readonly TOKENS_PER_MESSAGE = 3;
-  private static readonly TOKENS_PER_CONVERSATION = 3;
+  private static readonly TOKENS_PER_MESSAGE = 3.8;
+  private static readonly TOKENS_PER_CONVERSATION = 24;
 
   constructor(options: number | TokenLimiterOptions) {
     if (typeof options === 'number') {
@@ -129,6 +129,8 @@ export class TokenLimiterProcessor implements Processor {
     let overhead = 0;
 
     // Handle content based on MastraMessageV2 structure
+    let toolResultCount = 0; // Track tool results that will become separate messages
+
     if (typeof message.content === 'string') {
       // Simple string content
       tokenString += message.content;
@@ -155,17 +157,18 @@ export class TokenLimiterProcessor implements Processor {
                   tokenString += invocation.args;
                 } else {
                   tokenString += JSON.stringify(invocation.args);
-                  overhead -= 12; // Adjust for JSON overhead
+                  overhead -= 12;
                 }
               }
             } else if (invocation.state === 'result') {
-              // Tool result
+              // Tool result - this will become a separate CoreMessage
+              toolResultCount++;
               if (invocation.result !== undefined) {
                 if (typeof invocation.result === 'string') {
                   tokenString += invocation.result;
                 } else {
                   tokenString += JSON.stringify(invocation.result);
-                  overhead -= 12; // Adjust for JSON overhead
+                  overhead -= 12;
                 }
               }
             }
@@ -176,15 +179,18 @@ export class TokenLimiterProcessor implements Processor {
       }
     }
 
-    // Add message formatting overhead for non-tool messages
-    const hasNonToolParts =
-      !message.content?.parts || message.content.parts.some((p: any) => p.type !== 'tool-invocation');
-
-    if (typeof message.content === 'string' || hasNonToolParts) {
-      overhead += TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+    // Add message formatting overhead
+    // Each MastraDBMessage becomes at least 1 CoreMessage, plus 1 additional CoreMessage per tool-invocation (state: 'result')
+    // Base overhead for the message itself
+    overhead += TokenLimiterProcessor.TOKENS_PER_MESSAGE;
+    // Additional overhead for each tool result (which adds an extra CoreMessage)
+    if (toolResultCount > 0) {
+      overhead += toolResultCount * TokenLimiterProcessor.TOKENS_PER_MESSAGE;
     }
 
-    return this.encoder.encode(tokenString).length + overhead;
+    const tokenCount = this.encoder.encode(tokenString).length;
+    const total = tokenCount + overhead;
+    return total;
   }
 
   async processOutputStream(args: {
