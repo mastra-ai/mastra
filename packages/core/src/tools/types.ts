@@ -1,3 +1,4 @@
+import type { WritableStream } from 'stream/web';
 import type {
   Tool,
   ToolV5,

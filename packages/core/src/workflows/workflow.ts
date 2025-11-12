@@ -1,6 +1,6 @@
 import EventEmitter from 'events';
 import { randomUUID } from 'node:crypto';
-import { WritableStream, ReadableStream, TransformStream } from 'node:stream/web';
+import { WritableStream, ReadableStream, TransformStream } from 'stream/web';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../action';
 import { Agent } from '../agent';
@@ -1411,6 +1411,7 @@ export class Workflow<
       payload: (snapshot as WorkflowRunState).context?.input,
       steps: fullSteps as any,
       activeStepsPath: (snapshot as WorkflowRunState).activeStepsPath,
+      serializedStepGraph: (snapshot as WorkflowRunState).serializedStepGraph,
     };
   }
 }

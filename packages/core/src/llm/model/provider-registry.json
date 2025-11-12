@@ -627,7 +627,12 @@
       "apiKeyEnvVar": "BASETEN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Baseten",
-      "models": ["Qwen/Qwen3-Coder-480B-A35B-Instruct", "moonshotai/Kimi-K2-Instruct-0905", "zai-org/GLM-4.6"],
+      "models": [
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+        "moonshotai/Kimi-K2-Instruct-0905",
+        "moonshotai/Kimi-K2-Thinking",
+        "zai-org/GLM-4.6"
+      ],
       "docUrl": "https://docs.baseten.co/development/model-apis/overview",
       "gateway": "models.dev"
     },
@@ -1778,7 +1783,12 @@
       "moonshotai/Kimi-K2-Instruct",
       "openai/gpt-oss-120b"
     ],
-    "baseten": ["Qwen/Qwen3-Coder-480B-A35B-Instruct", "moonshotai/Kimi-K2-Instruct-0905", "zai-org/GLM-4.6"],
+    "baseten": [
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      "moonshotai/Kimi-K2-Instruct-0905",
+      "moonshotai/Kimi-K2-Thinking",
+      "zai-org/GLM-4.6"
+    ],
     "huggingface": [
       "MiniMaxAI/MiniMax-M2",
       "Qwen/Qwen3-235B-A22B-Thinking-2507",

@@ -191,6 +191,7 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 export interface WorkflowState {
   status: WorkflowRunStatus;
   activeStepsPath: Record<string, number[]>;
+  serializedStepGraph: SerializedStepFlowEntry[];
   steps: Record<
     string,
     {
