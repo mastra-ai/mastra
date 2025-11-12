@@ -89,13 +89,13 @@ GITHUB_TOKEN=$(gh auth token) node .github/scripts/sync-templates-local.js main
 
 ### `sync-templates.js`
 
-The original CI/CD version that runs in GitHub Actions. This script:
+The CI/CD version that runs in GitHub Actions. This script:
 
 - Runs automatically when templates are changed in the monorepo
 - Uses GitHub App authentication
-- Only syncs to the `main` branch
+- **Now syncs to the `beta` branch** for v1.0 beta release
 
-**Note**: After this PR, this script will be updated to only sync to `beta` branches until the beta release is stable.
+When the beta is stable and ready for production, this script should be updated to sync to `main` branch instead.
 
 ### `update-templates-to-model-router.js`
 
