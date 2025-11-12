@@ -20,6 +20,7 @@ import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
+import { removeUndefinedValues } from '../utils';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { RestartExecutionParams, TimeTravelExecutionParams } from './default';
@@ -2648,14 +2649,21 @@ export class Run<
     const snapshotContext = snapshot.context as Record<string, any>;
 
     for (const [index, entry] of this.executionGraph.steps.entries()) {
-      if (executionPath.length > 0) {
+      const currentExecPathLength = executionPath.length;
+      //if there is resumeData, steps down the graph until the suspended step will have stepResult info to use
+      if (currentExecPathLength > 0 && !resumeData) {
         break;
       }
+      let stepFound = false;
+      let stepInParallel = false;
       const stepIds = getStepIds(entry);
       if (stepIds.includes(firstStepId)) {
         const innerExecutionPath = stepIds?.length > 1 ? [stepIds?.findIndex(s => s === firstStepId)] : [];
+        //parallel and loop steps will have more than one step id,
+        // and if the step is one of those, we need the index for the execution path
         executionPath = [index, ...innerExecutionPath];
-        break;
+        stepFound = true;
+        stepInParallel = stepIds?.length > 1;
       }
 
       const prevStep = this.executionGraph.steps[index - 1]!;
@@ -2676,6 +2684,25 @@ export class Run<
           }
         }
       }
+
+      //the stepResult input is basically the payload of the first step
+      if (index === 0 && stepIds.includes(firstStepId)) {
+        stepResults.input = (context?.[firstStepId]?.payload ?? inputData ?? snapshotContext?.input) as any;
+      } else if (index === 0) {
+        stepResults.input =
+          stepIds?.reduce((acc, stepId) => {
+            if (acc) return acc;
+            return context?.[stepId]?.payload ?? snapshotContext?.[stepId]?.payload;
+          }, null) ??
+          snapshotContext?.input ??
+          {};
+      }
+
+      if (stepFound && !resumeData && !stepInParallel) {
+        //we need to construct stepResult for steps in parallel if timeTravelling to one of the parallel steps
+        break;
+      }
+
       let stepOutput = undefined;
       const nextStep = this.executionGraph.steps[index + 1]!;
       if (nextStep) {
@@ -2684,7 +2711,7 @@ export class Run<
           nextStepIds.length > 0 &&
           inputData &&
           nextStepIds.includes(firstStepId) &&
-          steps.length === 1 //steps being greater than 1 means it's travelling to sstep in a nested workflow
+          steps.length === 1 //steps being greater than 1 means it's travelling to step in a nested workflow
           //if it's a nested wokrflow step, the step being resumed in the nested workflow might not be the first step in it,
           // making the inputData the output here wrong
         ) {
@@ -2693,19 +2720,40 @@ export class Run<
       }
 
       stepIds.forEach(stepId => {
-        stepResults[stepId] = {
-          status: context?.[stepId]?.status ?? snapshotContext[stepId]?.status ?? 'success',
-          payload: context?.[stepId]?.payload ?? snapshotContext[stepId]?.payload ?? stepPayload,
-          output: context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {},
-          resumePayload: context?.[stepId]?.resumePayload ?? snapshotContext[stepId]?.resumePayload ?? {},
-          suspendPayload: context?.[stepId]?.suspendPayload ?? snapshotContext[stepId]?.suspendPayload ?? {},
-          suspendOutput: context?.[stepId]?.suspendOutput ?? snapshotContext[stepId]?.suspendOutput ?? {},
-          startedAt: context?.[stepId]?.startedAt ?? snapshotContext[stepId]?.startedAt ?? Date.now(),
-          endedAt: context?.[stepId]?.endedAt ?? snapshotContext[stepId]?.endedAt ?? Date.now(),
-          suspendedAt: context?.[stepId]?.suspendedAt ?? snapshotContext[stepId]?.suspendedAt,
-          resumedAt: context?.[stepId]?.resumedAt ?? snapshotContext[stepId]?.resumedAt,
-          error: context?.[stepId]?.error ?? snapshotContext[stepId]?.error ?? '',
-        } as any;
+        let result;
+        const stepContext = context?.[stepId] ?? snapshotContext[stepId];
+        const defaultStepStatus = steps?.includes(stepId) ? 'running' : 'success';
+        const status = stepContext?.status ?? defaultStepStatus;
+        const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
+        result = {
+          status,
+          payload: stepContext?.payload ?? stepPayload,
+          output: isCompleteStatus
+            ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
+            : undefined,
+          resumePayload: stepContext?.resumePayload,
+          suspendPayload: stepContext?.suspendPayload,
+          suspendOutput: stepContext?.suspendOutput,
+          startedAt: stepContext?.startedAt ?? Date.now(),
+          endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
+          suspendedAt: stepContext?.suspendedAt,
+          resumedAt: stepContext?.resumedAt,
+          error: isCompleteStatus ? stepContext?.error : undefined,
+        };
+        if (
+          currentExecPathLength > 0 &&
+          (!snapshotContext[stepId] || (snapshotContext[stepId] && snapshotContext[stepId].status !== 'suspended'))
+        ) {
+          // if the step is after the timeTravelled step in the graph
+          // and it doesn't exist in the snapshot,
+          // OR it exists in snapshot and is not suspended,
+          // we don't need to set stepResult for it
+          result = undefined;
+        }
+        if (result) {
+          const formattedResult = removeUndefinedValues(result);
+          stepResults[stepId] = formattedResult as any;
+        }
       });
     }
 

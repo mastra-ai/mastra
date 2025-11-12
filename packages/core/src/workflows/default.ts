@@ -688,8 +688,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     iterationCount?: number;
   }): Promise<StepResult<any, any, any, any>> {
-    const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
-    const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
     const stepCallId = randomUUID();
 
     const { inputData, validationError } = await validateStepInput({
@@ -711,9 +709,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resumeDataToUse = resume?.resumePayload;
     }
 
+    const startTime = resumeDataToUse ? undefined : Date.now();
+    const resumeTime = resumeDataToUse ? Date.now() : undefined;
+
     const stepInfo = {
       ...stepResults[step.id],
-      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : { payload: inputData }),
+      ...(resumeDataToUse ? { resumePayload: resumeDataToUse } : { payload: inputData }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
       status: 'running',
@@ -1126,6 +1127,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ...(resumeTime ? { resumedAt: resumeTime } : {}),
       } as StepResult<any, any, any, any>;
       executionContext.activeStepsPath[step.step.id] = [...executionContext.executionPath, stepIndex];
+    }
+
+    if (timeTravel && timeTravel.executionPath.length > 0) {
+      timeTravel.executionPath.shift();
     }
 
     let execResults: any;
