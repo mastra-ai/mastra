@@ -107,7 +107,7 @@ Update `tsconfig.app.json` to add the same path configuration:
 
 Update `vite.config.ts` to add path alias resolution and the Tailwind plugin:
 
-```ts title="vite.config.ts {2,7-12}"
+```ts title="vite.config.ts" {2,7-12}
 import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -221,8 +221,6 @@ This downloads the entire AI Elements UI component library into a `@/components/
 Create `src/pages/Chat.tsx`:
 
 ```tsx title="src/pages/Chat.tsx"
-"use client";
-
 import { useEffect, useState } from "react";
 import { DefaultChatTransport } from "ai";
 import { useChat } from "@ai-sdk/react";
