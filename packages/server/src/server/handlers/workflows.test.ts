@@ -257,7 +257,7 @@ describe('vNext Workflow Handlers', () => {
     it('should throw error when workflow is not found', async () => {
       await expect(
         getWorkflowRunExecutionResultHandler({ mastra: mockMastra, workflowId: 'non-existent', runId: 'test-run' }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow with ID non-existent not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
     });
 
     it('should throw error when workflow run is not found', async () => {

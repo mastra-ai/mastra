@@ -139,7 +139,7 @@ export async function getWorkflowRunExecutionResultHandler({
       throw new HTTPException(400, { message: 'Run ID is required' });
     }
 
-    const workflow = mastra.getWorkflow(workflowId);
+    const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });

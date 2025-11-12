@@ -13,10 +13,6 @@ describe('Agent Builder Routes', () => {
     // Use helper to set up agent-builder test environment
     const setup = await setupAgentBuilderTests();
     mastra = setup.mastra;
-    const setupMocks = setup.setupMocks;
-
-    // Set up WorkflowRegistry mocks
-    setupMocks();
   });
 
   afterEach(() => {

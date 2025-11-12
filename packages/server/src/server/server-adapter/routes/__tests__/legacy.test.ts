@@ -13,10 +13,6 @@ describe('Legacy Routes', () => {
     // Use helper to set up legacy test environment (includes agents, workflows, and agent-builder)
     const setup = await setupLegacyTests();
     mastra = setup.mastra;
-    const setupMocks = setup.setupMocks;
-
-    // Set up WorkflowRegistry mocks for agent-builder routes
-    setupMocks();
   });
 
   // Run standard route tests using the test suite

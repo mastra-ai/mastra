@@ -7,7 +7,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { MastraVector } from '@mastra/core/vector';
 import { CompositeVoice } from '@mastra/core/voice';
-import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { createWorkflow, createStep, Workflow } from '@mastra/core/workflows';
 import { vi } from 'vitest';
 import { InMemoryTaskStore } from '../../../a2a/store';
 import { WorkflowRegistry } from '../../../utils';
@@ -323,25 +323,20 @@ export async function setupLegacyTests() {
   const mergeTemplateWorkflow = createTestWorkflow({ id: 'merge-template' });
   const workflowBuilderWorkflow = createTestWorkflow({ id: 'workflow-builder' });
 
-  // Mock legacy workflow stream methods
-  const createMockWorkflowStream = () => {
-    return new ReadableStream({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode('data: {"type":"step-result","result":"test"}\n\n'));
-        controller.close();
-      },
-    });
-  };
-
   const mastra = createTestMastra({
     agents: { 'test-agent': agent },
     workflows: {
       'test-workflow': workflow,
-      'merge-template': mergeTemplateWorkflow,
-      'workflow-builder': workflowBuilderWorkflow,
     },
   });
 
+  // Return a function to setup WorkflowRegistry mocks (for agent-builder routes)
+  const workflows = {
+    'merge-template': mergeTemplateWorkflow,
+    'workflow-builder': workflowBuilderWorkflow,
+  };
+
+  setupWorkflowRegistryMocks(workflows, mastra);
   // Create and start a workflow run - it will suspend at step1
   const run = await workflow.createRun({
     runId: 'test-run',
@@ -355,40 +350,7 @@ export async function setupLegacyTests() {
 
   await run.start({ inputData: {} }).catch(() => {});
 
-  // Create and start agent-builder workflow runs
-  const mergeTemplateRun = await mergeTemplateWorkflow.createRun({
-    runId: 'test-run',
-  });
-  vi.spyOn(mergeTemplateRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
-  // observeStreamLegacy returns an object with a stream property
-  vi.spyOn(mergeTemplateRun, 'observeStreamLegacy').mockReturnValue({
-    stream: createMockWorkflowStream(),
-  } as any);
-  await mergeTemplateRun.start({ inputData: {} }).catch(() => {});
-
-  const workflowBuilderRun = await workflowBuilderWorkflow.createRun({
-    runId: 'test-run',
-  });
-  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
-  // observeStreamLegacy returns an object with a stream property
-  vi.spyOn(workflowBuilderRun, 'observeStreamLegacy').mockReturnValue({
-    stream: createMockWorkflowStream(),
-  } as any);
-  await workflowBuilderRun.start({ inputData: {} }).catch(() => {});
-
-  // Return a function to setup WorkflowRegistry mocks (for agent-builder routes)
-  const setupMocks = () => {
-    vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {});
-    vi.spyOn(WorkflowRegistry, 'cleanup').mockImplementation(() => {});
-    vi.spyOn(WorkflowRegistry, 'isAgentBuilderWorkflow').mockReturnValue(true);
-    vi.spyOn(WorkflowRegistry, 'getAllWorkflows').mockReturnValue({
-      'test-workflow': workflow,
-      'merge-template': mergeTemplateWorkflow,
-      'workflow-builder': workflowBuilderWorkflow,
-    });
-  };
-
-  return { agent, workflow, mastra, run, setupMocks };
+  return { agent, workflow, mastra, run };
 }
 
 /**
@@ -484,38 +446,21 @@ export async function setupAgentBuilderTests() {
 
   const mastra = createTestMastra({
     agents: { 'test-agent': agent },
-    workflows: {
-      'merge-template': mergeTemplateWorkflow,
-      'workflow-builder': workflowBuilderWorkflow,
-    },
   });
 
-  // Create and start a workflow run for routes that need existing runs
-  const run = await mergeTemplateWorkflow.createRun({
-    runId: 'test-run',
-  });
-  await run.start({ inputData: { name: 'test' } });
-
-  // Return a function to setup WorkflowRegistry mocks
-  // This needs to be called in beforeEach after vi.clearAllMocks()
-  const setupMocks = () => {
-    // Import WorkflowRegistry dynamically to avoid circular deps
-
-    vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {});
-    vi.spyOn(WorkflowRegistry, 'cleanup').mockImplementation(() => {});
-    vi.spyOn(WorkflowRegistry, 'isAgentBuilderWorkflow').mockReturnValue(true);
-    vi.spyOn(WorkflowRegistry, 'getAllWorkflows').mockReturnValue({
-      'merge-template': mergeTemplateWorkflow,
-      'workflow-builder': workflowBuilderWorkflow,
-    });
+  // Import WorkflowRegistry dynamically to avoid circular deps
+  const workflows = {
+    'merge-template': mergeTemplateWorkflow,
+    'workflow-builder': workflowBuilderWorkflow,
   };
+
+  await setupWorkflowRegistryMocks(workflows, mastra);
 
   return {
     agent,
     mergeTemplateWorkflow,
     workflowBuilderWorkflow,
     mastra,
-    setupMocks,
   };
 }
 
@@ -587,4 +532,64 @@ export function extractPathParams(path: string): string[] {
   const matches = path.match(/:(\w+)/g);
   if (!matches) return [];
   return matches.map(m => m.slice(1));
+}
+
+// Mock legacy workflow stream methods
+const createMockWorkflowStream = () => {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"step-result","result":"test"}\n\n'));
+      controller.close();
+    },
+  });
+};
+
+export async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
+  // Manually trigger the attachment of Mastra to workflows before creating runs
+  // This ensures runs are created AFTER workflows have storage access
+  for (const [id, workflow] of Object.entries(workflows)) {
+    workflow.__registerMastra(mastra);
+    workflow.__registerPrimitives({
+      logger: mastra.getLogger(),
+      storage: mastra.getStorage(),
+      agents: mastra.listAgents(),
+      tts: mastra.getTTS(),
+      vectors: mastra.getVectors(),
+    });
+  }
+  // Mock workflow.createRun to add stream mocks to runs created AFTER workflow is attached to Mastra
+  for (const workflow of Object.values(workflows)) {
+    const originalCreateRun = workflow.createRun.bind(workflow);
+    vi.spyOn(workflow, 'createRun').mockImplementation(async config => {
+      const run = await originalCreateRun(config);
+      // Mock stream methods on the run
+      vi.spyOn(run, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+      vi.spyOn(run, 'observeStreamLegacy').mockReturnValue({
+        stream: createMockWorkflowStream(),
+      } as any);
+      return run;
+    });
+    const workflowRun = await workflow.createRun({
+      runId: 'test-run',
+    });
+    await workflowRun.start({ inputData: {} }).catch(() => {});
+  }
+
+  // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
+  vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {
+    for (const [id, workflow] of Object.entries(workflows)) {
+      // Register Mastra instance with the workflow
+      if (mastra) {
+        workflow.__registerMastra(mastra);
+        workflow.__registerPrimitives({
+          logger: mastra.getLogger(),
+          storage: mastra.getStorage(),
+          agents: mastra.listAgents(),
+          tts: mastra.getTTS(),
+          vectors: mastra.getVectors(),
+        });
+      }
+      WorkflowRegistry['additionalWorkflows'][id] = workflow;
+    }
+  });
 }
