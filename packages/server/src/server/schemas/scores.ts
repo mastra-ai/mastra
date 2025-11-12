@@ -8,13 +8,23 @@ import { paginationInfoSchema } from './common';
 const scoringSamplingConfigSchema = z.object({}).passthrough();
 
 /**
- * Schema for MastraScorer properties
+ * Schema for MastraScorer config object
  */
-const mastraScorerSchema = z.object({
+const mastraScorerConfigSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string(),
-  type: z.unknown().optional(), // Can be string or object with schemas
+  type: z.unknown().optional(),
+  judge: z.unknown().optional(),
+});
+
+/**
+ * Schema for MastraScorer
+ */
+const mastraScorerSchema = z.object({
+  config: mastraScorerConfigSchema,
+  steps: z.array(z.unknown()),
+  originalPromptObjects: z.union([z.instanceof(Map), z.record(z.string(), z.unknown())]),
 });
 
 /**

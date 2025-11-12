@@ -8,12 +8,12 @@ import { createTool } from '@mastra/core/tools';
 import { MastraVector } from '@mastra/core/vector';
 import { CompositeVoice } from '@mastra/core/voice';
 import { createWorkflow, createStep, Workflow } from '@mastra/core/workflows';
-import { vi } from 'vitest';
-import { InMemoryTaskStore } from '../../../a2a/store';
+import { vi, type Mock } from 'vitest';
 import { WorkflowRegistry } from '../../../utils';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ZodTypeAny } from 'zod';
 import { createScorer, type MastraScorer } from '@mastra/core/evals';
+import { LogLevel, type BaseLogMessage, type IMastraLogger } from '@mastra/core/logger';
 
 vi.mock('@mastra/core/vector');
 
@@ -32,6 +32,27 @@ vi.mock('zod', async importOriginal => {
 });
 
 const z = require('zod');
+
+type MockedLogger = {
+  listLogsByRunId: Mock<IMastraLogger['listLogsByRunId']>;
+  listLogs: Mock<IMastraLogger['listLogs']>;
+};
+
+const mockLogger = {
+  listLogsByRunId: vi.fn(),
+  listLogs: vi.fn(),
+  transports: new Map<string, unknown>(),
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+  error: vi.fn(),
+  cleanup: vi.fn(),
+  trackException: vi.fn(),
+  getTransports: vi.fn(() => mockLogger.transports ?? new Map<string, unknown>()),
+} as unknown as MockedLogger & {
+  transports: Record<string, unknown>;
+  getTransports: () => Map<string, unknown>;
+};
 
 /**
  * Creates a test tool with basic schema
@@ -237,8 +258,25 @@ export function createTestMastra(
     vectors?: Record<string, MastraVector>;
   } = {},
 ) {
+  mockLogger.transports = new Map([
+    ['console', {}],
+    ['file', {}],
+  ]) as unknown as Record<string, unknown>;
+
+  const mockLogs: BaseLogMessage[] = [createLog({})];
+
+  mockLogger.listLogsByRunId.mockResolvedValue({
+    logs: mockLogs,
+    total: 1,
+    page: 1,
+    perPage: 100,
+    hasMore: false,
+  });
+
+  mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+
   return new Mastra({
-    logger: false,
+    logger: mockLogger as unknown as IMastraLogger,
     storage: config.storage || new InMemoryStore(),
     scorers: config.scorers || {},
     agents: config.agents || {},
@@ -255,8 +293,15 @@ export function setupAgentTests() {
   const agent = createTestAgent();
   mockAgentMethods(agent);
 
+  const testScorer = createScorer({
+    id: 'test-scorer',
+    name: 'Test Scorer',
+    description: 'Test scorer for observability tests',
+  });
+
   const mastra = createTestMastra({
     agents: { 'test-agent': agent },
+    scorers: { 'test-scorer': testScorer },
   });
 
   return { agent, mastra };
@@ -274,12 +319,7 @@ export async function setupWorkflowTests() {
     workflows: { 'test-workflow': workflow },
   });
 
-  // Create and start a workflow run - it will suspend at step1
-  // Use empty object as input since suspending workflow expects empty input schema
-  const run = await workflow.createRun({
-    runId: 'test-run',
-  });
-  await run.start({ inputData: {} }).catch(() => {});
+  await mockWorkflowRun(workflow);
 
   return { workflow, mastra };
 }
@@ -355,32 +395,6 @@ export async function setupLegacyTests() {
   await run.start({ inputData: {} }).catch(() => {});
 
   return { agent, workflow, mastra, run };
-}
-
-/**
- * Creates a test task for A2A routes
- */
-export function createTestTask(
-  overrides: {
-    taskId?: string;
-    agentId?: string;
-    contextId?: string;
-    state?: string;
-  } = {},
-) {
-  return {
-    id: overrides.taskId || 'test-task-id',
-    contextId: overrides.contextId || 'test-context-id',
-    state: overrides.state || 'completed',
-    artifacts: [],
-    metadata: {},
-    message: {
-      messageId: 'test-message-id',
-      kind: 'message' as const,
-      role: 'agent' as const,
-      parts: [{ kind: 'text' as const, text: 'Test response' }],
-    },
-  };
 }
 
 /**
@@ -548,4 +562,17 @@ async function mockWorkflowRun(workflow: Workflow) {
     stream: createMockWorkflowStream(),
   } as any);
   await workflowBuilderRun.start({ inputData: {} }).catch(() => {});
+}
+
+export function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
+  return {
+    msg: 'test log',
+    level: LogLevel.INFO,
+    time: new Date(),
+    ...args,
+    pid: 1,
+    hostname: 'test-host',
+    name: 'test-name',
+    runId: 'test-run',
+  };
 }

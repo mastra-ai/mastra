@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ServerRoute } from '../index';
 import type { Mastra } from '@mastra/core';
-import { z } from 'zod';
-import { InMemoryTaskStore } from '../../../a2a/store';
-import { createMockRequestContext, createTestTask } from './test-helpers';
+import { createMockRequestContext } from './test-helpers';
 import {
   expectInvalidSchema,
   expectValidSchema,

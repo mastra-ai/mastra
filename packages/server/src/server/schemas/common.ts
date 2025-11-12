@@ -127,11 +127,13 @@ export const messageResponseSchema = z.object({
 /**
  * Base log message schema
  */
-export const baseLogMessageSchema = z
-  .object({
-    level: z.enum(['debug', 'info', 'warn', 'error']),
-    message: z.string(),
-    timestamp: z.date(),
-    context: z.record(z.string(), z.unknown()).optional(),
-  })
-  .passthrough();
+export const baseLogMessageSchema = z.object({
+  level: z.enum(['debug', 'info', 'warn', 'error']),
+  msg: z.string(),
+  time: z.date(),
+  context: z.record(z.string(), z.unknown()).optional(),
+  runId: z.string().optional(),
+  pid: z.number(),
+  hostname: z.string(),
+  name: z.string(),
+});

@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { vi } from 'vitest';
+import { Mock, vi } from 'vitest';
 import type { AdapterTestContext } from './route-adapter-test-suite';
 import { Workflow } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
@@ -14,6 +14,7 @@ import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { WorkflowRegistry } from '@mastra/server/server-adapter';
+import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
 
 vi.mock('@mastra/core/vector');
 
@@ -206,9 +207,26 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     description: 'Test scorer for observability tests',
   });
 
+  mockLogger.transports = new Map([
+    ['console', {}],
+    ['file', {}],
+  ]) as unknown as Record<string, unknown>;
+
+  const mockLogs: BaseLogMessage[] = [createLog({})];
+
+  mockLogger.listLogsByRunId.mockResolvedValue({
+    logs: mockLogs,
+    total: 1,
+    page: 1,
+    perPage: 100,
+    hasMore: false,
+  });
+
+  mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+
   // Create Mastra instance with all test entities
   const mastra = new Mastra({
-    logger: false,
+    logger: mockLogger as unknown as IMastraLogger,
     storage: new InMemoryStore(),
     agents: {
       'test-agent': agent,
@@ -360,32 +378,6 @@ export function createTestWorkflow(
 }
 
 /**
- * Creates a test task for A2A routes
- */
-export function createTestTask(
-  overrides: {
-    taskId?: string;
-    agentId?: string;
-    contextId?: string;
-    state?: string;
-  } = {},
-) {
-  return {
-    id: overrides.taskId || 'test-task-id',
-    contextId: overrides.contextId || 'test-context-id',
-    state: overrides.state || 'completed',
-    artifacts: [],
-    metadata: {},
-    message: {
-      messageId: 'test-message-id',
-      kind: 'message' as const,
-      role: 'agent' as const,
-      parts: [{ kind: 'text' as const, text: 'Test response' }],
-    },
-  };
-}
-
-/**
  * Recursively converts ISO date strings to Date objects in response data.
  * This is needed because HTTP responses serialize dates to strings via JSON.stringify(),
  * but schemas expect Date objects for validation.
@@ -457,3 +449,37 @@ async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, m
     }
   });
 }
+
+export function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
+  return {
+    msg: 'test log',
+    level: LogLevel.INFO,
+    time: new Date(),
+    ...args,
+    pid: 1,
+    hostname: 'test-host',
+    name: 'test-name',
+    runId: 'test-run',
+  };
+}
+
+type MockedLogger = {
+  listLogsByRunId: Mock<IMastraLogger['listLogsByRunId']>;
+  listLogs: Mock<IMastraLogger['listLogs']>;
+};
+
+const mockLogger = {
+  listLogsByRunId: vi.fn(),
+  listLogs: vi.fn(),
+  transports: new Map<string, unknown>(),
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+  error: vi.fn(),
+  cleanup: vi.fn(),
+  trackException: vi.fn(),
+  getTransports: vi.fn(() => mockLogger.transports ?? new Map<string, unknown>()),
+} as unknown as MockedLogger & {
+  transports: Record<string, unknown>;
+  getTransports: () => Map<string, unknown>;
+};
