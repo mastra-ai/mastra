@@ -306,7 +306,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         this.logger?.trackException(mastraError);
         this.logger?.error('Error executing step: ' + error?.stack);
 
-        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result, mastraError)) as any;
+        const result = (await this.fmtReturnValue(params.emitter, stepResults, lastOutput.result, error)) as any;
         await this.persistStepUpdate({
           workflowId,
           runId,
@@ -316,7 +316,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: lastOutput.executionContext as ExecutionContext,
           workflowStatus: result.status,
           result: result.result,
-          error: mastraError,
+          error: error,
           requestContext: params.requestContext,
         });
 
@@ -837,7 +837,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         execResults = {
           status: 'failed',
-          error: mastraError,
+          error: error,
           endedAt: Date.now(),
         };
       }
