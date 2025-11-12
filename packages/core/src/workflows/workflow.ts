@@ -1410,6 +1410,7 @@ export class Workflow<
       payload: (snapshot as WorkflowRunState).context?.input,
       steps: fullSteps as any,
       activeStepsPath: (snapshot as WorkflowRunState).activeStepsPath,
+      serializedStepGraph: (snapshot as WorkflowRunState).serializedStepGraph,
     };
   }
 }
