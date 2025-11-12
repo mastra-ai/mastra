@@ -16,9 +16,7 @@ describe('Tools Routes', () => {
     tools = { 'test-tool': testTool };
 
     // Create Mastra instance
-    mastra = createTestMastra({
-      tools,
-    });
+    mastra = createTestMastra();
   });
 
   // Create test suite with auto-generated bodies!

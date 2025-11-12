@@ -13,6 +13,7 @@ import { InMemoryTaskStore } from '../../../a2a/store';
 import { WorkflowRegistry } from '../../../utils';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ZodTypeAny } from 'zod';
+import { createScorer, type MastraScorer } from '@mastra/core/evals';
 
 vi.mock('@mastra/core/vector');
 
@@ -232,13 +233,17 @@ export function createTestMastra(
     agents?: Record<string, Agent>;
     workflows?: Record<string, any>;
     storage?: InMemoryStore;
-    [key: string]: any;
+    scorers?: Record<string, MastraScorer>;
+    vectors?: Record<string, MastraVector>;
   } = {},
 ) {
   return new Mastra({
     logger: false,
     storage: config.storage || new InMemoryStore(),
-    ...config,
+    scorers: config.scorers || {},
+    agents: config.agents || {},
+    workflows: config.workflows || {},
+    vectors: config.vectors || {},
   });
 }
 
@@ -299,7 +304,6 @@ export async function setupMemoryTests() {
 
   // Create Mastra instance with both global memory and agent
   const mastra = createTestMastra({
-    memory,
     agents: { 'test-agent': testAgent },
   });
 
@@ -433,16 +437,11 @@ export async function setupAgentBuilderTests() {
  */
 export async function setupObservabilityTests() {
   // Create test scorer
-  const testScorer = {
+  const testScorer = createScorer({
     id: 'test-scorer',
     name: 'Test Scorer',
     description: 'Test scorer for observability tests',
-    executor: async () => ({ score: 0.5 }),
-    config: {
-      id: 'test-scorer',
-      name: 'Test Scorer',
-    },
-  };
+  });
 
   // Create Mastra instance with scorer
   const mastra = createTestMastra({
