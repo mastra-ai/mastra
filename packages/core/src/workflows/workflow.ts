@@ -1154,6 +1154,7 @@ export class Workflow<
     suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
     restart?: boolean;
     timeTravel?: {
+      inputData: z.infer<TInput>;
       steps: string[];
       nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
       resumeData?: any;
@@ -1226,7 +1227,7 @@ export class Workflow<
 
     if (isTimeTravel) {
       res = await run.timeTravel({
-        inputData,
+        inputData: timeTravel?.inputData,
         resumeData: timeTravel?.resumeData,
         initialState: state,
         step: timeTravel?.steps,
@@ -2642,8 +2643,6 @@ export class Run<
 
     const firstStepId = steps[0]!;
 
-    // const firstStep = this.workflowSteps[firstStepId]!;
-
     let executionPath: number[] = [];
     const stepResults: Record<string, StepResult<any, any, any, any>> = {};
     const snapshotContext = snapshot.context as Record<string, any>;
@@ -2684,8 +2683,8 @@ export class Run<
         if (
           nextStepIds.length > 0 &&
           inputData &&
-          nextStepIds.includes(firstStepId)
-          // firstStep.component !== RegisteredLogger.WORKFLOW
+          nextStepIds.includes(firstStepId) &&
+          steps.length === 1 //steps being greater than 1 means it's travelling to sstep in a nested workflow
           //if it's a nested wokrflow step, the step being resumed in the nested workflow might not be the first step in it,
           // making the inputData the output here wrong
         ) {
@@ -2711,6 +2710,7 @@ export class Run<
     }
 
     const timeTravelData: TimeTravelExecutionParams = {
+      inputData,
       executionPath,
       steps,
       stepResults,

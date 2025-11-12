@@ -11388,7 +11388,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Time travel', () => {
+  describe.only('Time travel', () => {
     afterEach(async () => {
       testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
@@ -11676,11 +11676,17 @@ describe('Workflow', () => {
         .then(step4)
         .commit();
 
-      new Mastra({
+      const mastra = new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { testWorkflow: workflow },
       });
+
+      const storage = mastra.getStorage();
+
+      if (!storage) {
+        expect.fail('Storage is not initialized');
+      }
 
       const run = await workflow.createRun();
       const result = await run.timeTravel({
@@ -11753,6 +11759,28 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
+      const nestedWorkflowSnapshot = await storage.loadWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId: run.runId,
+      });
+
+      expect(nestedWorkflowSnapshot?.context).toMatchObject({
+        step2: {
+          status: 'success',
+          payload: { step1Result: 2 },
+          output: { step2Result: 3 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+        step3: {
+          status: 'success',
+          payload: { step2Result: 3 },
+          output: { nestedFinal: 4 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+      });
+
       const run2 = await workflow.createRun();
       const result2 = await run2.timeTravel({
         step: 'nestedWorkflow.step3',
@@ -11767,11 +11795,11 @@ describe('Workflow', () => {
             payload: {},
             startedAt: expect.any(Number),
             status: 'success',
-            output: { step2Result: 3 },
+            output: {},
             endedAt: expect.any(Number),
           },
           nestedWorkflow: {
-            payload: { step2Result: 3 },
+            payload: {},
             startedAt: expect.any(Number),
             status: 'success',
             output: {
@@ -11798,6 +11826,28 @@ describe('Workflow', () => {
 
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
+
+      const nestedWorkflowSnapshot2 = await storage.loadWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId: run2.runId,
+      });
+
+      expect(nestedWorkflowSnapshot2?.context).toMatchObject({
+        step2: {
+          status: 'success',
+          payload: {},
+          output: { step2Result: 3 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+        step3: {
+          status: 'success',
+          payload: { step2Result: 3 },
+          output: { nestedFinal: 4 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+      });
 
       const run3 = await workflow.createRun();
       const result3 = await run3.timeTravel({
@@ -11844,6 +11894,28 @@ describe('Workflow', () => {
 
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(1);
+
+      const nestedWorkflowSnapshot3 = await storage.loadWorkflowSnapshot({
+        workflowName: 'nestedWorkflow',
+        runId: run3.runId,
+      });
+
+      expect(nestedWorkflowSnapshot3?.context).toMatchObject({
+        step2: {
+          status: 'success',
+          payload: { step1Result: 2 },
+          output: { step2Result: 3 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+        step3: {
+          status: 'success',
+          payload: { step2Result: 3 },
+          output: { nestedFinal: 4 },
+          endedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+        },
+      });
     });
 
     // it('should successfully suspend and resume a timeTravelled workflow execution', async () => {

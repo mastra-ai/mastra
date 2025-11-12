@@ -66,6 +66,7 @@ export type RestartExecutionParams = {
 
 export type TimeTravelExecutionParams = {
   executionPath: number[];
+  inputData?: any;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
   steps: string[];
@@ -699,7 +700,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =
       await validateStepResumeData({
-        resumeData: timeTravel?.resumeData,
+        resumeData: timeTravel?.stepResults[step.id]?.status === 'suspended' ? timeTravel?.resumeData : undefined,
         step,
       });
 
@@ -849,6 +850,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           timeTravel:
             timeTravelSteps.length > 0
               ? {
+                  inputData: timeTravel?.inputData ?? inputData,
                   steps: timeTravelSteps,
                   nestedStepResults: timeTravel?.nestedStepResults,
                   resumeData: timeTravel?.resumeData,
