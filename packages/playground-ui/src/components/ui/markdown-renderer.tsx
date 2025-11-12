@@ -16,9 +16,11 @@ export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   const processedText = children.replace(/\\n/g, '\n');
 
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS} className="space-y-3">
-      {processedText}
-    </Markdown>
+    <div className="space-y-3">
+      <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+        {processedText}
+      </Markdown>
+    </div>
   );
 }
 
