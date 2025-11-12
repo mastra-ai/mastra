@@ -15,6 +15,8 @@ import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { normalizeUsageMetrics } from './metrics';
 
+const MASTRA_TRACE_ID_METADATA_KEY = 'mastra-trace-id';
+
 export interface BraintrustExporterConfig extends BaseExporterConfig {
   /**
    * Optional Braintrust logger instance.
@@ -147,17 +149,20 @@ export class BraintrustExporter extends BaseExporter {
       name: span.name,
       type: mapSpanType(span.type),
       ...(shouldOmitParentIds
-        ? {
-            metadata: {
-              traceId: span.traceId,
-            },
-          } // Let Braintrust auto-link to parent
+        ? {}
         : {
             parentSpanIds: span.parentSpanId
               ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
               : { spanId: span.traceId, rootSpanId: span.traceId },
           }),
       ...payload,
+    });
+
+    // Include the Mastra trace ID in the span metadata for correlation
+    braintrustSpan.log({
+      metadata: {
+        [MASTRA_TRACE_ID_METADATA_KEY]: span.traceId,
+      },
     });
 
     spanData.spans.set(span.id, braintrustSpan);
