@@ -970,7 +970,7 @@ describe('CoreToolBuilder Output Schema', () => {
         conditions: z.string(),
         test: z.tuple([z.string(), z.string()]),
       }),
-      execute: async ({ context: _ }) => ({
+      execute: async () => ({
         temperature: 72,
         conditions: 'sunny',
         test: ['value1', 'value2'] as [string, string],
@@ -978,12 +978,12 @@ describe('CoreToolBuilder Output Schema', () => {
     });
 
     const builder = new CoreToolBuilder({
-      originalTool: toolWithTupleOutput as any,
+      originalTool: toolWithTupleOutput,
       options: {
         name: 'weather-tool',
         logger: console as any,
         description: 'Get weather information',
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: {},
         model: mockModel,
       },
