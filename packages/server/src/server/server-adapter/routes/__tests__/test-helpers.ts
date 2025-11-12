@@ -354,14 +354,6 @@ export async function setupLegacyTests() {
 }
 
 /**
- * Creates an InMemoryTaskStore for A2A testing
- */
-export function createTaskStore() {
-  // Import InMemoryTaskStore dynamically to avoid circular deps
-  return new InMemoryTaskStore();
-}
-
-/**
  * Creates a test task for A2A routes
  */
 export function createTestTask(
@@ -385,35 +377,6 @@ export function createTestTask(
       parts: [{ kind: 'text' as const, text: 'Test response' }],
     },
   };
-}
-
-/**
- * Pre-populates a taskStore with test tasks
- */
-export async function populateTaskStore(taskStore: any, tasks: Array<{ agentId: string; task: any }>) {
-  for (const { agentId, task } of tasks) {
-    await taskStore.save({ agentId, data: task });
-  }
-}
-
-/**
- * Complete setup for A2A routes testing
- * Returns a configured agent, task store, and mastra instance
- */
-export async function setupA2ATests() {
-  const agent = createTestAgent();
-  mockAgentMethods(agent);
-  const taskStore = createTaskStore();
-
-  // Pre-populate taskStore with test task
-  const testTask = createTestTask();
-  await populateTaskStore(taskStore, [{ agentId: 'test-agent', task: testTask }]);
-
-  const mastra = createTestMastra({
-    agents: { 'test-agent': agent },
-  });
-
-  return { agent, taskStore, mastra };
 }
 
 /**

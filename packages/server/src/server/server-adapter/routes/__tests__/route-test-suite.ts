@@ -3,7 +3,7 @@ import type { ServerRoute } from '../index';
 import type { Mastra } from '@mastra/core';
 import { z } from 'zod';
 import { InMemoryTaskStore } from '../../../a2a/store';
-import { createMockRequestContext, createTestTask, populateTaskStore } from './test-helpers';
+import { createMockRequestContext, createTestTask } from './test-helpers';
 import {
   expectInvalidSchema,
   expectValidSchema,
@@ -224,13 +224,6 @@ async function buildHandlerParams(
     mastra,
     requestContext: createMockRequestContext(),
   };
-
-  // Always include taskStore for A2A routes and pre-populate with test task
-  const taskStore = new InMemoryTaskStore();
-  // Import helpers at runtime to avoid circular deps
-  const testTask = createTestTask();
-  await populateTaskStore(taskStore, [{ agentId: 'test-agent', task: testTask }]);
-  params.taskStore = taskStore;
 
   // Add tools if provided (for tools routes)
   if (tools) {
