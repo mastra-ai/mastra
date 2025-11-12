@@ -47,9 +47,7 @@ ${getFinancialModelingAgentPrompt(true)}
       workingMemory: {
         enabled: true,
       },
-      threads: {
-        generateTitle: true,
-      },
+      generateTitle: true,
     },
   }),
   tools: async ({ requestContext }) => {

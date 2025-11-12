@@ -206,7 +206,7 @@ Remember: You are not just a code executor, but a complete development environme
   memory: new Memory({
     storage: new LibSQLStore({ id: 'coding-agent-storage', url: 'file:../../mastra.db' }),
     options: {
-      threads: { generateTitle: true },
+      generateTitle: true,
       semanticRecall: true,
       workingMemory: { enabled: true },
     },

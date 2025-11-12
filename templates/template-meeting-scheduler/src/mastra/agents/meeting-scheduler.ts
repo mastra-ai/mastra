@@ -65,7 +65,7 @@ Once authorized, you can proceed with the requested email analysis and calendar 
     options: {
       semanticRecall: true,
       workingMemory: { enabled: true },
-      threads: { generateTitle: true },
+      generateTitle: true,
     },
   }),
   tools: async ({ requestContext }) => {
