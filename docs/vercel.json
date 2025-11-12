@@ -1329,6 +1329,46 @@
       "source": "/:path(ja)?/docs/server-db/production-server",
       "destination": "/:path/docs/server-db/mastra-server",
       "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/off-the-shelf-scorers",
+      "destination": "/:path/docs/scorers/built-in-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/overview",
+      "destination": "/:path/docs/scorers/evals-legacy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/textual-evals",
+      "destination": "/:path/docs/scorers/evals-legacy/textual-evals",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/custom-eval",
+      "destination": "/:path/docs/scorers/evals-legacy/custom-eval",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/scorers/evals-old-api/running-in-ci",
+      "destination": "/:path/docs/scorers/evals-legacy/running-in-ci",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/mcp-overview",
+      "destination": "/:path/docs/tools-mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/advanced-usage",
+      "destination": "/:path/docs/tools-mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/examples/agents/deploying-mcp-server",
+      "destination": "/:path/docs/tools-mcp/deploying-mcp-server",
+      "permanent": true
     }
   ]
 }
