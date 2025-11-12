@@ -136,3 +136,5 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
 }
 
 export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {}
+
+export { getErrorFromUnknown };
