@@ -426,7 +426,7 @@ export async function updateWorkingMemoryHandler({
 interface SearchResult {
   id: string;
   role: string;
-  content: any;
+  content: string;
   createdAt: Date;
   threadId?: string;
   threadTitle?: string;
@@ -467,14 +467,25 @@ export async function deleteMessagesHandler({
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    // Delete the messages - let the memory method handle validation
-    await memory.deleteMessages(messageIds as any);
+    // Normalize messageIds to the format expected by deleteMessages
+    // Convert single values to arrays and extract IDs from objects
+    let normalizedIds: string[] | { id: string }[];
+
+    if (Array.isArray(messageIds)) {
+      // Already an array - keep as is (could be string[] or { id: string }[])
+      normalizedIds = messageIds;
+    } else if (typeof messageIds === 'string') {
+      // Single string ID - wrap in array
+      normalizedIds = [messageIds];
+    } else {
+      // Single object with id property - wrap in array
+      normalizedIds = [messageIds];
+    }
+
+    await memory.deleteMessages(normalizedIds);
 
     // Count messages for response
-    let count = 1;
-    if (Array.isArray(messageIds)) {
-      count = messageIds.length;
-    }
+    const count = Array.isArray(messageIds) ? messageIds.length : 1;
 
     return { success: true, message: `${count} message${count === 1 ? '' : 's'} deleted successfully` };
   } catch (error) {
@@ -608,12 +619,15 @@ export async function searchMemoryHandler({
     const fetched = await Promise.all(threadIds.map((id: string) => memory.getThreadById({ threadId: id })));
     const threadMap = new Map(fetched.filter(Boolean).map(t => [t!.id, t!]));
 
+    const getContent = (message: MastraDBMessage): string => {
+      if (typeof message.content === 'string') {
+        return message.content;
+      }
+      return message.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
+    };
     // Process each message in the results
     for (const msg of result.messages) {
-      const content =
-        typeof msg.content.content === `string`
-          ? msg.content.content
-          : msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') || '';
+      const content = getContent(msg);
 
       const msgThreadId = msg.threadId || threadId;
       const thread = threadMap.get(msgThreadId);
@@ -636,13 +650,13 @@ export async function searchMemoryHandler({
           before: threadMessages.slice(Math.max(0, messageIndex - beforeRange), messageIndex).map(m => ({
             id: m.id,
             role: m.role,
-            content: m.content,
+            content: getContent(m),
             createdAt: m.createdAt || new Date(),
           })),
           after: threadMessages.slice(messageIndex + 1, messageIndex + afterRange + 1).map(m => ({
             id: m.id,
             role: m.role,
-            content: m.content,
+            content: getContent(m),
             createdAt: m.createdAt || new Date(),
           })),
         };
