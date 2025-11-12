@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { WritableStream } from 'stream/web';
 import type { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IErrorDefinition } from '../error';
