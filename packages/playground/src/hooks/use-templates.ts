@@ -3,6 +3,7 @@ import { TemplateInstallationRequest } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
 import { useMastraClient } from '@mastra/react';
 import { useState } from 'react';
+import { toast } from '@mastra/playground-ui';
 
 export interface Template {
   slug: string;
@@ -405,6 +406,7 @@ const saveTemplateStateToLocalStorage = (runId: string, state: any) => {
     );
   } catch (error) {
     console.warn('Failed to save template state to localStorage:', error);
+    toast.warning('Failed to save template state');
   }
 };
 
@@ -425,6 +427,7 @@ const restoreTemplateStateFromLocalStorage = (runId: string) => {
     }
   } catch (error) {
     console.warn('Failed to restore template state from localStorage:', error);
+    toast.warning('Failed to restore template state');
   }
   return null;
 };
@@ -499,6 +502,7 @@ export const useWatchTemplateInstall = (workflowInfo?: any) => {
                 processTemplateRecord(record);
               } catch (err) {
                 console.error('💥 [watchInstall] Error processing template record:', err);
+                toast.error('Error processing template installation');
                 // Set minimal error state if processing fails (graceful degradation)
                 setStreamResult((prev: any) => ({ ...prev, error: err }));
               }
@@ -584,6 +588,7 @@ const useTemplateStreamProcessor = (workflowInfo?: any, runId?: string) => {
       }
     } catch (error) {
       console.error('💥 [processStream] Error processing template installation stream:', error);
+      toast.error('Template installation failed');
 
       // Use the helper for error handling too
       const { newState } = processTemplateInstallRecord(

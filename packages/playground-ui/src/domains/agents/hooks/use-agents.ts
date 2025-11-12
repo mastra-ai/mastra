@@ -3,6 +3,7 @@ import { ReorderModelListParams, UpdateModelInModelListParams, UpdateModelParams
 import { useMastraClient } from '@mastra/react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/lib/toast';
 
 export const useAgents = () => {
   const client = useMastraClient();
@@ -25,6 +26,7 @@ export const useUpdateAgentModel = (agentId: string) => {
     },
     onError: err => {
       console.error('Error updating model', err);
+      toast.error('Failed to update model');
     },
   });
 };
@@ -40,6 +42,7 @@ export const useReorderModelList = (agentId: string) => {
     },
     onError: err => {
       console.error('Error reordering model list', err);
+      toast.error('Failed to reorder model list');
     },
   });
 };
@@ -56,6 +59,7 @@ export const useUpdateModelInModelList = (agentId: string) => {
     },
     onError: err => {
       console.error('Error updating model in model list', err);
+      toast.error('Failed to update model in model list');
     },
   });
 };
@@ -71,6 +75,7 @@ export const useResetAgentModel = (agentId: string) => {
     },
     onError: err => {
       console.error('Error resetting model', err);
+      toast.error('Failed to reset model');
     },
   });
 };

@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
 import { useAgentsModelProviders } from '../../hooks/use-agents-model-providers';
 import { Provider } from '@mastra/client-js';
+import { toast } from '@/lib/toast';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -158,6 +159,7 @@ export const AgentMetadataModelSwitcher = ({
         console.log('Model updated:', result);
       } catch (error) {
         console.error('Failed to update model:', error);
+        toast.error('Failed to update model');
       } finally {
         setLoading(false);
       }
@@ -219,6 +221,7 @@ export const AgentMetadataModelSwitcher = ({
             modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
+            toast.error('Failed to reset model');
           });
         }
       }
@@ -254,6 +257,7 @@ export const AgentMetadataModelSwitcher = ({
   const handleReset = async () => {
     if (!resetModel) {
       console.warn('Reset model function not provided');
+      toast.warning('Reset function not available');
       return;
     }
 
@@ -272,6 +276,7 @@ export const AgentMetadataModelSwitcher = ({
       // which will update the defaultProvider and defaultModel props
     } catch (error) {
       console.error('Failed to reset model:', error);
+      toast.error('Failed to reset model');
     } finally {
       setLoading(false);
     }

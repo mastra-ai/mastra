@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { useEffect, useRef, useState } from 'react';
 import { recordMicrophoneToFile } from '../utils/record-mic-to-file';
 import { usePlaygroundStore } from '@/store/playground-store';
+import { toast } from '@/lib/toast';
 
 export interface SpeechRecognitionState {
   isListening: boolean;
@@ -41,6 +42,7 @@ export const useSpeechRecognition = ({
         setAgent(agent as unknown as Agent);
       } catch (error) {
         setAgent(null);
+        toast.error('Failed to initialize voice agent');
       }
     };
 

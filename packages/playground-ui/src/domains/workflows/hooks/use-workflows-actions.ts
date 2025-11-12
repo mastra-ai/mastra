@@ -17,6 +17,7 @@ export const useExecuteWorkflow = () => {
         return { runId: newRunId };
       } catch (error) {
         console.error('Error creating workflow run:', error);
+        toast.error('Failed to create workflow run');
         throw error;
       }
     },
@@ -45,6 +46,7 @@ export const useExecuteWorkflow = () => {
         await workflow.start({ runId, inputData: input || {}, requestContext });
       } catch (error) {
         console.error('Error starting workflow run:', error);
+        toast.error('Failed to start workflow run');
         throw error;
       }
     },
@@ -72,6 +74,7 @@ export const useExecuteWorkflow = () => {
         return result;
       } catch (error) {
         console.error('Error starting workflow run:', error);
+        toast.error('Failed to start workflow run');
         throw error;
       }
     },
@@ -426,6 +429,7 @@ export const useCancelWorkflowRun = () => {
         return response;
       } catch (error) {
         console.error('Error canceling workflow run:', error);
+        toast.error('Failed to cancel workflow run');
         throw error;
       }
     },

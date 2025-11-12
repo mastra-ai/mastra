@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMastraClient } from '@mastra/react';
 import { usePlaygroundStore } from '@/store/playground-store';
+import { toast } from '@/lib/toast';
 
 function parseJsonString(jsonString: string): any {
   try {
@@ -55,6 +56,7 @@ export function useAgentWorkingMemory(agentId: string, threadId: string, resourc
     } catch (error) {
       setWorkingMemoryData(null);
       console.error('Error fetching working memory', error);
+      toast.error('Failed to fetch working memory');
     } finally {
       setIsLoading(false);
     }
