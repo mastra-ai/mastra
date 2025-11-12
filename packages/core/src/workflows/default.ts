@@ -64,7 +64,7 @@ export type RestartExecutionParams = {
 };
 
 /**
- * Default implementation of the ExecutionEngine using XState
+ * Default implementation of the ExecutionEngine
  */
 export class DefaultExecutionEngine extends ExecutionEngine {
   /**
