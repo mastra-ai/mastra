@@ -117,8 +117,8 @@ export default function Dataset() {
                 onRowClick={handleRowClick}
                 filtersApplied={Boolean(
                   selectedVersionId &&
-                    datasetData?.currentVersion.id &&
-                    selectedVersionId !== datasetData?.currentVersion.id,
+                    datasetData?.currentVersion?.id &&
+                    selectedVersionId !== datasetData?.currentVersion?.id,
                 )}
                 // errorMsg={dataset?.errorMsg}
                 // setEndOfListElement={dataset?.setEndOfListElement}

@@ -23,7 +23,7 @@ export default function DatasetsPage() {
               <Icon>
                 <PlusIcon />
               </Icon>
-              Create New
+              New Dataset
             </Button>
             <Button as={Link} to="https://mastra.ai/en/docs/datasets/overview" target="_blank">
               Documentation

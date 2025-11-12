@@ -14,10 +14,26 @@ export function DatasetCreation() {
     description: '',
     metadata: '',
   });
-  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setLoading] = useState<boolean>(false);
 
   const handleCreate = async () => {
+    if (!dataset.name.trim()) {
+      setErrors({ ...errors, name: 'Name is required' });
+      return;
+    }
+
+    if (dataset.metadata?.trim()) {
+      try {
+        JSON.parse(dataset.metadata);
+      } catch (e) {
+        setErrors({ ...errors, metadata: 'Metadata must be valid JSON' });
+        return;
+      }
+    }
+
+    setLoading(true);
+
     try {
       const result = await createDataset({
         name: dataset.name,
@@ -43,27 +59,35 @@ export function DatasetCreation() {
         <PageHeader title={'New Dataset'} icon={<DatabaseIcon />} />
 
         <InputField
+          name="name"
           label="Name"
           value={dataset.name}
           onChange={e => setDataset({ ...dataset, name: e.target.value })}
           required
-          errorMsg={errorMsg}
+          errorMsg={errors['name']}
+          onBlur={() => setErrors({ ...errors, name: '' })}
         />
+
         <TextareaField
+          name="description"
           label="Description"
           value={dataset.description}
           onChange={e => setDataset({ ...dataset, description: e.target.value })}
         />
+
         <TextareaField
+          name="metadata"
           label="Metadata (JSON)"
           value={dataset.metadata}
           onChange={e => setDataset({ ...dataset, metadata: e.target.value })}
+          onBlur={() => setErrors({ ...errors, metadata: '' })}
+          errorMsg={errors['metadata']}
         />
 
         <FormActions
           onSubmit={handleCreate}
           onCancel={handleCancel}
-          isSubmitting={false}
+          isSubmitting={isLoading}
           submitLabel="Create"
           cancelLabel="Cancel"
         />
