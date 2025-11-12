@@ -12,7 +12,7 @@ import "dotenv/config";
 const config = {
   title: "Mastra Docs",
   tagline: "TypeScript agent framework",
-  favicon: "favicon.ico",
+  favicon: "/img/favicon.ico",
 
   // Set the production url of your site here
   url: "https://mastra.ai",
