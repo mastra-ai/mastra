@@ -10,11 +10,11 @@ import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
 import { Mastra } from '../mastra';
+import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
 import type { ChunkType, StreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 
 const testStorage = new MockStore();
 
