@@ -165,7 +165,7 @@ const config = {
     [
       "classic",
       /** @type {import('@docusaurus/preset-classic').Options} */
-      ({
+      {
         docs: {
           path: "src/content/en/docs",
           routeBasePath: "docs",
@@ -173,6 +173,15 @@ const config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+          // Make the current version the latest version
+          lastVersion: "current",
+          versions: {
+            current: {
+              label: "Latest",
+              path: "",
+              banner: "none",
+            },
+          },
         },
         blog: false,
         theme: {
@@ -185,13 +194,13 @@ const config = {
           ignorePatterns: ["/tags/**"],
           filename: "sitemap.xml",
         },
-      }),
+      },
     ],
   ],
 
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
-    ({
+    {
       navbar: {
         logo: {
           alt: "Mastra Logo",
@@ -273,7 +282,7 @@ const config = {
         theme: prismMastraLight,
         darkTheme: prismMastraDark,
       },
-    }),
+    },
 };
 
 export default config;

@@ -11,6 +11,7 @@ import SearchContainer from "./Search";
 import { Logo } from "./logo";
 import { TabSwitcher } from "./tab-switcher";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
+import DocsVersionDropdownNavbarItem from "@site/src/components/version-switcher";
 
 function NavbarContentDesktop() {
   const { i18n } = useDocusaurusContext();
@@ -36,6 +37,11 @@ function NavbarContentDesktop() {
             <VersionControl
               size="sm"
               className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
+            />
+            <DocsVersionDropdownNavbarItem
+              dropdownItemsBefore={[]}
+              dropdownItemsAfter={[]}
+              items={[]}
             />
             <LocaleControl
               size="sm"
