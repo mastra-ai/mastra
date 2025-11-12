@@ -2,6 +2,7 @@ import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 
 import { Kbd } from './kbd';
+import { cn } from '@/lib/utils';
 
 export interface SearchbarProps {
   onSearch: (search: string) => void;
@@ -67,6 +68,6 @@ export const Searchbar = ({ onSearch, label, placeholder }: SearchbarProps) => {
   );
 };
 
-export const SearchbarWrapper = ({ children }: { children: React.ReactNode }) => {
-  return <div className="px-4 py-2 border-b-sm border-border1">{children}</div>;
+export const SearchbarWrapper = ({ children, className }: { children: React.ReactNode; className?: string }) => {
+  return <div className={cn('px-4 py-2 border-b-sm border-border1', className)}>{children}</div>;
 };

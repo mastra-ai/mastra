@@ -29,6 +29,9 @@ type LinkComponentPaths = {
 
   scorerLink: (scorerId: string) => string;
 
+  datasetLink: (datasetId: string) => string;
+  datasetsLink: () => string;
+
   toolLink: (toolId: string) => string;
 
   mcpServerLink: (serverId: string) => string;
@@ -55,6 +58,8 @@ const LinkComponentContext = createContext<{
     networkNewThreadLink: () => '',
     networkThreadLink: () => '',
     scorerLink: () => '',
+    datasetLink: () => '',
+    datasetsLink: () => '',
     toolLink: () => '',
     mcpServerLink: () => '',
     mcpServerToolLink: () => '',

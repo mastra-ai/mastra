@@ -44,7 +44,7 @@ export class Dataset extends BaseResource {
    */
   update(params: UpdateDatasetParams): Promise<DatasetRecord> {
     return this.request(`/api/datasets/${this.datasetId}`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: params,
     });
   }
@@ -117,7 +117,7 @@ export class Dataset extends BaseResource {
    */
   updateRows(params: UpdateDatasetRowsParams): Promise<UpdateDatasetRowsResponse> {
     return this.request(`/api/datasets/${this.datasetId}/rows`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: params,
     });
   }

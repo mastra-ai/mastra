@@ -25,6 +25,10 @@ import { NavigateTo } from './lib/react-router';
 import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
+import Datasets from './pages/datasets';
+import Dataset from './pages/datasets/dataset';
+import DatasetNew from './pages/datasets/new';
+import DatasetSettingsPage from './pages/datasets/dataset/settings';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
@@ -44,6 +48,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetsLink: () => `/datasets`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
@@ -89,6 +95,18 @@ function App() {
                 >
                   <Route path="/scorers" element={<Scorers />} />
                   <Route path="/scorers/:scorerId" element={<Scorer />} />
+                </Route>
+                <Route
+                  element={
+                    <Layout>
+                      <Outlet />
+                    </Layout>
+                  }
+                >
+                  <Route path="/datasets" element={<Datasets />} />
+                  <Route path="/datasets/new" element={<DatasetNew />} />
+                  <Route path="/datasets/:datasetId" element={<Dataset />} />
+                  <Route path="/datasets/:datasetId/settings" element={<DatasetSettingsPage />} />
                 </Route>
                 <Route
                   element={
