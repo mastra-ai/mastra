@@ -45,7 +45,7 @@ const threadSchema = z.object({
  */
 const messageSchema = coreMessageSchema.extend({
   id: z.string(),
-  createdAt: z.date(),
+  createdAt: z.coerce.date(),
   threadId: z.string(),
   resourceId: z.string(),
 });

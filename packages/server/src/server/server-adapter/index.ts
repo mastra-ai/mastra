@@ -5,6 +5,8 @@ import { generateOpenAPIDocument } from './openapi-utils';
 
 export * from './routes';
 
+export { WorkflowRegistry } from '../utils';
+
 export interface OpenAPIConfig {
   title?: string;
   version?: string;

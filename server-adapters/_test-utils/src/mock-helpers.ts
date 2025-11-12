@@ -8,12 +8,12 @@ import { SpanType } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { CompositeVoice } from '@mastra/core/voice';
 import { MockMemory } from '@mastra/core/memory';
-import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
+import { WorkflowRegistry } from '@mastra/server/server-adapter';
 
 vi.mock('@mastra/core/vector');
 
@@ -176,8 +176,22 @@ const createMockWorkflowStream = () => {
  * This provides everything needed for adapter integration tests.
  */
 export async function createDefaultTestContext(): Promise<AdapterTestContext> {
-  // Create test agent with mocks
-  const agent = createTestAgent({ name: 'test-agent' });
+  // Create memory and pre-populate with test thread
+  const memory = createMockMemory();
+  await memory.createThread({
+    threadId: 'test-thread',
+    resourceId: 'test-resource',
+    metadata: {},
+  });
+
+  // Create vector instance
+  const vector = createMockVector();
+
+  // Create test tool
+  const testTool = createTestTool({ id: 'test-tool' });
+
+  // Create test agent with memory and mocks
+  const agent = createTestAgent({ name: 'test-agent', memory });
   mockAgentMethods(agent);
 
   // Create test workflow with mocks
@@ -203,11 +217,17 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       'test-workflow': workflow,
     },
     scorers: { 'test-scorer': testScorer },
+    vectors: { 'test-vector': vector },
   });
 
   await mockWorkflowRun(workflow);
-  await mockWorkflowRun(mergeTemplateWorkflow);
-  await mockWorkflowRun(workflowBuilderWorkflow);
+  await setupWorkflowRegistryMocks(
+    {
+      'merge-template': mergeTemplateWorkflow,
+      'workflow-builder': workflowBuilderWorkflow,
+    },
+    mastra,
+  );
 
   // Add test trace by creating a span with that traceId
   const storage = mastra.getStorage();
@@ -233,6 +253,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
 
   return {
     mastra,
+    tools: { 'test-tool': testTool },
   };
 }
 
@@ -405,34 +426,34 @@ export function parseDatesInResponse(data: any): any {
   return data;
 }
 
-// async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
-//   for (const workflow of Object.values(workflows)) {
-//     workflow.__registerMastra(mastra);
-//     workflow.__registerPrimitives({
-//       logger: mastra.getLogger(),
-//       storage: mastra.getStorage(),
-//       agents: mastra.listAgents(),
-//       tts: mastra.getTTS(),
-//       vectors: mastra.getVectors(),
-//     });
-//     await mockWorkflowRun(workflow);
-//   }
+async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
+  for (const workflow of Object.values(workflows)) {
+    workflow.__registerMastra(mastra);
+    workflow.__registerPrimitives({
+      logger: mastra.getLogger(),
+      storage: mastra.getStorage(),
+      agents: mastra.listAgents(),
+      tts: mastra.getTTS(),
+      vectors: mastra.getVectors(),
+    });
+    await mockWorkflowRun(workflow);
+  }
 
-//   // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
-//   vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {
-//     for (const [id, workflow] of Object.entries(workflows)) {
-//       // Register Mastra instance with the workflow
-//       if (mastra) {
-//         workflow.__registerMastra(mastra);
-//         workflow.__registerPrimitives({
-//           logger: mastra.getLogger(),
-//           storage: mastra.getStorage(),
-//           agents: mastra.listAgents(),
-//           tts: mastra.getTTS(),
-//           vectors: mastra.getVectors(),
-//         });
-//       }
-//       WorkflowRegistry['additionalWorkflows'][id] = workflow;
-//     }
-//   });
-// }
+  // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
+  vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {
+    for (const [id, workflow] of Object.entries(workflows)) {
+      // Register Mastra instance with the workflow
+      if (mastra) {
+        workflow.__registerMastra(mastra);
+        workflow.__registerPrimitives({
+          logger: mastra.getLogger(),
+          storage: mastra.getStorage(),
+          agents: mastra.listAgents(),
+          tts: mastra.getTTS(),
+          vectors: mastra.getVectors(),
+        });
+      }
+      WorkflowRegistry['additionalWorkflows'][id] = workflow;
+    }
+  });
+}

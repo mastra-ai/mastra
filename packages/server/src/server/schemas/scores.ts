@@ -53,8 +53,8 @@ export const entityPathParams = z.object({
 // Note: Handlers expect pagination as a nested object, not flat page/perPage
 // This matches the deployer pattern where query params are transformed into pagination object
 const nestedPaginationSchema = z.object({
-  page: z.number(),
-  perPage: z.number(),
+  page: z.coerce.number(),
+  perPage: z.coerce.number(),
 });
 
 export const listScoresByRunIdQuerySchema = z.object({
@@ -62,8 +62,8 @@ export const listScoresByRunIdQuerySchema = z.object({
 });
 
 export const listScoresByScorerIdQuerySchema = z.object({
-  page: z.number().optional().default(0),
-  perPage: z.number().optional().default(10),
+  page: z.coerce.number().optional().default(0),
+  perPage: z.coerce.number().optional().default(10),
   entityId: z.string().optional(),
   entityType: z.string().optional(),
 });
