@@ -18,6 +18,11 @@ const sidebars = {
           id: "quickstarts/nextjs",
           label: "Next.js",
         },
+        {
+          type: "doc",
+          id: "quickstarts/vite-react",
+          label: "React + Vite",
+        },
       ],
     },
     {
