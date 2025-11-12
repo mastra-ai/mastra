@@ -10357,7 +10357,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = mastra.getStorage('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -10517,7 +10517,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = mastra.getStorage('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -10840,7 +10840,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = mastra.getStorage('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -11079,7 +11079,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = mastra.getStorage('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -11267,7 +11267,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage();
+      const storage = mastra.getStorage('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -13268,7 +13268,7 @@ describe('Workflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({}) => {
+        const last = vi.fn().mockImplementation(async ({ }) => {
           return { success: true };
         });
         const begin = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -13393,7 +13393,7 @@ describe('Workflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({}) => {
+        const last = vi.fn().mockImplementation(async ({ }) => {
           return { success: true };
         });
         const begin = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -13858,7 +13858,7 @@ describe('Workflow', () => {
         const otherVal = getStepResult(otherStep)?.other ?? 0;
         return { finalValue: startVal + otherVal };
       });
-      const last = vi.fn().mockImplementation(async ({}) => {
+      const last = vi.fn().mockImplementation(async ({ }) => {
         return { success: true };
       });
       const begin = vi.fn().mockImplementation(async ({ inputData }) => {

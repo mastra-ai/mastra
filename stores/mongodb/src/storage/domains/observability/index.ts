@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { ObservabilityStorageBase, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -9,14 +9,37 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import { MongoDBDomainBase } from '../base';
+import type { MongoDBDomainConfig } from '../base';
+import type { MongoDBOperations } from '../operations';
 
-export class ObservabilityMongoDB extends ObservabilityStorage {
-  private operations: StoreOperationsMongoDB;
+export class ObservabilityMongoDB extends ObservabilityStorageBase {
+  protected db: MongoDBDomainBase['db'];
+  private domainBase: MongoDBDomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(opts: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new MongoDBDomainBase(opts);
+    this.db = this.domainBase['db'];
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async init(): Promise<void> {
+    // no op
+  }
+
+  async dropData(): Promise<void> {
+    await this.db.deleteCollection({ tableName: TABLE_SPANS });
+  }
+
+  private get operations(): MongoDBOperations {
+    return this.db;
   }
 
   public get tracingStrategy(): {

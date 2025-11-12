@@ -2,14 +2,15 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringEntityType, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
-  ScoresStorage,
+  EvalsStorageBase,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import { MongoDBDomainBase } from '../base';
+import type { MongoDBDomainConfig } from '../base';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   let scorerValue: any = null;
@@ -119,17 +120,31 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   };
 }
 
-export class ScoresStorageMongoDB extends ScoresStorage {
-  private operations: StoreOperationsMongoDB;
+export class EvalsStorageMongoDB extends EvalsStorageBase {
+  protected db: MongoDBDomainBase['db'];
+  private domainBase: MongoDBDomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(opts: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new MongoDBDomainBase(opts);
+    this.db = this.domainBase['db'];
+  }
+
+  async init(): Promise<void> {
+    // no op
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.db.deleteCollection({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.db.getCollection(TABLE_SCORERS);
       const document = await collection.findOne({ id });
 
       if (!document) {
@@ -209,7 +224,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         updatedAt: now,
       };
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.db.getCollection(TABLE_SCORERS);
       await collection.insertOne(scoreData);
 
       const savedScore: ScoreRowData = {
@@ -265,7 +280,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         query.source = source;
       }
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.db.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {
@@ -326,7 +341,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.db.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ runId });
 
       if (total === 0) {
@@ -389,7 +404,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.db.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ entityId, entityType });
 
       if (total === 0) {
@@ -453,7 +468,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const query = { traceId, spanId };
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.db.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {

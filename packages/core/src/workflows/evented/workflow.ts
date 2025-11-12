@@ -137,30 +137,30 @@ export function createStep<
 >(
   params:
     | {
-        id: TStepId;
-        description?: string;
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        resumeSchema?: TResumeSchema;
-        suspendSchema?: TSuspendSchema;
-        execute: ExecuteFunction<
-          z.infer<TState>,
-          z.infer<TStepInput>,
-          z.infer<TStepOutput>,
-          z.infer<TResumeSchema>,
-          z.infer<TSuspendSchema>,
-          EventedEngineType
-        >;
-      }
+      id: TStepId;
+      description?: string;
+      inputSchema: TStepInput;
+      outputSchema: TStepOutput;
+      resumeSchema?: TResumeSchema;
+      suspendSchema?: TSuspendSchema;
+      execute: ExecuteFunction<
+        z.infer<TState>,
+        z.infer<TStepInput>,
+        z.infer<TStepOutput>,
+        z.infer<TResumeSchema>,
+        z.infer<TSuspendSchema>,
+        EventedEngineType
+      >;
+    }
     | Agent<any, any>
     | (Tool<TStepInput, TStepOutput, TSuspendSchema, TResumeSchema, any> & {
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        execute: (
-          input: z.infer<TStepInput>,
-          context?: ToolExecutionContext<TSuspendSchema, TResumeSchema>,
-        ) => Promise<any>;
-      }),
+      inputSchema: TStepInput;
+      outputSchema: TStepOutput;
+      execute: (
+        input: z.infer<TStepInput>,
+        context?: ToolExecutionContext<TSuspendSchema, TResumeSchema>,
+      ) => Promise<any>;
+    }),
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
   if (isAgent(params)) {
     return {
@@ -374,10 +374,9 @@ export class EventedWorkflow<
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      const storage = this.mastra?.getStorage();
-      const workflowStore = storage?.getStore('workflows');
-      if (workflowStore) {
-        await workflowStore.createWorkflowSnapshot({
+      const storage = this.mastra?.getStorage('workflows');
+      if (storage) {
+        await storage.createWorkflowSnapshot({
           workflowId: this.id,
           runId: runIdToUse,
           snapshot: {
@@ -452,10 +451,9 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const storage = this.mastra?.getStorage();
-    const workflowStore = storage?.getStore('workflows');
-    if (workflowStore) {
-      await workflowStore.createWorkflowSnapshot({
+    const storage = this.mastra?.getStorage('workflows');
+    if (storage) {
+      await storage.createWorkflowSnapshot({
         workflowId: this.workflowId,
         runId: this.runId,
         snapshot: {
@@ -522,13 +520,13 @@ export class EventedRun<
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
     step:
-      | Step<string, any, any, TResumeSchema, any, any, TEngineType>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, TResumeSchema, any, any, TEngineType>,
-        ]
-      | string
-      | string[];
+    | Step<string, any, any, TResumeSchema, any, any, TEngineType>
+    | [
+      ...Step<string, any, any, any, any, any, TEngineType>[],
+      Step<string, any, any, TResumeSchema, any, any, TEngineType>,
+    ]
+    | string
+    | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
@@ -539,12 +537,11 @@ export class EventedRun<
       throw new Error('No steps provided to resume');
     }
 
-    const storage = this.mastra?.getStorage();
-    const workflowStore = storage?.getStore('workflows');
+    const storage = this.mastra?.getStorage('workflows');
     let snapshot: WorkflowRunState | null = null;
 
-    if (workflowStore) {
-      snapshot = await workflowStore.getWorkflowSnapshot({
+    if (storage) {
+      snapshot = await storage.getWorkflowSnapshot({
         workflowId: this.workflowId,
         runId: this.runId,
       });
@@ -614,7 +611,7 @@ export class EventedRun<
       })
       .then(result => {
         if (result.status !== 'suspended') {
-          this.closeStreamAction?.().catch(() => {});
+          this.closeStreamAction?.().catch(() => { });
         }
 
         return result;
@@ -635,10 +632,10 @@ export class EventedRun<
       await ack?.();
     };
 
-    this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+    this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => { });
 
     return () => {
-      this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+      this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => { });
     };
   }
 
@@ -652,10 +649,10 @@ export class EventedRun<
       await ack?.();
     };
 
-    await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+    await this.mastra?.pubsub.subscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => { });
 
     return async () => {
-      await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => {});
+      await this.mastra?.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, watchCb).catch(() => { });
     };
   }
 

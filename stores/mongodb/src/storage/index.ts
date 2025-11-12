@@ -1,14 +1,10 @@
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageDomains,
-  StoragePagination,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   SpanRecord,
@@ -23,8 +19,8 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
-import { StoreOperationsMongoDB } from './domains/operations';
-import { ScoresStorageMongoDB } from './domains/scores';
+import { MongoDBOperations } from './domains/operations';
+import { EvalsStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
 
@@ -67,6 +63,7 @@ const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
 
 export class MongoDBStore extends MastraStorage {
   #connector: MongoDBConnector;
+  #operations: MongoDBOperations;
 
   stores: StorageDomains;
 
@@ -91,75 +88,34 @@ export class MongoDBStore extends MastraStorage {
   constructor(config: MongoDBConfig) {
     super({ id: config.id, name: 'MongoDBStore' });
 
-    this.stores = {} as StorageDomains;
-
     this.#connector = loadConnector(config);
 
-    const operations = new StoreOperationsMongoDB({
+    this.#operations = new MongoDBOperations({
       connector: this.#connector,
     });
 
     const memory = new MemoryStorageMongoDB({
-      operations,
+      operations: this.#operations,
     });
 
-    const scores = new ScoresStorageMongoDB({
-      operations,
+    const evals = new EvalsStorageMongoDB({
+      operations: this.#operations,
     });
 
     const workflows = new WorkflowsStorageMongoDB({
-      operations,
+      operations: this.#operations,
     });
 
     const observability = new ObservabilityMongoDB({
-      operations,
+      operations: this.#operations,
     });
 
     this.stores = {
-      operations,
       memory,
-      scores,
+      evals,
       workflows,
       observability,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable(_args);
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -282,67 +238,6 @@ export class MongoDBStore extends MastraStorage {
         error,
       );
     }
-  }
-
-  /**
-   * SCORERS
-   */
-  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id });
-  }
-
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(score);
-  }
-
-  async listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId, pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-    source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
   /**

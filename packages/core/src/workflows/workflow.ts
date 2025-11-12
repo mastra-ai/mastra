@@ -521,19 +521,6 @@ export class Workflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  #getWorkflowStore() {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow run. Mastra Storage is not configured');
-      return undefined;
-    }
-    const workflowStore = storage.getStore('workflows');
-    if (!workflowStore) {
-      this.logger.debug('Cannot get workflow run. Workflow store is not configured');
-    }
-    return workflowStore;
-  }
-
   __registerPrimitives(p: MastraPrimitives) {
     if (p.logger) {
       this.__setLogger(p.logger);
@@ -1078,10 +1065,9 @@ export class Workflow<
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      const storage = this.mastra?.getStorage();
-      const workflowStore = storage?.getStore('workflows');
-      if (workflowStore) {
-        await workflowStore.createWorkflowSnapshot({
+      const storage = this.mastra?.getStorage('workflows');
+      if (storage) {
+        await storage.createWorkflowSnapshot({
           workflowId: this.id,
           runId: runIdToUse,
           resourceId: options?.resourceId,
@@ -1282,24 +1268,22 @@ export class Workflow<
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {
-
-
-    const workflowStore = this.#getWorkflowStore();
-    if (!workflowStore) {
+    const storage = this.#mastra?.getStorage('workflows');
+    if (!storage) {
       this.logger.debug('Cannot get workflow runs. Workflow store is not configured');
       return { runs: [], total: 0 };
     }
-    return workflowStore.listWorkflowRuns({ workflowId: this.id, ...(args ?? {}) });
+    return storage.listWorkflowRuns({ workflowId: this.id, ...(args ?? {}) });
   }
 
   async getWorkflowRunById(runId: string) {
-    const workflowStore = this.#getWorkflowStore();
-    if (!workflowStore) {
+    const storage = this.#mastra?.getStorage('workflows');
+    if (!storage) {
       return this.#runs.get(runId)
         ? ({ ...this.#runs.get(runId), workflowId: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = await workflowStore.getWorkflowRunById({ runId, workflowId: this.id });
+    const run = await storage.getWorkflowRunById({ runId, workflowId: this.id });
 
     return (
       run ??
@@ -1308,18 +1292,13 @@ export class Workflow<
   }
 
   protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
-    const storage = this.#mastra?.getStorage();
+    const storage = this.#mastra?.getStorage('workflows');
     if (!storage) {
       this.logger.debug('Cannot get workflow run steps. Mastra storage is not initialized');
       return {};
     }
 
-    const workflowStore = this.#getWorkflowStore();
-    if (!workflowStore) {
-      this.logger.debug('Cannot get workflow run steps. Workflow store is not configured');
-      return {};
-    }
-    const run = await workflowStore.getWorkflowRunById({ runId, workflowId: workflowId });
+    const run = await storage.getWorkflowRunById({ runId, workflowId: workflowId });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 
@@ -1367,22 +1346,14 @@ export class Workflow<
     runId: string,
     withNestedWorkflows: boolean = true,
   ): Promise<WorkflowState | null> {
-    const storage = this.#mastra?.getStorage();
+    const storage = this.#mastra?.getStorage('workflows');
+
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
       return null;
     }
 
-    const workflowStore = storage.getStore('workflows');
-
-    if (!workflowStore) {
-      this.logger.debug(
-        'Cannot get workflow run execution result. Mastra storage does not have a Workflow store initialized',
-      );
-      return null;
-    }
-
-    const run = await workflowStore.getWorkflowRunById({ runId, workflowId: this.id });
+    const run = await storage.getWorkflowRunById({ runId, workflowId: this.id });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 
@@ -2278,14 +2249,13 @@ export class Run<
     };
     forEachIndex?: number;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const storage = this.#mastra?.getStorage();
-    const workflowStore = storage?.getStore('workflows');
+    const storage = this.#mastra?.getStorage('workflows');
     let snapshot: WorkflowRunState | null = null;
-    if (workflowStore) {
-      snapshot = await workflowStore.getWorkflowSnapshot({
+    if (storage) {
+      snapshot = await storage.getWorkflowSnapshot({
         workflowId: this.workflowId,
         runId: this.runId,
-      });
+      }) as WorkflowRunState;
     }
 
     if (!snapshot) {
@@ -2472,7 +2442,7 @@ export class Run<
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const snapshot = await this.#mastra?.getStorage()?.getWorkflowSnapshot({
+    const snapshot = await this.#mastra?.getStorage('workflows')?.getWorkflowSnapshot({
       workflowId: this.workflowId,
       runId: this.runId,
     });

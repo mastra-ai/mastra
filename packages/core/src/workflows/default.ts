@@ -478,8 +478,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
-        suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
+        suspend: async (_suspendPayload: any): Promise<any> => { },
+        bail: () => { },
         abort: () => {
           abortController?.abort();
         },
@@ -584,8 +584,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(this, stepResults),
         // TODO: this function shouldn't have suspend probably?
-        suspend: async (_suspendPayload: any): Promise<any> => {},
-        bail: () => {},
+        suspend: async (_suspendPayload: any): Promise<any> => { },
+        bail: () => { },
         abort: () => {
           abortController?.abort();
         },
@@ -797,13 +797,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resume:
             stepResults[step.id]?.status === 'suspended'
               ? {
-                  steps: resume?.steps?.slice(1) || [],
-                  resumePayload: resume?.resumePayload,
-                  // @ts-ignore
-                  runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
-                  label: resume?.label,
-                  forEachIndex: resume?.forEachIndex,
-                }
+                steps: resume?.steps?.slice(1) || [],
+                resumePayload: resume?.resumePayload,
+                // @ts-ignore
+                runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
+                label: resume?.label,
+                forEachIndex: resume?.forEachIndex,
+              }
               : undefined,
           // Only pass restart data if this step is part of activeStepsPath
           // This prevents pending nested workflows from trying to restart instead of start
@@ -1243,8 +1243,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   getInitData: () => stepResults?.input as any,
                   getStepResult: getStepResult.bind(this, stepResults),
                   // TODO: this function shouldn't have suspend probably?
-                  suspend: async (_suspendPayload: any): Promise<any> => {},
-                  bail: () => {},
+                  suspend: async (_suspendPayload: any): Promise<any> => { },
+                  bail: () => { },
                   abort: () => {
                     abortController?.abort();
                   },
@@ -1532,8 +1532,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             iterationCount: iteration + 1,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
-            suspend: async (_suspendPayload: any): Promise<any> => {},
-            bail: () => {},
+            suspend: async (_suspendPayload: any): Promise<any> => { },
+            bail: () => { },
             abort: () => {
               abortController?.abort();
             },
@@ -1853,11 +1853,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContextObj[key] = value;
     });
 
-    const storage = this.mastra?.getStorage();
-    const workflowStore = storage?.getStore('workflows');
+    const storage = this.mastra?.getStorage('workflows');
 
-    if (workflowStore) {
-      await workflowStore?.createWorkflowSnapshot({
+    if (storage) {
+      await storage?.createWorkflowSnapshot({
         workflowId: workflowId,
         runId,
         resourceId,

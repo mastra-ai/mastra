@@ -1,15 +1,38 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON, normalizePerPage } from '@mastra/core/storage';
+import { WorkflowsStorageBase, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON, normalizePerPage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { StoreOperationsMongoDB } from '../operations';
+import { MongoDBDomainBase } from '../base';
+import type { MongoDBDomainConfig } from '../base';
+import type { MongoDBOperations } from '../operations';
 
-export class WorkflowsStorageMongoDB extends WorkflowsStorage {
-  private operations: StoreOperationsMongoDB;
+export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
+  protected db: MongoDBDomainBase['db'];
+  private domainBase: MongoDBDomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(opts: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new MongoDBDomainBase(opts);
+    this.db = this.domainBase['db'];
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async init(): Promise<void> {
+    // no op
+  }
+
+  async dropData(): Promise<void> {
+    await this.db.deleteCollection({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  private get operations(): MongoDBOperations {
+    return this.db;
   }
 
   updateWorkflowResults(
@@ -54,11 +77,15 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
       const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
@@ -70,8 +97,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             run_id: runId,
             resourceId,
             snapshot,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: createdAt || new Date(),
+            updatedAt: updatedAt || new Date(),
           },
         },
         { upsert: true },

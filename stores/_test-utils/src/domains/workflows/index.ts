@@ -1,4 +1,4 @@
-import { MastraStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { MastraStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';

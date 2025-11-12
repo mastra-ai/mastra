@@ -1,16 +1,20 @@
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { safelyParseJSON, StoreOperations, TABLE_SCHEMAS } from '@mastra/core/storage';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import type { ConnectorHandler } from '../../connectors/base';
 
 export interface MongoDBOperationsConfig {
   connector: ConnectorHandler;
 }
-export class StoreOperationsMongoDB extends StoreOperations {
+export class MongoDBOperations extends MastraBase {
   readonly #connector: ConnectorHandler;
 
   constructor(config: MongoDBOperationsConfig) {
-    super();
+    super({
+      component: 'STORAGE',
+      name: 'MONGO_DB_CONNECTOR',
+    });
     this.#connector = config.connector;
   }
 
@@ -24,19 +28,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
     return true;
   }
 
-  async createTable(): Promise<void> {
-    // Nothing to do here, MongoDB is schemaless
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    // Nothing to do here, MongoDB is schemaless
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+  async deleteCollection({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       const collection = await this.getCollection(tableName);
       await collection.deleteMany({});
