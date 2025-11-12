@@ -1,9 +1,16 @@
+import { StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_TRACES } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 export function createIndexManagementTests({ storage }: { storage: MastraStorage }) {
   if (storage.supports.indexManagement) {
+    const indexManagementStore = storage.getStore('indexManagement');
+
+    if (!indexManagementStore) {
+      throw new Error('Index management store not found');
+    }
+
     describe('Index Management', () => {
       // Use timestamp to ensure unique index names across test runs
       const timestamp = Date.now();
@@ -13,12 +20,12 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
       afterEach(async () => {
         // Clean up any indexes created during tests
         try {
-          const allIndexes = await storage.listIndexes();
+          const allIndexes = await indexManagementStore.listIndexes();
           const testIndexes = allIndexes.filter(i => i.name.includes(testIndexPrefix));
 
           for (const index of testIndexes) {
             try {
-              await storage.dropIndex(index.name);
+              await indexManagementStore.dropIndex(index.name);
             } catch (error) {
               console.warn(`Failed to drop test index ${index.name}:`, error);
             }
@@ -32,14 +39,14 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
       describe('createIndex', () => {
         it('should create single column index', async () => {
           const indexName = `${testIndexPrefix}_single`;
-          await storage.createIndex({
+          await storage.getStore('indexManagement')?.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId'],
           });
           createdIndexes.push(indexName);
 
-          const indexes = await storage.listIndexes('mastra_threads');
+          const indexes = await indexManagementStore.listIndexes('mastra_threads');
           const createdIndex = indexes.find(i => i.name === indexName);
           expect(createdIndex).toBeDefined();
           expect(createdIndex?.columns).toContain('resourceId');
@@ -47,14 +54,14 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
         it('should create composite index', async () => {
           const indexName = `${testIndexPrefix}_composite`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId', 'createdAt DESC'],
           });
           createdIndexes.push(indexName);
 
-          const indexes = await storage.listIndexes('mastra_threads');
+          const indexes = await indexManagementStore.listIndexes('mastra_threads');
           const createdIndex = indexes.find(i => i.name === indexName);
           expect(createdIndex).toBeDefined();
           expect(createdIndex?.columns).toContain('resourceId');
@@ -63,7 +70,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
         it('should create unique index', async () => {
           const indexName = `${testIndexPrefix}_unique`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['id'],
@@ -71,7 +78,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
           createdIndexes.push(indexName);
 
-          const indexes = await storage.listIndexes('mastra_threads');
+          const indexes = await indexManagementStore.listIndexes('mastra_threads');
           const createdIndex = indexes.find(i => i.name === indexName);
           expect(createdIndex).toBeDefined();
           expect(createdIndex?.unique).toBe(true);
@@ -80,7 +87,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         it('should handle index creation errors gracefully', async () => {
           // Try to create index on non-existent table
           await expect(
-            storage.createIndex({
+            indexManagementStore.createIndex({
               name: `${testIndexPrefix}_invalid`,
               table: 'non_existent_table' as any,
               columns: ['id'],
@@ -90,7 +97,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
         it('should prevent duplicate index creation', async () => {
           const indexName = `${testIndexPrefix}_duplicate`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId'],
@@ -99,7 +106,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
           // Should not throw, should handle gracefully
           await expect(
-            storage.createIndex({
+            indexManagementStore.createIndex({
               name: indexName,
               table: TABLE_THREADS,
               columns: ['resourceId'],
@@ -115,12 +122,12 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           ];
 
           for (const indexDef of testIndexes) {
-            await storage.createIndex(indexDef);
+            await indexManagementStore.createIndex(indexDef);
             createdIndexes.push(indexDef.name);
           }
 
           // Verify all were created
-          const allIndexes = await storage.listIndexes();
+          const allIndexes = await indexManagementStore.listIndexes();
           for (const indexDef of testIndexes) {
             expect(allIndexes.some(i => i.name === indexDef.name)).toBe(true);
           }
@@ -129,7 +136,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         it('should create index with advanced options', async () => {
           // Test BRIN index (efficient for large tables with natural ordering)
           const brinIndexName = `${testIndexPrefix}_brin`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: brinIndexName,
             table: TABLE_THREADS,
             columns: ['createdAt'],
@@ -137,14 +144,14 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
           createdIndexes.push(brinIndexName);
 
-          const indexes = await storage.listIndexes('mastra_threads');
+          const indexes = await indexManagementStore.listIndexes('mastra_threads');
           const brinIndex = indexes.find(i => i.name === brinIndexName);
           expect(brinIndex).toBeDefined();
           expect(brinIndex?.definition.toLowerCase()).toContain('brin');
 
           // Test SP-GiST index (space-partitioned GiST)
           const spgistIndexName = `${testIndexPrefix}_spgist`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: spgistIndexName,
             table: TABLE_THREADS,
             columns: ['title'],
@@ -152,7 +159,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
           createdIndexes.push(spgistIndexName);
 
-          const spgistIndexes = await storage.listIndexes('mastra_threads');
+          const spgistIndexes = await indexManagementStore.listIndexes('mastra_threads');
           const spgistIndex = spgistIndexes.find(i => i.name === spgistIndexName);
           expect(spgistIndex).toBeDefined();
           expect(spgistIndex?.definition.toLowerCase()).toContain('spgist');
@@ -162,7 +169,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           const indexName = `${testIndexPrefix}_with_storage`;
 
           // Create index with storage parameters
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId'],
@@ -173,7 +180,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
           createdIndexes.push(indexName);
 
-          const indexes = await storage.listIndexes('mastra_threads');
+          const indexes = await indexManagementStore.listIndexes('mastra_threads');
           const createdIndex = indexes.find(i => i.name === indexName);
           expect(createdIndex).toBeDefined();
           expect(createdIndex?.definition).toContain('fillfactor');
@@ -185,26 +192,26 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           const indexName = `${testIndexPrefix}_to_drop`;
 
           // Create index first
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId'],
           });
 
           // Verify it exists
-          let indexes = await storage.listIndexes('mastra_threads');
+          let indexes = await indexManagementStore.listIndexes('mastra_threads');
           expect(indexes.some(i => i.name === indexName)).toBe(true);
 
           // Drop it
-          await storage.dropIndex(indexName);
+          await indexManagementStore.dropIndex(indexName);
 
           // Verify it's gone
-          indexes = await storage.listIndexes('mastra_threads');
+          indexes = await indexManagementStore.listIndexes('mastra_threads');
           expect(indexes.some(i => i.name === indexName)).toBe(false);
         });
 
         it('should handle dropping non-existent index gracefully', async () => {
-          await expect(storage.dropIndex(`${testIndexPrefix}_non_existent`)).resolves.not.toThrow();
+          await expect(indexManagementStore.dropIndex(`${testIndexPrefix}_non_existent`)).resolves.not.toThrow();
         });
       });
 
@@ -213,7 +220,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           const indexName = `${testIndexPrefix}_describe`;
 
           // Create an index to describe
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId', 'createdAt'],
@@ -222,7 +229,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           createdIndexes.push(indexName);
 
           // Get index statistics
-          const stats = await storage.describeIndex(indexName);
+          const stats = await indexManagementStore.describeIndex(indexName);
 
           // Verify the response structure
           expect(stats).toBeDefined();
@@ -241,7 +248,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         it('should return statistics for unique index', async () => {
           const indexName = `${testIndexPrefix}_describe_unique`;
 
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_MESSAGES,
             columns: ['id'],
@@ -249,7 +256,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
           createdIndexes.push(indexName);
 
-          const stats = await storage.describeIndex(indexName);
+          const stats = await indexManagementStore.describeIndex(indexName);
 
           expect(stats.unique).toBe(true);
           expect(stats.columns).toContain('id');
@@ -258,7 +265,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         it('should return statistics for different index methods', async () => {
           // Test GIN index on JSONB column (use TABLE_TRACES attributes column which is JSONB)
           const ginIndexName = `${testIndexPrefix}_describe_gin`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: ginIndexName,
             table: TABLE_TRACES,
             columns: ['attributes'],
@@ -266,12 +273,12 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
           createdIndexes.push(ginIndexName);
 
-          const ginStats = await storage.describeIndex(ginIndexName);
+          const ginStats = await indexManagementStore.describeIndex(ginIndexName);
           expect(ginStats.method).toBe('gin');
 
           // Test HASH index
           const hashIndexName = `${testIndexPrefix}_describe_hash`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: hashIndexName,
             table: TABLE_THREADS,
             columns: ['id'],
@@ -279,7 +286,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           });
           createdIndexes.push(hashIndexName);
 
-          const hashStats = await storage.describeIndex(hashIndexName);
+          const hashStats = await indexManagementStore.describeIndex(hashIndexName);
           expect(hashStats.method).toBe('hash');
 
           // Test GIST index (typically used for geometric types, but can work with text via extensions)
@@ -287,14 +294,20 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should throw error for non-existent index', async () => {
-          await expect(storage.describeIndex(`${testIndexPrefix}_non_existent_describe`)).rejects.toThrow();
+          await expect(indexManagementStore.describeIndex(`${testIndexPrefix}_non_existent_describe`)).rejects.toThrow();
         });
 
         it('should track index usage statistics', async () => {
+          const memoryStore = storage.getStore('memory');
+
+          if (!memoryStore) {
+            throw new Error('Memory store not found');
+          }
+
           const indexName = `${testIndexPrefix}_describe_usage`;
 
           // Create index
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId'],
@@ -311,20 +324,17 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
             metadata: {},
           };
 
-          await storage.insert({
-            tableName: TABLE_THREADS,
-            record: testThread,
-          });
+          await memoryStore?.saveThread({ thread: testThread });
 
           // Perform a query that should use the index
-          await storage.listThreadsByResourceId({
+          await memoryStore?.listThreadsByResourceId({
             resourceId: testThread.resourceId,
             page: 0,
             perPage: 10,
           });
 
           // Get updated statistics
-          const stats = await storage.describeIndex(indexName);
+          const stats = await indexManagementStore.describeIndex(indexName);
 
           // Verify statistics fields exist (values might be 0 initially)
           expect(stats).toHaveProperty('scans');
@@ -334,7 +344,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           expect(stats.scans).toBeGreaterThanOrEqual(0);
 
           // Clean up test data
-          await storage.deleteThread({ threadId: testThread.id });
+          await memoryStore?.deleteThread({ threadId: testThread.id });
         });
       });
 
@@ -342,7 +352,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         beforeEach(async () => {
           // Create a test index for listing tests
           const indexName = `${testIndexPrefix}_for_list`;
-          await storage.createIndex({
+          await indexManagementStore.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId', 'createdAt'],
@@ -351,7 +361,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should list all indexes when no table specified', async () => {
-          const indexes = await storage.listIndexes();
+          const indexes = await indexManagementStore.listIndexes();
           expect(Array.isArray(indexes)).toBe(true);
           expect(indexes.length).toBeGreaterThan(0);
 
@@ -360,7 +370,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should list indexes for specific table', async () => {
-          const indexes = await storage.listIndexes('mastra_threads');
+          const indexes = await indexManagementStore.listIndexes('mastra_threads');
           expect(Array.isArray(indexes)).toBe(true);
 
           // Should include indexes for threads table
@@ -371,7 +381,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
 
         it('should include index metadata', async () => {
-          const indexes = await storage.listIndexes('mastra_threads');
+          const indexes = await indexManagementStore.listIndexes('mastra_threads');
           const testIndex = indexes.find(i => i.name === `${testIndexPrefix}_for_list`);
 
           expect(testIndex).toBeDefined();
@@ -389,7 +399,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           const tables = ['mastra_threads', 'mastra_messages', 'mastra_traces'];
 
           for (const table of tables) {
-            const indexes = await storage.listIndexes(table);
+            const indexes = await indexManagementStore.listIndexes(table);
             expect(Array.isArray(indexes)).toBe(true);
           }
         });
@@ -405,7 +415,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
             return;
           }
 
-          const indexes = await storage.listIndexes();
+          const indexes = await indexManagementStore.listIndexes();
 
           // Verify each defined automatic index was created
           for (const def of definitions) {
@@ -435,7 +445,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         it('should handle schema prefixes in automatic indexes', async () => {
           // This test verifies that automatic indexes work correctly with schemas
           // The schema prefix handling is done internally by the storage adapter
-          const indexes = await storage.listIndexes();
+          const indexes = await indexManagementStore.listIndexes();
 
           // All automatic indexes should exist regardless of schema
           expect(indexes.some(i => i.name.includes('threads_resourceid_createdat'))).toBe(true);
@@ -447,7 +457,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         it('should improve query performance with indexes', async () => {
           // Create a custom index for testing performance
           const indexName = `${testIndexPrefix}_perf`;
-          await storage.createIndex({
+          await storage.getStore('indexManagement')?.createIndex({
             name: indexName,
             table: TABLE_THREADS,
             columns: ['resourceId', 'createdAt DESC'],
@@ -455,7 +465,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           createdIndexes.push(indexName);
 
           // Insert some test data
-          const testThreads = [];
+          const testThreads: StorageThreadType[] = [];
           for (let i = 0; i < 100; i++) {
             testThreads.push({
               id: `perf-thread-${timestamp}-${i}`,
@@ -467,24 +477,18 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
             });
           }
 
-          // Batch insert if available, otherwise insert one by one
-          if (storage.batchInsert) {
-            await storage.batchInsert({
-              tableName: TABLE_THREADS,
-              records: testThreads,
+          const memoryStore = storage.getStore('memory');
+
+          for (const thread of testThreads) {
+            await memoryStore?.saveThread({
+              thread,
             });
-          } else {
-            for (const thread of testThreads) {
-              await storage.insert({
-                tableName: TABLE_THREADS,
-                record: thread,
-              });
-            }
           }
 
           // Measure query performance
           const startTime = Date.now();
-          await storage.listThreadsByResourceId({
+
+          await memoryStore?.listThreadsByResourceId({
             resourceId: `perf-resource-5`,
             page: 0,
             perPage: 10,
@@ -498,7 +502,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
 
           // Clean up test data
           for (const thread of testThreads) {
-            await storage.deleteThread({ threadId: thread.id });
+            await memoryStore?.deleteThread({ threadId: thread.id });
           }
         });
       });

@@ -85,12 +85,14 @@ const thread = await storage.createThread({
 });
 
 // Get thread by ID
-const retrievedThread = await storage.getStore('memory')?.getThreadById({
+const memoryStore = storage.getStore('memory');
+const retrievedThread = await memoryStore?.getThreadById({
   threadId: thread.id,
 });
 
 // Update thread
-await storage.updateThread({
+const memoryStore = storage.getStore('memory');
+await memoryStore?.updateThread({
   id: thread.id,
   title: 'Updated Title',
   metadata: { newKey: 'newValue' },
@@ -101,7 +103,8 @@ await storage.updateThread({
 
 ```typescript
 // Save messages
-await storage.saveMessages({
+const memoryStore = storage.getStore('memory');
+await memoryStore?.saveMessages({
   messages: [
     {
       id: 'msg-1',
@@ -114,7 +117,7 @@ await storage.saveMessages({
 });
 
 // Get thread messages with pagination
-const result = await storage.listMessages({
+const result = await memoryStore?.listMessages({
   threadId: thread.id,
   page: 0,
   perPage: 50,
@@ -129,7 +132,7 @@ console.log(result.hasMore); // Whether more pages exist
 
 ```typescript
 // Save workflow state
-await storage.createWorkflowSnapshot({
+await storage.getStore('workflows')?.createWorkflowSnapshot({
   workflowId: 'my-workflow',
   runId: 'run-123',
   snapshot: {

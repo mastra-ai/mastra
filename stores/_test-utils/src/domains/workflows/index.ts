@@ -5,12 +5,17 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 
 export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
+  const workflowStore = storage.getStore('workflows');
+  if (!workflowStore) {
+    throw new Error('Workflow store not found');
+  }
+
   describe('listWorkflowRuns', () => {
     beforeEach(async () => {
-      await storage.getStore('workflows')?.dropData();
+      await workflowStore.dropData();
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await storage.listWorkflowRuns();
+      const { runs, total } = await workflowStore.listWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -30,7 +35,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         .getStore('workflows')
         ?.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await storage.listWorkflowRuns();
+      const { runs, total } = await workflowStore.listWorkflowRuns();
 
       const wfRun2 = runs.find(r => r.workflowName === workflowName2);
       const wfRun1 = runs.find(r => r.workflowName === workflowName1);
@@ -61,7 +66,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         .getStore('workflows')
         ?.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await storage.listWorkflowRuns({ workflowId: workflowName1 });
+      const { runs, total } = await workflowStore.listWorkflowRuns({ workflowId: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -84,7 +89,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         .getStore('workflows')
         ?.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
 
-      const { runs, total } = await storage.listWorkflowRuns({ status: 'success' });
+      const { runs, total } = await workflowStore.listWorkflowRuns({ status: 'success' });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -128,7 +133,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         updatedAt: now,
       });
 
-      const { runs } = await storage.listWorkflowRuns({
+      const { runs } = await workflowStore.listWorkflowRuns({
         fromDate: yesterday,
         toDate: now,
       });
@@ -166,13 +171,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         ?.createWorkflowSnapshot({ workflowId: workflowName3, runId: runId3, snapshot: workflow3 });
 
       // Get first page
-      const page1 = await storage.listWorkflowRuns({ perPage: 2, page: 0 });
+      const page1 = await workflowStore.listWorkflowRuns({ perPage: 2, page: 0 });
 
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
 
       // Get second page
-      const page2 = await storage.listWorkflowRuns({ perPage: 2, page: 1 });
+      const page2 = await workflowStore.listWorkflowRuns({ perPage: 2, page: 1 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
     });
@@ -196,7 +201,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     it('should retrieve a workflow run by ID', async () => {
-      const found = await storage.getWorkflowRunById({
+      const found = await workflowStore.getWorkflowRunById({
         runId,
         workflowId: workflowName,
       });
@@ -206,7 +211,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return null for non-existent workflow run ID', async () => {
-      const notFound = await storage.getWorkflowRunById({
+      const notFound = await workflowStore.getWorkflowRunById({
         runId: 'non-existent-id',
         workflowId: workflowName,
       });
@@ -247,7 +252,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await storage.listWorkflowRuns({
+      const { runs } = await workflowStore.listWorkflowRuns({
         resourceId,
         workflowId: workflowName,
       });
@@ -260,7 +265,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await storage.listWorkflowRuns({
+      const { runs } = await workflowStore.listWorkflowRuns({
         resourceId: 'non-existent-resource',
         workflowId: workflowName,
       });
@@ -292,7 +297,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       snapshot,
     });
     // Fetch the row directly from the database
-    const run = await storage.getWorkflowRunById({ workflowId: workflowName, runId });
+    const run = await workflowStore.getWorkflowRunById({ workflowId: workflowName, runId });
     expect(run).toBeTruthy();
     // Check that these are valid Date objects
     expect(run?.createdAt instanceof Date).toBe(true);
@@ -324,7 +329,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       snapshot,
     });
 
-    const { runs } = await storage.listWorkflowRuns({ workflowId: workflowName });
+    const { runs } = await workflowStore.listWorkflowRuns({ workflowId: workflowName });
     expect(runs.length).toBeGreaterThan(0);
     const run = runs.find(r => r.runId === runId);
     expect(run).toBeTruthy();
@@ -490,7 +495,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         snapshot,
       });
 
-      const run = await storage.getWorkflowRunById({
+      const run = await workflowStore.getWorkflowRunById({
         runId,
         workflowId: workflowName,
       });

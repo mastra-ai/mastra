@@ -4,12 +4,17 @@ import { createSampleResource } from './data';
 import { randomUUID } from 'crypto';
 
 export function createResourcesTest({ storage }: { storage: MastraStorage }) {
+  const memoryStore = storage.getStore('memory');
+  if (!memoryStore) {
+    throw new Error('Memory store not found');
+  }
+
   describe('Resources', () => {
     it('should create and retrieve a resource', async () => {
       const resource = createSampleResource();
 
       // Save resource
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(savedResource).toEqual(
         expect.objectContaining({
           id: resource.id,
@@ -19,7 +24,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       );
 
       // Retrieve resource
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.id).toEqual(resource.id);
       expect(retrievedResource?.workingMemory).toEqual(resource.workingMemory);
       expect(retrievedResource?.metadata).toEqual(resource.metadata);
@@ -36,13 +41,13 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       });
 
       // Save resource
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(savedResource?.id).toEqual(exampleResourceId);
       expect(savedResource?.workingMemory).toEqual('Custom working memory');
       expect(savedResource?.metadata).toEqual({ custom: 'data', version: 1 });
 
       // Retrieve resource
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.id).toEqual(exampleResourceId);
       expect(retrievedResource?.workingMemory).toEqual('Custom working memory');
       expect(retrievedResource?.metadata).toEqual({ custom: 'data', version: 1 });
@@ -56,18 +61,18 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return null for non-existent resource', async () => {
-      const result = await storage.getStore('memory')?.getResourceById({ resourceId: 'non-existent' });
+      const result = await memoryStore.getResourceById({ resourceId: 'non-existent' });
       expect(result).toBeNull();
     });
 
     it('should update resource workingMemory and metadata', async () => {
       const resource = createSampleResource();
-      await storage.getStore('memory')?.saveResource({ resource });
+      await memoryStore.saveResource({ resource });
 
       const newWorkingMemory = 'Updated working memory content';
       const newMetadata = { newKey: 'newValue', updated: true };
 
-      const updatedResource = await storage.getStore('memory')?.updateResource({
+      const updatedResource = await memoryStore.updateResource({
         resourceId: resource.id,
         workingMemory: newWorkingMemory,
         metadata: newMetadata,
@@ -80,7 +85,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       });
 
       // Verify persistence
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.workingMemory).toBe(newWorkingMemory);
       expect(retrievedResource?.metadata).toEqual({
         ...resource.metadata,
@@ -90,12 +95,12 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
 
     it('should update only workingMemory when metadata is not provided', async () => {
       const resource = createSampleResource();
-      await storage.getStore('memory')?.saveResource({ resource });
+      await memoryStore.saveResource({ resource });
 
       const newWorkingMemory = 'Updated working memory only';
       const originalMetadata = resource.metadata;
 
-      const updatedResource = await storage.getStore('memory')?.updateResource({
+      const updatedResource = await memoryStore.updateResource({
         resourceId: resource.id,
         workingMemory: newWorkingMemory,
       });
@@ -104,19 +109,19 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       expect(updatedResource?.metadata).toEqual(originalMetadata);
 
       // Verify persistence
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.workingMemory).toBe(newWorkingMemory);
       expect(retrievedResource?.metadata).toEqual(originalMetadata);
     });
 
     it('should update only metadata when workingMemory is not provided', async () => {
       const resource = createSampleResource();
-      await storage.getStore('memory')?.saveResource({ resource });
+      await memoryStore.saveResource({ resource });
 
       const newMetadata = { onlyMetadata: 'updated' };
       const originalWorkingMemory = resource.workingMemory;
 
-      const updatedResource = await storage.getStore('memory')?.updateResource({
+      const updatedResource = await memoryStore.updateResource({
         resourceId: resource.id,
         metadata: newMetadata,
       });
@@ -128,7 +133,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       });
 
       // Verify persistence
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.workingMemory).toBe(originalWorkingMemory);
       expect(retrievedResource?.metadata).toEqual({
         ...resource.metadata,
@@ -141,7 +146,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       const newWorkingMemory = 'New working memory';
       const newMetadata = { created: true, source: 'update' };
 
-      const createdResource = await storage.getStore('memory')?.updateResource({
+      const createdResource = await memoryStore.updateResource({
         resourceId: nonExistentId,
         workingMemory: newWorkingMemory,
         metadata: newMetadata,
@@ -152,7 +157,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       expect(createdResource?.metadata).toEqual(newMetadata);
 
       // Verify it was actually created
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: nonExistentId });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: nonExistentId });
       expect(retrievedResource?.id).toBe(nonExistentId);
       expect(retrievedResource?.workingMemory).toBe(newWorkingMemory);
       expect(retrievedResource?.metadata).toEqual(newMetadata);
@@ -163,10 +168,10 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
         workingMemory: '',
       });
 
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(savedResource?.workingMemory).toBe('');
 
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.workingMemory).toBe('');
     });
 
@@ -179,10 +184,10 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
         updatedAt: new Date(),
       };
 
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(!!savedResource?.workingMemory).toBe(false);
 
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(!!retrievedResource?.workingMemory).toBe(false);
     });
 
@@ -191,10 +196,10 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
         metadata: {},
       });
 
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(savedResource?.metadata).toEqual({});
 
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.metadata).toEqual({});
     });
 
@@ -207,10 +212,10 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
         updatedAt: new Date(),
       };
 
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(!!savedResource?.metadata).toBe(false);
 
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(!!retrievedResource?.metadata).toBe(false);
     });
 
@@ -240,10 +245,10 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
         metadata: complexMetadata,
       });
 
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(savedResource?.metadata).toEqual(complexMetadata);
 
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.metadata).toEqual(complexMetadata);
     });
 
@@ -253,19 +258,19 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
         workingMemory: largeWorkingMemory,
       });
 
-      const savedResource = await storage.getStore('memory')?.saveResource({ resource });
+      const savedResource = await memoryStore.saveResource({ resource });
       expect(savedResource?.workingMemory).toBe(largeWorkingMemory);
 
-      const retrievedResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const retrievedResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(retrievedResource?.workingMemory).toBe(largeWorkingMemory);
     });
 
     it('should update resource updatedAt timestamp', async () => {
       const resource = createSampleResource();
-      await storage.getStore('memory')?.saveResource({ resource });
+      await memoryStore.saveResource({ resource });
 
       // Get the initial resource to capture the original updatedAt
-      const initialResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const initialResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(initialResource).toBeDefined();
       const originalUpdatedAt = initialResource!.updatedAt;
 
@@ -273,7 +278,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Update the resource
-      const updatedResource = await storage.getStore('memory')?.updateResource({
+      const updatedResource = await memoryStore.updateResource({
         resourceId: resource.id,
         workingMemory: 'Updated content',
       });
@@ -296,21 +301,21 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
 
     it('should handle concurrent updates to the same resource', async () => {
       const resource = createSampleResource();
-      await storage.getStore('memory')?.saveResource({ resource });
+      await memoryStore.saveResource({ resource });
 
       // Perform concurrent updates
       const updatePromises = [
-        storage.getStore('memory')?.updateResource({
+        memoryStore.updateResource({
           resourceId: resource.id,
           workingMemory: 'Update 1',
           metadata: { update: 1 },
         }),
-        storage.getStore('memory')?.updateResource({
+        memoryStore.updateResource({
           resourceId: resource.id,
           workingMemory: 'Update 2',
           metadata: { update: 2 },
         }),
-        storage.getStore('memory')?.updateResource({
+        memoryStore.updateResource({
           resourceId: resource.id,
           workingMemory: 'Update 3',
           metadata: { update: 3 },
@@ -326,7 +331,7 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       });
 
       // Final state should be consistent
-      const finalResource = await storage.getStore('memory')?.getResourceById({ resourceId: resource.id });
+      const finalResource = await memoryStore.getResourceById({ resourceId: resource.id });
       expect(finalResource).toBeDefined();
       expect(finalResource?.id).toBe(resource.id);
     });

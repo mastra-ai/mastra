@@ -6,7 +6,7 @@ import type { StorageThreadType } from '../memory/types';
 import type { TracingStorageStrategy } from '../observability';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
-import type { ObservabilityStorageBase, WorkflowsStorageBase, ScoresStorageBase, MemoryStorageBase } from './domains';
+import type { ObservabilityStorageBase, WorkflowsStorageBase, ScoresStorageBase, MemoryStorageBase, IndexManagementBase } from './domains';
 import type {
   PaginationInfo,
   StorageColumn,
@@ -30,6 +30,7 @@ export type StorageDomains = {
   scores: ScoresStorageBase;
   memory: MemoryStorageBase;
   observability?: ObservabilityStorageBase;
+  indexManagement?: IndexManagementBase;
 };
 
 export function ensureDate(date: Date | string | undefined): Date | undefined {

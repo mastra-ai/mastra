@@ -3,10 +3,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
 import type { ScoreRowData } from '@mastra/core/evals';
 import { TABLE_SCORERS, type MastraStorage } from '@mastra/core/storage';
+import type { ScoresStorageBase } from '@mastra/core/storage';
 
 // Helper function for creating test scores
 async function createScores(
-  storage: MastraStorage,
+  scoresStore: ScoresStorageBase,
   configs: Array<{
     count: number;
     scorerId: string;
@@ -24,7 +25,7 @@ async function createScores(
         spanId: config.spanId,
       });
       allScores.push(score);
-      await storage.saveScore(score);
+      await scoresStore.saveScore(score);
     }
   }
 
@@ -32,9 +33,14 @@ async function createScores(
 }
 
 export function createScoresTest({ storage }: { storage: MastraStorage }) {
+  const scoresStore = storage.getStore('scores');
+  if (!scoresStore) {
+    throw new Error('Scores store not found');
+  }
+
   describe('Score Operations', () => {
     beforeEach(async () => {
-      await storage.getStore('scores')?.dropData();
+      await scoresStore.dropData();
     });
 
     it('should retrieve scores by scorer id', async () => {
@@ -47,12 +53,12 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
 
       // Insert evals
 
-      await storage.saveScore(score1);
-      await storage.saveScore(score2);
-      await storage.saveScore(score3);
+      await scoresStore.saveScore(score1);
+      await scoresStore.saveScore(score2);
+      await scoresStore.saveScore(score3);
 
       // Test getting all evals for the agent
-      const allScoresByScorerId = await storage.listScoresByScorerId({
+      const allScoresByScorerId = await scoresStore.listScoresByScorerId({
         scorerId,
         pagination: { page: 0, perPage: 10 },
       });
@@ -65,7 +71,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       );
 
       // Test getting scores for non-existent scorer
-      const nonExistentScores = await storage.listScoresByScorerId({
+      const nonExistentScores = await scoresStore.listScoresByScorerId({
         scorerId: 'non-existent-scorer',
         pagination: { page: 0, perPage: 10 },
       });
@@ -76,9 +82,9 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       const scorerId = `scorer-${randomUUID()}`;
       const score1 = createSampleScore({ scorerId, source: 'TEST' });
       const score2 = createSampleScore({ scorerId, source: 'LIVE' });
-      await storage.saveScore(score1);
-      await storage.saveScore(score2);
-      const scoresBySource = await storage.listScoresByScorerId({
+      await scoresStore.saveScore(score1);
+      await scoresStore.saveScore(score2);
+      const scoresBySource = await scoresStore.listScoresByScorerId({
         scorerId,
         pagination: { page: 0, perPage: 10 },
         source: 'TEST',
@@ -90,8 +96,8 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
     it('should save scorer', async () => {
       const scorerId = `scorer-${randomUUID()}`;
       const scorer = createSampleScore({ scorerId });
-      await storage.saveScore(scorer);
-      const result = await storage.listScoresByRunId({ runId: scorer.runId, pagination: { page: 0, perPage: 10 } });
+      await scoresStore.saveScore(scorer);
+      const result = await scoresStore.listScoresByRunId({ runId: scorer.runId, pagination: { page: 0, perPage: 10 } });
       expect(result.scores).toHaveLength(1);
       expect(result.pagination.total).toBe(1);
       expect(result.pagination.page).toBe(0);
@@ -101,9 +107,9 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
 
     it('listScoresByEntityId should return paginated scores with total count when returnPaginationResults is true', async () => {
       const scorer = createSampleScore({ scorerId: `scorer-${randomUUID()}` });
-      await storage.saveScore(scorer);
+      await scoresStore.saveScore(scorer);
 
-      const result = await storage.listScoresByEntityId({
+      const result = await scoresStore.listScoresByEntityId({
         entityId: scorer.entity!.id!,
         entityType: scorer.entityType!,
         pagination: { page: 0, perPage: 10 },
@@ -122,9 +128,9 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         const spanId = randomUUID();
 
         const score = createSampleScore({ scorerId, traceId, spanId });
-        await storage.saveScore(score);
+        await scoresStore.saveScore(score);
 
-        const result = await storage.listScoresBySpan({
+        const result = await scoresStore.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 10 },
@@ -147,11 +153,11 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         const score2 = createSampleScore({ scorerId, traceId, spanId });
         const score3 = createSampleScore({ scorerId, traceId, spanId });
 
-        await storage.saveScore(score1);
-        await storage.saveScore(score2);
-        await storage.saveScore(score3);
+        await scoresStore.saveScore(score1);
+        await scoresStore.saveScore(score2);
+        await scoresStore.saveScore(score3);
 
-        const result = await storage.listScoresBySpan({
+        const result = await scoresStore.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 10 },
@@ -169,14 +175,14 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         const traceId = randomUUID();
         const spanId = randomUUID();
 
-        await createScores(storage, [
+        await createScores(scoresStore, [
           { count: 5, scorerId, traceId, spanId }, // target scores
           { count: 1, scorerId, traceId: randomUUID(), spanId }, // different trace
           { count: 1, scorerId, traceId, spanId: randomUUID() }, // different span
           { count: 1, scorerId, traceId: randomUUID(), spanId: randomUUID() }, // both different
         ]);
 
-        const firstPage = await storage.listScoresBySpan({
+        const firstPage = await scoresStore.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 2 },
@@ -196,14 +202,14 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         const traceId = randomUUID();
         const spanId = randomUUID();
 
-        const allScores = await createScores(storage, [
+        await createScores(scoresStore, [
           { count: 5, scorerId, traceId, spanId }, // target scores
           { count: 1, scorerId, traceId: randomUUID(), spanId }, // different trace
           { count: 1, scorerId, traceId, spanId: randomUUID() }, // different span
           { count: 1, scorerId, traceId: randomUUID(), spanId: randomUUID() }, // both different
         ]);
 
-        const secondPage = await storage.listScoresBySpan({
+        const secondPage = await scoresStore.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 1, perPage: 2 },
@@ -228,7 +234,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         const otherSpanId1 = randomUUID();
         const otherSpanId2 = randomUUID();
 
-        await createScores(storage, [
+        await createScores(scoresStore, [
           { count: 5, scorerId, traceId, spanId }, // target scores
           { count: 1, scorerId, traceId: otherTraceId1, spanId }, // different trace, same span
           { count: 1, scorerId, traceId, spanId: otherSpanId1 }, // same trace, different span
@@ -237,19 +243,19 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
           { count: 1, scorerId, traceId, spanId: otherSpanId2 }, // same trace, different span (again)
         ]);
 
-        const firstPage = await storage.listScoresBySpan({
+        const firstPage = await scoresStore.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 2 },
         });
 
-        const secondPage = await storage.listScoresBySpan({
+        const secondPage = await scoresStore.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 1, perPage: 2 },
         });
 
-        const lastPage = await storage.listScoresBySpan({
+        const lastPage = await scoresStore.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 2, perPage: 2 },
