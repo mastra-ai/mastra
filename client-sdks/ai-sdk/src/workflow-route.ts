@@ -5,6 +5,8 @@ import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 type WorkflowRouteBody = {
+  runId?: string;
+  resourceId?: string;
   inputData?: Record<string, any>;
   resumeData?: Record<string, any>;
   requestContext?: RequestContext;
@@ -46,9 +48,13 @@ export function workflowRoute({
             schema: {
               type: 'object',
               properties: {
+                runId: { type: 'string', additionalProperties: true },
+                resourceId: { type: 'string', additionalProperties: true },
                 inputData: { type: 'object', additionalProperties: true },
+                resumeData: { type: 'object', additionalProperties: true },
                 requestContext: { type: 'object', additionalProperties: true },
                 tracingOptions: { type: 'object', additionalProperties: true },
+                step: { type: 'string', additionalProperties: true },
               },
             },
           },
@@ -66,7 +72,7 @@ export function workflowRoute({
       },
     },
     handler: async c => {
-      const { inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
+      const { runId, resourceId, inputData, resumeData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
       const mastra = c.get('mastra');
 
       let workflowToUse: string | undefined = workflow;
@@ -91,7 +97,7 @@ export function workflowRoute({
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
 
-      const run = await workflowObj.createRun();
+      const run = await workflowObj.createRun({ runId, resourceId, ...rest });
 
       const stream = resumeData ? run.resumeStream({ resumeData, ...rest }) : run.stream({ inputData, ...rest });
 
