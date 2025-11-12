@@ -1080,7 +1080,8 @@ describe('Memory Handlers', () => {
       });
 
       expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
-      expect(mockMemory.deleteMessages).toHaveBeenCalledWith('test-message-id');
+      // Single string should be normalized to array
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith(['test-message-id']);
     });
 
     it('should delete multiple messages successfully', async () => {
@@ -1120,7 +1121,8 @@ describe('Memory Handlers', () => {
       });
 
       expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
-      expect(mockMemory.deleteMessages).toHaveBeenCalledWith({ id: 'test-message-id' });
+      // Single object should be normalized to array
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith([{ id: 'test-message-id' }]);
     });
 
     it('should accept array of message objects', async () => {
