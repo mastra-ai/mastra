@@ -396,6 +396,7 @@ h6 code {
     .menu,
     pre,
     [class*="tableOfContents"],
+    [role="log"],
     .tabs,
     .toc-wrapper {
       scrollbar-color: #2a2a2a transparent;
