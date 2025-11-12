@@ -73,7 +73,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.55.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "@types/shell-quote": "^1.7.5",
     "eslint": "^9.37.0",
     "memfs": "^4.50.0",
