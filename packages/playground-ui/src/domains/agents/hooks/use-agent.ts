@@ -4,11 +4,11 @@ import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useAgent = (agentId?: string) => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['agent', agentId, JSON.stringify(runtimeContext)],
-    queryFn: () => (agentId ? client.getAgent(agentId).details(runtimeContext) : null),
+    queryKey: ['agent', agentId, JSON.stringify(requestContext)],
+    queryFn: () => (agentId ? client.getAgent(agentId).details(requestContext) : null),
     retry: false,
     enabled: Boolean(agentId),
   });

@@ -27,7 +27,7 @@ export const createSandbox = createTool({
         error: z.string(),
       }),
     ),
-  execute: async ({ context: sandboxOptions }) => {
+  execute: async sandboxOptions => {
     try {
       const sandbox = await Sandbox.create(sandboxOptions);
 
@@ -76,11 +76,11 @@ export const runCode = createTool({
         error: z.string().describe('The error from a failed execution'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
+      const sandbox = await Sandbox.connect(input.sandboxId);
 
-      const execution = await sandbox.runCode(context.code, context.runCodeOpts);
+      const execution = await sandbox.runCode(input.code, input.runCodeOpts);
 
       return {
         execution: JSON.stringify(execution.toJSON()),
@@ -110,14 +110,14 @@ export const readFile = createTool({
         error: z.string().describe('The error from a failed file read'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const fileContent = await sandbox.files.read(context.path);
+      const sandbox = await Sandbox.connect(input.sandboxId);
+      const fileContent = await sandbox.files.read(input.path);
 
       return {
         content: fileContent,
-        path: context.path,
+        path: input.path,
       };
     } catch (e) {
       return {
@@ -145,14 +145,14 @@ export const writeFile = createTool({
         error: z.string().describe('The error from a failed file write'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      await sandbox.files.write(context.path, context.content);
+      const sandbox = await Sandbox.connect(input.sandboxId);
+      await sandbox.files.write(input.path, context.content);
 
       return {
         success: true,
-        path: context.path,
+        path: input.path,
       };
     } catch (e) {
       return {
@@ -186,9 +186,9 @@ export const writeFiles = createTool({
         error: z.string().describe('The error from a failed files write'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
+      const sandbox = await Sandbox.connect(input.sandboxId);
       await sandbox.files.write(context.files);
 
       return {
@@ -228,10 +228,10 @@ export const listFiles = createTool({
         error: z.string().describe('The error from a failed file listing'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const fileList = await sandbox.files.list(context.path);
+      const sandbox = await Sandbox.connect(input.sandboxId);
+      const fileList = await sandbox.files.list(input.path);
 
       fileList.map(f => f.type);
 
@@ -241,7 +241,7 @@ export const listFiles = createTool({
           path: file.path,
           isDirectory: file.type === FileType.DIR,
         })),
-        path: context.path,
+        path: input.path,
       };
     } catch (e) {
       return {
@@ -268,14 +268,14 @@ export const deleteFile = createTool({
         error: z.string().describe('The error from a failed file deletion'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      await sandbox.files.remove(context.path);
+      const sandbox = await Sandbox.connect(input.sandboxId);
+      await sandbox.files.remove(input.path);
 
       return {
         success: true,
-        path: context.path,
+        path: input.path,
       };
     } catch (e) {
       return {
@@ -302,14 +302,14 @@ export const createDirectory = createTool({
         error: z.string().describe('The error from a failed directory creation'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      await sandbox.files.makeDir(context.path);
+      const sandbox = await Sandbox.connect(input.sandboxId);
+      await sandbox.files.makeDir(input.path);
 
       return {
         success: true,
-        path: context.path,
+        path: input.path,
       };
     } catch (e) {
       return {
@@ -344,10 +344,10 @@ export const getFileInfo = createTool({
         error: z.string().describe('The error from a failed file info request'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const info = await sandbox.files.getInfo(context.path);
+      const sandbox = await Sandbox.connect(input.sandboxId);
+      const info = await sandbox.files.getInfo(input.path);
 
       return {
         name: info.name,
@@ -387,22 +387,22 @@ export const checkFileExists = createTool({
         error: z.string().describe('The error from a failed existence check'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
+      const sandbox = await Sandbox.connect(input.sandboxId);
 
       try {
-        const info = await sandbox.files.getInfo(context.path);
+        const info = await sandbox.files.getInfo(input.path);
         return {
           exists: true,
-          path: context.path,
+          path: input.path,
           type: info.type,
         };
       } catch (e) {
         // If getInfo fails, the file doesn't exist
         return {
           exists: false,
-          path: context.path,
+          path: input.path,
         };
       }
     } catch (e) {
@@ -436,10 +436,10 @@ export const getFileSize = createTool({
         error: z.string().describe('The error from a failed size check'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
-      const info = await sandbox.files.getInfo(context.path);
+      const sandbox = await Sandbox.connect(input.sandboxId);
+      const info = await sandbox.files.getInfo(input.path);
 
       let humanReadableSize: string | undefined;
 
@@ -458,7 +458,7 @@ export const getFileSize = createTool({
       return {
         size: info.size,
         humanReadableSize,
-        path: context.path,
+        path: input.path,
         type: info.type,
       };
     } catch (e) {
@@ -502,14 +502,14 @@ export const watchDirectory = createTool({
         error: z.string().describe('The error from a failed directory watch'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
+      const sandbox = await Sandbox.connect(input.sandboxId);
       const events: Array<{ type: FilesystemEventType; name: string; timestamp: string }> = [];
 
       // Start watching the directory
       const handle = await sandbox.files.watchDir(
-        context.path,
+        input.path,
         async event => {
           events.push({
             type: event.type,
@@ -530,7 +530,7 @@ export const watchDirectory = createTool({
 
       return {
         watchStarted: true,
-        path: context.path,
+        path: input.path,
         events,
       };
     } catch (e) {
@@ -565,9 +565,9 @@ export const runCommand = createTool({
         error: z.string().describe('The error from a failed command execution'),
       }),
     ),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const sandbox = await Sandbox.connect(context.sandboxId);
+      const sandbox = await Sandbox.connect(input.sandboxId);
       const startTime = Date.now();
 
       const result = await sandbox.commands.run(context.command, {

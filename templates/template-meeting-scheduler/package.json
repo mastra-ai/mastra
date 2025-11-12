@@ -14,7 +14,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
@@ -28,7 +28,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
+    "@types/node": "22.13.17",
     "mastra": "^0.17.5",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2"

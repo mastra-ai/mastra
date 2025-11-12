@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -28,9 +29,11 @@ describe('Memory with LibSQL Integration', () => {
   const memory = new Memory({
     storage: new LibSQLStore({
       url: 'file:libsql-test.db',
+      id: randomUUID(),
     }),
     vector: new LibSQLVector({
       connectionUrl: 'file:libsql-test.db',
+      id: randomUUID(),
     }),
     embedder: fastembed,
     options: memoryOptions,
@@ -38,10 +41,11 @@ describe('Memory with LibSQL Integration', () => {
 
   getResuableTests(memory, {
     storageTypeForWorker: StorageType.LibSQL,
-    storageConfigForWorker: { url: 'file:libsql-test.db' },
+    storageConfigForWorker: { url: 'file:libsql-test.db', id: randomUUID() },
     memoryOptionsForWorker: memoryOptions,
     vectorConfigForWorker: {
       connectionUrl: 'file:libsql-test.db',
+      id: randomUUID(),
     },
   });
 });

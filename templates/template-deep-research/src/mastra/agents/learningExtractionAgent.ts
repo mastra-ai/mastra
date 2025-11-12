@@ -5,6 +5,7 @@ import { openai } from '@ai-sdk/openai';
 const mainModel = openai('gpt-4.1');
 
 export const learningExtractionAgent = new Agent({
+  id: 'learning-extraction-agent',
   name: 'Learning Extraction Agent',
   instructions: `You are an expert at analyzing search results and extracting key insights. Your role is to:
 

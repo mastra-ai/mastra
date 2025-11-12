@@ -1,5 +1,5 @@
 ---
-title: "Example: Deploying an MCPServer | Agents | Mastra Docs"
+title: "Example: Deploying an MCPServer | Agents"
 description: Example of setting up, building, and deploying a Mastra MCPServer using the stdio transport and publishing it to NPM.
 ---
 
@@ -14,7 +14,7 @@ This example guides you through setting up a basic Mastra MCPServer using the st
 Install the necessary packages:
 
 ```bash
-pnpm add @mastra/mcp @mastra/core tsup
+pnpm add @mastra/mcp@beta @mastra/core@beta tsup
 ```
 
 ## Set up MCP Server
@@ -29,7 +29,8 @@ pnpm add @mastra/mcp @mastra/core tsup
     import { weatherTool } from "./tools";
 
     const server = new MCPServer({
-      name: "my-mcp-server",
+      id: "my-mcp-server",
+      name: "My MCP Server",
       version: "1.0.0",
       tools: { weatherTool },
     });
@@ -91,8 +92,8 @@ const mcp = new MCPClient({
 });
 
 // You can then get tools or toolsets from this configuration to use in your agent
-const tools = await mcp.getTools();
-const toolsets = await mcp.getToolsets();
+const tools = await mcp.listTools();
+const toolsets = await mcp.listToolsets();
 ```
 
 Note: If you published without an organization scope, the `args` might just be `["-y", "your-package-name@latest"]`.

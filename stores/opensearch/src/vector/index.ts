@@ -37,8 +37,8 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
    *
    * @param {string} url - The url of the OpenSearch node.
    */
-  constructor({ url }: { url: string }) {
-    super();
+  constructor({ url, id }: { url: string } & { id: string }) {
+    super({ id });
     this.client = new OpenSearchClient({ node: url });
   }
 

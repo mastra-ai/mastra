@@ -17,6 +17,7 @@ export const init = async ({
   llmApiKey,
   addExample = false,
   configureEditorWithDocsMCP,
+  versionTag,
 }: {
   directory?: string;
   components: Component[];
@@ -24,8 +25,10 @@ export const init = async ({
   llmApiKey?: string;
   addExample?: boolean;
   configureEditorWithDocsMCP?: Editor;
+  versionTag?: string;
 }) => {
   s.start('Initializing Mastra');
+  const packageVersionTag = versionTag ? `@${versionTag}` : '';
 
   try {
     const result = await createMastraDir(directory);
@@ -57,30 +60,31 @@ export const init = async ({
       ]);
 
       const depService = new DepsService();
+
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
       if (needsLibsql) {
-        await depService.installPackages(['@mastra/libsql']);
+        await depService.installPackages([`@mastra/libsql${packageVersionTag}`]);
       }
       const needsMemory =
         components.includes(`agents`) && (await depService.checkDependencies(['@mastra/memory'])) !== `ok`;
       if (needsMemory) {
-        await depService.installPackages(['@mastra/memory']);
+        await depService.installPackages([`@mastra/memory${packageVersionTag}`]);
       }
 
       const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
       if (needsLoggers) {
-        await depService.installPackages(['@mastra/loggers']);
+        await depService.installPackages([`@mastra/loggers${packageVersionTag}`]);
       }
 
       const needsObservability = (await depService.checkDependencies(['@mastra/observability'])) !== `ok`;
       if (needsObservability) {
-        await depService.installPackages(['@mastra/observability']);
+        await depService.installPackages([`@mastra/observability${packageVersionTag}`]);
       }
 
       const needsEvals =
         components.includes(`scorers`) && (await depService.checkDependencies(['@mastra/evals'])) !== `ok`;
       if (needsEvals) {
-        await depService.installPackages(['@mastra/evals']);
+        await depService.installPackages([`@mastra/evals${packageVersionTag}`]);
       }
     }
 

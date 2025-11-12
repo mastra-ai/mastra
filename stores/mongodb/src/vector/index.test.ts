@@ -97,7 +97,7 @@ describe('MongoDBVector Integration Tests', () => {
   const emptyIndexName = 'empty-index';
 
   beforeAll(async () => {
-    vectorDB = new MongoDBVector({ uri, dbName });
+    vectorDB = new MongoDBVector({ uri, dbName, id: 'mongodb-test' });
     await vectorDB.connect();
 
     // Wait for Atlas Search to be ready
@@ -554,8 +554,6 @@ describe('MongoDBVector Integration Tests', () => {
     });
 
     test('filtering by thread_id WITHOUT metadata prefix works correctly', async () => {
-      // This is what Memory.rememberMessages does - passes thread_id directly
-      // Previously this would ignore the filter, but now it works correctly
       const results = await vectorDB.query({
         indexName: bugTestIndexName,
         queryVector: [1, 0, 0, 0],
@@ -573,7 +571,6 @@ describe('MongoDBVector Integration Tests', () => {
     });
 
     test('filtering by resource_id WITHOUT metadata prefix works correctly', async () => {
-      // This is what Memory.rememberMessages does with resource scope
       const results = await vectorDB.query({
         indexName: bugTestIndexName,
         queryVector: [0, 1, 0, 0],
@@ -625,7 +622,7 @@ describe('MongoDBVector Integration Tests', () => {
 });
 
 // Use the shared test suite with factory pattern
-const vectorDB = new MongoDBVector({ uri, dbName });
+const vectorDB = new MongoDBVector({ uri, dbName, id: 'mongodb-shared-test' });
 
 createVectorTestSuite({
   vector: vectorDB,

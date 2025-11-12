@@ -1,4 +1,4 @@
-import { SystemMessage } from '@mastra/core';
+import { SystemMessage } from '@mastra/core/llm';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { extractPrompt } from '../utils/extractPrompt';
 

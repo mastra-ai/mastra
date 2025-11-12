@@ -1,6 +1,6 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { summarizePdfTool } from '../tools/summarize-pdf-tool';
 import { textToSpeechTool } from '../tools/text-to-speech-tool';
 
@@ -40,7 +40,7 @@ const downloadAndSummarizePdfStep = createStep({
     const result = await summarizePdfTool.execute({
       context: { pdfUrl },
       mastra,
-      runtimeContext: new RuntimeContext(),
+      requestContext: new RequestContext(),
       tracingContext: {} as any,
     });
 
@@ -84,7 +84,7 @@ const generateAudioFromSummaryStep = createStep({
           speed,
         },
         mastra,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
         tracingContext: {} as any,
       });
 

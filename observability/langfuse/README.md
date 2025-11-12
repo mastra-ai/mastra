@@ -36,7 +36,7 @@ const mastra = new Mastra({
 
 ## Features
 
-### AI Tracing
+### Tracing
 
 - **Automatic span mapping**: Root spans become Langfuse traces
 - **Model generation support**: `MODEL_GENERATION` spans become Langfuse generations with token usage

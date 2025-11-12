@@ -1,13 +1,15 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import type { StorageThreadType } from '../memory';
 import type { OutputSchema } from '../stream';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 
-export async function tryGenerateWithJsonFallback<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' = 'mastra',
->(agent: Agent, prompt: MessageListInput, options: AgentExecutionOptions<OUTPUT, FORMAT>) {
+export async function tryGenerateWithJsonFallback<OUTPUT extends OutputSchema = undefined>(
+  agent: Agent,
+  prompt: MessageListInput,
+  options: AgentExecutionOptions<OUTPUT>,
+) {
   if (!options.structuredOutput?.schema) {
     throw new MastraError({
       id: 'STRUCTURED_OUTPUT_OPTIONS_REQUIRED',
@@ -28,10 +30,11 @@ export async function tryGenerateWithJsonFallback<
   }
 }
 
-export async function tryStreamWithJsonFallback<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' = 'mastra',
->(agent: Agent, prompt: MessageListInput, options: AgentExecutionOptions<OUTPUT, FORMAT>) {
+export async function tryStreamWithJsonFallback<OUTPUT extends OutputSchema = undefined>(
+  agent: Agent,
+  prompt: MessageListInput,
+  options: AgentExecutionOptions<OUTPUT>,
+) {
   if (!options.structuredOutput?.schema) {
     throw new MastraError({
       id: 'STRUCTURED_OUTPUT_OPTIONS_REQUIRED',
@@ -60,4 +63,17 @@ export async function tryStreamWithJsonFallback<
       structuredOutput: { ...options.structuredOutput, jsonPromptInjection: true },
     });
   }
+}
+
+export function resolveThreadIdFromArgs(args: {
+  memory?: { thread?: string | { id: string } };
+  threadId?: string;
+}): (Partial<StorageThreadType> & { id: string }) | undefined {
+  if (args?.memory?.thread) {
+    if (typeof args.memory.thread === 'string') return { id: args.memory.thread };
+    if (typeof args.memory.thread === 'object' && args.memory.thread.id)
+      return args.memory.thread as Partial<StorageThreadType> & { id: string };
+  }
+  if (args?.threadId) return { id: args.threadId };
+  return undefined;
 }

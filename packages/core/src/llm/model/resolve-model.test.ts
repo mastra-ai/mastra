@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, it, expect } from 'vitest';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
 
@@ -47,15 +47,15 @@ describe('resolveModelConfig', () => {
     expect(result).toBe(model);
   });
 
-  it('should pass runtimeContext to dynamic function', async () => {
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set('preferredModel', 'anthropic/claude-3-opus');
+  it('should pass requestContext to dynamic function', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('preferredModel', 'anthropic/claude-3-opus');
 
-    const dynamicFn = ({ runtimeContext: ctx }) => {
+    const dynamicFn = ({ requestContext: ctx }) => {
       return ctx.get('preferredModel');
     };
 
-    const result = await resolveModelConfig(dynamicFn, runtimeContext);
+    const result = await resolveModelConfig(dynamicFn, requestContext);
     expect(result).toBeInstanceOf(ModelRouterLanguageModel);
     expect(result.modelId).toBe(`claude-3-opus`);
     expect(result.provider).toBe(`anthropic`);
@@ -172,19 +172,19 @@ describe('resolveModelConfig', () => {
         expect(result.provider).toBe('dynamic-provider');
       });
 
-      it('should resolve a custom config selected from runtime context', async () => {
-        const runtimeContext = new RuntimeContext();
-        runtimeContext.set('customEndpoint', 'https://api.mycompany.com/v1/chat/completions');
-        runtimeContext.set('customApiKey', 'context-api-key');
+      it('should resolve a custom config selected from request context', async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('customEndpoint', 'https://api.mycompany.com/v1/chat/completions');
+        requestContext.set('customApiKey', 'context-api-key');
 
-        const dynamicFn = ({ runtimeContext: ctx }) => ({
+        const dynamicFn = ({ requestContext: ctx }) => ({
           providerId: 'context-provider',
           modelId: 'context-model',
           url: ctx.get('customEndpoint'),
           apiKey: ctx.get('customApiKey'),
         });
 
-        const result = await resolveModelConfig(dynamicFn, runtimeContext);
+        const result = await resolveModelConfig(dynamicFn, requestContext);
         expect(result).toBeInstanceOf(ModelRouterLanguageModel);
         expect(result.modelId).toBe('context-model');
         expect(result.provider).toBe('context-provider');

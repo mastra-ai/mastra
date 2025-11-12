@@ -105,7 +105,7 @@ export default function SearchContainer({ locale }: { locale: string }) {
           onClick={open}
           size="sm"
           variant="ghost"
-          className="md:flex hidden w-[350px]  items-center pr-[0.38rem] text-sm font-normal justify-between gap-6 cursor-pointer border-[0.5px] bg-(--mastra-surface-4) border-(--border)  text-(--mastra-icons-3)"
+          className="md:flex hidden w-[200px]  items-center pr-[0.38rem] text-sm font-normal justify-between gap-6 cursor-pointer border-[0.5px] bg-(--mastra-surface-4) border-(--border)  text-(--mastra-icons-3)"
         >
           <span className="text-sm">Search docs...</span>
           <Shortcut />

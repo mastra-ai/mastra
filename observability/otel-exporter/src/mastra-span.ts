@@ -2,7 +2,7 @@
  * Custom OpenTelemetry span that preserves Mastra's trace and span IDs
  */
 
-import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
+import type { AnyExportedSpan } from '@mastra/core/observability';
 import { SpanStatusCode, TraceFlags } from '@opentelemetry/api';
 import type { SpanKind, SpanContext, SpanStatus, Attributes, Link } from '@opentelemetry/api';
 import type { InstrumentationScope } from '@opentelemetry/core';
@@ -34,14 +34,14 @@ export class MastraReadableSpan implements ReadableSpan {
   readonly droppedLinksCount: number = 0;
 
   constructor(
-    aiSpan: AnyExportedAISpan,
+    span: AnyExportedSpan,
     attributes: Attributes,
     kind: SpanKind,
     parentSpanId?: string,
     resource?: Resource,
     instrumentationLibrary?: InstrumentationScope,
   ) {
-    this.name = aiSpan.name;
+    this.name = span.name;
     this.kind = kind;
     this.attributes = attributes;
     this.parentSpanId = parentSpanId;
@@ -49,46 +49,46 @@ export class MastraReadableSpan implements ReadableSpan {
     this.events = [];
 
     // Convert JavaScript Date to hrtime format [seconds, nanoseconds]
-    this.startTime = this.dateToHrTime(aiSpan.startTime);
-    this.endTime = aiSpan.endTime ? this.dateToHrTime(aiSpan.endTime) : this.startTime;
-    this.ended = !!aiSpan.endTime;
+    this.startTime = this.dateToHrTime(span.startTime);
+    this.endTime = span.endTime ? this.dateToHrTime(span.endTime) : this.startTime;
+    this.ended = !!span.endTime;
 
     // Calculate duration
-    if (aiSpan.endTime) {
-      const durationMs = aiSpan.endTime.getTime() - aiSpan.startTime.getTime();
+    if (span.endTime) {
+      const durationMs = span.endTime.getTime() - span.startTime.getTime();
       this.duration = [Math.floor(durationMs / 1000), (durationMs % 1000) * 1000000];
     } else {
       this.duration = [0, 0];
     }
 
     // Set status based on error info
-    if (aiSpan.errorInfo) {
+    if (span.errorInfo) {
       this.status = {
         code: SpanStatusCode.ERROR,
-        message: aiSpan.errorInfo.message,
+        message: span.errorInfo.message,
       };
 
       // Add error as event
       this.events.push({
         name: 'exception',
         attributes: {
-          'exception.message': aiSpan.errorInfo.message,
+          'exception.message': span.errorInfo.message,
           'exception.type': 'Error',
-          ...(aiSpan.errorInfo.details?.stack && {
-            'exception.stacktrace': aiSpan.errorInfo.details.stack as string,
+          ...(span.errorInfo.details?.stack && {
+            'exception.stacktrace': span.errorInfo.details.stack as string,
           }),
         },
         time: this.startTime,
         droppedAttributesCount: 0,
       });
-    } else if (aiSpan.endTime) {
+    } else if (span.endTime) {
       this.status = { code: SpanStatusCode.OK };
     } else {
       this.status = { code: SpanStatusCode.UNSET };
     }
 
     // Add instant event if needed
-    if (aiSpan.isEvent) {
+    if (span.isEvent) {
       this.events.push({
         name: 'instant_event',
         attributes: {},
@@ -99,8 +99,8 @@ export class MastraReadableSpan implements ReadableSpan {
 
     // Create span context with Mastra's IDs
     this.spanContext = () => ({
-      traceId: aiSpan.traceId,
-      spanId: aiSpan.id,
+      traceId: span.traceId,
+      spanId: span.id,
       traceFlags: TraceFlags.SAMPLED,
       isRemote: false,
     });
@@ -108,7 +108,7 @@ export class MastraReadableSpan implements ReadableSpan {
     // Set parent span context if parent span ID is provided
     if (parentSpanId) {
       this.parentSpanContext = {
-        traceId: aiSpan.traceId,
+        traceId: span.traceId,
         spanId: parentSpanId,
         traceFlags: TraceFlags.SAMPLED,
         isRemote: false,

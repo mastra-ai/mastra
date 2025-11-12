@@ -1,5 +1,5 @@
 ---
-title: "Using Vercel AI SDK | Frameworks | Mastra Docs"
+title: "Using Vercel AI SDK | Frameworks"
 description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
 ---
 
@@ -18,13 +18,14 @@ When creating agents in Mastra, you can specify any AI SDK-supported model.
 import { Agent } from "@mastra/core/agent";
 
 export const weatherAgent = new Agent({
+  id: "weather-agent",
   name: "Weather Agent",
   instructions: "Instructions for the agent...",
   model: "openai/gpt-4-turbo",
 });
 ```
 
-> See [Using AI SDK with Mastra](/models#use-ai-sdk-with-mastra) for more information.
+> See [Using AI SDK with Mastra](/models/v1#use-ai-sdk-with-mastra) for more information.
 
 ## Streaming
 
@@ -32,25 +33,33 @@ The recommended way of using Mastra and AI SDK together is by installing the `@m
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @mastra/ai-sdk ```
+    ```bash copy
+    npm install @mastra/ai-sdk@beta
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @mastra/ai-sdk ```
+    ```bash copy
+    pnpm add @mastra/ai-sdk@beta
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @mastra/ai-sdk ```
+    ```bash copy
+    yarn add @mastra/ai-sdk@beta
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @mastra/ai-sdk ```
+    ```bash copy
+    bun add @mastra/ai-sdk@beta
+    ```
   </TabItem>
 </Tabs>
 
 ### `chatRoute()`
 
-When setting up a [custom API route](/docs/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
+When setting up a [custom API route](/docs/v1/server-db/custom-api-routes), use the `chatRoute()` utility to create a route handler that automatically formats the agent stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { chatRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -102,7 +111,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 Use the `workflowRoute()` utility to create a route handler that automatically formats the workflow stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { workflowRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -129,6 +138,10 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
           inputData: {
             city: messages[messages.length - 1].parts[0].text,
           },
+          //Or resumeData for resuming a suspended workflow
+          resumeData: {
+            confirmation: messages[messages.length - 1].parts[0].text
+          }
         },
       };
     },
@@ -141,7 +154,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 Use the `networkRoute()` utility to create a route handler that automatically formats the agent network stream into an AI SDK-compatible format.
 
 ```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { networkRoute } from "@mastra/ai-sdk";
 
 export const mastra = new Mastra({
@@ -179,7 +192,7 @@ The `@mastra/ai-sdk` package transforms and emits Mastra streams (e.g workflow, 
   - `data-tool-network`: Nested network emitted from within an tool stream.
   - `data-tool-agent`: Nested agent emitted from within an tool stream.
 
-Here's an example: For a [nested agent stream within a tool](/docs/streaming/tool-streaming#tool-using-an-agent), `data-tool-agent` UI message parts will be emitted and can be leveraged on the client as documented below:
+Here's an example: For a [nested agent stream within a tool](/docs/v1/streaming/tool-streaming#tool-using-an-agent), `data-tool-agent` UI message parts will be emitted and can be leveraged on the client as documented below:
 
 ```typescript title="app/page.tsx" copy
 "use client";
@@ -268,7 +281,7 @@ export const testTool = createTool({
 });
 ```
 
-For more information about tool streaming see [Tool streaming documentation](/docs/streaming/tool-streaming)
+For more information about tool streaming see [Tool streaming documentation](/docs/v1/streaming/tool-streaming)
 
 ### Stream Transformations
 
@@ -350,16 +363,24 @@ Install the required AI SDK React package:
 
 <Tabs>
   <TabItem value="npm" label="npm">
-    ```bash copy npm install @ai-sdk/react ```
+    ```bash copy
+    npm install @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="pnpm" label="pnpm">
-    ```bash copy pnpm add @ai-sdk/react ```
+    ```bash copy
+    pnpm add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="yarn" label="yarn">
-    ```bash copy yarn add @ai-sdk/react ```
+    ```bash copy
+    yarn add @ai-sdk/react
+    ```
   </TabItem>
   <TabItem value="bun" label="bun">
-    ```bash copy bun add @ai-sdk/react ```
+    ```bash copy
+    bun add @ai-sdk/react
+    ```
   </TabItem>
 </Tabs>
 
@@ -412,7 +433,7 @@ export async function POST(req: Request) {
 }
 ```
 
-> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/agents/agent-memory) for key implementation details.
+> When using `useChat()` with agent memory, refer to the [Agent Memory section](/docs/v1/agents/agent-memory) for key implementation details.
 
 ### Using `useCompletion()`
 
@@ -457,7 +478,7 @@ export async function POST(req: Request) {
 
 ### Passing additional data
 
-`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RuntimeContext`.
+`sendMessage()` allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as `RequestContext`.
 
 ```typescript {16-26} title="app/test/chat-extra.tsx" copy
 "use client";
@@ -502,41 +523,41 @@ export function ChatExtra() {
 
 ```typescript {8,12} title="app/api/chat-extra/route.ts" copy
 import { mastra } from "../../../mastra";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 export async function POST(req: Request) {
   const { messages, data } = await req.json();
   const myAgent = mastra.getAgent("weatherAgent");
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (data) {
     for (const [key, value] of Object.entries(data)) {
-      runtimeContext.set(key, value);
+      requestContext.set(key, value);
     }
   }
 
   const stream = await myAgent.stream(messages, {
-    runtimeContext,
+    requestContext,
     format: "aisdk",
   });
   return stream.toUIMessageStreamResponse();
 }
 ```
 
-### Handling `runtimeContext` with `server.middleware`
+### Handling `requestContext` with `server.middleware`
 
-You can also populate the `RuntimeContext` by reading custom data in a server middleware:
+You can also populate the `RequestContext` by reading custom data in a server middleware:
 
 ```typescript {8,17} title="mastra/index.ts" copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
   server: {
     middleware: [
       async (c, next) => {
-        const runtimeContext = c.get("runtimeContext");
+        const requestContext = c.get("requestContext");
 
         if (c.req.method === "POST") {
           try {
@@ -545,7 +566,7 @@ export const mastra = new Mastra({
 
             if (body?.data) {
               for (const [key, value] of Object.entries(body.data)) {
-                runtimeContext.set(key, value);
+                requestContext.set(key, value);
               }
             }
           } catch {}
@@ -557,7 +578,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> You can then access this data in your tools via the `runtimeContext` parameter. See the [Runtime Context documentation](/docs/server-db/runtime-context) for more details.
+> You can then access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/v1/server-db/request-context) for more details.
 
 ## Migrating from AI SDK v4 to v5
 
@@ -613,7 +634,7 @@ const weatherTool = createTool({
     temperature: z.number(),
     conditions: z.string(),
   }),
-  execute: async ({ context }) => {
+  execute: async (inputData) => {
     return {
       temperature: 72,
       conditions: "sunny",
@@ -652,7 +673,7 @@ const tools = {
     outputSchema: z.object({
       result: z.number(),
     }),
-    execute: async ({ context }) => {
+    execute: async (inputData) => {
       // implementation...
       return { result: 0 };
     },

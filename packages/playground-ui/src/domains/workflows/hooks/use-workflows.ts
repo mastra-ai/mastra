@@ -4,10 +4,10 @@ import { usePlaygroundStore } from '@/store/playground-store';
 
 export const useWorkflows = () => {
   const client = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['workflows', JSON.stringify(runtimeContext)],
-    queryFn: () => client.getWorkflows(runtimeContext),
+    queryKey: ['workflows', JSON.stringify(requestContext)],
+    queryFn: () => client.listWorkflows(requestContext),
   });
 };

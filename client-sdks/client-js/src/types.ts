@@ -9,32 +9,32 @@ import type {
   AgentInstructions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
   MastraMessageV1,
-  MastraMessageV2,
+  MastraDBMessage,
   MemoryConfig,
   StorageThreadType,
 } from '@mastra/core/memory';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
-import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/scores';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
-  AITraceRecord,
-  AISpanRecord,
-  StorageGetMessagesArg,
+  TraceRecord,
+  SpanRecord,
   PaginationInfo,
   WorkflowRun,
   WorkflowRuns,
+  StorageListMessagesInput,
 } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
-import type { QueryResult } from '@mastra/core/vector';
-import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 
-import type { UIMessage } from 'ai';
+import type { QueryResult } from '@mastra/core/vector';
+import type { Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
+
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -77,7 +77,9 @@ type WithoutMethods<T> = {
 export type NetworkStreamParams = {
   messages: MessageListInput;
 } & MultiPrimitiveExecutionOptions;
+
 export interface GetAgentResponse {
+  id: string;
   name: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
@@ -86,8 +88,6 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
-  defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
-  defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
   modelList:
     | Array<{
         id: string;
@@ -100,35 +100,38 @@ export interface GetAgentResponse {
         };
       }>
     | undefined;
+  defaultOptions: WithoutMethods<AgentExecutionOptions>;
+  defaultGenerateOptionsLegacy: WithoutMethods<AgentGenerateOptions>;
+  defaultStreamOptionsLegacy: WithoutMethods<AgentStreamOptions>;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
+  Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools' | 'abortSignal'>
+  Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
 >;
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'runtimeContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+  Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
 >;
 
 export type UpdateModelParams = {
@@ -150,13 +153,6 @@ export type ReorderModelListParams = {
   reorderedModelIds: string[];
 };
 
-export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
-  evals: any[];
-  instructions: string;
-  name: string;
-  id: string;
-}
-
 export interface GetToolResponse {
   id: string;
   description: string;
@@ -164,19 +160,19 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetWorkflowRunsParams {
+export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  limit?: number;
-  offset?: number;
+  perPage?: number | false;
+  page?: number;
   resourceId?: string;
 }
 
-export type GetWorkflowRunsResponse = WorkflowRuns;
+export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WatchEvent['payload']['workflowState'];
+export type GetWorkflowRunExecutionResultResponse = WorkflowState;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -206,8 +202,6 @@ export interface GetWorkflowResponse {
   inputSchema: string;
   outputSchema: string;
 }
-
-export type WorkflowWatchResult = WatchEvent & { runId: string };
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
 export interface UpsertVectorParams {
@@ -241,17 +235,17 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraMessageV2)[];
+  messages: (MastraMessageV1 | MastraDBMessage)[];
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export interface SaveNetworkMessageToMemoryParams {
-  messages: (MastraMessageV1 | MastraMessageV2)[];
+  messages: (MastraMessageV1 | MastraDBMessage)[];
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraMessageV2)[];
+export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -259,63 +253,43 @@ export interface CreateMemoryThreadParams {
   resourceId: string;
   threadId?: string;
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
-}
-
-export interface CreateNetworkMemoryThreadParams {
-  title?: string;
-  metadata?: Record<string, any>;
-  resourceId: string;
-  threadId?: string;
-  networkId: string;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export type CreateMemoryThreadResponse = StorageThreadType;
 
-export interface GetMemoryThreadParams {
+export interface ListMemoryThreadsParams {
   resourceId: string;
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  page?: number;
+  perPage?: number;
+  orderBy?: 'createdAt' | 'updatedAt';
+  sortDirection?: 'ASC' | 'DESC';
+  requestContext?: RequestContext | Record<string, any>;
 }
+
+export type ListMemoryThreadsResponse = PaginationInfo & {
+  threads: StorageThreadType[];
+};
 
 export interface GetMemoryConfigParams {
   agentId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export type GetMemoryConfigResponse = { config: MemoryConfig };
-
-export interface GetNetworkMemoryThreadParams {
-  resourceId: string;
-  networkId: string;
-}
-
-export type GetMemoryThreadResponse = StorageThreadType[];
 
 export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
-export interface GetMemoryThreadMessagesParams {
-  /**
-   * Limit the number of messages to retrieve (default: 40)
-   */
-  limit?: number;
-}
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
 
-export type GetMemoryThreadMessagesPaginatedParams = Omit<StorageGetMessagesArg, 'threadConfig' | 'threadId'>;
-
-export interface GetMemoryThreadMessagesResponse {
-  messages: CoreMessage[];
-  legacyMessages: AiMessageType[];
-  uiMessages: UIMessage[];
-}
-
-export type GetMemoryThreadMessagesPaginatedResponse = PaginationInfo & {
-  messages: MastraMessageV1[] | MastraMessageV2[];
+export type ListMemoryThreadMessagesResponse = {
+  messages: MastraDBMessage[];
 };
 
 export interface GetLogsParams {
@@ -385,7 +359,7 @@ export interface GenerateOrStreamVNextNetworkParams {
   message: string;
   threadId?: string;
   resourceId?: string;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export interface LoopStreamVNextNetworkParams {
@@ -393,7 +367,7 @@ export interface LoopStreamVNextNetworkParams {
   threadId?: string;
   resourceId?: string;
   maxIterations?: number;
-  runtimeContext?: RuntimeContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, any>;
 }
 
 export interface LoopVNextNetworkResponse {
@@ -438,13 +412,13 @@ export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> &
 } & { spanId?: string };
 
 // Scores-related types
-export interface GetScoresByRunIdParams {
+export interface ListScoresByRunIdParams {
   runId: string;
   page?: number;
   perPage?: number;
 }
 
-export interface GetScoresByScorerIdParams {
+export interface ListScoresByScorerIdParams {
   scorerId: string;
   entityId?: string;
   entityType?: string;
@@ -452,14 +426,14 @@ export interface GetScoresByScorerIdParams {
   perPage?: number;
 }
 
-export interface GetScoresByEntityIdParams {
+export interface ListScoresByEntityIdParams {
   entityId: string;
   entityType: string;
   page?: number;
   perPage?: number;
 }
 
-export interface GetScoresBySpanParams {
+export interface ListScoresBySpanParams {
   traceId: string;
   spanId: string;
   page?: number;
@@ -470,7 +444,7 @@ export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
 }
 
-export interface GetScoresResponse {
+export interface ListScoresResponse {
   pagination: {
     total: number;
     page: number;
@@ -509,12 +483,12 @@ export interface TemplateInstallationRequest {
   variables?: Record<string, string>;
 }
 
-export interface GetAITraceResponse {
-  trace: AITraceRecord;
+export interface GetTraceResponse {
+  trace: TraceRecord;
 }
 
-export interface GetAITracesResponse {
-  spans: AISpanRecord[];
+export interface GetTracesResponse {
+  spans: SpanRecord[];
   pagination: PaginationInfo;
 }
 
@@ -555,7 +529,7 @@ export interface MemorySearchResult {
   };
 }
 
-export interface GetAgentsModelProvidersResponse {
+export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }
 

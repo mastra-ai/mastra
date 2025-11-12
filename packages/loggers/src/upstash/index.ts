@@ -143,7 +143,7 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 
-  async getLogs(params?: {
+  async listLogs(params?: {
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;
@@ -243,7 +243,7 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 
-  async getLogsByRunId({
+  async listLogsByRunId({
     runId,
     fromDate,
     toDate,
@@ -269,7 +269,7 @@ export class UpstashTransport extends LoggerTransport {
     try {
       const page = pageInput === 0 ? 1 : (pageInput ?? 1);
       const perPage = perPageInput ?? 100;
-      const allLogs = await this.getLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
+      const allLogs = await this.listLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
       const logs = (allLogs?.logs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
       const total = logs.length;
       const resolvedPerPage = perPage || 100;

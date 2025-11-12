@@ -3,8 +3,7 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   StoreOperations,
-  TABLE_AI_SPANS,
-  TABLE_EVALS,
+  TABLE_SPANS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCORERS,
@@ -46,11 +45,10 @@ export class StoreOperationsDynamoDB extends StoreOperations {
       [TABLE_THREADS]: 'thread',
       [TABLE_MESSAGES]: 'message',
       [TABLE_WORKFLOW_SNAPSHOT]: 'workflow_snapshot',
-      [TABLE_EVALS]: 'eval',
       [TABLE_SCORERS]: 'score',
       [TABLE_TRACES]: 'trace',
       [TABLE_RESOURCES]: 'resource',
-      [TABLE_AI_SPANS]: 'ai_span',
+      [TABLE_SPANS]: 'ai_span',
     };
     return mapping[tableName] || null;
   }

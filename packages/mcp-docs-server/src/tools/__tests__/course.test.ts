@@ -35,7 +35,7 @@ function completeCourses({
 
 describe('Course Tools', () => {
   beforeAll(async () => {
-    tools = await mcp.getTools(); // <-- must be after the mock!
+    tools = await mcp.listTools(); // <-- must be after the mock!
   });
 
   afterAll(async () => {

@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import { normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
+import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 
@@ -40,13 +40,13 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       // runId,
       // stepId,
       // result,
-      // runtimeContext,
+      // requestContext,
     }: {
       workflowName: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
+      requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
@@ -92,7 +92,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         entity: 'workflow_snapshot', // Add entity type
         workflow_name: workflowName,
         run_id: runId,
-        snapshot: JSON.stringify(snapshot), // Stringify the snapshot object
+        snapshot: JSON.stringify(snapshot),
         createdAt: now,
         updatedAt: now,
         resourceId,
@@ -151,20 +151,28 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     this.logger.debug('Getting workflow runs', { args });
 
     try {
       // Default values
-      const limit = args?.limit || 10;
-      const offset = args?.offset || 0;
+      const perPage = args?.perPage !== undefined ? args.perPage : 10;
+      const page = args?.page !== undefined ? args.page : 0;
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: 'DYNAMODB_STORE_INVALID_PAGE',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      const normalizedPerPage = normalizePerPage(perPage, 10);
+      const offset = page * normalizedPerPage;
 
       let query;
 
@@ -194,6 +202,12 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
         if (pageResults.data && pageResults.data.length > 0) {
           let pageFilteredData: WorkflowSnapshotDBItem[] = pageResults.data;
+
+          if (args?.status) {
+            pageFilteredData = pageFilteredData.filter((snapshot: WorkflowSnapshotDBItem) => {
+              return snapshot.snapshot.status === args.status;
+            });
+          }
 
           // Apply date filters if specified
           if (args?.fromDate || args?.toDate) {
@@ -227,7 +241,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
       // Apply offset and limit to the accumulated filtered results
       const total = allMatchingSnapshots.length;
-      const paginatedData = allMatchingSnapshots.slice(offset, offset + limit);
+      const paginatedData = allMatchingSnapshots.slice(offset, offset + normalizedPerPage);
 
       // Format and return the results
       const runs = paginatedData.map((snapshot: WorkflowSnapshotDBItem) => formatWorkflowRun(snapshot));
@@ -239,7 +253,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: 'STORAGE_DYNAMODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: args?.workflowName || '', resourceId: args?.resourceId || '' },

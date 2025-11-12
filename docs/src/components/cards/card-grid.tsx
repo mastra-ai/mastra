@@ -37,8 +37,11 @@ export const CardGridItem = ({
   children?: React.ReactNode;
 }) => {
   return (
-    <Link to={href} className="block h-full w-full">
-      <Card className="h-full w-full shadow-none dark:border-[var(--border)] border-[var(--light-border-muted)] hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors cursor-pointer">
+    <Link
+      to={href}
+      className="block no-underline! text-black! dark:text-white! h-full w-full"
+    >
+      <Card className="h-full w-full shadow-none hover:bg-(--mastra-surface-1)/70 bg-(--mastra-surface-1)/20 dark:border-(--border) border-(--border) dark:hover:bg-(--mastra-surface-2) transition-colors cursor-pointer">
         <CardHeader>
           <div className="flex items-center gap-3">
             {logo &&
@@ -63,10 +66,12 @@ export const CardGridItem = ({
                   {logo}
                 </div>
               ))}
-            <CardTitle className="text-lg">{title}</CardTitle>
+            <CardTitle className="text-lg border-b-0">{title}</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="text-sm">{children || description}</CardContent>
+        <CardContent className="text-sm ">
+          {children || description}
+        </CardContent>
       </Card>
     </Link>
   );

@@ -1,5 +1,5 @@
 ---
-title: "Reference: MCPClient | Tools & MCP | Mastra Docs"
+title: "Reference: MCPClient | Tools & MCP"
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
 ---
 
@@ -7,7 +7,7 @@ description: API Reference for MCPClient - A class for managing multiple Model C
 
 The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle, tool namespacing, and provides access to tools across all configured servers.
 
-This class replaces the deprecated [`MastraMCPClient`](/reference/tools/client).
+This class replaces the deprecated [`MastraMCPClient`](/reference/v1/tools/client).
 
 ## Constructor
 
@@ -129,23 +129,23 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 
 ## Methods
 
-### getTools()
+### listTools()
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
 
 ```ts
-new Agent({ tools: await mcp.getTools() });
+new Agent({ tools: await mcp.listTools() });
 ```
 
-### getToolsets()
+### listToolsets()
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
 Intended to be passed dynamically into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
-  toolsets: await mcp.getToolsets(),
+  toolsets: await mcp.listToolsets(),
 });
 ```
 
@@ -627,7 +627,7 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 
 ### Static Tool Configuration
 
-For tools where you have a single connection to the MCP server for you entire app, use `getTools()` and pass the tools to your agent:
+For tools where you have a single connection to the MCP server for you entire app, use `listTools()` and pass the tools to your agent:
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
@@ -658,7 +658,7 @@ const agent = new Agent({
   name: "Multi-tool Agent",
   instructions: "You have access to multiple tool servers.",
   model: openai("gpt-4"),
-  tools: await mcp.getTools(),
+  tools: await mcp.listTools(),
 });
 
 // Example of using resource methods
@@ -702,7 +702,7 @@ checkWeatherPrompt();
 
 ### Dynamic toolsets
 
-When you need a new MCP connection for each user, use `getToolsets()` and add the tools when calling stream or generate:
+When you need a new MCP connection for each user, use `listToolsets()` and add the tools when calling stream or generate:
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -742,7 +742,7 @@ const mcp = new MCPClient({
 const response = await agent.stream(
   "How is AAPL doing and what is the weather?",
   {
-    toolsets: await mcp.getToolsets(),
+    toolsets: await mcp.listToolsets(),
   },
 );
 ```

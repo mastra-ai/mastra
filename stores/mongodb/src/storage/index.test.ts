@@ -1,11 +1,12 @@
 import { createTestSuite } from '@internal/storage-test-utils';
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { SpanType } from '@mastra/core/observability';
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { ConnectorHandler } from './connectors/base';
 import type { MongoDBConfig } from './types';
 import { MongoDBStore } from './index';
 
 const TEST_CONFIG: MongoDBConfig = {
+  id: 'mongodb-test-store',
   url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
   dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
 };
@@ -32,6 +33,7 @@ describe('MongoDB Store Validation', () => {
 
   describe('with connection handler', () => {
     const validWithConnectionHandlerConfig = {
+      id: 'mongodb-handler-test',
       connectorHandler: {} as ConnectorHandler,
     };
 
@@ -76,6 +78,7 @@ describe('MongoDB Specific Tests', () => {
   describe('MongoDB Connection Options', () => {
     it('should handle MongoDB Atlas connection strings', () => {
       const atlasConfig = {
+        id: 'mongodb-atlas-test',
         url: 'mongodb+srv://user:pass@cluster.mongodb.net/',
         dbName: 'test-db',
         options: {
@@ -88,6 +91,7 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle MongoDB connection with auth options', () => {
       const authConfig = {
+        id: 'mongodb-auth-test',
         url: 'mongodb://user:pass@localhost:27017',
         dbName: 'test-db',
         options: {
@@ -100,6 +104,7 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle MongoDB connection pool options', () => {
       const poolConfig = {
+        id: 'mongodb-pool-test',
         url: 'mongodb://localhost:27017',
         dbName: 'test-db',
         options: {
@@ -425,19 +430,19 @@ describe('MongoDB Specific Tests', () => {
     });
   });
 
-  describe('MongoDB AI Span Operations', () => {
+  describe('MongoDB Span Operations', () => {
     beforeEach(async () => {
       try {
         await store.clearTable({ tableName: 'mastra_ai_spans' as any });
       } catch {}
     });
 
-    it('should handle AI span creation with MongoDB-specific features', async () => {
-      const aiSpan = {
+    it('should handle Span creation with MongoDB-specific features', async () => {
+      const Span = {
         spanId: 'mongodb-span-1',
         traceId: 'mongodb-trace-1',
         name: 'MongoDB AI Operation',
-        spanType: AISpanType.LLM_GENERATION,
+        spanType: SpanType.LLM_GENERATION,
         parentSpanId: null,
         scope: {
           name: 'mongodb-test',
@@ -482,22 +487,22 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(store.createAISpan(aiSpan)).resolves.not.toThrow();
+      await expect(store.createSpan(Span)).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await store.getAITrace('mongodb-trace-1');
+      const trace = await store.getTrace('mongodb-trace-1');
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe('mongodb-span-1');
     });
 
-    it('should handle AI span updates with complex data', async () => {
+    it('should handle Span updates with complex data', async () => {
       // Create initial span with all required fields
       const initialSpan = {
         spanId: 'update-span-1',
         traceId: 'update-trace-1',
         name: 'Updating Span',
-        spanType: AISpanType.AGENT_RUN,
+        spanType: SpanType.AGENT_RUN,
         parentSpanId: null,
         scope: {
           name: 'test-scope',
@@ -514,7 +519,7 @@ describe('MongoDB Specific Tests', () => {
         links: null,
       };
 
-      await store.createAISpan(initialSpan);
+      await store.createSpan(initialSpan);
 
       // Update with complex nested data
       const updates = {
@@ -547,7 +552,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       await expect(
-        store.updateAISpan({
+        store.updateSpan({
           spanId: 'update-span-1',
           traceId: 'update-trace-1',
           updates,
@@ -555,7 +560,7 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await store.getAITrace('update-trace-1');
+      const trace = await store.getTrace('update-trace-1');
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });
@@ -577,6 +582,7 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle connection issues gracefully', async () => {
       const badStore = new MongoDBStore({
+        id: 'mongodb-bad-connection-test',
         url: 'mongodb://nonexistent:27017',
         dbName: 'test',
         options: {

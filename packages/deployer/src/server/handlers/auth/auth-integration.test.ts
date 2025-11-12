@@ -1,4 +1,4 @@
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import type { MastraAuthConfig } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { describe, it, expect } from 'vitest';
@@ -35,7 +35,7 @@ describe('auth middleware integration tests', () => {
   const createMastraWithRoutes = (routes: any[]) => {
     return new Mastra({
       server: {
-        experimental_auth: authConfig,
+        auth: authConfig,
         apiRoutes: routes,
       },
     });

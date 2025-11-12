@@ -2,12 +2,11 @@ import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
-import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { getErrorFromUnknown } from '../../error/utils.js';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
@@ -172,7 +171,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#options = options;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
+    this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
 
     this.#model = _model;
 
@@ -531,7 +530,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               // Add structured output to the latest assistant message metadata
               if (self.#bufferedObject !== undefined) {
-                const responseMessages = messageList.get.response.v2();
+                const responseMessages = messageList.get.response.db();
                 const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
                 if (lastAssistantMessage) {
                   if (!lastAssistantMessage.content.metadata) {
@@ -944,12 +943,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     if (this.#returnScorerData) {
       scoringData = {
         input: {
-          inputMessages: this.messageList.getPersisted.input.ui(),
-          rememberedMessages: this.messageList.getPersisted.remembered.ui(),
+          inputMessages: this.messageList.getPersisted.input.db(),
+          rememberedMessages: this.messageList.getPersisted.remembered.db(),
           systemMessages: this.messageList.getSystemMessages(),
           taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
         },
-        output: this.messageList.getPersisted.response.ui(),
+        output: this.messageList.getPersisted.response.db(),
       };
     }
 

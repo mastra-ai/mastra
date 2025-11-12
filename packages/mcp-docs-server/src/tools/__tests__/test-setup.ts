@@ -62,7 +62,7 @@ export const mcp = new MCPClient({
 });
 
 export async function callTool(tool: any, args: any) {
-  const response = await tool.execute({ context: args }, { suspend: async () => {} });
+  const response = await tool.execute(args, { suspend: async () => {} });
 
   // Handle string responses
   if (typeof response === 'string') {

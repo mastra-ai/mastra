@@ -1,6 +1,6 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { pdfFetcherTool } from '../tools/download-pdf-tool';
 import { generateQuestionsFromTextTool } from '../tools/generate-questions-from-text-tool';
 
@@ -27,14 +27,14 @@ const downloadAndSummarizePdfStep = createStep({
   description: 'Downloads PDF from URL and generates an AI summary',
   inputSchema: pdfInputSchema,
   outputSchema: pdfSummarySchema,
-  execute: async ({ inputData, mastra, runtimeContext }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     console.log('Executing Step: download-and-summarize-pdf');
     const { pdfUrl } = inputData;
 
     const result = await pdfFetcherTool.execute({
       context: { pdfUrl },
       mastra,
-      runtimeContext: runtimeContext || new RuntimeContext(),
+      requestContext: requestContext || new RequestContext(),
     });
 
     console.log(
@@ -51,7 +51,7 @@ const generateQuestionsFromSummaryStep = createStep({
   description: 'Generates questions from the AI-generated PDF summary',
   inputSchema: pdfSummarySchema,
   outputSchema: questionsSchema,
-  execute: async ({ inputData, mastra, runtimeContext }) => {
+  execute: async ({ inputData, mastra, requestContext }) => {
     console.log('Executing Step: generate-questions-from-summary');
 
     const { summary } = inputData;
@@ -65,7 +65,7 @@ const generateQuestionsFromSummaryStep = createStep({
       const result = await generateQuestionsFromTextTool.execute({
         context: { extractedText: summary }, // Use summary as the text input
         mastra,
-        runtimeContext: runtimeContext || new RuntimeContext(),
+        requestContext: requestContext || new RequestContext(),
       });
 
       console.log(

@@ -11,11 +11,13 @@ import { pageExtractTool } from '../tools/page-extract-tool';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'ad-copy-agent-storage',
     url: 'file:../mastra.db',
   }),
 });
 
 export const adCopyAgent = new Agent({
+  id: 'ad-copy-agent',
   name: 'Ad Copy Generation Agent',
   description: 'An agent that generates compelling ad copy and promotional images from text content or PDF documents',
   instructions: `

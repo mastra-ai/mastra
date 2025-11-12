@@ -15,32 +15,32 @@ const docsTabs = [
   {
     id: "Docs",
     label: "Docs",
-    href: "/docs",
-    basePath: "/docs",
+    href: "/docs/v1",
+    basePath: "/docs/v1",
   },
   {
     id: "Models",
     label: "Models",
-    href: "/models",
-    basePath: "/models",
+    href: "/models/v1",
+    basePath: "/models/v1",
   },
   {
     id: "Examples",
     label: "Examples",
-    href: "/examples",
-    basePath: "/examples",
+    href: "/examples/v1",
+    basePath: "/examples/v1",
   },
   {
     id: "Guides",
     label: "Guides & Migrations",
-    href: "/guides",
-    basePath: "/guides",
+    href: "/guides/v1",
+    basePath: "/guides/v1",
   },
   {
     id: "Reference",
     label: "Reference",
-    href: "/reference",
-    basePath: "/reference",
+    href: "/reference/v1",
+    basePath: "/reference/v1",
   },
   {
     id: "Showcase",
@@ -61,7 +61,7 @@ export function MobileDocsDropdown() {
         pathname.startsWith(tab.basePath + "/") ||
         pathname === tab.basePath
       ) {
-        if (tab.basePath === "/docs") {
+        if (tab.basePath === "/docs/v1") {
           const otherTabPaths = docsTabs
             .filter((t) => t.id !== "Docs")
             .map((t) => t.basePath);
@@ -79,7 +79,7 @@ export function MobileDocsDropdown() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="secondary"
-          className="w-full shadow-none justify-between bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
+          className="w-full shadow-none justify-between bg-(--mastra-surface-4) dark:bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
         >
           <span>{activeTab.label}</span>
           <ChevronDown
