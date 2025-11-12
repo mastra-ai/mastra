@@ -90,7 +90,6 @@ It provides robust vector similarity search capabilities within your existing Po
 import { PgVector } from "@mastra/pg";
 
 const vectorStore = new PgVector({
-  id: 'pg-vector',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 ```
@@ -99,7 +98,6 @@ const vectorStore = new PgVector({
 
 ```ts
 const vectorStore = new PgVector({
-  id: 'pg-vector',
   host: "localhost",
   port: 5432,
   database: "mydb",
@@ -112,7 +110,6 @@ const vectorStore = new PgVector({
 
 ```ts
 const vectorStore = new PgVector({
-  id: 'pg-vector',
   connectionString: "postgresql://user:password@localhost:5432/mydb",
   schemaName: "custom_schema",
   max: 30,

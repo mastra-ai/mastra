@@ -11,48 +11,72 @@ const sidebars = {
       type: "doc",
       id: "index",
       label: "Overview",
+      key: "reference.index",
     },
     {
       type: "category",
       label: "Core",
+      key: "reference.core.index",
       collapsed: true,
       items: [
+        { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
         { type: "doc", id: "core/getAgent", label: ".getAgent()" },
-        { type: "doc", id: "core/listAgents", label: ".listAgents()" },
+        { type: "doc", id: "core/getAgents", label: ".getAgents()" },
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
-        { type: "doc", id: "core/getWorkflow", label: ".getWorkflow()" },
-        { type: "doc", id: "core/listWorkflows", label: ".listWorkflows()" },
-        { type: "doc", id: "core/setStorage", label: ".setStorage()" },
+        {
+          type: "doc",
+          id: "core/getWorkflow",
+          key: "reference.core.getWorkflow",
+          label: ".getWorkflow()",
+        },
+        {
+          type: "doc",
+          id: "core/getWorkflows",
+          key: "reference.core.getWorkflows",
+          label: ".getWorkflows()",
+        },
+        {
+          type: "doc",
+          id: "core/getMemory",
+          key: "reference.core.getMemory",
+          label: ".getMemory()",
+        },
+        {
+          type: "doc",
+          id: "core/setStorage",
+          key: "reference.core.setStorage",
+          label: ".setStorage()",
+        },
         { type: "doc", id: "core/getServer", label: ".getServer()" },
         { type: "doc", id: "core/getMCPServer", label: ".getMCPServer()" },
-        {
-          type: "doc",
-          id: "core/getMCPServerById",
-          label: ".getMCPServerById()",
-        },
         { type: "doc", id: "core/getVector", label: ".getVector()" },
-        { type: "doc", id: "core/listVectors", label: ".listVectors()" },
+        { type: "doc", id: "core/getVectors", label: ".getVectors()" },
         { type: "doc", id: "core/getDeployer", label: ".getDeployer()" },
         { type: "doc", id: "core/getStorage", label: ".getStorage()" },
-        { type: "doc", id: "core/listMCPServers", label: ".listMCPServers()" },
+        { type: "doc", id: "core/getMCPServers", label: ".getMCPServers()" },
         { type: "doc", id: "core/getTelemetry", label: ".getTelemetry()" },
         { type: "doc", id: "core/setTelemetry", label: ".setTelemetry()" },
-        { type: "doc", id: "core/listLogs", label: ".listLogs()" },
-        {
-          type: "doc",
-          id: "core/listLogsByRunId",
-          label: ".listLogsByRunId()",
-        },
+        { type: "doc", id: "core/getLogs", label: ".getLogs()" },
+        { type: "doc", id: "core/getLogsByRunId", label: ".getLogsByRunId()" },
         { type: "doc", id: "core/getLogger", label: ".getLogger()" },
         { type: "doc", id: "core/setLogger", label: ".setLogger()" },
-        { type: "doc", id: "core/listScorers", label: ".listScorers()" },
-        { type: "doc", id: "core/getScorer", label: ".getScorer()" },
         {
           type: "doc",
-          id: "core/getScorerById",
-          label: ".getScorerById()",
+          id: "core/getScorers",
+          key: "reference.core.getScorers",
+          label: ".getScorers()",
         },
-        { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
+        {
+          type: "doc",
+          id: "core/getScorer",
+          key: "reference.core.getScorer",
+          label: ".getScorer()",
+        },
+        {
+          type: "doc",
+          id: "core/getScorerByName",
+          label: ".getScorerByName()",
+        },
       ],
     },
     {
@@ -67,10 +91,21 @@ const sidebars = {
     {
       type: "category",
       label: "Agents",
+      key: "reference.agents",
       collapsed: true,
       items: [
-        { type: "doc", id: "agents/agent", label: "Agent" },
-        { type: "doc", id: "agents/generate", label: ".generate()" },
+        {
+          type: "doc",
+          id: "agents/agent",
+          key: "references.agents.agent",
+          label: "Agent",
+        },
+        {
+          type: "doc",
+          id: "agents/generate",
+          key: "references.agents.generate",
+          label: ".generate()",
+        },
         {
           type: "doc",
           id: "agents/generateLegacy",
@@ -78,9 +113,9 @@ const sidebars = {
         },
         { type: "doc", id: "agents/network", label: ".network()" },
         { type: "doc", id: "agents/listAgents", label: ".listAgents()" },
-        { type: "doc", id: "agents/listWorkflows", label: ".listWorkflows()" },
-        { type: "doc", id: "agents/listTools", label: ".listTools()" },
-        { type: "doc", id: "agents/listScorers", label: ".listScorers()" },
+        { type: "doc", id: "agents/getWorkflows", label: ".getWorkflows()" },
+        { type: "doc", id: "agents/getTools", label: ".getTools()" },
+        { type: "doc", id: "agents/getScorers", label: ".getScorers()" },
         { type: "doc", id: "agents/getModel", label: ".getModel()" },
         { type: "doc", id: "agents/getMemory", label: ".getMemory()" },
         { type: "doc", id: "agents/getVoice", label: ".getVoice()" },
@@ -97,35 +132,38 @@ const sidebars = {
         { type: "doc", id: "agents/getLLM", label: ".getLLM()" },
         {
           type: "doc",
-          id: "agents/getDefaultOptions",
-          label: ".getDefaultOptions()",
-        },
-        {
-          type: "doc",
           id: "agents/getDefaultGenerateOptions",
-          label: ".getDefaultGenerateOptionsLegacy()",
+          label: ".getDefaultGenerateOptions()",
         },
         {
           type: "doc",
           id: "agents/getDefaultStreamOptions",
-          label: ".getDefaultStreamOptionsLegacy()",
+          label: ".getDefaultStreamOptions()",
         },
       ],
     },
     {
       type: "category",
       label: "Workflows",
+      key: "reference.workflows",
       collapsed: true,
       items: [
-        { type: "doc", id: "workflows/workflow", label: "Workflow Class" },
+        {
+          type: "doc",
+          id: "workflows/workflow",
+          key: "reference.workflows.workflow",
+          label: "Workflow Class",
+        },
         {
           type: "category",
+          key: "reference.workflows.methods",
           label: "Methods",
           items: [
             {
               type: "doc",
               id: "workflows/workflow-methods/then",
               label: ".then()",
+              key: "reference.workflows.methods.then",
             },
             {
               type: "doc",
@@ -140,11 +178,13 @@ const sidebars = {
             {
               type: "doc",
               id: "workflows/workflow-methods/commit",
+              key: "reference.workflows.methods.commit",
               label: ".commit()",
             },
             {
               type: "doc",
               id: "workflows/workflow-methods/dowhile",
+              key: "reference.workflows.methods.dowhile",
               label: ".dowhile()",
             },
             {
@@ -185,7 +225,7 @@ const sidebars = {
             {
               type: "doc",
               id: "workflows/workflow-methods/create-run",
-              label: ".createRun()",
+              label: ".createRunAsync()",
             },
           ],
         },
@@ -198,12 +238,20 @@ const sidebars = {
             {
               type: "doc",
               id: "workflows/run-methods/start",
+              key: "reference.workflows.run-methods.start",
               label: ".start()",
             },
             {
               type: "doc",
               id: "workflows/run-methods/resume",
+              key: "reference.workflows.run-methods.resume",
               label: ".resume()",
+            },
+            {
+              type: "doc",
+              id: "workflows/run-methods/watch",
+              key: "reference.workflows.run-methods.watch",
+              label: ".watch()",
             },
             {
               type: "doc",
@@ -211,6 +259,67 @@ const sidebars = {
               label: ".cancel()",
             },
           ],
+        },
+      ],
+    },
+    // Legacy Workflows - Hidden from sidebar using CSS class "sidebar-hidden" (see custom.css)
+    // Pages remain accessible via direct URLs and sidebar still shows when visiting legacy pages
+    {
+      type: "category",
+      label: "Legacy Workflows",
+      className: "sidebar-hidden",
+      collapsed: true,
+      items: [
+        { type: "doc", id: "legacyWorkflows/workflow", label: "Workflow" },
+        { type: "doc", id: "legacyWorkflows/after", label: ".after()" },
+        { type: "doc", id: "legacyWorkflows/then", label: ".then()" },
+        { type: "doc", id: "legacyWorkflows/until", label: ".until()" },
+        { type: "doc", id: "legacyWorkflows/while", label: ".while()" },
+        { type: "doc", id: "legacyWorkflows/if", label: ".if()" },
+        { type: "doc", id: "legacyWorkflows/else", label: ".else()" },
+        { type: "doc", id: "legacyWorkflows/createRun", label: ".createRun()" },
+        { type: "doc", id: "legacyWorkflows/start", label: ".start()" },
+        { type: "doc", id: "legacyWorkflows/execute", label: ".execute()" },
+        { type: "doc", id: "legacyWorkflows/suspend", label: ".suspend()" },
+        { type: "doc", id: "legacyWorkflows/snapshots", label: "Snapshots" },
+        { type: "doc", id: "legacyWorkflows/resume", label: ".resume()" },
+        { type: "doc", id: "legacyWorkflows/commit", label: ".commit()" },
+        { type: "doc", id: "legacyWorkflows/watch", label: ".watch()" },
+        {
+          type: "doc",
+          id: "legacyWorkflows/events",
+          label: "Event-Driven Workflows",
+        },
+        {
+          type: "doc",
+          id: "legacyWorkflows/afterEvent",
+          label: ".afterEvent()",
+        },
+        {
+          type: "doc",
+          id: "legacyWorkflows/resumeWithEvent",
+          label: ".resumeWithEvent()",
+        },
+        {
+          type: "doc",
+          id: "legacyWorkflows/step-function",
+          label: "Workflow.step()",
+        },
+        {
+          type: "doc",
+          id: "legacyWorkflows/step-options",
+          label: "StepOptions",
+        },
+        {
+          type: "doc",
+          id: "legacyWorkflows/step-retries",
+          label: "Step Retries",
+        },
+        { type: "doc", id: "legacyWorkflows/step-class", label: "Step" },
+        {
+          type: "doc",
+          id: "legacyWorkflows/step-condition",
+          label: "StepCondition",
         },
       ],
     },
@@ -227,6 +336,7 @@ const sidebars = {
             {
               type: "doc",
               id: "streaming/agents/stream",
+              key: "reference.streaming.agents.stream",
               label: ".stream()",
             },
             {
@@ -306,13 +416,17 @@ const sidebars = {
       items: [
         { type: "doc", id: "memory/memory-class", label: "Memory Class" },
         { type: "doc", id: "memory/createThread", label: ".createThread()" },
-        { type: "doc", id: "memory/recall", label: ".recall()" },
-        { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
+        { type: "doc", id: "memory/query", label: ".query()" },
         { type: "doc", id: "memory/getThreadById", label: ".getThreadById()" },
         {
           type: "doc",
-          id: "memory/listThreadsByResourceId",
-          label: ".listThreadsByResourceId()",
+          id: "memory/getThreadsByResourceId",
+          label: ".getThreadsByResourceId()",
+        },
+        {
+          type: "doc",
+          id: "memory/getThreadsByResourceIdPaginated",
+          label: ".getThreadsByResourceIdPaginated()",
         },
         {
           type: "doc",
@@ -411,10 +525,30 @@ const sidebars = {
       label: "Deployer",
       collapsed: true,
       items: [
-        { type: "doc", id: "deployer/deployer", label: "Deployer" },
-        { type: "doc", id: "deployer/cloudflare", label: "Cloudflare" },
-        { type: "doc", id: "deployer/netlify", label: "Netlify" },
-        { type: "doc", id: "deployer/vercel", label: "Vercel" },
+        {
+          type: "doc",
+          id: "deployer/deployer",
+          key: "reference.deployer.deployer",
+          label: "Deployer",
+        },
+        {
+          type: "doc",
+          id: "deployer/cloudflare",
+          key: "reference.deployer.cloudflare",
+          label: "Cloudflare",
+        },
+        {
+          type: "doc",
+          id: "deployer/netlify",
+          key: "reference.deployer.netlify",
+          label: "Netlify",
+        },
+        {
+          type: "doc",
+          id: "deployer/vercel",
+          key: "reference.deployer.vercel",
+          label: "Vercel",
+        },
       ],
     },
     {
@@ -436,6 +570,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "client-js/workflows-legacy",
+          label: "Workflows (Legacy) API",
+        },
+        {
+          type: "doc",
           id: "client-js/error-handling",
           label: "Error Handling",
         },
@@ -453,26 +592,26 @@ const sidebars = {
       items: [
         {
           type: "category",
-          label: "Tracing",
+          label: "AI Tracing",
           items: [
             {
               type: "doc",
-              id: "observability/tracing/instances",
-              label: "Instances",
+              id: "observability/ai-tracing/ai-tracing",
+              label: "AITracing",
             },
             {
               type: "doc",
-              id: "observability/tracing/configuration",
+              id: "observability/ai-tracing/configuration",
               label: "Configuration",
             },
             {
               type: "doc",
-              id: "observability/tracing/spans",
-              label: "Spans",
+              id: "observability/ai-tracing/span",
+              label: "Span",
             },
             {
               type: "doc",
-              id: "observability/tracing/interfaces",
+              id: "observability/ai-tracing/interfaces",
               label: "Interfaces",
             },
             {
@@ -481,43 +620,43 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/arize",
+                  id: "observability/ai-tracing/exporters/arize",
                   label: "ArizeExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/braintrust",
-                  label: "BraintrustExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/tracing/exporters/cloud-exporter",
+                  id: "observability/ai-tracing/exporters/cloud-exporter",
                   label: "CloudExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/console-exporter",
+                  id: "observability/ai-tracing/exporters/console-exporter",
                   label: "ConsoleExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/default-exporter",
-                  label: "DefaultExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/tracing/exporters/langfuse",
-                  label: "LangfuseExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/tracing/exporters/langsmith",
+                  id: "observability/ai-tracing/exporters/langsmith",
                   label: "LangSmithExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/otel",
+                  id: "observability/ai-tracing/exporters/langfuse",
+                  label: "LangfuseExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/ai-tracing/exporters/otel",
                   label: "OtelExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/ai-tracing/exporters/braintrust",
+                  label: "BraintrustExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/ai-tracing/exporters/default-exporter",
+                  label: "DefaultExporter",
                 },
               ],
             },
@@ -527,7 +666,7 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/tracing/processors/sensitive-data-filter",
+                  id: "observability/ai-tracing/processors/sensitive-data-filter",
                   label: "SensitiveDataFilter",
                 },
               ],
@@ -540,8 +679,90 @@ const sidebars = {
           items: [
             {
               type: "doc",
-              id: "logging/pino-logger",
+              id: "observability/logging/pino-logger",
               label: "PinoLogger",
+            },
+          ],
+        },
+        {
+          type: "category",
+          label: "OTEL Tracing",
+          items: [
+            {
+              type: "doc",
+              id: "observability/otel-tracing/otel-config",
+              label: "OtelConfig",
+            },
+            {
+              type: "category",
+              label: "Providers",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/traceloop",
+                  label: "Traceloop",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/dash0",
+                  label: "Dash0",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/new-relic",
+                  label: "New Relic",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/langwatch",
+                  label: "LangWatch",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/index",
+                  label: "OTLP Providers",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/langsmith",
+                  label: "LangSmith",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/langfuse",
+                  label: "Langfuse",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/arize-ax",
+                  label: "Arize AX",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/laminar",
+                  label: "Laminar",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/braintrust",
+                  label: "Braintrust",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/signoz",
+                  label: "SigNoz",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/arize-phoenix",
+                  label: "Arize Phoenix",
+                },
+                {
+                  type: "doc",
+                  id: "observability/otel-tracing/providers/keywordsai",
+                  label: "Keywords AI",
+                },
+              ],
             },
           ],
         },
@@ -552,67 +773,160 @@ const sidebars = {
       label: "Evals",
       collapsed: true,
       items: [
-        { type: "doc", id: "evals/mastra-scorer", label: "MastraScorer" },
-        { type: "doc", id: "evals/create-scorer", label: "createScorer" },
-        { type: "doc", id: "evals/run-evals", label: "runEvals" },
-        { type: "doc", id: "evals/bias", label: "Bias" },
-        { type: "doc", id: "evals/completeness", label: "Completeness" },
-        { type: "doc", id: "evals/faithfulness", label: "Faithfulness" },
-        { type: "doc", id: "evals/hallucination", label: "Hallucination" },
-        { type: "doc", id: "evals/toxicity", label: "Toxicity" },
+        {
+          type: "doc",
+          id: "evals/bias",
+          key: "reference.evals.bias",
+          label: "Bias",
+        },
+        {
+          type: "doc",
+          id: "evals/completeness",
+          key: "reference.evals.completeness",
+          label: "Completeness",
+        },
+        {
+          type: "doc",
+          id: "evals/faithfulness",
+          key: "reference.evals.faithfulness",
+          label: "Faithfulness",
+        },
+        {
+          type: "doc",
+          id: "evals/hallucination",
+          key: "reference.evals.hallucination",
+          label: "Hallucination",
+        },
+        {
+          type: "doc",
+          id: "evals/summarization",
+          key: "reference.evals.summarization",
+          label: "Summarization",
+        },
+        {
+          type: "doc",
+          id: "evals/toxicity",
+          key: "reference.evals.toxicity",
+          label: "Toxicity",
+        },
         {
           type: "doc",
           id: "evals/keyword-coverage",
-          label: "Keyword Coverage Scorer",
+          label: "KeywordCoverageMetric",
         },
         {
           type: "doc",
           id: "evals/tone-consistency",
-          label: "Tone Consistency Scorer",
-        },
-        {
-          type: "doc",
-          id: "evals/noise-sensitivity",
-          label: "Noise Sensitivity Scorer",
+          label: "ToneConsistencyMetric",
         },
         {
           type: "doc",
           id: "evals/content-similarity",
-          label: "Content Similarity Scorer",
+          label: "ContentSimilarityMetric",
+        },
+        {
+          type: "doc",
+          id: "evals/context-relevancy",
+          label: "ContextRelevancyMetric",
         },
         {
           type: "doc",
           id: "evals/answer-relevancy",
-          label: "Answer Relevancy Scorer",
+          label: "AnswerRelevancyMetric",
         },
         {
           type: "doc",
           id: "evals/context-precision",
-          label: "Context Precision Scorer",
+          label: "ContextPrecisionMetric",
         },
         {
           type: "doc",
-          id: "evals/answer-similarity",
-          label: "Answer Similarity Scorer",
+          id: "evals/contextual-recall",
+          label: "ContextualRecallMetric",
         },
         {
           type: "doc",
-          id: "evals/context-relevance",
-          label: "Context Relevance Scorer",
-        },
-        {
-          type: "doc",
-          id: "evals/tool-call-accuracy",
-          label: "Tool Call Accuracy Scorers",
+          id: "evals/context-position",
+          label: "ContextPositionMetric",
         },
         {
           type: "doc",
           id: "evals/textual-difference",
-          label: "Textual Difference Scorer",
+          label: "TextualDifferenceMetric",
         },
         {
           type: "doc",
           id: "evals/prompt-alignment",
+          label: "PromptAlignmentMetric",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Scorers",
+      collapsed: true,
+      items: [
+        { type: "doc", id: "scorers/bias", label: "Bias" },
+        { type: "doc", id: "scorers/completeness", label: "Completeness" },
+        { type: "doc", id: "scorers/faithfulness", label: "Faithfulness" },
+        { type: "doc", id: "scorers/hallucination", label: "Hallucination" },
+        { type: "doc", id: "scorers/toxicity", label: "Toxicity" },
+        {
+          type: "doc",
+          id: "scorers/keyword-coverage",
+          label: "Keyword Coverage Scorer",
+        },
+        {
+          type: "doc",
+          id: "scorers/tone-consistency",
+          label: "Tone Consistency Scorer",
+        },
+        {
+          type: "doc",
+          id: "scorers/noise-sensitivity",
+          label: "Noise Sensitivity Scorer (CI/Testing Only)",
+        },
+        { type: "doc", id: "scorers/mastra-scorer", label: "MastraScorer" },
+        { type: "doc", id: "scorers/create-scorer", label: "createScorer" },
+        {
+          type: "doc",
+          id: "scorers/content-similarity",
+          label: "Content Similarity Scorer",
+        },
+        { type: "doc", id: "scorers/run-experiment", label: "runExperiment" },
+        {
+          type: "doc",
+          id: "scorers/answer-relevancy",
+          label: "Answer Relevancy Scorer",
+        },
+        {
+          type: "doc",
+          id: "scorers/context-precision",
+          label: "Context Precision Scorer",
+        },
+        {
+          type: "doc",
+          id: "scorers/answer-similarity",
+          label: "Answer Similarity Scorer",
+        },
+        {
+          type: "doc",
+          id: "scorers/context-relevance",
+          label: "Context Relevance Scorer",
+        },
+        {
+          type: "doc",
+          id: "scorers/tool-call-accuracy",
+          label: "Tool Call Accuracy Scorers",
+        },
+        {
+          type: "doc",
+          id: "scorers/textual-difference",
+          label: "Textual Difference Scorer",
+        },
+        {
+          type: "doc",
+          id: "scorers/prompt-alignment",
           label: "Prompt Alignment Scorer",
         },
       ],
@@ -620,6 +934,7 @@ const sidebars = {
     {
       type: "category",
       label: "Processors",
+      key: "reference.processors",
       collapsed: true,
       items: [
         {

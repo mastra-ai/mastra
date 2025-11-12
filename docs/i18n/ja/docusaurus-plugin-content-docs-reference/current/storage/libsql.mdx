@@ -1,0 +1,90 @@
+---
+title: "リファレンス: LibSQL ストレージ | ストレージ | Mastra ドキュメント"
+description: Mastra における LibSQL ストレージ実装のドキュメント。
+---
+
+<div id="libsql-storage">
+  # LibSQL ストレージ
+</div>
+
+LibSQL のストレージ実装は、インメモリでも永続的なデータベースとしても動作する、SQLite 互換のストレージソリューションを提供します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/libsql@latest
+```
+
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript copy showLineNumbers
+import { LibSQLStore } from "@mastra/libsql";
+
+// ファイルベースのデータベース（開発）
+const storage = new LibSQLStore({
+  url: "file:./storage.db",
+});
+
+// 永続型データベース（本番環境）
+const storage = new LibSQLStore({
+  url: process.env.DATABASE_URL,
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description:
+        "データベースの URL。インメモリデータベースには ':memory:'、ファイルデータベースには 'file:filename.db'、永続的なストレージには LibSQL 互換の任意の接続文字列を使用します。",
+      isOptional: false,
+    },
+    {
+      name: "authToken",
+      type: "string",
+      description: "リモートの LibSQL データベース用の認証トークン。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="additional-notes">
+  ## 追記
+</div>
+
+<div id="in-memory-vs-persistent-storage">
+  ### インメモリ vs 永続ストレージ
+</div>
+
+ファイル設定（`file:storage.db`）は次の用途に便利です：
+
+- 開発・テスト
+- 一時的な保存
+- 素早いプロトタイピング
+
+本番環境では、永続的なデータベースのURLを使用してください：`libsql://your-database.turso.io`
+
+<div id="schema-management">
+  ### スキーマ管理
+</div>
+
+ストレージ実装はスキーマの作成と更新を自動的に行います。次のテーブルを作成します:
+
+- `mastra_workflow_snapshot`: ワークフローの状態と実行データを格納
+- `mastra_evals`: 評価結果とメタデータを格納
+- `mastra_threads`: 会話スレッドを格納
+- `mastra_messages`: 個々のメッセージを格納
+- `mastra_traces`: テレメトリおよびトレースデータを格納
+- `mastra_scorers`: スコアリングおよび評価データを格納
+- `mastra_resources`: リソースのワーキングメモリデータを格納

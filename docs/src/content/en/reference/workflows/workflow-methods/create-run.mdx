@@ -1,16 +1,22 @@
 ---
-title: "Reference: Workflow.createRun() | Workflows"
-description: Documentation for the `Workflow.createRun()` method in workflows, which creates a new workflow run instance.
+title: "Reference: Workflow.createRunAsync() | Workflows"
+description: Documentation for the `Workflow.createRunAsync()` method in workflows, which creates a new workflow run instance.
 ---
 
-# Workflow.createRun()
+# Workflow.createRunAsync()
 
-The `.createRun()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data. This is the current API that returns a `Run` instance.
+The `.createRunAsync()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data. This is the current API that returns a `Run` instance.
+
+:::note
+
+For the legacy `createRun()` method that returns an object with methods, see the [Legacy Workflows](../../legacyWorkflows/createRun) section.
+
+:::
 
 ## Usage example
 
 ```typescript copy
-await workflow.createRun();
+await workflow.createRunAsync();
 ```
 
 ## Parameters
@@ -44,7 +50,7 @@ await workflow.createRun();
 ```typescript showLineNumbers copy
 const workflow = mastra.getWorkflow("workflow");
 
-const run = await workflow.createRun();
+const run = await workflow.createRunAsync();
 
 const result = await run.start({
   inputData: {
@@ -56,4 +62,4 @@ const result = await run.start({
 ## Related
 
 - [Run Class](../run)
-- [Workflows overview](/docs/v1/workflows/overview)
+- [Workflows overview](/docs/workflows/overview)

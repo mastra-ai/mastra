@@ -77,7 +77,6 @@ const { embeddings } = await embedMany({
 });
 
 const pgVector = new PgVector({
-  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 

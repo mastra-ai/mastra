@@ -1,0 +1,150 @@
+---
+title: "リファレンス: Token Limiter プロセッサ | プロセッサ | Mastra ドキュメント"
+description: "Mastra の TokenLimiterProcessor のドキュメント。AI 応答のトークン数を制限します。"
+---
+
+<div id="tokenlimiterprocessor">
+  # TokenLimiterProcessor
+</div>
+
+`TokenLimiterProcessor` は、AI の応答に含まれるトークン数を制限する**出力プロセッサ**です。トークンのカウントを行い、上限超過時の扱い（切り詰めや中止など）を設定できるため、レスポンスの長さを制御できます。ストリーミング／非ストリーミングのいずれのシナリオにも対応します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+
+const processor = new TokenLimiterProcessor({
+  limit: 1000,
+  strategy: "truncate",
+  countMode: "cumulative"
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "number | Options",
+      description: "トークン上限を指定する単純な数値、または設定オプションのオブジェクト",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="options">
+  ### オプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "limit",
+      type: "number",
+      description: "レスポンスで許可するトークンの最大数",
+      isOptional: false,
+    },
+    {
+      name: "encoding",
+      type: "TiktokenBPE",
+      description: "使用するエンコーディング（任意）。既定は gpt-4o で使用される o200k_base",
+      isOptional: true,
+      default: "o200k_base",
+    },
+    {
+      name: "strategy",
+      type: "'truncate' | 'abort'",
+      description: "トークン上限に達した際の動作: 'truncate' はチャンクの出力を止め、'abort' は abort() を呼び出してストリームを停止する",
+      isOptional: true,
+      default: "'truncate'",
+    },
+    {
+      name: "countMode",
+      type: "'cumulative' | 'part'",
+      description: "ストリームの冒頭から数えるか、現在の区分のみを数えるか: 'cumulative' は開始からの全トークンを数え、'part' は現在の区分のトークンのみを数える",
+      isOptional: true,
+      default: "'cumulative'",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返却値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名。'token-limiter' に設定されています",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
+      description: "ストリーミング中にトークン数を制限するため、ストリーミング出力のパートを処理します",
+      isOptional: false,
+    },
+    {
+      name: "processOutputResult",
+      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
+      description: "非ストリーミング時にトークン数を制限するため、最終的な出力結果を処理します",
+      isOptional: false,
+    },
+    {
+      name: "reset",
+      type: "() => void",
+      description: "トークンカウンタをリセットします（テストやプロセッサの再利用に便利）",
+      isOptional: false,
+    },
+    {
+      name: "getCurrentTokens",
+      type: "() => number",
+      description: "現在のトークン数を取得します",
+      isOptional: false,
+    },
+    {
+      name: "getMaxTokens",
+      type: "() => number",
+      description: "最大トークン数の上限を取得します",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
+
+```typescript title="src/mastra/agents/limited-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "limited-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o-mini",
+  outputProcessors: [
+    new TokenLimiterProcessor({
+      limit: 1000,
+      strategy: "truncate",
+      countMode: "cumulative"
+    })
+  ]
+});
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [ガードレール](/docs/agents/guardrails)

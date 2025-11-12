@@ -1,0 +1,356 @@
+---
+title: "リファレンス: イベント駆動型ワークフロー | 旧ワークフロー | Mastra ドキュメント"
+description: "Mastra で afterEvent と resumeWithEvent メソッドを使用して、イベント駆動型ワークフローを作成する方法を学びます。"
+---
+
+<div id="event-driven-workflows">
+  # イベント駆動型ワークフロー
+</div>
+
+Mastra は、`afterEvent` と `resumeWithEvent` メソッドを通じてイベント駆動型ワークフローをネイティブにサポートします。これらのメソッドにより、特定のイベントの発生を待つ間に実行を一時停止し、イベントデータが利用可能になった時点で再開するワークフローを作成できます。
+
+<div id="overview">
+  ## 概要
+</div>
+
+イベント駆動型ワークフローは、次のようなシナリオで有用です：
+
+- 外部システムの処理完了を待つ必要がある場合
+- 特定の時点でユーザーの承認や入力が必要な場合
+- 非同期処理を連携・調整する必要がある場合
+- 長時間実行される処理を複数のサービス間で分割して実行する必要がある場合
+
+<div id="defining-events">
+  ## イベントの定義
+</div>
+
+イベント駆動のメソッドを使う前に、ワークフロー構成で、ワークフローが受け取る（待ち受ける）イベントを定義しておく必要があります。
+
+```typescript
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+const workflow = new LegacyWorkflow({
+  name: "approval-workflow",
+  triggerSchema: z.object({ requestId: z.string() }),
+  events: {
+    // Define events with their validation schemas
+    // 検証用スキーマとともにイベントを定義
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+        comment: z.string().optional(),
+      }),
+    },
+    documentUploaded: {
+      schema: z.object({
+        documentId: z.string(),
+        documentType: z.enum(["invoice", "receipt", "contract"]),
+        metadata: z.record(z.string()).optional(),
+      }),
+    },
+  },
+});
+```
+
+各イベントには、イベント発生時に想定されるデータの構造を定義するスキーマと名前が必要です。
+
+
+<div id="afterevent">
+  ## afterEvent()
+</div>
+
+`afterEvent` メソッドは、特定のイベントが発生するまで自動的に待機する、ワークフロー内の中断ポイントを作成します。
+
+<div id="syntax">
+  ### 構文
+</div>
+
+```typescript
+workflow.afterEvent(eventName: string): LegacyWorkflow
+```
+
+
+<div id="parameters">
+  ### パラメータ
+</div>
+
+- `eventName`: 待機するイベント名（ワークフローの `events` 設定で定義されている必要があります）
+
+<div id="return-value">
+  ### 戻り値
+</div>
+
+メソッドチェーンのためにワークフローインスタンスを返します。
+
+<div id="how-it-works">
+  ### 仕組み
+</div>
+
+`afterEvent` が呼び出されると、Mastra は次の処理を行います:
+
+1. ID `__eventName_event` の特別なステップを作成する
+2. このステップをワークフロー実行を自動的に一時停止するように設定する
+3. イベント受信後の継続ポイントを設定する
+
+<div id="usage-example">
+  ### 使い方の例
+</div>
+
+```typescript
+workflow
+  .step(initialProcessStep)
+  .afterEvent("approvalReceived") // ここでワークフローが一時停止
+  .step(postApprovalStep) // このステップはイベント受信後に実行
+  .then(finalStep)
+  .commit();
+```
+
+
+<div id="resumewithevent">
+  ## resumeWithEvent()
+</div>
+
+`resumeWithEvent` メソッドは、特定のイベントのデータを渡して、一時停止中のワークフローを再開します。
+
+<div id="syntax">
+  ### 構文
+</div>
+
+```typescript
+run.resumeWithEvent(eventName: string, data: any): Promise<LegacyWorkflowRunResult>
+```
+
+
+<div id="parameters">
+  ### パラメータ
+</div>
+
+- `eventName`: トリガーされるイベントの名前
+- `data`: イベントデータ（このイベント用に定義されたスキーマに準拠している必要があります）
+
+<div id="return-value">
+  ### 戻り値
+</div>
+
+再開後のワークフローの実行結果で解決される Promise を返します。
+
+<div id="how-it-works">
+  ### 仕組み
+</div>
+
+`resumeWithEvent` が呼び出されると、Mastra は次の処理を行います：
+
+1. そのイベント用に定義されたスキーマに照らしてイベントデータを検証する
+2. ワークフローのスナップショットを読み込む
+3. イベントデータでコンテキストを更新する
+4. 該当イベントのステップから実行を再開する
+5. 以降のステップでワークフローの実行を継続する
+
+<div id="usage-example">
+  ### 使い方の例
+</div>
+
+```typescript
+// ワークフロー実行を作成する
+const run = workflow.createRun();
+
+// ワークフローを開始する
+await run.start({ triggerData: { requestId: "req-123" } });
+
+// 後で、イベントが発生したとき:
+const result = await run.resumeWithEvent("approvalReceived", {
+  approved: true,
+  approverName: "John Doe",
+  comment: "問題なさそうです！",
+});
+
+console.log(result.results);
+```
+
+
+<div id="accessing-event-data">
+  ## イベントデータへのアクセス
+</div>
+
+ワークフローがイベントデータとともに再開されると、そのデータはステップコンテキストの `context.inputData.resumedEvent` で参照できます:
+
+```typescript
+const processApprovalStep = new LegacyStep({
+  id: "processApproval",
+  execute: async ({ context }) => {
+    // イベントデータへアクセス
+    const eventData = context.inputData.resumedEvent;
+
+    return {
+      processingResult: `承認者 ${eventData.approverName} の承認を処理しました`,
+      wasApproved: eventData.approved,
+    };
+  },
+});
+```
+
+
+<div id="multiple-events">
+  ## 複数のイベント
+</div>
+
+ワークフローの各所で、複数の異なるイベントを待機するように設定できます。
+
+```typescript
+workflow
+  .step(createRequest)
+  .afterEvent("承認受領")
+  .step(processApproval)
+  .afterEvent("ドキュメントアップロード完了")
+  .step(processDocument)
+  .commit();
+```
+
+複数のイベントの一時停止ポイントがあるワークフローを再開する場合は、現在の一時停止ポイントに対応する正しいイベント名とデータを指定する必要があります。
+
+
+<div id="practical-example">
+  ## 実践例
+</div>
+
+この例では、承認とドキュメントのアップロードの両方を必要とする完全なワークフローを示します。
+
+```typescript
+import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+// ステップの定義
+const createRequest = new LegacyStep({
+  id: "createRequest",
+  execute: async () => ({ requestId: `req-${Date.now()}` }),
+});
+
+const processApproval = new LegacyStep({
+  id: "processApproval",
+  execute: async ({ context }) => {
+    const approvalData = context.inputData.resumedEvent;
+    return {
+      approved: approvalData.approved,
+      approver: approvalData.approverName,
+    };
+  },
+});
+
+const processDocument = new LegacyStep({
+  id: "processDocument",
+  execute: async ({ context }) => {
+    const documentData = context.inputData.resumedEvent;
+    return {
+      documentId: documentData.documentId,
+      processed: true,
+      type: documentData.documentType,
+    };
+  },
+});
+
+const finalizeRequest = new LegacyStep({
+  id: "finalizeRequest",
+  execute: async ({ context }) => {
+    const requestId = context.steps.createRequest.output.requestId;
+    const approved = context.steps.processApproval.output.approved;
+    const documentId = context.steps.processDocument.output.documentId;
+
+    return {
+      finalized: true,
+      summary: `リクエスト ${requestId} は、ドキュメント ${documentId} とともに${approved ? "承認" : "却下"}されました`,
+    };
+  },
+});
+
+// ワークフローの作成
+const requestWorkflow = new LegacyWorkflow({
+  name: "document-request-workflow",
+  events: {
+    approvalReceived: {
+      schema: z.object({
+        approved: z.boolean(),
+        approverName: z.string(),
+      }),
+    },
+    documentUploaded: {
+      schema: z.object({
+        documentId: z.string(),
+        documentType: z.enum(["invoice", "receipt", "contract"]),
+      }),
+    },
+  },
+});
+
+// ワークフローの構築
+requestWorkflow
+  .step(createRequest)
+  .afterEvent("approvalReceived")
+  .step(processApproval)
+  .afterEvent("documentUploaded")
+  .step(processDocument)
+  .then(finalizeRequest)
+  .commit();
+
+// ワークフローのエクスポート
+export { requestWorkflow };
+```
+
+
+<div id="running-the-example-workflow">
+  ### 例題ワークフローの実行
+</div>
+
+```typescript
+import { requestWorkflow } from "./workflows";
+import { mastra } from "./mastra";
+
+async function runWorkflow() {
+  // ワークフローを取得する
+  const workflow = mastra.legacy_getWorkflow("document-request-workflow");
+  const run = workflow.createRun();
+
+  // Start the workflow
+  const initialResult = await run.start();
+  console.log("ワークフローを開始:", initialResult.results);
+
+  // 承認の受領をシミュレート
+  const afterApprovalResult = await run.resumeWithEvent("approvalReceived", {
+    approved: true,
+    approverName: "Jane Smith",
+  });
+  console.log("承認後:", afterApprovalResult.results);
+
+  // ドキュメントのアップロードをシミュレート
+  const finalResult = await run.resumeWithEvent("documentUploaded", {
+    documentId: "doc-456",
+    documentType: "invoice",
+  });
+  console.log("最終結果:", finalResult.results);
+}
+
+runWorkflow().catch(console.error);
+```
+
+
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
+
+1. **明確なイベントスキーマを定義する**: Zod を用いて、イベントデータ検証用の厳密なスキーマを作成する
+2. **説明的なイベント名を使う**: 目的が一目で分かるイベント名を選ぶ
+3. **未発生のイベントを扱う**: イベントが発生しない、またはタイムアウトする場合にもワークフローが対処できるようにする
+4. **監視を組み込む**: `watch` メソッドで、イベント待ちでサスペンドされているワークフローを監視する
+5. **タイムアウトを考慮する**: 発生しない可能性のあるイベントにはタイムアウト機構を実装する
+6. **イベントをドキュメント化する**: 他の開発者向けに、ワークフローが依存するイベントを明確に記述する
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [ワークフローのサスペンドと再開](/docs/workflows-legacy/suspend-and-resume)
+- [Workflow クラス リファレンス](./workflow)
+- [resume メソッド リファレンス](./resume)
+- [watch メソッド リファレンス](./watch)
+- [after イベント リファレンス](./afterEvent)
+- [resumeWithEvent リファレンス](./resumeWithEvent)

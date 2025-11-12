@@ -1,0 +1,281 @@
+---
+title: "ガイド：AIシェフアシスタントの構築 | Mastra エージェントガイド"
+description: 利用可能な食材で作れる料理を支援するための、Mastraでのシェフアシスタントエージェント作成ガイド。
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import YouTube from "@site/src/components/YouTube-player";
+
+
+<div id="building-an-ai-chef-assistant">
+  # AIシェフアシスタントの構築
+</div>
+
+このガイドでは、手元の食材を使って料理を作るのを手助けする「Chef Assistant」エージェントを作成します。
+
+エージェントの作成方法とMastraへの登録方法を学び、続いてターミナルからエージェントと対話して、さまざまな応答形式を確認します。最後に、MastraのローカルAPIエンドポイント経由でエージェントにアクセスします。
+
+<YouTube id="_tZhOqHCrF0" />
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+- Node.js `v20.0` 以上がインストールされていること
+- サポート対象の [Model Provider](/models) の API キー
+- 既存の Mastra プロジェクト（新規プロジェクトのセットアップは [インストールガイド](/docs/getting-started/installation) を参照）
+
+<div id="creating-the-agent">
+  ## エージェントの作成
+</div>
+
+Mastra でエージェントを作成するには、`Agent` クラスで定義してから Mastra に登録します。
+
+<Steps>
+
+<StepItem>
+
+新規に `src/mastra/agents/chefAgent.ts` ファイルを作成し、エージェントを定義します:
+
+```ts copy title="src/mastra/agents/chefAgent.ts"
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+export const chefAgent = new Agent({
+  name: "chef-agent",
+  instructions:
+    "You are Michel, a practical and experienced home chef" +
+    "You help people cook with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+`src/mastra/index.ts` ファイルでエージェントを登録します:
+
+```ts copy title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { chefAgent } from "./agents/chefAgent";
+
+export const mastra = new Mastra({
+  agents: { chefAgent },
+});
+```
+
+</StepItem>
+
+</Steps >
+
+<div id="interacting-with-the-agent">
+  ## エージェントとのやり取り
+</div>
+
+要件に応じて、エージェントとやり取りし、さまざまな形式で応答を受け取れます。以下の手順では、生成、ストリーミング、構造化出力の取得方法を学びます。
+
+<Steps>
+
+<StepItem>
+
+新しいファイル `src/index.ts` を作成し、`main()` 関数を追加します。関数内でエージェントへのクエリを作成し、その応答をログに出力します。
+
+```ts copy title="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
+async function main() {
+  const query =
+    "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
+  console.log(`Query: ${query}`);
+
+  const response = await chefAgent.generate([{ role: "user", content: query }]);
+  console.log("\n👨‍🍳 Chef Michel:", response.text);
+}
+
+main();
+```
+
+続いて、スクリプトを実行します:
+
+```bash copy
+npx bun src/index.ts
+```
+
+次のような出力が得られるはずです:
+
+```
+Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
+
+👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
+```
+
+</StepItem>
+
+<StepItem>
+
+前の例では、進行状況が分からないまま少し待つ必要があったかもしれません。エージェントが出力を生成する様子を表示するには、応答をターミナルにストリーミングします。
+
+```ts copy title="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+
+async function main() {
+  const query =
+    "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
+  console.log(`Query: ${query}`);
+
+  const stream = await chefAgent.stream([{ role: "user", content: query }]);
+
+  console.log("\n Chef Michel: ");
+
+  for await (const chunk of stream.textStream) {
+    process.stdout.write(chunk);
+  }
+
+  console.log("\n\n✅ Recipe complete!");
+}
+
+main();
+```
+
+その後、もう一度スクリプトを実行します:
+
+```bash copy
+npx bun src/index.ts
+```
+
+以下のような出力が得られるはずです。今回は大きなブロックではなく、行ごとに読み進められます。
+
+```
+Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
+
+👨‍🍳 Chef Michel:
+Great! You can make a comforting chicken curry...
+
+✅ Recipe complete!
+```
+
+</StepItem>
+
+<StepItem>
+
+エージェントの応答を人に見せるのではなく、コードの別の部分に渡したい場合があります。こうしたケースでは、エージェントは[構造化出力](/docs/agents/overview#structured-output)を返す必要があります。
+
+`src/index.ts` を次のように変更します:
+
+```ts copy title="src/index.ts"
+import { chefAgent } from "./mastra/agents/chefAgent";
+import { z } from "zod";
+
+async function main() {
+  const query =
+    "I want to make lasagna, can you generate a lasagna recipe for me?";
+  console.log(`Query: ${query}`);
+
+  // Zod スキーマを定義
+  const schema = z.object({
+    ingredients: z.array(
+      z.object({
+        name: z.string(),
+        amount: z.string(),
+      }),
+    ),
+    steps: z.array(z.string()),
+  });
+
+  const response = await chefAgent.generate(
+    [{ role: "user", content: query }],
+    {
+      structuredOutput: {
+        schema,
+      },
+    },
+  );
+  console.log("\n👨‍🍳 Chef Michel:", response.object);
+}
+
+main();
+```
+
+再度スクリプトを実行すると、次のような出力が得られるはずです:
+
+```
+Query: I want to make lasagna, can you generate a lasagna recipe for me?
+
+👨‍🍳 Chef Michel: {
+  ingredients: [
+    { name: "Lasagna noodles", amount: "12 sheets" },
+    { name: "Ground beef", amount: "1 pound" },
+    // ...
+  ],
+  steps: [
+    "Preheat oven to 375°F (190°C).",
+    "Cook the lasagna noodles according to package instructions.",
+    // ...
+  ]
+}
+```
+
+</StepItem>
+
+</Steps >
+
+<div id="running-the-agent-server">
+  ## エージェントサーバーの実行
+</div>
+
+Mastra の API を通じてエージェントとやり取りする方法を説明します。
+
+<Steps>
+
+<StepItem>
+
+`mastra dev` コマンドで、エージェントをサービスとして起動できます:
+
+```bash copy
+mastra dev
+```
+
+これにより、登録済みエージェントと対話するためのエンドポイントを公開するサーバーが起動します。[playground](/docs/getting-started/studio) では、UI 上でエージェントをテストできます。
+
+</StepItem>
+
+<StepItem>
+
+デフォルトでは `mastra dev` は `http://localhost:4111` で動作します。Chef Assistant エージェントには次のエンドポイントでアクセスできます:
+
+```
+POST http://localhost:4111/api/agents/chefAgent/generate
+```
+
+</StepItem>
+
+<StepItem>
+
+コマンドラインから `curl` を使ってエージェントと対話できます:
+
+```bash copy
+curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "user",
+        "content": "I have eggs, flour, and milk. What can I make?"
+      }
+    ]
+  }'
+```
+
+**サンプルレスポンス:**
+
+```json
+{
+  "text": "You can make delicious pancakes! Here's a simple recipe..."
+}
+```
+
+</StepItem>
+
+</Steps>

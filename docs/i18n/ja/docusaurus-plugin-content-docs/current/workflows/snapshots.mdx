@@ -1,0 +1,303 @@
+---
+title: "スナップショット | ワークフロー | Mastra ドキュメント"
+description: "Mastra のスナップショットでワークフローの実行状態を保存・再開する方法を学びましょう"
+---
+
+<div id="snapshots">
+  # スナップショット
+</div>
+
+Mastra において、スナップショットは特定時点のワークフローの完全な実行状態をシリアライズ可能な形で表したものです。スナップショットには、以下を含む、ワークフローを中断したまさにその地点から再開するために必要なすべての情報が含まれます。
+
+- ワークフロー内の各ステップの現在の状態
+- 完了したステップの出力
+- ワークフローで辿られた実行パス
+- 一時停止中のステップとそのメタデータ
+- 各ステップに残っている再試行回数
+- 実行再開に必要な追加のコンテキストデータ
+
+スナップショットは、ワークフローが一時停止される際に Mastra によって自動的に作成・管理され、設定済みのストレージシステムに永続化されます。
+
+<div id="the-role-of-snapshots-in-suspend-and-resume">
+  ## サスペンドと再開におけるスナップショットの役割
+</div>
+
+スナップショットは、Mastra のサスペンド／再開機能を支える中核的な仕組みです。ワークフローステップが `await suspend()` を呼び出すと：
+
+1. ワークフローの実行がその時点で正確に一時停止される
+2. ワークフローの現在の状態がスナップショットとして記録される
+3. スナップショットがストレージに永続化される
+4. ワークフローステップはステータスが `'suspended'` の「サスペンド中」としてマークされる
+5. 後にサスペンドされたステップで `resume()` が呼び出されると、スナップショットが取得される
+6. ワークフローの実行は中断されたまさにその地点から再開される
+
+この仕組みにより、ヒューマン・イン・ザ・ループのワークフローの実装、レート制限への対処、外部リソースの待機、長時間の一時停止を伴う複雑な分岐ワークフローの実装が可能になります。
+
+<div id="snapshot-anatomy">
+  ## スナップショットの構成
+</div>
+
+各スナップショットには、`runId`、入力、ステップのステータス（`success`、`suspended` など）、サスペンド時および再開時のペイロード、最終的な出力が含まれます。これにより、実行を再開する際に完全なコンテキストを利用できます。
+
+```json
+{
+  "runId": "34904c14-e79e-4a12-9804-9655d4616c50",
+  "status": "success",
+  "value": {},
+  "context": {
+    "input": {
+      "value": 100,
+      "user": "Michael",
+      "requiredApprovers": ["manager", "finance"]
+    },
+    "approval-step": {
+      "payload": {
+        "value": 100,
+        "user": "Michael",
+        "requiredApprovers": ["manager", "finance"]
+      },
+      "startedAt": 1758027577955,
+      "status": "success",
+      "suspendPayload": {
+        "message": "ワークフローを一時停止しました",
+        "requestedBy": "Michael",
+        "approvers": ["manager", "finance"]
+      },
+      "suspendedAt": 1758027578065,
+      "resumePayload": { "confirm": true, "approver": "manager" },
+      "resumedAt": 1758027578517,
+      "output": { "value": 100, "approved": true },
+      "endedAt": 1758027578634
+    }
+  },
+  "activePaths": [],
+  "serializedStepGraph": [
+    {
+      "type": "step",
+      "step": {
+        "id": "approval-step",
+        "description": "値を受け取り、確認を待機します"
+      }
+    }
+  ],
+  "suspendedPaths": {},
+  "waitingPaths": {},
+  "result": { "value": 100, "approved": true },
+  "runtimeContext": {},
+  "timestamp": 1758027578740
+}
+```
+
+
+<div id="how-snapshots-are-saved-and-retrieved">
+  ## スナップショットの保存と取得方法
+</div>
+
+スナップショットは、設定済みのストレージシステムに保存されます。既定では LibSQL を使用しますが、Upstash や PostgreSQL を利用するように設定することも可能です。各スナップショットは `workflow_snapshots` テーブルに保存され、ワークフローの `runId` によって識別されます。
+
+詳しくは以下をご覧ください:
+
+- [LibSQL Storage](/reference/storage/libsql)
+- [Upstash Storage](/reference/storage/upstash)
+- [PostgreSQL Storage](/reference/storage/postgresql)
+
+<div id="saving-snapshots">
+  ### スナップショットの保存
+</div>
+
+ワークフローが一時停止されると、Mastra は次の手順でワークフローのスナップショットを自動的に永続化します:
+
+1. ステップ実行内の `suspend()` 関数がスナップショット処理をトリガーする
+2. `WorkflowInstance.suspend()` メソッドが一時停止中のマシンを記録する
+3. 現在の状態を保存するために `persistWorkflowSnapshot()` が呼び出される
+4. スナップショットはシリアライズされ、設定されたデータベースの `workflow_snapshots` テーブルに保存される
+5. 保存レコードにはワークフロー名、実行 ID、シリアライズされたスナップショットが含まれる
+
+<div id="retrieving-snapshots">
+  ### スナップショットの取得
+</div>
+
+ワークフローが再開されると、Mastra は次の手順で永続化されたスナップショットを取得します。
+
+1. 特定のステップ ID を指定して `resume()` メソッドが呼び出される
+2. `loadWorkflowSnapshot()` を使用してストレージからスナップショットを読み込む
+3. スナップショットを解析し、再開に向けて準備する
+4. スナップショットの状態を基にワークフロー実行を再構成する
+5. 中断されたステップを再開し、実行を継続する
+
+```typescript
+const storage = mastra.getStorage();
+
+const snapshot = await storage!.loadWorkflowSnapshot({
+  runId: "<run-id>",
+  workflowName: "<workflow-id>",
+});
+
+console.log(snapshot);
+```
+
+
+<div id="storage-options-for-snapshots">
+  ## スナップショットのストレージオプション
+</div>
+
+スナップショットは、`Mastra` クラスで設定された `storage` インスタンスによって永続化されます。このストレージ層は、そのインスタンスに登録されたすべてのワークフローで共有されます。Mastra は、さまざまな環境で柔軟に対応できるよう、複数のストレージオプションをサポートしています。
+
+<div id="libsql-mastralibsql">
+  ### LibSQL `@mastra/libsql`
+</div>
+
+この例では、LibSQL のスナップショットの使い方を示します。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // ...
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+});
+```
+
+
+<div id="upstash-mastraupstash">
+  ### Upstash `@mastra/upstash`
+</div>
+
+この例では、Upstash でスナップショットを使う方法を紹介します。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { UpstashStore } from "@mastra/upstash";
+
+export const mastra = new Mastra({
+  // ...
+  storage: new UpstashStore({
+    url: "<upstash-redis-rest-url>",
+    token: "<upstash-redis-rest-token>",
+  }),
+});
+```
+
+
+<div id="postgres-mastrapg">
+  ### Postgres `@mastra/pg`
+</div>
+
+この例では、PostgreSQL でスナップショットを利用する方法を紹介します。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { PostgresStore } from "@mastra/pg";
+
+export const mastra = new Mastra({
+  // ...
+  storage: new PostgresStore({
+    connectionString: "<データベースURL>",
+  }),
+});
+```
+
+
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
+
+1. **シリアライズ可能であることを確保する**: スナップショットに含める必要があるデータはすべて、シリアライズ可能（JSON に変換可能）でなければなりません。
+2. **スナップショットのサイズを最小化する**: 大きなデータオブジェクトをワークフローのコンテキストに直接保存するのは避けましょう。代わりに、それらへの参照（ID など）を保存し、必要に応じてデータを取得します。
+3. **再開時のコンテキストを慎重に扱う**: ワークフローを再開する際にどのコンテキストを渡すかは慎重に検討してください。提供したコンテキストは既存のスナップショットデータとマージされます。
+4. **適切な監視を設定する**: 特に長時間実行されるものについては、保留中のワークフローを監視し、確実に再開されるようにしてください。
+5. **ストレージのスケーリングを検討する**: 多数の保留中のワークフローを抱えるアプリケーションでは、ストレージソリューションが適切にスケールしていることを確認してください。
+
+<div id="custom-snapshot-metadata">
+  ## カスタムスナップショットメタデータ
+</div>
+
+`suspendSchema` を定義すると、ワークフローを一時停止する際にカスタムメタデータを添付できます。このメタデータはスナップショットに保存され、ワークフローの再開時に利用できます。
+
+```typescript {30-34} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const approvalStep = createStep({
+  id: "approval-step",
+  description: "値を受け取り、承認を待機します",
+  inputSchema: z.object({
+    value: z.number(),
+    user: z.string(),
+    requiredApprovers: z.array(z.string()),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+    requestedBy: z.string(),
+    approvers: z.array(z.string()),
+  }),
+  resumeSchema: z.object({
+    confirm: z.boolean(),
+    approver: z.string(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+    approved: z.boolean(),
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    const { value, user, requiredApprovers } = inputData;
+    const { confirm } = resumeData ?? {};
+
+    if (!confirm) {
+      return await suspend({
+        message: "ワークフローを一時停止しました",
+        requestedBy: user,
+        approvers: [...requiredApprovers],
+      });
+    }
+
+    return {
+      value,
+      approved: confirm,
+    };
+  },
+});
+```
+
+
+<div id="providing-resume-data">
+  ### レジュメデータの提供
+</div>
+
+一時停止中のステップを再開する際に、構造化された入力を渡すには `resumeData` を使用します。これはステップの `resumeSchema` に適合している必要があります。
+
+```typescript {14-20} showLineNumbers copy
+const workflow = mastra.getWorkflow("approvalWorkflow");
+
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: 100,
+    user: "Michael",
+    requiredApprovers: ["manager", "finance"],
+  },
+});
+
+if (result.status === "suspended") {
+  const resumedResult = await run.resume({
+    step: "approval-step",
+    resumeData: {
+      confirm: true,
+      approver: "manager",
+    },
+  });
+}
+```
+
+
+<div id="related">
+  ## 関連
+</div>
+
+- [一時停止と再開](/docs/workflows/suspend-and-resume)
+- [ヒューマン・イン・ザ・ループの例](/examples/workflows_legacy/human-in-the-loop)
+- [WorkflowRun.watch()](/reference/workflows/run-methods/watch)

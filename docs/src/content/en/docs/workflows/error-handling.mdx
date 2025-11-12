@@ -163,6 +163,25 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
+## Monitor errors with `watch()`
+
+You can monitor workflows for errors using the `watch` method:
+
+```typescript {11} title="src/test-workflow.ts" showLineNumbers copy
+import { mastra } from "../src/mastra";
+
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync();
+
+run.watch((event) => {
+  const {
+    payload: { currentStep },
+  } = event;
+
+  console.log(currentStep?.payload?.status);
+});
+```
+
 ## Monitor errors with `stream()`
 
 You can monitor workflows for errors using `stream`:
@@ -172,7 +191,7 @@ import { mastra } from "../src/mastra";
 
 const workflow = mastra.getWorkflow("testWorkflow");
 
-const run = await workflow.createRun();
+const run = await workflow.createRunAsync();
 
 const stream = await run.stream({
   inputData: {
@@ -187,6 +206,6 @@ for await (const chunk of stream.stream) {
 
 ## Related
 
-- [Control Flow](/docs/v1/workflows/control-flow)
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
-- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Control Flow](/docs/workflows/control-flow)
+- [Suspend & Resume](/docs/workflows/suspend-and-resume)
+- [Human-in-the-loop](/docs/workflows/human-in-the-loop)

@@ -1,0 +1,37 @@
+---
+title: "例：ZeroEntropy を用いたリランキング | RAG | Mastra ドキュメント"
+description: ZeroEntropy のリランキングサービスを使用して、Mastra でドキュメント検索の関連性を向上させる例。
+---
+
+<div id="reranking-with-zeroentropy">
+  # ZeroEntropy を使ったリランキング
+</div>
+
+```typescript
+import {
+  rerankWithScorer as rerank,
+  ZeroEntropyRelevanceScorer
+} from "@mastra/rag";
+
+const results = rerank({
+  results: searchResults,
+  query: "デプロイ設定",
+  scorer: new ZeroEntropyRelevanceScorer('zerank-1'),
+  {
+    topK: 5,
+    weights: {
+      semantic: 0.4,
+      vector: 0.4,
+      position: 0.2,
+    },
+  },
+);
+```
+
+
+<div id="links">
+  ## リンク
+</div>
+
+- [rerank() リファレンス](/reference/rag/rerankWithScorer)
+- [検索（リトリーバル）ドキュメント](/docs/rag/retrieval)

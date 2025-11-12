@@ -1,0 +1,191 @@
+---
+title: "リファレンス: Moderation Processor | Processors | Mastra ドキュメント"
+description: "Mastra の ModerationProcessor のドキュメント。LLM を用いて複数のカテゴリにわたる不適切な内容を検出し、コンテンツのモデレーションを提供します。"
+---
+
+<div id="moderationprocessor">
+  # ModerationProcessor
+</div>
+
+`ModerationProcessor` は、LLM を用いて複数カテゴリにわたる不適切なコンテンツを検出するコンテンツモデレーションを提供し、入力処理と出力処理の双方で使用できる**ハイブリッドプロセッサ**です。このプロセッサは、設定可能なモデレーションカテゴリに基づいてメッセージを評価し、フラグ付けされたコンテンツに対する柔軟な対応戦略により、コンテンツの安全性維持を支援します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+import { ModerationProcessor } from "@mastra/core/processors";
+
+const processor = new ModerationProcessor({
+  model: "openai/gpt-4.1-nano",
+  threshold: 0.7,
+  strategy: "block",
+  categories: ["ヘイト", "ハラスメント", "暴力"]
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "コンテンツのモデレーション用の設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="options">
+  ### オプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "モデレーションエージェントのモデル設定",
+      isOptional: false,
+    },
+    {
+      name: "categories",
+      type: "string[]",
+      description: "モデレーションでチェックするカテゴリ。未指定の場合は OpenAI のデフォルトカテゴリを使用します",
+      isOptional: true,
+      default: "['hate', 'hate/threatening', 'harassment', 'harassment/threatening', 'self-harm', 'self-harm/intent', 'self-harm/instructions', 'sexual', 'sexual/minors', 'violence', 'violence/graphic']",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "フラグ付けの信頼度しきい値 (0〜1)。いずれかのカテゴリのスコアがこのしきい値を超えるとコンテンツがフラグ付けされます",
+      isOptional: true,
+      default: "0.5",
+    },
+    {
+      name: "strategy",
+      type: "'block' | 'warn' | 'filter'",
+      description: "コンテンツがフラグ付けされた場合の方針: 'block' はエラーで拒否、'warn' は警告を記録して通過させる、'filter' はフラグ付きメッセージを除去",
+      isOptional: true,
+      default: "'block'",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "エージェント向けのカスタムモデレーション指示。未指定の場合は、カテゴリに基づくデフォルト指示を使用します",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "includeScores",
+      type: "boolean",
+      description: "ログに信頼度スコアを含めるかどうか。しきい値の調整やデバッグに有用です",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "chunkWindow",
+      type: "number",
+      description: "ストリームのチャンクをモデレートする際、文脈として含める直前のチャンク数。1 に設定すると直前の部分を含めます",
+      isOptional: true,
+      default: "0（コンテキストウィンドウなし）",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名。値は 'moderation' に設定されます",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      description: "LLM に送信する前に、入力メッセージを処理してコンテンツをモデレーションします",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
+      description: "ストリーミング中に、出力の各パートを処理してコンテンツをモデレーションします",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
+
+<div id="input-processing">
+  ### 入力の処理
+</div>
+
+```typescript title="src/mastra/agents/moderated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { ModerationProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "moderated-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o-mini",
+  inputProcessors: [
+    new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      categories: ["hate", "harassment", "violence"],
+      threshold: 0.7,
+      strategy: "block",
+      instructions: "ユーザーメッセージ内の不適切なコンテンツを検出し、フラグを立てます",
+      includeScores: true
+    })
+  ]
+});
+```
+
+
+<div id="output-processing-with-batching">
+  ### バッチ処理による出力処理
+</div>
+
+`ModerationProcessor` を出力プロセッサとして使用する場合は、パフォーマンス最適化のために `BatchPartsProcessor` と組み合わせて使うことを推奨します。`BatchPartsProcessor` は、モデレーターに渡す前にストリームのチャンクをまとめて一括処理し、モデレーションに必要な LLM の呼び出し回数を減らします。
+
+```typescript title="src/mastra/agents/output-moderated-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, ModerationProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "output-moderated-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o-mini",
+  outputProcessors: [
+    // LLM呼び出しを削減するため、まずストリームパーツをバッチ処理
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // 次にバッチ処理されたコンテンツにモデレーションを適用
+    new ModerationProcessor({
+      model: "openai/gpt-4.1-nano",
+      strategy: "filter",
+      chunkWindow: 1,
+    }),
+  ]
+});
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [ガードレール](/docs/agents/guardrails)

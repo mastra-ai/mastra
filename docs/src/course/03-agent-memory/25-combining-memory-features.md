@@ -16,7 +16,6 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 // Create a comprehensive memory configuration
 const memory = new Memory({
   storage: new LibSQLStore({
-    id: "learning-memory-storage",
     url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }),
   vector: new LibSQLVector({

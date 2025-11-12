@@ -57,7 +57,6 @@ import { Memory } from "@mastra/memory";
 const memory = new Memory();
 
 const agent = new Agent({
-  id: "agent-network",
   name: "agent-network",
   agents: { agent1, agent2 },
   tools: { tool1, tool2 },
@@ -78,7 +77,6 @@ Before:
 import { NewAgentNetwork } from "@mastra/core/network/vnext";
 
 const agent = new NewAgentNetwork({
-  id: "agent-network",
   name: "agent-network",
   agents: { agent1, agent2 },
   workflows: { workflow1 },

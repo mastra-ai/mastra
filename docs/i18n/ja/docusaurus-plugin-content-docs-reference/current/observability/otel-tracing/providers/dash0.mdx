@@ -1,0 +1,50 @@
+---
+title: "リファレンス: Dash0 | 可観測性 | Mastra ドキュメント"
+description: Mastra を OpenTelemetry ネイティブの可観測性ソリューションである Dash0 と統合するためのドキュメント。
+---
+
+<div id="dash0">
+  # Dash0
+</div>
+
+Dash0 は、OpenTelemetry ネイティブのオブザーバビリティ・ソリューションで、フルスタックの監視機能に加え、Perses や Prometheus などの他の CNCF プロジェクトとの統合も提供します。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+Mastra で Dash0 を使用するには、次の環境変数を設定してください:
+
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=https://ingress.<region>.dash0.com
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <your-auth-token>, Dash0-Dataset=<optional-dataset>
+```
+
+
+<div id="implementation">
+  ## 実装
+</div>
+
+Mastra を Dash0 で利用できるように設定する方法は次のとおりです:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  // ... その他の設定
+  telemetry: {
+    serviceName: "your-service-name",
+    enabled: true,
+    export: {
+      type: "otlp",
+    },
+  },
+});
+```
+
+
+<div id="dashboard">
+  ## ダッシュボード
+</div>
+
+[dash0.com](https://www.dash0.com/) から Dash0 のダッシュボードにアクセスし、[Dash0 Integration Hub](https://www.dash0.com/hub/integrations) で [Distributed Tracing](https://www.dash0.com/distributed-tracing) の連携方法をさらに確認しましょう。

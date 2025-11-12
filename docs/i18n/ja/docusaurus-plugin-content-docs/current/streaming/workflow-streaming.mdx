@@ -1,0 +1,139 @@
+---
+title: "ワークフローのストリーミング | ストリーミング | Mastra ドキュメント"
+description: "Mastra でのワークフローのストリーミングの使い方を学びます。ワークフロー実行イベントの処理、ステップのストリーミング、エージェントやツールとの統合について解説します."
+---
+
+<div id="workflow-streaming">
+  # ワークフローのストリーミング
+</div>
+
+Mastra のワークフローのストリーミングは、完了を待たずに実行中の段階的な結果を送信できます。これにより、部分的な進捗や中間状態、逐次的なデータを、ユーザーや上流のエージェント／ワークフローに直接提示できます。
+
+ストリームへの書き込み方法は主に次の2つです:
+
+- **ワークフローのステップ内から**: すべてのワークフローのステップは `writer` 引数を受け取ります。これは、実行の進行に合わせて更新をプッシュできる書き込み可能なストリームです。
+- **エージェントのストリームから**: エージェントの `stream` 出力をワークフローのステップの writer に直接パイプし、グルーコードを追加せずにエージェントの応答をワークフローの結果へと簡単に連結できます。
+
+書き込み可能なワークフローストリームとエージェントのストリーミングを組み合わせることで、中間結果がシステム内を流れてユーザー体験へ届くまでのプロセスをきめ細かく制御できます。
+
+<div id="using-the-writer-argument">
+  ### `writer` 引数の使用
+</div>
+
+:::warning
+
+`writer` は `streamVNext` を使用している場合にのみ利用可能です。
+
+:::
+
+`writer` 引数はワークフローのステップの `execute` 関数に渡され、アクティブなストリームへカスタムイベントやデータ、値を送出するために使用できます。これにより、実行中であっても、各ステップが中間結果や進捗状況の更新を提供できるようになります。
+
+:::warning
+
+`writer.write(...)` の呼び出しは必ず `await` してください。そうしないとストリームがロックされ、`WritableStream is locked` エラーが発生します。
+
+:::
+
+```typescript {5,8,15} showLineNumbers copy
+import { createStep } from "@mastra/core/workflows";
+
+export const testStep = createStep({
+  // ...
+  execute: async ({ inputData, writer }) => {
+     const { value } = inputData;
+
+    await writer?.write({
+      type: "custom-event",
+      status: "pending"
+    });
+
+    const response = await fetch(...);
+
+   await writer?.write({
+      type: "custom-event",
+      status: "success"
+    });
+
+    return {
+      value: ""
+    };
+  },
+});
+```
+
+
+<div id="inspecting-workflow-stream-payloads">
+  ### ワークフローのストリーム・ペイロードの確認
+</div>
+
+ストリームに書き込まれたイベントは、出力されるチャンクに含まれます。これらのチャンクを確認すると、イベントタイプ、中間値、ステップ固有のデータといったカスタムフィールドにアクセスできます。
+
+```typescript showLineNumbers copy
+const testWorkflow = mastra.getWorkflow("testWorkflow");
+
+const run = await testWorkflow.createRunAsync();
+
+const stream = await run.streamVNext({
+  inputData: {
+    value: "initial data",
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+
+if (result!.status === "suspended") {
+  // ワークフローが中断されている場合は、resumeStreamVNextメソッドで再開できます
+  const resumedStream = await run.resumeStreamVNext({
+    resumeData: { value: "resume data" },
+  });
+
+  for await (const chunk of resumedStream) {
+    console.log(chunk);
+  }
+}
+```
+
+
+<div id="resuming-an-interrupted-workflow-stream">
+  ### 中断されたワークフロー ストリームの再開
+</div>
+
+ワークフロー ストリームが何らかの理由でクローズまたは中断された場合は、`resumeStreamVNext` メソッドで再開できます。これにより、新しい `ReadableStream` が返され、ワークフローのイベントを観察できます。
+
+```typescript showLineNumbers copy
+const newStream = await run.resumeStreamVNext();
+
+for await (const chunk of newStream) {
+  console.log(chunk);
+}
+```
+
+
+<div id="workflow-using-an-agent">
+  ## エージェントを使ったワークフロー
+</div>
+
+エージェントの `textStream` をワークフローステップの `writer` にパイプします。これにより部分的な出力がストリーミングされ、Mastra がエージェントの使用状況をワークフローの実行に自動的に集約します。
+
+```typescript showLineNumbers copy
+import { createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const testStep = createStep({
+  // ...
+  execute: async ({ inputData, mastra, writer }) => {
+    const { city } = inputData;
+
+    const testAgent = mastra?.getAgent("testAgent");
+    const stream = await testAgent?.stream(`${city}の天気はどうですか?`);
+
+    await stream!.textStream.pipeTo(writer!);
+
+    return {
+      value: await stream!.text,
+    };
+  },
+});
+```

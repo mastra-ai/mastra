@@ -13,6 +13,7 @@ import { BurgerIcon } from "./search-icons";
 import { useHistory } from "@docusaurus/router";
 import { CancelIcon } from "./copy-page-icons";
 import { Button } from "./ui/button";
+import { useGT } from "gt-react";
 
 // Custom hook for responsive design
 const useMediaQuery = (query: string): boolean => {
@@ -75,7 +76,7 @@ const getSectionIcon = (section?: string) => {
 
 export const CustomSearch: FC<SearchProps> = ({
   className,
-  placeholder = "Search docs...",
+  placeholder,
   searchOptions,
   closeModal,
 }) => {
@@ -88,6 +89,11 @@ export const CustomSearch: FC<SearchProps> = ({
     loadMore,
     isLoadingMore,
   } = useAlgoliaSearch(300, searchOptions);
+
+  const gt = useGT();
+  if (!placeholder) {
+    placeholder = gt("Search docs...");
+  }
 
   const history = useHistory();
   const inputRef = useRef<HTMLInputElement>(null!);
@@ -242,17 +248,17 @@ export const CustomSearch: FC<SearchProps> = ({
   // Handler for empty state item selection
   const handleEmptyStateSelect = (index: number) => {
     const emptyStateLinks = [
-      "/docs/v1/getting-started/installation",
-      "/docs/v1/agents/overview",
-      "/docs/v1/workflows/overview",
-      "/docs/v1/server-db/local-dev-playground",
-      "/docs/v1/streaming/overview",
-      "/docs/v1/tools-mcp/mcp-overview",
-      "/docs/v1/memory/overview",
-      "/docs/v1/scorers/overview",
-      "/docs/v1/rag/overview",
-      "/docs/v1/observability/overview",
-      "/docs/v1/deployment/overview",
+      "/docs/getting-started/installation",
+      "/docs/agents/overview",
+      "/docs/workflows/overview",
+      "/docs/server-db/local-dev-playground",
+      "/docs/streaming/overview",
+      "/docs/tools-mcp/mcp-overview",
+      "/docs/memory/overview",
+      "/docs/scorers/overview",
+      "/docs/rag/overview",
+      "/docs/observability/overview",
+      "/docs/deployment/overview",
     ];
 
     const link = emptyStateLinks[index];

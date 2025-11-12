@@ -1,0 +1,47 @@
+---
+title: "リファレンス: Mastra.getLogger() | コア | Mastra ドキュメント"
+description: "Mastra の `Mastra.getLogger()` メソッドに関するドキュメント。設定されたロガーインスタンスを取得します。"
+---
+
+<div id="mastragetlogger">
+  # Mastra.getLogger()
+</div>
+
+`.getLogger()` メソッドは、Mastra インスタンスで構成されたロガーインスタンスを取得するために使用します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+mastra.getLogger();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドはパラメータを受け付けません。
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "logger",
+      type: "TLogger",
+      description:
+        "すべてのコンポーネント（エージェント、ワークフローなど）でのログ出力に使用される、設定済みのロガーインスタンス。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [ログ記録の概要](/docs/observability/logging)
+- [ロガー リファレンス](/reference/observability/logging/pino-logger)

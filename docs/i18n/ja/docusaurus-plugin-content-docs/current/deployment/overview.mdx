@@ -1,0 +1,100 @@
+---
+title: "デプロイの概要 | デプロイ | Mastra ドキュメント"
+description: Mastra アプリケーションの多様なデプロイ方法について学ぶ
+---
+
+<div id="deployment-overview">
+  # デプロイ概要
+</div>
+
+Mastra では、フルマネージドなソリューションからセルフホスト型、Web フレームワークとの統合まで、アプリケーションの要件に合わせた複数のデプロイ方法を提供しています。本ガイドでは、利用可能なデプロイの選択肢を理解し、プロジェクトに最適な方法を選ぶための手助けをします。
+
+<div id="choosing-a-deployment-option">
+  ## デプロイオプションの選択
+</div>
+
+| オプション               | 最適な対象                                                 | 主なメリット                                                       |
+| ------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| **Mastra Cloud**         | インフラを気にせず迅速にリリースしたいチーム                 | フルマネージド、自動スケーリング、組み込みの可観測性               |
+| **Framework Deployment** | すでに Next.js や Astro などを利用しているチーム            | フロントエンドとバックエンドを単一コードベースで統一し、デプロイを簡素化 |
+| **Server Deployment**    | 最大限のコントロールとカスタマイズが必要なチーム             | 完全なコントロール、カスタムミドルウェア、既存アプリとの統合       |
+| **Serverless Platforms** | すでに Vercel、Netlify、または Cloudflare を利用しているチーム | プラットフォーム連携、デプロイの簡素化、自動スケーリング           |
+
+<div id="deployment-options">
+  ## デプロイ方法の選択肢
+</div>
+
+<div id="runtime-support">
+  ### ランタイムのサポート
+</div>
+
+- Node.js `v20.0` 以上
+- Bun
+- Deno
+- [Cloudflare](../deployment/serverless-platforms/cloudflare-deployer)
+
+<div id="mastra-cloud">
+  ### Mastra Cloud
+</div>
+
+Mastra Cloud は、GitHub リポジトリと連携し、コードの変更に応じて自動デプロイを行い、監視ツールも提供するデプロイプラットフォームです。主な機能は次のとおりです:
+
+- GitHub リポジトリ連携
+- git push によるデプロイ
+- エージェントのテスト用インターフェース
+- 充実したログとトレース
+- プロジェクトごとのカスタムドメイン
+
+[Mastra Cloud のドキュメントを見る →](../mastra-cloud/overview)
+
+<div id="with-a-web-framework">
+  ### Webフレームワークとともに
+</div>
+
+MastraはさまざまなWebフレームワークと統合できます。詳しい手順は、以下のいずれかのガイドをご覧ください。
+
+- [Next.js での利用](../frameworks/web-frameworks/next-js)
+- [Astro での利用](../frameworks/web-frameworks/astro)
+
+フレームワークと統合した場合、Mastraは通常、デプロイのための追加設定を必要としません。
+
+[Webフレームワークとの統合を見る →](./web-framework)
+
+<div id="with-a-server">
+  ### サーバーでの運用
+</div>
+
+Mastra は標準的な Node.js の HTTP サーバーとしてデプロイでき、インフラやデプロイ環境を自由に制御できます。
+
+- カスタム API ルートとミドルウェア
+- CORS や認証の柔軟な設定
+- VM、コンテナ、または PaaS へのデプロイ
+- 既存の Node.js アプリケーションとの統合に最適
+
+[サーバーでのデプロイガイド →](./server-deployment)
+
+<div id="serverless-platforms">
+  ### サーバーレスプラットフォーム
+</div>
+
+Mastra は主要なサーバーレスプラットフォーム向けにプラットフォーム専用のデプロイヤを用意しており、最小限の設定でアプリケーションをデプロイできます。
+
+- Cloudflare Workers、Vercel、Netlify へのデプロイ
+- プラットフォーム別の最適化
+- シンプルなデプロイ手順
+- プラットフォームによる自動スケーリング
+
+[サーバーレス導入ガイド →](./server-deployment)
+
+<div id="client-configuration">
+  ## クライアント構成
+</div>
+
+Mastra アプリケーションをデプロイしたら、クライアントがそれと通信できるように設定する必要があります。Mastra Client SDK は、Mastra サーバーとやり取りするためのシンプルで型安全なインターフェースを提供します。
+
+- 型安全な API 連携
+- 認証とリクエスト処理
+- リトライとエラー処理
+- ストリーミングレスポンスのサポート
+
+[クライアント設定ガイド →](/docs/server-db/mastra-client)

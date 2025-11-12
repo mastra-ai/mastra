@@ -1,0 +1,191 @@
+---
+title: "エージェントのメモリ | エージェント | Mastra ドキュメント"
+description: エージェントにメモリを追加して会話履歴を保存し、複数のやり取りにわたってコンテキストを維持する方法を学びます。
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+
+<div id="agent-memory">
+  # エージェントのメモリ
+</div>
+
+エージェントは、やり取りの間でコンテキストを維持するためにメモリを使用します。LLM はステートレスで呼び出し間の情報を保持しないため、エージェントには会話履歴を追跡し、関連情報を思い出すためのメモリが必要です。
+
+Mastra のエージェントは会話履歴を保存するように設定でき、最近のコンテキストを維持するための[ワーキングメモリ](../memory/working-memory)や、意味に基づいて過去のメッセージを検索・取得するための[セマンティックリコール](../memory/semantic-recall)をオプションで利用できます。
+
+<div id="when-to-use-memory">
+  ## メモリを使用するタイミング
+</div>
+
+エージェントが、過去のやり取りを参照するマルチターンの会話を維持したり、同一セッション内で以前に示されたユーザーの好みや事実を想起したり、会話スレッドの中で時間をかけて文脈を構築したりする必要がある場合は、メモリを使用します。各やり取りが独立している単発（シングルターン）のリクエストでは、メモリは使用しないでください。
+
+<div id="setting-up-memory">
+  ## メモリの設定
+</div>
+
+Mastraでメモリを有効化するには、ストレージプロバイダーとあわせて `@mastra/memory` パッケージをインストールします。
+
+```bash npm2yarn copy
+npm install @mastra/memory@latest @mastra/libsql@latest
+```
+
+
+<div id="storage-providers">
+  ## ストレージプロバイダー
+</div>
+
+Memory では、ユーザーのメッセージやエージェントの応答を含む会話履歴を保持するために、ストレージプロバイダーが必要です。利用可能なプロバイダーや Mastra におけるストレージの仕組みについて詳しくは、[Storage](/docs/server-db/storage) のドキュメントをご覧ください。
+
+<div id="configuring-memory">
+  ## メモリの構成
+</div>
+
+<Steps>
+  <StepItem>
+    `Memory` インスタンスを作成し、エージェントの `memory` オプションに渡してメモリを有効にします。
+
+    ```typescript {6-9} title="src/mastra/agents/memory-agent.ts" copy
+    import { Agent } from "@mastra/core/agent";
+    import { Memory } from "@mastra/memory";
+
+    export const memoryAgent = new Agent({
+      // ...
+      memory: new Memory({
+        options: {
+          lastMessages: 20,
+        },
+      }),
+    });
+    ```
+
+    :::note
+
+    利用可能な設定オプションの一覧は、[Memory クラス](/reference/memory/memory-class)のドキュメントをご覧ください。
+
+    :::
+  </StepItem>
+
+  <StepItem>
+    すべての設定済みエージェントでメモリを有効にするには、メインの Mastra インスタンスにストレージプロバイダーを追加します。
+
+    ```typescript {6-8} title="src/mastra/index.ts" copy
+    import { Mastra } from "@mastra/core/mastra";
+    import { LibSQLStore } from "@mastra/libsql";
+
+    export const mastra = new Mastra({
+      // ..
+      storage: new LibSQLStore({
+        url: ":memory:",
+      }),
+    });
+    ```
+
+    :::note
+
+    利用可能な設定オプションの一覧は、[LibSQL ストレージ](/reference/storage/libsql)のドキュメントをご覧ください。
+
+    :::
+  </StepItem>
+</Steps>
+
+別案として、データを分離したい場合やエージェントごとに異なるプロバイダーを使いたい場合は、ストレージを各エージェントのメモリに直接追加することもできます。
+
+```typescript {7-10} title="src/mastra/agents/memory-agent.ts" copy
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const memoryAgent = new Agent({
+  // ...
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: ":memory:",
+    }),
+  }),
+});
+```
+
+
+<div id="conversation-history">
+  ## 会話履歴
+</div>
+
+エージェント呼び出し中の会話履歴を追跡するために、`resource` と `thread` の両方を含む `memory` オブジェクトを指定してください。
+
+* `resource`: ユーザーまたはエンティティを一意に表す安定した識別子。
+* `thread`: 特定の会話やセッションを切り分けるための ID。
+
+これらのフィールドは、エージェントがコンテキストを保存・取得する場所を示し、会話全体にわたって永続的かつスレッド認識型のメモリを実現します。
+
+```typescript {3-4}
+const response = await memoryAgent.generate(
+  "私の好きな色は青です。覚えておいてください。",
+  {
+    memory: {
+      thread: "user-123",
+      resource: "test-123",
+    },
+  },
+);
+```
+
+メモリに保存された情報を再取得するには、元の会話で使用したのと同じ `resource` と `thread` の値でエージェントを呼び出します。
+
+```typescript {3-4}
+const response = await memoryAgent.generate("私の好きな色は何ですか?", {
+  memory: {
+    thread: "user-123",
+    resource: "test-123",
+  },
+});
+```
+
+メモリの詳細については、[メモリ](../memory/overview) ドキュメントをご覧ください。
+
+
+<div id="using-runtimecontext">
+  ## `RuntimeContext` の使用
+</div>
+
+[RuntimeContext](/docs/server-db/runtime-context) を使うと、リクエストごとの値にアクセスできます。これにより、リクエストのコンテキストに応じて、メモリやストレージの構成を条件付きで切り替えられます。
+
+```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const premiumMemory = new Memory({
+  // ...
+});
+
+const standardMemory = new Memory({
+  // ...
+});
+
+export const memoryAgent = new Agent({
+  // ...
+  memory: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+
+    return userTier === "enterprise" ? premiumMemory : standardMemory;
+  },
+});
+```
+
+:::note
+
+詳細は [Runtime Context](/docs/server-db/runtime-context) のドキュメントをご参照ください。
+
+:::
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [ワーキングメモリ](../memory/working-memory)
+- [セマンティックリコール](../memory/semantic-recall)
+- [スレッドとリソース](../memory/threads-and-resources)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

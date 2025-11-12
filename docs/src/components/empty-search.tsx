@@ -5,57 +5,57 @@ export const searches = [
   {
     label: "Quickstart",
     description: "Get up and running with Mastra AI",
-    link: "/docs/v1/getting-started/installation",
+    link: "/docs/getting-started/installation",
   },
   {
     label: "Agents",
     description: "Use LLMs and tools to solve open-ended tasks",
-    link: "/docs/v1/agents/overview",
+    link: "/docs/agents/overview",
   },
   {
     label: "Workflows",
     description: "Define and manage complex sequences of tasks",
-    link: "/docs/v1/workflows/overview",
+    link: "/docs/workflows/overview",
   },
   {
     label: "Playground",
     description: "Test your agents, workflows, and tools during development",
-    link: "/docs/v1/server-db/local-dev-playground",
+    link: "/docs/server-db/local-dev-playground",
   },
   {
     label: "Streaming",
     description: "Streaming for real-time agent interactions",
-    link: "/docs/v1/streaming/overview",
+    link: "/docs/streaming/overview",
   },
   {
     label: "MCP",
     description: "Connect AI agents to external tools and resources",
-    link: "/docs/v1/tools-mcp/mcp-overview",
+    link: "/docs/tools-mcp/mcp-overview",
   },
   {
     label: "Memory",
     description: "Manage agent context across conversations",
-    link: "/docs/v1/memory/overview",
+    link: "/docs/memory/overview",
   },
   {
     label: "Scorers",
     description: "Evaluate agent performance",
-    link: "/docs/v1/scorers/overview",
+    link: "/docs/scorers/overview",
   },
   {
     label: "RAG",
     description: "Incorporate relevant context from your own data sources",
-    link: "/docs/v1/rag/overview",
+    link: "/docs/rag/overview",
   },
   {
     label: "Observability",
     description: "Monitor and log agent activity",
-    link: "/docs/v1/observability/overview",
+    link: "/docs/observability/overview",
   },
   {
     label: "Deployment",
     description: "Deploy your agents, workflows, and tools",
-    link: "/docs/v1/deployment/overview",
+    link: "/docs/deployment/overview",
   },
 ];
 

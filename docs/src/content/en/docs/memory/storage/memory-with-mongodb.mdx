@@ -20,7 +20,7 @@ MONGODB_DB_NAME=<your-db-name>
 And install the following package:
 
 ```bash copy
-npm install @mastra/mongodb@beta
+npm install @mastra/mongodb
 ```
 
 ## Adding memory to an agent
@@ -34,7 +34,6 @@ import { openai } from "@ai-sdk/openai";
 import { MongoDBStore } from "@mastra/mongodb";
 
 export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
@@ -63,7 +62,7 @@ This setup uses FastEmbed, a local embedding model, to generate vector embedding
 To use this, install `@mastra/fastembed`:
 
 ```bash copy
-npm install @mastra/fastembed@beta
+npm install @mastra/fastembed
 ```
 
 Add the following to your agent:
@@ -76,7 +75,6 @@ import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
 import { fastembed } from "@mastra/fastembed";
 
 export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
@@ -149,4 +147,4 @@ for await (const chunk of stream.textStream) {
 
 ## Related
 
-- [Calling Agents](/docs/v1/agents/overview)
+- [Calling Agents](/docs/agents/overview)

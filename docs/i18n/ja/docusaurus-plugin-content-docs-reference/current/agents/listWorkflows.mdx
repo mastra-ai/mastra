@@ -1,0 +1,85 @@
+---
+title: "リファレンス: Agent.listWorkflows() | Agents | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.listWorkflows()` メソッドのリファレンス。エージェントが実行可能なワークフローを取得します。"
+---
+
+<div id="agentlistworkflows">
+  # Agent.listWorkflows()
+</div>
+
+`.listWorkflows()` メソッドは、エージェントに設定されたワークフローを取得し、関数として指定されている場合はそれを解決します。これらのワークフローにより、エージェントは定義済みの実行パスに従って、複雑なマルチステップの処理を実行できます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.listWorkflows();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "リクエストコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflows",
+      type: "Promise<Record<string, Workflow>>",
+      description:
+        "ワークフロー名を対応する Workflow インスタンスにマッピングしたレコードを解決する Promise。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 発展的な使用例
+</div>
+
+```typescript copy
+await agent.listWorkflows({
+  requestContext: new RequestContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "依存性注入とコンテキスト情報のためのリクエストコンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連
+</div>
+
+- [Agents の概要](/docs/agents/overview)
+- [Workflows の概要](/docs/workflows/overview)

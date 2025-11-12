@@ -19,7 +19,7 @@ DATABASE_URL=<your-connection-string>
 And install the following package:
 
 ```bash copy
-npm install @mastra/pg@beta
+npm install @mastra/pg
 ```
 
 ## Adding memory to an agent
@@ -33,18 +33,16 @@ import { openai } from "@ai-sdk/openai";
 import { PostgresStore } from "@mastra/pg";
 
 export const pgAgent = new Agent({
-  id: "pg-agent",
-  name: "PG Agent",
+  name: "pg-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
-      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     options: {
-      generateTitle: true, // Explicitly enable automatic title generation
+      generateTitle: true,
     },
   }),
 });
@@ -57,7 +55,7 @@ Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve r
 Install `fastembed` to get started:
 
 ```bash copy
-npm install @mastra/fastembed@beta
+npm install @mastra/fastembed
 ```
 
 Add the following to your agent:
@@ -70,18 +68,15 @@ import { PostgresStore, PgVector } from "@mastra/pg";
 import { fastembed } from "@mastra/fastembed";
 
 export const pgAgent = new Agent({
-  id: "pg-agent",
-  name: "PG Agent",
+  name: "pg-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PostgresStore({
-      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL!,
     }),
     vector: new PgVector({
-      id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL!,
     }),
     embedder: fastembed,
@@ -140,4 +135,4 @@ for await (const chunk of stream.textStream) {
 
 ## Related
 
-- [Calling Agents](/examples/v1/agents/calling-agents)
+- [Calling Agents](/examples/agents/calling-agents)

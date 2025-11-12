@@ -81,7 +81,7 @@ export function CopilotKitComponent({ runtimeUrl }: { runtimeUrl: string }) {
 
 <StepItem>
 
-If you have not yet set up your Mastra server, follow the [getting started guide](/docs/v1/getting-started/installation) to set up a new Mastra project.
+If you have not yet set up your Mastra server, follow the [getting started guide](/docs/getting-started/installation) to set up a new Mastra project.
 
 In your Mastra server, install additional packages for CopilotKit integration:
 
@@ -89,21 +89,21 @@ In your Mastra server, install additional packages for CopilotKit integration:
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install @copilotkit/runtime @ag-ui/mastra@beta
+npm install @copilotkit/runtime @ag-ui/mastra
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add @copilotkit/runtime @ag-ui/mastra@beta
+yarn add @copilotkit/runtime @ag-ui/mastra
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add @copilotkit/runtime @ag-ui/mastra@beta
+pnpm add @copilotkit/runtime @ag-ui/mastra
 ```
 
 </TabItem>
@@ -116,11 +116,11 @@ pnpm add @copilotkit/runtime @ag-ui/mastra@beta
 Configure your Mastra instance to include CopilotKit's runtime endpoint:
 
 ```typescript title="src/mastra/index.ts" copy {2,5-8,12-28}
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { registerCopilotKit } from "@ag-ui/mastra/copilotkit";
 import { weatherAgent } from "./agents/weather-agent";
 
-type WeatherRequestContext = {
+type WeatherRuntimeContext = {
   "user-id": string;
   "temperature-scale": "celsius" | "fahrenheit";
 };
@@ -134,15 +134,15 @@ export const mastra = new Mastra({
       allowHeaders: ["*"],
     },
     apiRoutes: [
-      registerCopilotKit<WeatherRequestContext>({
+      registerCopilotKit<WeatherRuntimeContext>({
         path: "/copilotkit",
         resourceId: "weatherAgent",
-        setContext: (c, requestContext) => {
-          requestContext.set(
+        setContext: (c, runtimeContext) => {
+          runtimeContext.set(
             "user-id",
             c.req.header("X-User-ID") || "anonymous",
           );
-          requestContext.set("temperature-scale", "celsius");
+          runtimeContext.set("temperature-scale", "celsius");
         },
       }),
     ],
@@ -185,21 +185,21 @@ In your Next.js app, install the required packages:
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra@beta
+npm install @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra@beta
+yarn add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra@beta
+pnpm add @copilotkit/react-core @copilotkit/react-ui @copilotkit/runtime @ag-ui/mastra
 ```
 
 </TabItem>
@@ -287,21 +287,21 @@ Install the Mastra Client SDK.
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install @mastra/client-js@beta
+npm install @mastra/client-js
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add @mastra/client-js@beta
+yarn add @mastra/client-js
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add @mastra/client-js@beta
+pnpm add @mastra/client-js
 ```
 
 </TabItem>
@@ -379,4 +379,4 @@ Start building the future!
 
 - [CopilotKit Documentation](https://docs.copilotkit.ai) - Complete CopilotKit reference
 - [React Hooks with CopilotKit](https://docs.copilotkit.ai/reference/hooks/useCoAgent) - Advanced React integration patterns
-- [Next.js Integration with Mastra](/docs/v1/frameworks/web-frameworks/next-js) - Full-stack Next.js setup guide
+- [Next.js Integration with Mastra](/docs/frameworks/web-frameworks/next-js) - Full-stack Next.js setup guide

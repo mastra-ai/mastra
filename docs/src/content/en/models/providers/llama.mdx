@@ -7,6 +7,8 @@ description: "Use Llama models with Mastra. 7 models available."
 
 
 
+
+
 # <img src="https://models.dev/logos/llama.svg" alt="Llama logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Llama
 
 Access 7 Llama models through Mastra's model router. Authentication is handled automatically using the `LLAMA_API_KEY` environment variable.
@@ -18,11 +20,10 @@ LLAMA_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
+  name: "my-agent",
   instructions: "You are a helpful assistant",
   model: "llama/cerebras-llama-4-maverick-17b-128e-instruct"
 });
@@ -140,7 +141,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
-  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.llama.com/compat/v1/",
@@ -157,10 +157,9 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "llama/llama-4-scout-17b-16e-instruct-fp8"
       : "llama/cerebras-llama-4-maverick-17b-128e-instruct";

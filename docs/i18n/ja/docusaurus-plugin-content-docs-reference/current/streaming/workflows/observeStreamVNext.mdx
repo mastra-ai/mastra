@@ -1,0 +1,58 @@
+---
+title: "リファレンス: Run.observeStreamVNext()（実験的） | ストリーミング | Mastra ドキュメント"
+description: ワークフローにおける `Run.observeStreamVNext()` メソッドのドキュメント。実行中のワークフローランのストリームを再度開くことができます。
+---
+
+<div id="runobservestreamvnext-experimental">
+  # Run.observeStreamVNext()（実験的）
+</div>
+
+`.observeStreamVNext()` メソッドは、現在進行中のワークフロー実行に対して新しい `ReadableStream` を開き、元のストリームが利用できなくなった場合にイベントのストリームを引き続き監視できるようにします。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+run.streamVNext({
+  inputData: {
+    value: "初期データ",
+  },
+});
+
+const stream = await run.observeStreamVNext();
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+`ReadableStream<ChunkType>`
+
+<div id="stream-events">
+  ## ストリームイベント
+</div>
+
+ストリームはワークフローの実行中にさまざまな種類のイベントを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
+
+- **`workflow-start`**: ワークフローの実行を開始
+- **`workflow-step-start`**: ステップの実行を開始
+- **`workflow-step-output`**: ステップからのカスタム出力
+- **`workflow-step-result`**: ステップが結果とともに完了
+- **`workflow-finish`**: 使用状況の統計とともにワークフローの実行が完了
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [Workflows の概要](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Run.streamVNext()](./streamVNext)
+- [Run.resumeStreamVNext()](./resumeStreamVNext)

@@ -1,0 +1,50 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.guidesSidebar.category.Guides": {
+    "message": "Guides",
+    "description": "The label for category 'Guides' in sidebar 'guidesSidebar'"
+  },
+  "sidebar.guidesSidebar.category.Migrations": {
+    "message": "Migrations",
+    "description": "The label for category 'Migrations' in sidebar 'guidesSidebar'"
+  },
+  "sidebar.guidesSidebar.doc.Agents: Chef Michel": {
+    "message": "Agents: Chef Michel",
+    "description": "The label for the doc item 'Agents: Chef Michel' in sidebar 'guidesSidebar', linking to the doc guide/chef-michel"
+  },
+  "sidebar.guidesSidebar.doc.Tools: Stock Agent": {
+    "message": "Tools: Stock Agent",
+    "description": "The label for the doc item 'Tools: Stock Agent' in sidebar 'guidesSidebar', linking to the doc guide/stock-agent"
+  },
+  "sidebar.guidesSidebar.doc.Workflows: AI Recruiter": {
+    "message": "Workflows: AI Recruiter",
+    "description": "The label for the doc item 'Workflows: AI Recruiter' in sidebar 'guidesSidebar', linking to the doc guide/ai-recruiter"
+  },
+  "sidebar.guidesSidebar.doc.RAG: Research Assistant": {
+    "message": "RAG: Research Assistant",
+    "description": "The label for the doc item 'RAG: Research Assistant' in sidebar 'guidesSidebar', linking to the doc guide/research-assistant"
+  },
+  "sidebar.guidesSidebar.doc.MCP Server: Notes MCP Server": {
+    "message": "MCP Server: Notes MCP Server",
+    "description": "The label for the doc item 'MCP Server: Notes MCP Server' in sidebar 'guidesSidebar', linking to the doc guide/notes-mcp-server"
+  },
+  "sidebar.guidesSidebar.doc.Tools: Web Search": {
+    "message": "Tools: Web Search",
+    "description": "The label for the doc item 'Tools: Web Search' in sidebar 'guidesSidebar', linking to the doc guide/web-search"
+  },
+  "sidebar.guidesSidebar.doc.v1.0": {
+    "message": "v1.0",
+    "description": "The label for the doc item 'v1.0' in sidebar 'guidesSidebar', linking to the doc migrations/upgrade-to-v1"
+  },
+  "sidebar.guidesSidebar.doc.VNext to Standard APIs": {
+    "message": "VNext to Standard APIs",
+    "description": "The label for the doc item 'VNext to Standard APIs' in sidebar 'guidesSidebar', linking to the doc migrations/vnext-to-standard-apis"
+  },
+  "sidebar.guidesSidebar.doc.AgentNetwork to .network()": {
+    "message": "AgentNetwork to .network()",
+    "description": "The label for the doc item 'AgentNetwork to .network()' in sidebar 'guidesSidebar', linking to the doc migrations/agentnetwork"
+  }
+}

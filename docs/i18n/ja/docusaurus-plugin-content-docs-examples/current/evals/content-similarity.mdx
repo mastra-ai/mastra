@@ -1,0 +1,188 @@
+---
+title: "例: コンテンツ類似度の評価 | Evals | Mastra ドキュメント"
+description: コンテンツ類似度メトリクスを用いて、コンテンツ間のテキスト類似度を評価する例。
+---
+
+<div id="content-similarity-evaluation">
+  # コンテンツ類似度の評価
+</div>
+
+:::note
+Scorers API は現在ベータ版です。改善に鋭意取り組んでおり、皆さまのフィードバックを歓迎します。ご質問や機能リクエストは [Discord](https://discord.gg/mastra) までお寄せください。
+:::
+
+`ContentSimilarityMetric` を使うと、コンテンツの重なりに基づいて、レスポンスが参照とどの程度似ているかを評価できます。メトリクスは `query` と `response` を受け取り、スコアと、類似度の値を含む `info` オブジェクトを返します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/evals
+```
+
+
+<div id="high-similarity-example">
+  ## 高い類似度の例
+</div>
+
+この例では、応答は構造と意味の両面でクエリと非常に近いものになっています。時制や表現のわずかな違いは、全体的な類似度に大きく影響しません。
+
+```typescript title="src/example-high-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+const metric = new ContentSimilarityMetric();
+
+const query = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+const response = "素早い茶色のキツネが怠惰な犬を飛び越えた。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="high-similarity-output">
+  ### 類似度が高い出力
+</div>
+
+この出力は、クエリの意図と内容をほぼそのまま保ち、表現上の変更がごくわずかであるため、高いスコアを得ます。
+
+```typescript
+{
+  スコア: 0.7761194029850746,
+  情報: {
+    類似度: 0.7761194029850746
+  }
+}
+```
+
+
+<div id="moderate-similarity-example">
+  ## 中程度の類似性の例
+</div>
+
+この例では、応答はクエリと概念面での重なりはあるものの、構造や表現が異なります。主要な要素は残っている一方で、言い回しには中程度の変化が加えられています。
+
+```typescript title="src/example-moderate-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+const metric = new ContentSimilarityMetric();
+
+const query = "茶色のキツネが素早く眠っている犬を飛び越える。";
+const response = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="moderate-similarity-output">
+  ### 中程度の類似度の出力
+</div>
+
+この出力は、クエリの大意は捉えているものの、表現の違いが一定程度あるため全体の類似度が下がり、結果として中程度のスコアとなります。
+
+```typescript
+{
+  score: 0.40540540540540543,
+  info: {
+    similarity: 0.40540540540540543
+  }
+}
+```
+
+
+<div id="low-similarity-example">
+  ## 類似度が低い例
+</div>
+
+この例では、応答とクエリは文法構造こそ似ていますが、意味的には無関係です。共通する内容の重なりはほとんど、あるいはまったくありません。
+
+```typescript title="src/example-low-similarity.ts" showLineNumbers copy
+import { ContentSimilarityMetric } from "@mastra/evals/nlp";
+
+const metric = new ContentSimilarityMetric();
+
+const query = "猫が窓辺で眠っている。";
+const response = "素早い茶色のキツネが怠惰な犬を飛び越える。";
+
+const result = await metric.measure(query, response);
+
+console.log(result);
+```
+
+
+<div id="low-similarity-output">
+  ### 類似性の低い出力
+</div>
+
+この出力は、応答がクエリの内容や意図と一致していないため、低い評価となります。
+
+```typescript
+{
+  score: 0.25806451612903225,
+  info: {
+    similarity: 0.25806451612903225
+  }
+}
+```
+
+
+<div id="metric-configuration">
+  ## メトリクスの設定
+</div>
+
+`ContentSimilarityMetric` のインスタンスはデフォルト設定で作成できます。追加の設定は不要です。
+
+```typescript showLineNumbers copy
+const metric = new ContentSimilarityMetric();
+```
+
+> 設定オプションの全一覧は [ContentSimilarityMetric](/reference/evals/content-similarity) を参照してください。
+
+
+<div id="understanding-the-results">
+  ## 結果の理解
+</div>
+
+`ContentSimilarityMetric` は次の形式の結果を返します：
+
+```typescript
+{
+  score: number,
+  info: {
+    similarity: number
+  }
+}
+```
+
+
+<div id="similarity-score">
+  ### 類似度スコア
+</div>
+
+0〜1 の範囲の類似度スコア:
+
+- **1.0**: 完全一致 – コンテンツはほぼ同一。
+- **0.7〜0.9**: 高い類似度 – 語句や構成にわずかな違い。
+- **0.4〜0.6**: 中程度の類似度 – おおむね重なるが、目立つ相違がある。
+- **0.1〜0.3**: 低い類似度 – 共通する要素や意味が少ない。
+- **0.0**: 類似なし – まったく異なるコンテンツ。
+
+<div id="similarity-info">
+  ### 類似度情報
+</div>
+
+スコアの説明（以下の詳細を含む）:
+
+- クエリとレスポンスの重なり具合
+- 一致するフレーズやキーワード
+- テキスト類似度に基づく意味的近さ
+
+<GithubLink
+  outdated={true}
+  marginTop="mt-16"
+  link="https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/content-similarity"
+/>

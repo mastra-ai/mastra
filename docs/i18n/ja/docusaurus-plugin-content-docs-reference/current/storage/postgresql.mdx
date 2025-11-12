@@ -1,0 +1,344 @@
+---
+title: "リファレンス: PostgreSQL ストレージ | ストレージ | Mastra ドキュメント"
+description: Mastra における PostgreSQL ストレージ実装のドキュメント。
+---
+
+<div id="postgresql-storage">
+  # PostgreSQL ストレージ
+</div>
+
+PostgreSQL のストレージ実装は、PostgreSQL データベースを用いた本番運用向けのストレージソリューションを提供します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/pg@latest
+```
+
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript copy showLineNumbers
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL,
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description:
+        "PostgreSQL の接続文字列（例：postgresql://user:pass@host:5432/dbname）",
+      isOptional: false,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description:
+        "ストレージで使用するスキーマ名。指定しない場合は既定のスキーマが使用されます。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="constructor-examples">
+  ## コンストラクターの例
+</div>
+
+`PostgresStore` は次の方法でインスタンス化できます。
+
+```ts
+import { PostgresStore } from "@mastra/pg";
+
+// 接続文字列のみを使用
+const store1 = new PostgresStore({
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+});
+
+// カスタムスキーマ名を指定した接続文字列を使用
+const store2 = new PostgresStore({
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema", // 省略可
+});
+
+// 個別の接続パラメーターを使用
+const store4 = new PostgresStore({
+  host: "localhost",
+  port: 5432,
+  database: "mydb",
+  user: "user",
+  password: "password",
+});
+
+// schemaName を指定した個別パラメーター
+const store5 = new PostgresStore({
+  host: "localhost",
+  port: 5432,
+  database: "mydb",
+  user: "user",
+  password: "password",
+  schemaName: "custom_schema", // 省略可
+});
+```
+
+
+<div id="additional-notes">
+  ## 追記
+</div>
+
+<div id="schema-management">
+  ### スキーマ管理
+</div>
+
+このストレージ実装は、スキーマの作成と更新を自動的に行います。次のテーブルを作成します：
+
+- `mastra_workflow_snapshot`: ワークフローの状態および実行データを保存
+- `mastra_evals`: 評価結果とメタデータを保存
+- `mastra_threads`: 会話スレッドを保存
+- `mastra_messages`: 個々のメッセージを保存
+- `mastra_traces`: テレメトリおよびトレーシングデータを保存
+- `mastra_scorers`: スコアリングおよび評価データを保存
+- `mastra_resources`: リソースのワーキングメモリデータを保存
+
+<div id="direct-database-and-pool-access">
+  ### データベースおよびプールへの直接アクセス
+</div>
+
+`PostgresStore` は、内部のデータベースオブジェクトと pg-promise のインスタンスを公開フィールドとして提供します：
+
+```typescript
+store.db; // pg-promise データベースインスタンス
+store.pgp; // pg-promise メインインスタンス
+```
+
+これにより、直接のクエリ実行とカスタムトランザクション管理が可能になります。これらのフィールドを使用する場合:
+
+* 接続およびトランザクションの適切な処理は、利用者の責任です。
+* ストアをクローズ（`store.close()`）すると、関連するコネクションプールは破棄されます。
+* 直接アクセスは、PostgresStore のメソッドが提供する追加のロジックや検証を迂回します。
+
+このアプローチは、低レベルのアクセスが必要となる上級者向けのシナリオを想定しています。
+
+
+<div id="index-management">
+  ## インデックス管理
+</div>
+
+PostgreSQL のストレージは、クエリ性能を最適化するための充実したインデックス管理機能を提供します。
+
+<div id="automatic-performance-indexes">
+  ### 自動パフォーマンスインデックス
+</div>
+
+PostgreSQL ストレージは、一般的なクエリパターンに合わせて初期化時に複合インデックスを自動的に作成します。
+
+- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
+- `mastra_traces_name_starttime_idx`: (name, startTime DESC)
+- `mastra_evals_agent_name_created_at_idx`: (agent_name, created_at DESC)
+
+これらのインデックスにより、フィルタ付きのソートを伴うクエリの性能が大幅に向上します。
+
+<div id="creating-custom-indexes">
+  ### カスタムインデックスの作成
+</div>
+
+特定のクエリパターンを最適化するために、追加のインデックスを作成します。
+
+```typescript copy
+// 一般的なクエリ用の基本インデックス
+await storage.createIndex({
+  name: "idx_threads_resource",
+  table: "mastra_threads",
+  columns: ["resourceId"],
+});
+
+// フィルタリング + ソート用のソート順付き複合インデックス
+await storage.createIndex({
+  name: "idx_messages_composite",
+  table: "mastra_messages",
+  columns: ["thread_id", "createdAt DESC"],
+});
+
+// JSONB列用のGINインデックス(高速JSONクエリ)
+await storage.createIndex({
+  name: "idx_traces_attributes",
+  table: "mastra_traces",
+  columns: ["attributes"],
+  method: "gin",
+});
+```
+
+より高度なユースケースでは、次のような指定も利用できます：
+
+* `unique: true` は一意制約の指定
+* `where: 'condition'` は部分インデックスの指定
+* `method: 'brin'` は時系列データ向け
+* `storage: { fillfactor: 90 }` は更新頻度の高いテーブル向け
+* `concurrent: true` はブロッキングしない作成（デフォルト）
+
+
+<div id="index-options">
+  ### インデックスのオプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "インデックスのユニークな名前",
+      isOptional: false,
+    },
+    {
+      name: "table",
+      type: "string",
+      description: "テーブル名（例: 'mastra_threads'）",
+      isOptional: false,
+    },
+    {
+      name: "columns",
+      type: "string[]",
+      description:
+        "列名の配列。並び順の指定も可能（例: ['id', 'createdAt DESC']）",
+      isOptional: false,
+    },
+    {
+      name: "unique",
+      type: "boolean",
+      description: "ユニーク制約付きインデックスを作成",
+      isOptional: true,
+    },
+    {
+      name: "concurrent",
+      type: "boolean",
+      description: "テーブルをロックせずにインデックスを作成（初期値: true）",
+      isOptional: true,
+    },
+    {
+      name: "where",
+      type: "string",
+      description: "部分インデックスの条件（PostgreSQL 固有）",
+      isOptional: true,
+    },
+    {
+      name: "method",
+      type: "'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin'",
+      description: "インデックスメソッド（初期値: 'btree'）",
+      isOptional: true,
+    },
+    {
+      name: "opclass",
+      type: "string",
+      description: "GIN/GIST インデックスのオペレータクラス",
+      isOptional: true,
+    },
+    {
+      name: "storage",
+      type: "Record<string, any>",
+      description: "ストレージパラメータ（例: { fillfactor: 90 }）",
+      isOptional: true,
+    },
+    {
+      name: "tablespace",
+      type: "string",
+      description: "インデックスの配置先テーブルスペース名",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="managing-indexes">
+  ### インデックスの管理
+</div>
+
+既存のインデックスを一覧表示し、監視します：
+
+```typescript copy
+// すべてのインデックスを一覧表示
+const allIndexes = await storage.listIndexes();
+console.log(allIndexes);
+// [
+//   {
+//     name: 'mastra_threads_pkey',
+//     table: 'mastra_threads',
+//     columns: ['id'],
+//     unique: true,
+//     size: '16 KB',
+//     definition: 'CREATE UNIQUE INDEX...'
+//   },
+//   ...
+// ]
+
+// 特定のテーブルのインデックスを一覧表示
+const threadIndexes = await storage.listIndexes("mastra_threads");
+
+// インデックスの詳細な統計情報を取得
+const stats = await storage.describeIndex("idx_threads_resource");
+console.log(stats);
+// {
+//   name: 'idx_threads_resource',
+//   table: 'mastra_threads',
+//   columns: ['resourceId', 'createdAt'],
+//   unique: false,
+//   size: '128 KB',
+//   definition: 'CREATE INDEX idx_threads_resource...',
+//   method: 'btree',
+//   scans: 1542,           // インデックススキャンの回数
+//   tuples_read: 45230,    // インデックス経由で読み取られたタプル
+//   tuples_fetched: 12050  // インデックス経由で取得されたタプル
+// }
+
+// インデックスを削除
+await storage.dropIndex("idx_threads_status");
+```
+
+
+<div id="schema-specific-indexes">
+  ### スキーマ固有のインデックス
+</div>
+
+カスタムスキーマを使用する場合、インデックスはスキーマのプレフィックス付きで作成されます。
+
+```typescript copy
+const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL,
+  schemaName: "custom_schema",
+});
+
+// custom_schema_idx_threads_status としてインデックスを作成します
+await storage.createIndex({
+  name: "idx_threads_status",
+  table: "mastra_threads",
+  columns: ["status"],
+});
+```
+
+
+<div id="index-types-and-use-cases">
+  ### インデックスの種類とユースケース
+</div>
+
+PostgreSQL には特定の用途に最適化されたさまざまなインデックス型があります:
+
+| インデックス型          | 最適な用途                            | ストレージ | 速度                         |
+| ----------------------- | ------------------------------------- | ---------- | ---------------------------- |
+| **btree**（デフォルト） | 範囲クエリ、ソート、汎用              | 中         | 高速                         |
+| **hash**                | 等価比較のみ                          | 小         | `=` に対して非常に高速       |
+| **gin**                 | JSONB、配列、全文検索                 | 大         | 包含に対して高速             |
+| **gist**                | 幾何データ、全文検索                  | 中         | 近傍検索に対して高速         |
+| **spgist**              | 非平衡データ、テキストパターン        | 小         | 特定のパターンに対して高速   |
+| **brin**                | 自然な順序を持つ大規模テーブル        | 非常に小   | 範囲に対して高速             |

@@ -1,0 +1,80 @@
+---
+title: "リファレンス: StepOptions | レガシー ワークフロー | Mastra ドキュメント"
+description: ワークフローにおけるステップオプションのリファレンス。変数のマッピング、実行条件、その他のランタイム動作を制御します。
+---
+
+<div id="stepoptions">
+  # StepOptions
+</div>
+
+変数マッピング、実行条件、その他のランタイム動作を制御するワークフローの各ステップ用の設定オプション。
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript
+workflow.step(processOrder, {
+  variables: {
+    orderId: { step: "trigger", path: "id" },
+    userId: { step: "auth", path: "user.id" },
+  },
+  when: {
+    ref: { step: "auth", path: "status" },
+    query: { $eq: "認証済" },
+  },
+});
+```
+
+
+<div id="properties">
+  ## プロパティ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "variables",
+      type: "Record<string, VariableRef>",
+      description: "ステップの入力変数を他のステップの値にマッピングします",
+      isOptional: true,
+    },
+    {
+      name: "when",
+      type: "StepCondition",
+      description: "ステップを実行するために満たす必要がある条件",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="variableref">
+  ### VariableRef
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "string | Step | { id: string }",
+      description: "変数値の取得元となるステップ",
+      isOptional: false,
+    },
+    {
+      name: "path",
+      type: "string",
+      description: "そのステップの出力内で値に至るパス",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [パス比較](/docs/workflows-legacy/control-flow)
+- [Step Function リファレンス](./step-function)
+- [Step クラスリファレンス](./step-class)
+- [Workflow クラスリファレンス](./workflow)
+- [制御フローガイド](/docs/workflows-legacy/control-flow)

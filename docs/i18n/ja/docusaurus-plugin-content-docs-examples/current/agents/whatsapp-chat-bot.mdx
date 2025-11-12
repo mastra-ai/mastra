@@ -1,0 +1,443 @@
+---
+title: "例: WhatsApp チャットボット | エージェント | Mastra ドキュメント"
+description: Mastra のエージェントとワークフローを用いて、受信メッセージを処理し、テキストメッセージで自然に応答する WhatsApp チャットボットを作成する例。
+---
+
+<div id="whatsapp-chat-bot">
+  # WhatsApp チャットボット
+</div>
+
+この例では、Mastra のエージェントとワークフローを使って WhatsApp チャットボットを作成する方法を紹介します。ボットは webhook で受信した WhatsApp メッセージを AI エージェントで処理し、応答を自然な複数のテキストメッセージに分割して、WhatsApp Business API 経由で送信します。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+この例を実行するには、WhatsApp Business API のセットアップが必要で、`anthropic` モデルを使用します。以下の環境変数を `.env` ファイルに追加してください:
+
+```bash title=".env" copy
+ANTHROPIC_API_KEY=<あなたのAnthropic APIキー>
+WHATSAPP_VERIFY_TOKEN=<あなたの検証トークン>
+WHATSAPP_ACCESS_TOKEN=<あなたのWhatsAppアクセストークン>
+WHATSAPP_BUSINESS_PHONE_NUMBER_ID=<あなたの電話番号ID>
+WHATSAPP_API_VERSION=v22.0
+```
+
+
+<div id="creating-the-whatsapp-client">
+  ## WhatsApp クライアントの作成
+</div>
+
+このクライアントは、WhatsApp Business API を使用してユーザーにメッセージを送信します。
+
+```typescript title="src/whatsapp-client.ts" showLineNumbers copy
+// メッセージ送信用のシンプルなWhatsApp Business APIクライアント
+
+interface SendMessageParams {
+  to: string;
+  message: string;
+}
+
+export async function sendWhatsAppMessage({ to, message }: SendMessageParams) {
+  // WhatsApp APIの環境変数を取得
+  const apiVersion = process.env.WHATSAPP_API_VERSION || "v22.0";
+  const phoneNumberId = process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+
+  // 必須の環境変数が設定されているか確認
+  if (!phoneNumberId || !accessToken) {
+    return false;
+  }
+
+  // WhatsApp Business APIのエンドポイント
+  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+
+  // WhatsApp API形式に従ったメッセージペイロード
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: to,
+    type: "text",
+    text: {
+      body: message,
+    },
+  };
+
+  try {
+    // WhatsApp Business API経由でメッセージを送信
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      console.log(`✅ WhatsAppメッセージを${to}に送信しました:「${message}」`);
+      return true;
+    } else {
+      console.error("❌ WhatsAppメッセージの送信に失敗しました:", result);
+      return false;
+    }
+  } catch (error) {
+    console.error("❌ WhatsAppメッセージの送信中にエラーが発生しました:", error);
+    return false;
+  }
+}
+```
+
+
+<div id="creating-the-chat-agent">
+  ## チャットエージェントの作成
+</div>
+
+このエージェントは、親しみやすい会話的なキャラクターで、主な会話ロジックを担当します。
+
+```typescript title="src/mastra/agents/chat-agent.ts" showLineNumbers copy
+import { anthropic } from "@ai-sdk/anthropic";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const chatAgent = new Agent({
+  name: "チャットエージェント",
+  instructions: `
+    あなたはWhatsAppでユーザーとチャットするのが大好きな、親切でフレンドリーかつ知識豊富なAIアシスタントです。
+
+    あなたの性格:
+    - 温かく、親しみやすく、会話的
+    - どんなトピックでも喜んで手助けする
+    - 友達とチャットしているようなカジュアルでフレンドリーな口調を使う
+    - 簡潔でありながら有益
+    - ユーザーの質問に真摯な関心を示す
+
+    あなたの能力:
+    - 幅広いトピックの質問に答える
+    - 役立つアドバイスや提案を提供する
+    - カジュアルな会話をする
+    - 問題解決や創造的なタスクを手伝う
+    - 複雑なトピックをわかりやすく説明する
+
+    ガイドライン:
+    - 回答は有益でありながら、情報過多にならないようにする
+    - 適切な場合はフォローアップの質問をする
+    - 励ましとポジティブな姿勢を持つ
+    - わからないことがあれば正直に認める
+    - ユーザーの口調に合わせてコミュニケーションスタイルを調整する
+    - WhatsAppでのやり取りであることを意識し、会話的で自然な対応を心がける
+
+    常にフレンドリーで親しみやすい会話スタイルを維持しながら、役立つ存在であることを目指してください。
+  `,
+  model: anthropic("claude-4-sonnet-20250514"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db",
+    }),
+  }),
+});
+```
+
+
+<div id="creating-the-text-message-agent">
+  ## テキストメッセージ用エージェントの作成
+</div>
+
+このエージェントは、長文の回答を、WhatsAppに適した自然で読みやすい短文テキストメッセージに変換します。
+
+```typescript title="src/mastra/agents/text-message-agent.ts" showLineNumbers copy
+import { anthropic } from "@ai-sdk/anthropic";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const textMessageAgent = new Agent({
+  name: "テキストメッセージエージェント",
+  instructions: `
+    あなたは、フォーマルな文章や長文を自然でカジュアルなテキストメッセージに変換するコンバーターです。
+
+    あなたの役割:
+    - 入力されたテキストを5〜8個の短くカジュアルなメッセージに変換する
+    - 各メッセージは最大1〜2文にする
+    - 自然でフレンドリーなメッセージ言葉を使う(短縮形、カジュアルな口調)
+    - 元のテキストの重要な情報はすべて残す
+    - 友達にメッセージを送っているような雰囲気にする
+    - 絵文字は控えめに使って個性を出す
+    - 会話の流れを論理的でわかりやすく保つ
+
+    友達にメッセージで何かワクワクすることを説明するイメージで - 長い文章で圧倒せず、読みやすくて魅力的なメッセージに分割してください。
+
+    必ずmessages配列に5〜8個のメッセージを返してください。
+  `,
+  model: anthropic("claude-4-sonnet-20250514"),
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db",
+    }),
+  }),
+});
+```
+
+
+<div id="creating-the-chat-workflow">
+  ## チャットワークフローの作成
+</div>
+
+このワークフローは、応答の生成、メッセージへの分割、そして WhatsApp 経由での送信まで、チャット処理全体を統括します。
+
+```typescript title="src/mastra/workflows/chat-workflow.ts" showLineNumbers copy
+import { createStep, createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+import { sendWhatsAppMessage } from "../../whatsapp-client";
+
+const respondToMessage = createStep({
+  id: "respond-to-message",
+  description: "ユーザーメッセージへの返信を生成",
+  inputSchema: z.object({ userMessage: z.string() }),
+  outputSchema: z.object({ response: z.string() }),
+  execute: async ({ inputData, mastra }) => {
+    const agent = mastra?.getAgent("chatAgent");
+    if (!agent) {
+      throw new Error("チャットエージェントが見つかりません");
+    }
+
+    const response = await agent.generate([
+      { role: "user", content: inputData.userMessage },
+    ]);
+
+    return { response: response.text };
+  },
+});
+
+const breakIntoMessages = createStep({
+  id: "break-into-messages",
+  description: "返信をテキストメッセージに分割",
+  inputSchema: z.object({ prompt: z.string() }),
+  outputSchema: z.object({ messages: z.array(z.string()) }),
+  execute: async ({ inputData, mastra }) => {
+    const agent = mastra?.getAgent("textMessageAgent");
+    if (!agent) {
+      throw new Error("テキストメッセージエージェントが見つかりません");
+    }
+
+    const response = await agent.generate(
+      [{ role: "user", content: inputData.prompt }],
+      {
+        structuredOutput: {
+          schema: z.object({
+            messages: z.array(z.string()),
+          }),
+        },
+      },
+    );
+
+    if (!response.object) throw new Error("メッセージの生成エラー");
+
+    return response.object;
+  },
+});
+
+const sendMessages = createStep({
+  id: "send-messages",
+  description: "WhatsApp経由でテキストメッセージを送信",
+  inputSchema: z.object({
+    messages: z.array(z.string()),
+    userPhone: z.string(),
+  }),
+  outputSchema: z.object({ sentCount: z.number() }),
+  execute: async ({ inputData }) => {
+    const { messages, userPhone } = inputData;
+
+    console.log(
+      `\n🔥 ${userPhone}に${messages.length}件のWhatsAppメッセージを送信中...`,
+    );
+
+    let sentCount = 0;
+
+    // 自然な流れのため、各メッセージ間に短い遅延を入れる
+    for (let i = 0; i < messages.length; i++) {
+      const success = await sendWhatsAppMessage({
+        to: userPhone,
+        message: messages[i],
+      });
+
+      if (success) {
+        sentCount++;
+      }
+
+      // 自然なテキストのリズムのため、メッセージ間に遅延を追加
+      if (i < messages.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+
+    console.log(
+      `\n✅ ${sentCount}/${messages.length}件のWhatsAppメッセージを送信しました\n`,
+    );
+
+    return { sentCount };
+  },
+});
+
+export const chatWorkflow = createWorkflow({
+  id: "chat-workflow",
+  inputSchema: z.object({ userMessage: z.string() }),
+  outputSchema: z.object({ sentCount: z.number() }),
+})
+  .then(respondToMessage)
+  .map(async ({ inputData }) => ({
+    prompt: `このAIの返信を、WhatsApp会話で自然に感じられる3〜8件のカジュアルでフレンドリーなテキストメッセージに分割してください:\n\n${inputData.response}`,
+  }))
+  .then(breakIntoMessages)
+  .map(async ({ inputData, getInitData }) => {
+    // 元の文字列化された入力を解析してユーザーの電話番号を取得
+    const initData = getInitData();
+    const webhookData = JSON.parse(initData.userMessage);
+    const userPhone =
+      webhookData.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ||
+      "unknown";
+
+    return {
+      messages: inputData.messages,
+      userPhone,
+    };
+  })
+  .then(sendMessages);
+
+chatWorkflow.commit();
+```
+
+
+<div id="setting-up-mastra-configuration">
+  ## Mastra の設定
+</div>
+
+Mastra インスタンスにエージェント、ワークフロー、WhatsApp の Webhook エンドポイントを設定します。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { registerApiRoute } from "@mastra/core/server";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+
+import { chatWorkflow } from "./workflows/chat-workflow";
+import { textMessageAgent } from "./agents/text-message-agent";
+import { chatAgent } from "./agents/chat-agent";
+
+export const mastra = new Mastra({
+  workflows: { chatWorkflow },
+  agents: { textMessageAgent, chatAgent },
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+  server: {
+    apiRoutes: [
+      registerApiRoute("/whatsapp", {
+        method: "GET",
+        handler: async (c) => {
+          const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+          const {
+            "hub.mode": mode,
+            "hub.challenge": challenge,
+            "hub.verify_token": token,
+          } = c.req.query();
+
+          if (mode === "subscribe" && token === verifyToken) {
+            return c.text(challenge, 200);
+          } else {
+            return c.status(403);
+          }
+        },
+      }),
+      registerApiRoute("/whatsapp", {
+        method: "POST",
+        handler: async (c) => {
+          const mastra = c.get("mastra");
+          const chatWorkflow = mastra.getWorkflow("chatWorkflow");
+
+          const body = await c.req.json();
+
+          const workflowRun = await chatWorkflow.createRunAsync();
+          const runResult = await workflowRun.start({
+            inputData: { userMessage: JSON.stringify(body) },
+          });
+
+          return c.json(runResult);
+        },
+      }),
+    ],
+  },
+});
+```
+
+
+<div id="testing-the-chat-bot">
+  ## チャットボットのテスト
+</div>
+
+WhatsApp の Webhook ペイロードをシミュレートして、ローカル環境でチャットボットをテストできます。
+
+```typescript title="src/test-whatsapp-bot.ts" showLineNumbers copy
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+// WhatsApp Webhookペイロードをシミュレート
+const mockWebhookData = {
+  entry: [
+    {
+      changes: [
+        {
+          value: {
+            messages: [
+              {
+                from: "1234567890", // テスト用電話番号
+                text: {
+                  body: "こんにちは!今日は元気ですか?",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+};
+
+const workflow = mastra.getWorkflow("chatWorkflow");
+const workflowRun = await workflow.createRunAsync();
+
+const result = await workflowRun.start({
+  inputData: { userMessage: JSON.stringify(mockWebhookData) },
+});
+
+console.log("ワークフロー完了:", result);
+```
+
+
+<div id="example-output">
+  ## 出力例
+</div>
+
+ユーザーがあなたの WhatsApp ボットに「Hello! How are you today?」と送ると、次のように複数のメッセージで返答することがあります。
+
+```text
+やあ!👋 元気だよ、聞いてくれてありがとう!
+
+今日はどんな感じ?
+
+何でも話したいことがあれば、ここにいるよ
+
+何か手伝いが必要でも、ただ話したいだけでも、いつでも聞くよ!😊
+
+最近どう?
+```
+
+このボットは記憶によって会話の文脈を保持し、WhatsAppのやり取りに自然になじむ応答を返します。

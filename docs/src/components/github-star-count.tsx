@@ -4,7 +4,7 @@ export const GithubStarCount = () => {
       href="https://github.com/mastra-ai/mastra"
       target="_blank"
       rel="noopener noreferrer"
-      className="font-medium hover:text-black  cursor-pointer w-fit text-(--mastra-text-quaternary) dark:text-white  rounded-md  transition-colors hover:opacity-100 flex items-center gap-2 justify-start px-2.5 py-2 h-8.5 text-sm"
+      className="font-medium hover:text-black  cursor-pointer w-fit text-(--mastra-text-quaternary) dark:text-white  rounded-md  transition-colors hover:opacity-100 px-2.5 py-2 h-8.5 text-sm"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

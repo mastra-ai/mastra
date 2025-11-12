@@ -9,8 +9,8 @@ Tool streaming in Mastra enables tools to send incremental results while they ru
 
 Streams can be written to in two main ways:
 
-- **From within a tool**: every tool receives a `context.writer` object, which is a writable stream you can use to push updates as execution progresses.
-- **From an agent stream**: you can also pipe an agent's `stream` output directly into a tool's writer, making it easy to chain agent responses into tool results without extra glue code.
+- **From within a tool**: every tool receives a `writer` argument, which is a writable stream you can use to push updates as execution progresses.
+- **From an agent stream**: you can also pipe an agent’s `stream` output directly into a tool’s writer, making it easy to chain agent responses into tool results without extra glue code.
 
 By combining writable tool streams with agent streaming, you gain fine grained control over how intermediate results flow through your system and into the user experience.
 
@@ -25,17 +25,16 @@ import { Agent } from "@mastra/core/agent";
 import { testTool } from "../tools/test-tool";
 
 export const testAgent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
+  name: "test-agent",
   instructions: "You are a weather agent.",
   model: openai("gpt-4o-mini"),
   tools: { testTool },
 });
 ```
 
-### Using `context.writer`
+### Using the `writer` argument
 
-The `context.writer` object is available in a tool's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+The `writer` argument is passed to a tool’s `execute` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
 
 :::warning
 
@@ -48,17 +47,17 @@ import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
   // ...
-  execute: async (inputData, context) => {
-    const { value } = inputData;
+  execute: async ({ context, writer }) => {
+    const { value } = context;
 
-   await context?.writer?.write({
+   await writer?.write({
       type: "custom-event",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await context?.writer?.write({
+   await writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -78,17 +77,17 @@ import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
   // ...
-  execute: async (inputData, context) => {
-    const { value } = inputData;
+  execute: async ({ context, writer }) => {
+    const { value } = context;
 
-   await context?.writer?.custom({
+   await writer?.custom({
       type: "data-tool-progress",
       status: "pending"
     });
 
     const response = await fetch(...);
 
-   await context?.writer?.custom({
+   await writer?.custom({
       type: "data-tool-progress",
       status: "success"
     });
@@ -127,13 +126,13 @@ import { z } from "zod";
 
 export const testTool = createTool({
   // ...
-  execute: async (inputData, context) => {
-    const { city } = inputData;
+  execute: async ({ context, mastra, writer }) => {
+    const { city } = context;
 
-    const testAgent = context?.mastra?.getAgent("testAgent");
+    const testAgent = mastra?.getAgent("testAgent");
     const stream = await testAgent?.stream(`What is the weather in ${city}?`);
 
-    await stream!.textStream.pipeTo(context?.writer!);
+    await stream!.textStream.pipeTo(writer!);
 
     return {
       value: await stream!.text,

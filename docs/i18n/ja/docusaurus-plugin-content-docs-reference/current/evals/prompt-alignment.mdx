@@ -1,0 +1,274 @@
+---
+title: "リファレンス: PromptAlignmentMetric | Evals | Mastra ドキュメント"
+description: Mastra における Prompt Alignment Metric のドキュメント。LLM の出力がプロンプトの指示にどの程度従っているかを評価します。
+---
+
+<div id="promptalignmentmetric">
+  # PromptAlignmentMetric
+</div>
+
+:::info Scorers
+このドキュメントはレガシーの evals API を対象としています。最新の Scorers の機能については [Scorers](/docs/scorers/overview) を参照してください。
+:::
+
+`PromptAlignmentMetric` クラスは、LLM の出力が与えられたプロンプトの指示にどれだけ厳密に従っているかを評価します。各指示が正確に守られているかを判定するジャッジ方式を採用し、逸脱があった場合にはその理由を詳細に示します。
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを構成する
+const model = openai("gpt-4o-mini");
+
+const instructions = [
+  "文は大文字で始める",
+  "各文の末尾にピリオドを付ける",
+  "現在形を使う",
+];
+
+const metric = new PromptAlignmentMetric(model, {
+  instructions,
+  scale: 1,
+});
+
+const result = await metric.measure(
+  "天気を説明する",
+  "太陽が照っている。雲が空に浮かんでいる。そよ風が吹いている。",
+);
+
+console.log(result.score); // アラインメント・スコア（0～1）
+console.log(result.info.reason); // スコアの説明
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターのパラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "LanguageModel",
+      description:
+        "命令整合性を評価するために使用するモデルの設定",
+      isOptional: false,
+    },
+    {
+      name: "options",
+      type: "PromptAlignmentOptions",
+      description: "このメトリクスの設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="promptalignmentoptions">
+  ### PromptAlignmentOptions
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "instructions",
+      type: "string[]",
+      description: "出力が従うべき指示の配列",
+      isOptional: false,
+    },
+    {
+      name: "scale",
+      type: "number",
+      description: "最大スコア",
+      isOptional: true,
+      defaultValue: "1",
+    },
+  ]}
+/>
+
+<div id="measure-parameters">
+  ## measure() のパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string",
+      description: "元のプロンプトまたはクエリ",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "string",
+      description: "評価対象のLLMの応答",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "score",
+      type: "number",
+      description: "アライメントスコア（0〜scale、既定では 0〜1）",
+    },
+    {
+      name: "info",
+      type: "object",
+      description:
+        "指示遵守に関する詳細な指標を含むオブジェクト",
+      properties: [
+        {
+          type: "string",
+          parameters: [
+            {
+              name: "reason",
+              type: "string",
+              description:
+                "スコアおよび指示遵守に関する詳細な説明",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="scoring-details">
+  ## スコアリングの詳細
+</div>
+
+この指標は、以下の観点から指示への整合性を評価します:
+
+- 各指示の適用可否の評価
+- 適用対象となる指示への厳密な遵守評価
+- すべての判定に対する詳細な根拠の提示
+- 適用対象の指示に基づく比例配点
+
+<div id="instruction-verdicts">
+  ### 命令の判定
+</div>
+
+各命令には次のいずれかの判定が付与されます：
+
+- "yes": 命令は適用可能で、完全に満たされている
+- "no": 命令は適用可能だが、満たされていない、または一部のみ満たされている
+- "n/a": 命令は当該文脈には適用されない
+
+<div id="scoring-process">
+  ### スコアリング手順
+</div>
+
+1. 指示の適用可否を評価:
+   - 各指示が文脈に適用できるかを判定
+   - 無関係な指示は「n/a」としてマーク
+   - ドメイン固有の要件を考慮
+
+2. 適用可能な指示の順守状況を評価:
+   - 各適用可能な指示を独立に評価
+   - 「yes」の判定には完全な順守が必要
+   - すべての判定について具体的な理由を記録
+
+3. アラインメントスコアを算出:
+   - 順守された指示（「yes」の判定）をカウント
+   - 適用可能な指示の総数で割る（「n/a」を除外）
+   - 設定された範囲にスケーリング
+
+最終スコア: `(followed_instructions / applicable_instructions) * scale`
+
+<div id="important-considerations">
+  ### 重要な考慮事項
+</div>
+
+- 空の出力:
+  - すべての書式指示は適用対象とみなす
+  - 要件を満たせないため「no」としてマークする
+- ドメイン固有の指示:
+  - 問い合わせたドメインに関する場合は常に適用対象
+  - 守られていない場合は「n/a」ではなく「no」としてマークする
+- 「n/a」の判定:
+  - まったく別のドメインに対してのみ使用する
+  - 最終スコアの算出には影響しない
+
+<div id="score-interpretation">
+  ### スコアの解釈
+</div>
+
+（スケールは0から。デフォルトは0〜1）
+
+- 1.0: 該当する指示をすべて完全に遵守
+- 0.7-0.9: 該当する指示の大半を遵守
+- 0.4-0.6: 該当する指示の遵守状況はばらつきがある
+- 0.1-0.3: 該当する指示の遵守は限定的
+- 0.0: 該当する指示をまったく遵守していない
+
+<div id="example-with-analysis">
+  ## 解説付きの例
+</div>
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { PromptAlignmentMetric } from "@mastra/evals/llm";
+
+// 評価用にモデルを設定する
+const model = openai("gpt-4o-mini");
+
+const metric = new PromptAlignmentMetric(model, {
+  instructions: [
+    "各項目には箇条書きを使う",
+    "例をちょうど3つ含める",
+    "各項目をセミコロンで終える"
+  ],
+  scale: 1
+});
+
+const result = await metric.measure(
+  "果物を3つ挙げてください",
+  "• りんごは赤くて甘い；
+• バナナは黄色で曲がっている；
+• オレンジは柑橘で丸い。"
+);
+
+// 出力例:
+// {
+//   score: 1.0,
+//   info: {
+//     reason: "スコアが1.0である理由は、すべての指示に正確に従っているためです。
+//           箇条書きが使用され、例がちょうど3つ提示され、
+//           各項目がセミコロンで終わっています。"
+//   }
+// }
+
+const result2 = await metric.measure(
+  "果物を3つ挙げてください",
+  "1. りんご
+2. バナナ
+3. オレンジとぶどう"
+);
+
+// 出力例:
+// {
+//   score: 0.33,
+//   info: {
+//     reason: "スコアが0.33である理由は次のとおりです。箇条書きではなく番号付きリストが使用され、
+//           セミコロンが使われておらず、ちょうど3つではなく4つの果物が挙げられています。"
+//   }
+// }
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [回答の関連性メトリクス](./answer-relevancy)
+- [キーワード網羅性メトリクス](./keyword-coverage)

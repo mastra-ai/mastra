@@ -1,0 +1,212 @@
+---
+title: "Request Context | サーバー＆DB | Mastra ドキュメント"
+description: Mastra の RequestContext を使って、エージェントに動的かつリクエストごとに最適化された設定を提供する方法を学びましょう。
+---
+
+<div id="request-context">
+  # リクエストコンテキスト
+</div>
+
+エージェント、ツール、ワークフローはすべて `RequestContext` をパラメータとして受け取り、リクエスト固有の値を基盤となるプリミティブで利用可能にします。
+
+<div id="when-to-use-requestcontext">
+  ## `RequestContext` を使うべきとき
+</div>
+
+実行時の状況によってプリミティブの挙動を変える必要がある場合に `RequestContext` を使用します。たとえば、ユーザー属性に応じてモデルやストレージのバックエンドを切り替えたり、言語に合わせて指示やツール選択を調整したりできます。
+
+:::note
+
+**注:** `RequestContext` は主に特定のリクエストにデータを渡すために使用します。これは、複数回の呼び出しにまたがる会話履歴や状態の保持を扱うエージェントメモリとは異なります。
+
+:::
+
+<div id="setting-values">
+  ## 値の設定
+</div>
+
+`requestContext` をエージェント、ネットワーク、ワークフロー、またはツール呼び出しに渡すことで、実行中にすべての基盤となるプリミティブで値を利用できるようにします。呼び出しの前に値を定義するには `.set()` を使用します。
+
+`.set()` メソッドは次の2つの引数を取ります:
+
+1. **key**: 値を識別するための名前。
+2. **value**: そのキーに関連付けるデータ。
+
+```typescript showLineNumbers
+import { RequestContext } from "@mastra/core/request-context";
+
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const requestContext = new RequestContext<UserTier>();
+requestContext.set("user-tier", "enterprise");
+
+const agent = mastra.getAgent("weatherAgent");
+await agent.generate("ロンドンの天気はどうですか？", {
+  requestContext,
+});
+
+const routingAgent = mastra.getAgent("routingAgent");
+routingAgent.network("ロンドンの天気はどうですか？", {
+  requestContext,
+});
+
+const run = await mastra.getWorkflow("weatherWorkflow").createRunAsync();
+await run.start({
+  inputData: {
+    location: "ロンドン",
+  },
+  requestContext,
+});
+await run.resume({
+  resumeData: {
+    city: "ニューヨーク",
+  },
+  requestContext,
+});
+
+await weatherTool.execute({
+  context: {
+    location: "ロンドン",
+  },
+  requestContext,
+});
+```
+
+
+<div id="setting-values-based-on-request-headers">
+  ### リクエストヘッダーに基づく値の設定
+</div>
+
+`requestContext` は、サーバーミドルウェアでリクエストから情報を抽出して動的に設定できます。次の例では、ユーザーのロケールに合ったレスポンスになるよう、Cloudflare の `CF-IPCountry` ヘッダーに基づいて `temperature-unit` を設定します。
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { RequestContext } from "@mastra/core/request-context";
+import { testWeatherAgent } from "./agents/test-weather-agent";
+
+export const mastra = new Mastra({
+  agents: { testWeatherAgent },
+  server: {
+    middleware: [
+      async (context, next) => {
+        const country = context.req.header("CF-IPCountry");
+        const requestContext = context.get("requestContext");
+
+        requestContext.set(
+          "temperature-unit",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        await next();
+      },
+    ],
+  },
+});
+```
+
+> サーバーミドルウェアの使い方は [Middleware](/docs/server-db/middleware) を参照してください。
+
+
+<div id="accessing-values-with-agents">
+  ## エージェントで値にアクセスする
+</div>
+
+エージェントでは、サポートされている各種の設定オプションから `requestContext` 引数にアクセスできます。これらの関数は同期でも `async` でもかまいません。`requestContext` の値を読み取るには `.get()` メソッドを使用します。
+
+```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherAgent = new Agent({
+  name: "weather-agent",
+  instructions: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+  model: ({ requestContext }) => {
+    // ...
+  },
+  tools: ({ requestContext }) => {
+    // ...
+  },
+  memory: ({ requestContext }) => {
+    // ...
+  },
+});
+```
+
+`requestContext` は、`agents`、`workflows`、`scorers`、`inputProcessors`、`outputProcessors` といった他のオプションでも使用できます。
+
+> 設定オプションの一覧については [Agent](/reference/agents/agent) を参照してください。
+
+
+<div id="accessing-values-from-workflow-steps">
+  ## ワークフローステップから値にアクセスする
+</div>
+
+ワークフローステップの `execute` 関数から、引数の `requestContext` にアクセスできます。この関数は同期・非同期どちらでも使用できます。`requestContext` から値を読み取るには、`.get()` メソッドを使用します。
+
+```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+const stepOne = createStep({
+  id: "step-one",
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+});
+```
+
+> 設定オプションの全一覧は [createStep()](/reference/workflows/step) を参照してください。
+
+
+<div id="accessing-values-with-tools">
+  ## ツールでの値へのアクセス
+</div>
+
+ツールの `execute` 関数から `requestContext` 引数にアクセスできます。この関数は `async` です。`requestContext` から値を取得するには `.get()` メソッドを使用します。
+
+```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
+export type UserTier = {
+  "user-tier": "enterprise" | "pro";
+};
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+
+    if (userTier === "enterprise") {
+      // ...
+    }
+    // ...
+  },
+});
+```
+
+> 設定項目の全一覧は [createTool()](/reference/tools/create-tool) をご覧ください。
+
+
+<div id="related">
+  ## 関連
+</div>
+
+- [Request Context の例](/examples/agents/request-context)
+- [エージェントの Request Context](/docs/agents/overview#using-requestcontext)
+- [ワークフローの Request Context](../workflows/overview#using-requestcontext)
+- [ツールの Request Context](../tools-mcp/overview#using-requestcontext)
+- [サーバーのミドルウェアにおける Request Context](/docs/server-db/middleware)

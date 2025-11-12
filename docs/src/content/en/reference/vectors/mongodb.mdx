@@ -10,7 +10,7 @@ The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Sea
 ## Installation
 
 ```bash copy
-npm install @mastra/mongodb@beta
+npm install @mastra/mongodb
 ```
 
 ## Usage Example
@@ -19,7 +19,6 @@ npm install @mastra/mongodb@beta
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
-  id: 'mongodb-vector',
   url: process.env.MONGODB_URL,
   database: process.env.MONGODB_DATABASE,
 });
@@ -29,11 +28,6 @@ const store = new MongoDBVector({
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Unique identifier for this vector store instance",
-    },
     {
       name: "url",
       type: "string",

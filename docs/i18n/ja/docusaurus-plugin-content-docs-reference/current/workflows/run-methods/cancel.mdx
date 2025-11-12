@@ -1,0 +1,73 @@
+---
+title: "リファレンス: Run.cancel() | Workflows | Mastra ドキュメント"
+description: ワークフローで `Run.cancel()` メソッドを使用して、実行中のワークフローをキャンセルする方法のドキュメントです。
+---
+
+<div id="runcancel">
+  # Run.cancel()
+</div>
+
+`.cancel()` メソッドはワークフロー実行をキャンセルし、処理を停止してリソースを解放します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+await run.cancel();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "パラメータなし",
+      type: "void",
+      description: "このメソッドは引数を取りません",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<void>",
+      description:
+        "ワークフローの実行がキャンセルされると解決される Promise",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 発展的な使用例
+</div>
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+try {
+  const result = await run.start({ inputData: { value: "初期データ" } });
+} catch (error) {
+  await run.cancel();
+}
+```
+
+
+<div id="related">
+  ## 関連
+</div>
+
+- [Workflows の概要](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](../workflow-methods/create-run)

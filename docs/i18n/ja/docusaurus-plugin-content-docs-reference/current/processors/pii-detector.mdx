@@ -1,0 +1,199 @@
+---
+title: "リファレンス: PII Detector | プロセッサ | Mastra ドキュメント"
+description: "Mastra の PIIDetector に関するドキュメント。AI の応答から個人を特定できる情報（PII）を検出し、マスキング（編集）します。"
+---
+
+<div id="piidetector">
+  # PIIDetector
+</div>
+
+`PIIDetector` は、プライバシー遵守のために個人情報（PII）を検出して編集・マスキングできる、入力処理と出力処理の両方で利用可能な**ハイブリッドプロセッサ**です。このプロセッサは、さまざまな種類の PII を特定し、それらの取り扱いに関する柔軟な戦略を提供します。GDPR、CCPA、HIPAA などの各種プライバシー規制への遵守を確保するため、複数の編集方法に対応しています。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+import { PIIDetector } from "@mastra/core/processors";
+
+const processor = new PIIDetector({
+  model: "openai/gpt-4.1-nano",
+  threshold: 0.6,
+  strategy: "redact",
+  detectionTypes: ["email", "phone", "credit-card", "ssn"]
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "Options",
+      description: "PII の検出とマスキングのための設定オプション",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="options">
+  ### オプション
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "model",
+      type: "MastraModelConfig",
+      description: "検出エージェントのモデル構成",
+      isOptional: false,
+    },
+    {
+      name: "detectionTypes",
+      type: "string[]",
+      description: "検出する PII の種類。未指定の場合はデフォルトの種類を使用します",
+      isOptional: true,
+      default: "['email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'name', 'address', 'date-of-birth', 'url', 'uuid', 'crypto-wallet', 'iban']",
+    },
+    {
+      name: "threshold",
+      type: "number",
+      description: "フラグ付けの信頼度しきい値 (0〜1)。いずれかのカテゴリのスコアがこのしきい値を超えると PII としてフラグ付けされます",
+      isOptional: true,
+      default: "0.6",
+    },
+    {
+      name: "strategy",
+      type: "'block' | 'warn' | 'filter' | 'redact'",
+      description: "PII 検出時の方針: 'block' はエラーで拒否、'warn' は警告をログ出力して通過、'filter' はフラグ付けされたメッセージを削除、'redact' は PII をマスキングなどで置換します",
+      isOptional: true,
+      default: "'redact'",
+    },
+    {
+      name: "redactionMethod",
+      type: "'mask' | 'hash' | 'remove' | 'placeholder'",
+      description: "PII の編集方式: 'mask' はアスタリスクで置換、'hash' は SHA256 ハッシュに置換、'remove' は完全に削除、'placeholder' は種類名のプレースホルダーに置換します",
+      isOptional: true,
+      default: "'mask'",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      description: "エージェント向けのカスタム検出指示。未指定の場合は、検出タイプに基づくデフォルトの指示を使用します",
+      isOptional: true,
+      default: "undefined",
+    },
+    {
+      name: "includeDetections",
+      type: "boolean",
+      description: "検出の詳細をログに含めるかどうか。コンプライアンス監査やデバッグに有用です",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "preserveFormat",
+      type: "boolean",
+      description: "マスキング時に PII の表記（フォーマット）を保持するかどうか。true の場合、電話番号の ***-**-1234 のように構造を維持します",
+      isOptional: true,
+      default: "true",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "プロセッサ名。'pii-detector' に設定されます",
+      isOptional: false,
+    },
+    {
+      name: "processInput",
+      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraMessageV2[]>",
+      description: "LLM に送信する前に入力メッセージを処理し、PII を検出してマスキングします",
+      isOptional: false,
+    },
+    {
+      name: "processOutputStream",
+      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>",
+      description: "ストリーミング中の出力チャンクを処理し、PII を検出してマスキングします",
+      isOptional: false,
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 拡張された使用例
+</div>
+
+<div id="input-processing">
+  ### 入力処理
+</div>
+
+```typescript title="src/mastra/agents/private-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { PIIDetector } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "private-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "openai/gpt-4o-mini",
+  inputProcessors: [
+    new PIIDetector({
+      model: "openai/gpt-4.1-nano",
+      detectionTypes: ["email", "phone", "credit-card", "ssn"],
+      threshold: 0.6,
+      strategy: "redact",
+      redactionMethod: "mask",
+      instructions: "メッセージの意図を保ちながら個人情報を検出して編集する",
+      includeDetections: true,
+      preserveFormat: true
+    })
+  ]
+});
+```
+
+
+<div id="output-processing-with-batching">
+  ### バッチ処理による出力処理
+</div>
+
+`PIIDetector` を出力プロセッサとして使用する場合は、パフォーマンス最適化のために `BatchPartsProcessor` と併用することを推奨します。`BatchPartsProcessor` は、PII 検出器に渡す前にストリームのチャンクをまとめてバッチ化し、検出に必要な LLM 呼び出し回数を減らします。
+
+```typescript title="src/mastra/agents/output-pii-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { BatchPartsProcessor, PIIDetector } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "output-pii-agent",
+  instructions: "あなたは役に立つアシスタントです",
+  model: "openai/gpt-4o-mini",
+  outputProcessors: [
+    // まずストリームパーツをバッチ処理してLLM呼び出しを削減
+    new BatchPartsProcessor({
+      batchSize: 10,
+    }),
+    // 次にバッチ処理されたコンテンツにPII検出を適用
+    new PIIDetector({
+      model: "openai/gpt-4.1-nano",
+      strategy: "redact",
+    })
+  ]
+});
+```
+
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [ガードレール](/docs/agents/guardrails)

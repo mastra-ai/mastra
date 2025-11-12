@@ -1,0 +1,47 @@
+---
+title: "リファレンス: Mastra.getMemory() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getMemory()` メソッドのドキュメント。構成済みのメモリインスタンスを取得します。"
+---
+
+<div id="mastragetmemory">
+  # Mastra.getMemory()
+</div>
+
+`.getMemory()` メソッドは、Mastra インスタンスで構成されたメモリ インスタンスを取得するために使用します。
+
+<div id="usage-example">
+  ## 使用例
+</div>
+
+```typescript copy
+mastra.getMemory();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドはパラメータを受け取りません。
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "memory",
+      type: "MastraMemory | undefined",
+      description:
+        "設定済みのメモリインスタンス。メモリが構成されていない場合は undefined。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [メモリ概要](/docs/memory/overview)
+- [メモリリファレンス](/reference/memory/memory-class)

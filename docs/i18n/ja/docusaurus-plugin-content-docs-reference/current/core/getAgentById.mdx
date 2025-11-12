@@ -1,0 +1,55 @@
+---
+title: "リファレンス: Mastra.getAgentById() | Core | Mastra ドキュメント"
+description: "Mastra の `Mastra.getAgentById()` メソッドのリファレンス。ID によってエージェントを取得します。"
+---
+
+<div id="mastragetagentbyid">
+  # Mastra.getAgentById()
+</div>
+
+`.getAgentById()` メソッドは、ID を指定してエージェントを取得します。このメソッドは、エージェントの ID を表す `string` 型のパラメータを 1 つ受け取ります。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+mastra.getAgentById("test-agent-123");
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description:
+        "取得するエージェントのID。まずこのIDに一致するエージェントを検索し、見つからない場合はこの値を名前として扱って getAgent() を呼び出します。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返却値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "agent",
+      type: "Agent",
+      description:
+        "指定したIDのエージェントインスタンス。エージェントが見つからない場合はエラーを発生させます。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [Agents の概要](/docs/agents/overview)

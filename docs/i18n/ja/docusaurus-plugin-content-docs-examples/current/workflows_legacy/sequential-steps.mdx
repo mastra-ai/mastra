@@ -1,0 +1,127 @@
+---
+title: "例: 連続ステップによるワークフロー（レガシー） | Workflows (Legacy) | Mastra Docs"
+description: Mastra を使用してレガシー版ワークフローのステップを特定の順序でつなぎ、データを受け渡す例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="workflow-legacy-with-sequential-steps">
+  # 逐次ステップのレガシーワークフロー
+</div>
+
+ワークフローは、特定の順序で順番に連結して実行できます。
+
+<div id="control-flow-diagram">
+  ## 制御フローダイアグラム
+</div>
+
+この例では、`then` メソッドを使ってワークフローのステップをチェーンし、連続するステップ間でデータを受け渡しつつ、順に実行する方法を示します。
+
+制御フローダイアグラムは次のとおりです:
+
+<img
+  src="/sequential-chains.png"
+  alt="連続するステップを持つワークフローを示す図"
+  width={600}
+/>
+
+<div id="creating-the-steps">
+  ## 手順の作成
+</div>
+
+まずは手順を作成し、ワークフローを初期化しましょう。
+
+```ts showLineNumbers copy
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+const stepOne = new LegacyStep({
+  id: "stepOne",
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
+});
+
+const stepTwo = new LegacyStep({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 };
+    }
+
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+  },
+});
+
+const stepThree = new LegacyStep({
+  id: "stepThree",
+  execute: async ({ context }) => {
+    if (context.steps.stepTwo.status !== "success") {
+      return { tripledValue: 0 };
+    }
+
+    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 };
+  },
+});
+
+// ワークフローを作成する
+const myWorkflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+
+<div id="chaining-the-steps-and-executing-the-workflow">
+  ## ステップをつなげてワークフローを実行する
+</div>
+
+では、ステップをつないでいきましょう。
+
+```ts showLineNumbers copy
+// 逐次的なステップ
+myWorkflow.step(stepOne).then(stepTwo).then(stepThree);
+
+myWorkflow.commit();
+
+const { start } = myWorkflow.createRun();
+
+const res = await start({ triggerData: { inputValue: 90 } });
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-sequential-steps"
+}
+/>
+
+
+<div id="workflows-legacy">
+  ## ワークフロー（レガシー）
+</div>
+
+以下のリンクは、レガシー版ワークフローの例を示すドキュメントです:
+
+- [シンプルなワークフローの作成（レガシー）](/examples/workflows_legacy/creating-a-workflow)
+- [ステップによる並列実行](/examples/workflows_legacy/parallel-steps)
+- [分岐パス](/examples/workflows_legacy/branching-paths)
+- [条件分岐付きワークフロー（レガシー、実験的）](/examples/workflows_legacy/conditional-branching)
+- [ワークフロー（レガシー）からエージェントを呼び出す](/examples/workflows_legacy/calling-agent)
+- [ツールをワークフローのステップとして使用（レガシー）](/examples/workflows_legacy/using-a-tool-as-a-step)
+- [循環依存のあるワークフロー（レガシー）](/examples/workflows_legacy/cyclical-dependencies)
+- [ワークフロー変数を使ったデータマッピング（レガシー）](/examples/workflows_legacy/workflow-variables)
+- [Human-in-the-Loop ワークフロー（レガシー）](/examples/workflows_legacy/human-in-the-loop)
+- [一時停止と再開に対応したワークフロー（レガシー）](/examples/workflows_legacy/suspend-and-resume)

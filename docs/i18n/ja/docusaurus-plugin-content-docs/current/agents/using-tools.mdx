@@ -1,0 +1,112 @@
+---
+title: "ツールの利用 | Agents | Mastra Docs"
+description: ツールを作成してエージェントに追加し、テキスト生成以外の機能を拡張する方法を学びます。
+---
+
+<div id="using-tools">
+  # ツールの使用
+</div>
+
+エージェントはツールを使って API を呼び出したり、データベースを照会したり、コードベース内のカスタム関数を実行します。[Tools](../tools-mcp/overview) は、データへの構造化されたアクセスと明確に定義された操作を提供することで、単なる言語生成を超える能力をエージェントに付与します。エージェントの機能を拡張するために、リモートの [MCP servers](../tools-mcp/mcp-overview) からツールを読み込むこともできます。
+
+<div id="when-to-use-tools">
+  ## ツールを使うタイミング
+</div>
+
+エージェントがリモートのリソースから追加の文脈や情報を必要とする場合、または特定の処理を行うコードを実行する必要がある場合にツールを使用します。これには、ライブデータの取得や、明確に定義された一貫した出力の生成など、モデル単体では安定して扱えないタスクが含まれます。
+
+<div id="creating-a-tool">
+  ## ツールの作成
+</div>
+
+この例では、API から天気データを取得するツールの作り方を示します。エージェントがツールを呼び出すと、ツールの `inputSchema` で定義された必須入力を提供します。ツールは `context` 引数を介してこのデータにアクセスします。この例では、天気 API のクエリに使用される `location` が含まれます。
+
+```typescript {14,16} title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherTool = createTool({
+  id: "weather-tool",
+  description: "場所の天気を取得します",
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    weather: z.string(),
+  }),
+  execute: async ({ context }) => {
+    const { location } = context;
+
+    const response = await fetch(`https://wttr.in/${location}?format=3`);
+    const weather = await response.text();
+
+    return { weather };
+  },
+});
+```
+
+
+<div id="adding-tools-to-an-agent">
+  ## エージェントにツールを追加する
+</div>
+
+ツールをエージェントで利用可能にするには、`tools` オプションに追加し、エージェントの指示内でその名前を参照します。
+
+```typescript {9,11} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather-tool";
+
+export const weatherAgent = new Agent({
+  name: "weather-agent",
+  instructions: `
+      あなたは親切な天気アシスタントです。
+      weatherToolを使用して現在の天気データを取得します。`,
+  model: openai("gpt-4o-mini"),
+  tools: { weatherTool },
+});
+```
+
+
+<div id="calling-an-agent">
+  ## エージェントの呼び出し
+</div>
+
+エージェントはツールの`inputSchema`を用いて、ツールが想定するデータを推定します。この場合、メッセージから`London`を`location`として抽出し、ツールのコンテキストで利用できるようにします。
+
+```typescript {5} title="src/test-tool.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("weatherAgent");
+
+const result = await agent.generate("ロンドンの天気はどう?");
+```
+
+
+<div id="using-multiple-tools">
+  ## 複数のツールを使用する
+</div>
+
+エージェントは、特定の処理を個々のツールに任せることで、より複雑なタスクに対処するために複数のツールを活用できます。エージェントは、ユーザーのメッセージ、エージェントへの指示、ツールの説明やスキーマに基づいて、どのツールを使うかを判断します。
+
+複数のツールが利用可能な場合、問い合わせに答えるために必要に応じて、1つだけ使う、複数を組み合わせる、あるいは使わない、という選択をエージェントが行うことがあります。
+
+```typescript {6} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+import { weatherTool } from "../tools/weather-tool";
+import { activitiesTool } from "../tools/activities-tool";
+
+export const weatherAgent = new Agent({
+  // ..
+  tools: { weatherTool, activitiesTool },
+});
+```
+
+
+<div id="related">
+  ## 関連情報
+</div>
+
+- [Tools の概要](../tools-mcp/overview)
+- [エージェントメモリ](./agent-memory)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)
+- [エージェントの呼び出し](/examples/agents/calling-agents)

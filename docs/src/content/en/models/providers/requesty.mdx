@@ -7,6 +7,8 @@ description: "Use Requesty models with Mastra. 13 models available."
 
 
 
+
+
 # <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
 
 Access 13 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
@@ -18,11 +20,10 @@ REQUESTY_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
+  name: "my-agent",
   instructions: "You are a helpful assistant",
   model: "requesty/anthropic/claude-3-7-sonnet"
 });
@@ -212,7 +213,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
-  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://router.requesty.ai/v1",
@@ -229,10 +229,9 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "requesty/openai/o4-mini"
       : "requesty/anthropic/claude-3-7-sonnet";

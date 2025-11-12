@@ -55,6 +55,7 @@ const sidebars = {
         {
           type: "doc",
           id: "agents/overview",
+          key: "agents.overview",
           label: "Overview",
         },
         {
@@ -91,6 +92,7 @@ const sidebars = {
         {
           type: "doc",
           id: "workflows/overview",
+          key: "workflows.overview",
           label: "Overview",
         },
         {
@@ -137,6 +139,7 @@ const sidebars = {
         {
           type: "doc",
           id: "streaming/overview",
+          key: "streaming.overview",
           label: "Overview",
         },
         {
@@ -164,6 +167,7 @@ const sidebars = {
         {
           type: "doc",
           id: "tools-mcp/overview",
+          key: "tools-mcp.overview",
           label: "Overview",
         },
         {
@@ -186,6 +190,7 @@ const sidebars = {
         {
           type: "doc",
           id: "memory/overview",
+          key: "memory.overview",
           label: "Overview",
         },
         {
@@ -248,6 +253,7 @@ const sidebars = {
         {
           type: "doc",
           id: "rag/overview",
+          key: "rag.overview",
           label: "Overview",
         },
         {
@@ -283,8 +289,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "server-db/request-context",
-          label: "Request Context",
+          id: "server-db/runtime-context",
+          label: "Runtime Context",
         },
         {
           type: "doc",
@@ -310,6 +316,7 @@ const sidebars = {
         {
           type: "doc",
           id: "deployment/overview",
+          key: "deployment.overview",
           label: "Overview",
         },
         {
@@ -360,6 +367,7 @@ const sidebars = {
             {
               type: "doc",
               id: "deployment/cloud-providers/index",
+              key: "deployment.cloud-providers.overview",
               label: "Overview",
             },
             {
@@ -402,26 +410,38 @@ const sidebars = {
       ],
     },
     {
-      type: "doc",
-      id: "logging",
-      label: "Logging",
-    },
-    {
       type: "category",
       label: "Observability",
       items: [
         {
           type: "doc",
           id: "observability/overview",
+          key: "observability.overview",
           label: "Overview",
         },
         {
+          type: "doc",
+          id: "observability/logging",
+          label: "Logging",
+        },
+        {
+          type: "doc",
+          id: "observability/otel-tracing",
+          label: "OTEL Tracing",
+        },
+        {
+          type: "doc",
+          id: "observability/nextjs-tracing",
+          label: "Next.js Tracing",
+        },
+        {
           type: "category",
-          label: "Tracing",
+          label: "AI Tracing",
           items: [
             {
               type: "doc",
-              id: "observability/tracing/overview",
+              id: "observability/ai-tracing/overview",
+              key: "observability.ai-tracing.overview",
               label: "Overview",
             },
             {
@@ -430,37 +450,37 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/default",
+                  id: "observability/ai-tracing/exporters/default",
                   label: "Default",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/cloud",
+                  id: "observability/ai-tracing/exporters/cloud",
                   label: "Cloud",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/arize",
+                  id: "observability/ai-tracing/exporters/arize",
                   label: "Arize",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/braintrust",
+                  id: "observability/ai-tracing/exporters/braintrust",
                   label: "Braintrust",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/langfuse",
+                  id: "observability/ai-tracing/exporters/langfuse",
                   label: "Langfuse",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/langsmith",
+                  id: "observability/ai-tracing/exporters/langsmith",
                   label: "LangSmith",
                 },
                 {
                   type: "doc",
-                  id: "observability/tracing/exporters/otel",
+                  id: "observability/ai-tracing/exporters/otel",
                   label: "OpenTelemetry",
                 },
               ],
@@ -471,7 +491,7 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/tracing/processors/sensitive-data-filter",
+                  id: "observability/ai-tracing/processors/sensitive-data-filter",
                   label: "SensitiveDataFilter",
                 },
               ],
@@ -482,27 +502,50 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Evals",
+      label: "Scorers",
       items: [
         {
           type: "doc",
-          id: "evals/overview",
+          id: "scorers/overview",
+          key: "scorers.overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "evals/off-the-shelf-scorers",
+          id: "scorers/off-the-shelf-scorers",
           label: "Off the Shelf Scorers",
         },
         {
           type: "doc",
-          id: "evals/custom-scorers",
+          id: "scorers/custom-scorers",
           label: "Custom Scorers",
         },
         {
-          type: "doc",
-          id: "evals/running-in-ci",
-          label: "Running in CI",
+          type: "category",
+          label: "Evals (old API)",
+          items: [
+            {
+              type: "doc",
+              id: "scorers/evals-old-api/overview",
+              key: "scorers.evals-old-api.overview",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "scorers/evals-old-api/textual-evals",
+              label: "Textual Evals",
+            },
+            {
+              type: "doc",
+              id: "scorers/evals-old-api/custom-eval",
+              label: "Custom Evals",
+            },
+            {
+              type: "doc",
+              id: "scorers/evals-old-api/running-in-ci",
+              label: "Running in CI",
+            },
+          ],
         },
       ],
     },
@@ -513,6 +556,7 @@ const sidebars = {
         {
           type: "doc",
           id: "auth/index",
+          key: "auth.overview",
           label: "Overview",
         },
         {
@@ -554,6 +598,7 @@ const sidebars = {
         {
           type: "doc",
           id: "voice/overview",
+          key: "voice.overview",
           label: "Overview",
         },
         {

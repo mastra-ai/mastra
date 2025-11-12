@@ -1,41 +1,42 @@
 import { cn } from "@site/src/css/utils";
 import Link from "@docusaurus/Link";
 import { useLocation } from "@docusaurus/router";
+import { msg, useMessages } from "gt-react";
 
 const docsTabs = [
   {
     id: "Docs",
-    label: "Docs",
-    href: "/docs/v1",
-    basePath: "/docs/v1",
+    label: msg("Docs"),
+    href: "/docs",
+    basePath: "/docs",
   },
   {
     id: "Models",
-    label: "Models",
-    href: "/models/v1",
-    basePath: "/models/v1",
+    label: msg("Models"),
+    href: "/models",
+    basePath: "/models",
   },
   {
     id: "Examples",
-    label: "Examples",
-    href: "/examples/v1",
-    basePath: "/examples/v1",
+    label: msg("Examples"),
+    href: "/examples",
+    basePath: "/examples",
   },
   {
     id: "Guides",
-    label: "Guides & Migrations",
-    href: "/guides/v1",
-    basePath: "/guides/v1",
+    label: msg("Guides & Migrations"),
+    href: "/guides",
+    basePath: "/guides",
   },
   {
     id: "Reference",
-    label: "Reference",
-    href: "/reference/v1",
-    basePath: "/reference/v1",
+    label: msg("Reference"),
+    href: "/reference",
+    basePath: "/reference",
   },
   {
     id: "Showcase",
-    label: "Showcase",
+    label: msg("Showcase"),
     href: "/showcase",
     basePath: "/showcase",
   },
@@ -44,6 +45,7 @@ const docsTabs = [
 export const TabSwitcher = ({ className }: { className?: string }) => {
   const location = useLocation();
   const pathname = location.pathname;
+  const m = useMessages();
   return (
     <div
       className={cn(
@@ -66,7 +68,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 pathname === tab.basePath
               ) {
                 // For the general "Docs" tab, exclude paths that belong to other specific tabs
-                if (tab.basePath === "/docs/v1") {
+                if (tab.basePath === "/docs") {
                   const otherTabPaths = docsTabs
                     .filter((t) => t.id !== "Docs")
                     .map((t) => t.basePath);
@@ -88,7 +90,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 className="flex min-w-fit relative gap-1.5 items-center px-0 py-1 text-sm font-medium transition-colors"
                 aria-current={isActive ? "page" : undefined}
               >
-                {tab.label}
+                {m(tab.label)}
 
                 {isActive && (
                   <div

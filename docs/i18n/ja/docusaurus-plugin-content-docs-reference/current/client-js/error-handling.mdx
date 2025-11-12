@@ -1,0 +1,25 @@
+---
+title: "リファレンス: エラーハンドリング | Client SDK | Mastra ドキュメント"
+description: Mastra の client-js SDK に備わるリトライ機構とエラーハンドリング機能について解説します。
+---
+
+# エラー処理
+
+Mastra Client SDK には、組み込みのリトライ機能とエラー処理機能が備わっています。
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+すべての API メソッドはエラーをスローする可能性があり、捕捉して処理できます。
+
+```typescript
+try {
+  const agent = mastraClient.getAgent("agent-id");
+  const response = await agent.generate({
+    messages: [{ role: "user", content: "こんにちは" }],
+  });
+} catch (error) {
+  console.error("エラーが発生しました:", error.message);
+}
+```

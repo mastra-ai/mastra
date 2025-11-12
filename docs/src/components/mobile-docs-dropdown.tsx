@@ -10,41 +10,42 @@ import {
 } from "./ui/dropdown";
 import { Button } from "./ui/button";
 import { cn } from "@site/src/css/utils";
+import { msg, useMessages } from "gt-react";
 
 const docsTabs = [
   {
     id: "Docs",
-    label: "Docs",
-    href: "/docs/v1",
-    basePath: "/docs/v1",
+    label: msg("Docs"),
+    href: "/docs",
+    basePath: "/docs",
   },
   {
     id: "Models",
-    label: "Models",
-    href: "/models/v1",
-    basePath: "/models/v1",
+    label: msg("Models"),
+    href: "/models",
+    basePath: "/models",
   },
   {
     id: "Examples",
-    label: "Examples",
-    href: "/examples/v1",
-    basePath: "/examples/v1",
+    label: msg("Examples"),
+    href: "/examples",
+    basePath: "/examples",
   },
   {
     id: "Guides",
-    label: "Guides & Migrations",
-    href: "/guides/v1",
-    basePath: "/guides/v1",
+    label: msg("Guides & Migrations"),
+    href: "/guides",
+    basePath: "/guides",
   },
   {
     id: "Reference",
-    label: "Reference",
-    href: "/reference/v1",
-    basePath: "/reference/v1",
+    label: msg("Reference"),
+    href: "/reference",
+    basePath: "/reference",
   },
   {
     id: "Showcase",
-    label: "Showcase",
+    label: msg("Showcase"),
     href: "/showcase",
     basePath: "/showcase",
   },
@@ -54,14 +55,14 @@ export function MobileDocsDropdown() {
   const location = useLocation();
   const pathname = location.pathname;
   const [open, setOpen] = React.useState(false);
-
+  const m = useMessages();
   const activeTab =
     docsTabs.find((tab) => {
       if (
         pathname.startsWith(tab.basePath + "/") ||
         pathname === tab.basePath
       ) {
-        if (tab.basePath === "/docs/v1") {
+        if (tab.basePath === "/docs") {
           const otherTabPaths = docsTabs
             .filter((t) => t.id !== "Docs")
             .map((t) => t.basePath);
@@ -81,7 +82,7 @@ export function MobileDocsDropdown() {
           variant="secondary"
           className="w-full shadow-none justify-between bg-(--mastra-surface-4) dark:bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
         >
-          <span>{activeTab.label}</span>
+          <span>{m(activeTab.label)}</span>
           <ChevronDown
             className={cn(
               "size-4 text-(--mastra-text-quaternary) transition-transform duration-200",
@@ -106,7 +107,7 @@ export function MobileDocsDropdown() {
                   isActive && "text-(--mastra-text-primary) font-medium",
                 )}
               >
-                <span>{tab.label}</span>
+                <span>{m(tab.label)}</span>
                 {isActive && (
                   <Check className="size-4 text-(--mastra-green-accent-2)" />
                 )}

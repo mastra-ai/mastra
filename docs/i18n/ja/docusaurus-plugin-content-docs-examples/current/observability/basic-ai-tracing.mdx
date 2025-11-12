@@ -1,0 +1,187 @@
+---
+title: "例: 基本的なAIトレーシング | 可観測性 | Mastra ドキュメント"
+description: Mastra アプリケーションでAIトレーシングを始めましょう
+---
+
+<div id="basic-ai-tracing-example">
+  # AI トレーシングの基本例
+</div>
+
+この例では、Mastra アプリケーションで、エージェントやワークフローを自動計測しながら AI トレーシングを基本的に設定する方法を紹介します。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+- Mastra v0.14.0 以上
+- Node.js 18 以上
+- 設定済みのストレージ・バックエンド（libsql または memory）
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+<div id="1-install-dependencies">
+  ### 1. 依存関係のインストール
+</div>
+
+```bash npm2yarn
+npm install @mastra/core
+```
+
+Mastra Cloudでトレースを表示するには、アクセス トークンを含む `.env` ファイルを作成してください：
+
+```bash
+export MASTRA_CLOUD_ACCESS_TOKEN=your_token_here
+```
+
+
+<div id="2-configure-mastra-with-default-tracing">
+  ### 2. デフォルトのトレーシングで Mastra を設定する
+</div>
+
+AI トレーシングを有効にして Mastra の構成を作成します：
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { LibSQLStorage } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  // ストレージの設定（DefaultExporterに必要）
+  storage: new LibSQLStorage({
+    url: "file:local.db",
+  }),
+
+  // デフォルト設定でAIトレーシングを有効化
+  observability: {
+    default: { enabled: true },
+  },
+});
+```
+
+このデフォルト構成には自動的に以下が含まれます:
+
+* **[DefaultExporter](/docs/observability/ai-tracing/exporters/default)** - トレースをストレージに永続化します
+* **[CloudExporter](/docs/observability/ai-tracing/exporters/cloud)** - Mastra Cloud に送信します（トークンが設定されている場合）
+* **[SensitiveDataFilter](/docs/observability/ai-tracing/processors/sensitive-data-filter)** - 機密フィールドをマスキングします
+* **[100% sampling](/docs/observability/ai-tracing/overview#always-sample)** - すべてのトレースを収集します
+
+
+<div id="3-create-an-agent-with-automatic-tracing">
+  ### 3. 自動トレース対応のエージェントを作成する
+</div>
+
+```typescript title="src/mastra/agents/example-agent.ts" showLineNumbers copy
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { openai } from "@ai-sdk/openai";
+
+// createToolを使用してツールを作成
+const getCurrentTime = createTool({
+  name: "getCurrentTime",
+  description: "現在時刻を取得",
+  input: {},
+  execute: async () => {
+    // ツール呼び出しは自動的にトレースされます
+    return { time: new Date().toISOString() };
+  },
+});
+
+export const exampleAgent = new Agent({
+  name: "example-agent",
+  instructions: "あなたは親切なAIアシスタントです。",
+  model: openai("gpt-4"),
+  tools: {
+    getCurrentTime,
+  },
+});
+```
+
+
+<div id="4-execute-and-view-traces">
+  ### 4. トレースの実行と表示
+</div>
+
+```typescript title="src/example.ts" showLineNumbers copy
+import { mastra } from "./mastra";
+
+async function main() {
+  // エージェントを取得
+  const agent = mastra.getAgent("example-agent");
+
+  // エージェントを実行 - 自動的にトレースを作成
+  const result = await agent.generate("今何時ですか?");
+
+  console.log("エージェントの応答:", result.text);
+  console.log("トレースID:", result.traceId);
+  console.log("トレースを表示: http://localhost:3000/traces/" + result.traceId);
+}
+
+main().catch(console.error);
+```
+
+
+<div id="what-gets-traced">
+  ## 何がトレースされるのか
+</div>
+
+この例を実行すると、Mastraは自動的に次のスパンを作成します：
+
+1. **AGENT&#95;RUN** - エージェントの全体実行
+2. **MODEL&#95;GENERATION** - エージェント内でのモデル実行
+3. **TOOL&#95;CALL** - ツール実行
+
+トレース階層の例：
+
+```
+AGENT_RUN (example-agent)
+├── MODEL_GENERATION (gpt-4) - モデル入出力
+├── TOOL_CALL (getCurrentTime) - ツール実行
+```
+
+
+<div id="viewing-traces">
+  ## トレースの表示
+</div>
+
+Playground または Mastra Cloud で Observability ページに移動し、Trace をクリックします。個々の span をクリックすると、input、output、attributes、metadata を確認できます。
+
+<div id="adding-custom-metadata">
+  ## カスタムメタデータの追加
+</div>
+
+トレースをカスタムメタデータで充実させましょう:
+
+```typescript title="src/example-with-metadata.ts" showLineNumbers copy
+const result = await agent.generate("What time is it?", {
+  // トレースにカスタムメタデータを追加
+  metadata: {
+    userId: "user_123",
+    sessionId: "session_abc",
+    feature: "time-query",
+    environment: "development",
+  },
+});
+```
+
+
+<div id="related">
+  ## 関連情報
+</div>
+
+<div id="documentation">
+  ### ドキュメント
+</div>
+
+- [AI トレーシング概要](/docs/observability/ai-tracing/overview) - トレーシングの完全ガイド
+- [機密データフィルター](/docs/observability/ai-tracing/processors/sensitive-data-filter) - 機密情報のマスキング
+- [構成パターン](/docs/observability/ai-tracing/overview#common-configuration-patterns--troubleshooting) - ベストプラクティス
+
+<div id="reference">
+  ### 参考
+</div>
+
+- [設定](/reference/observability/ai-tracing/configuration) - ObservabilityConfig API
+- [エクスポーター](/reference/observability/ai-tracing/exporters/default-exporter) - DefaultExporter の詳細
+- [スパンの種類](/reference/observability/ai-tracing/span) - スパンのインターフェースとメソッド
+- [AITracing クラス](/reference/observability/ai-tracing/) - トレーシングのコアクラス

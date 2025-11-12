@@ -1,0 +1,141 @@
+---
+title: "リファレンス: LangfuseExporter | オブザーバビリティ | Mastra ドキュメント"
+description: AI トレース用の Langfuse エクスポーター
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+
+<div id="langfuseexporter">
+  # LangfuseExporter
+</div>
+
+可観測性のために AI のトレーシングデータを Langfuse に送信します。
+
+<div id="constructor">
+  ## コンストラクタ
+</div>
+
+```typescript
+new LangfuseExporter(config: LangfuseExporterConfig)
+```
+
+
+<div id="langfuseexporterconfig">
+  ## Langfuseエクスポーター設定
+</div>
+
+```typescript
+interface LangfuseExporterConfig {
+  publicKey?: string;
+  secretKey?: string;
+  baseUrl?: string;
+  realtime?: boolean;
+  logLevel?: "debug" | "info" | "warn" | "error";
+  options?: any;
+}
+```
+
+<PropertiesTable
+  props={[
+{
+  name: "publicKey",
+  type: "string",
+  description: "Langfuse の API キー",
+  required: false,
+},
+{
+  name: "secretKey",
+  type: "string",
+  description: "Langfuse のシークレットキー",
+  required: false,
+},
+{
+  name: "baseUrl",
+  type: "string",
+  description: "Langfuse のホスト URL",
+  required: false,
+},
+{
+  name: "realtime",
+  type: "boolean",
+  description: "リアルタイムモードを有効化 — 各イベント後にフラッシュします",
+  required: false,
+},
+{
+  name: "logLevel",
+  type: "'debug' | 'info' | 'warn' | 'error'",
+  description: "ロガーのレベル（既定: 'warn'）",
+  required: false,
+},
+{
+  name: "options",
+  type: "any",
+  description: "Langfuse クライアントの追加オプション",
+  required: false,
+},
+]}
+/>
+
+
+<div id="methods">
+  ## 方法
+</div>
+
+<div id="exportevent">
+  ### exportEvent
+</div>
+
+```typescript
+async exportEvent(event: AITracingEvent): Promise<void>
+```
+
+トレーシングイベントを Langfuse にエクスポートします。
+
+
+<div id="export">
+  ### export
+</div>
+
+```typescript
+async export(spans: ReadOnlyAISpan[]): Promise<void>
+```
+
+スパンをバッチ形式でLangfuseにエクスポートします。
+
+
+<div id="shutdown">
+  ### シャットダウン
+</div>
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+保留中のデータを書き出してから、クライアントをシャットダウンします。
+
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript
+import { LangfuseExporter } from "@mastra/langfuse";
+
+const exporter = new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  secretKey: process.env.LANGFUSE_SECRET_KEY,
+  baseUrl: "https://cloud.langfuse.com",
+  realtime: true,
+});
+```
+
+
+<div id="span-mapping">
+  ## スパンのマッピング
+</div>
+
+- ルートスパン → Langfuse のトレース
+- `MODEL_GENERATION` スパン → Langfuse のジェネレーション
+- 上記以外のスパン → Langfuse のスパン
+- イベントスパン → Langfuse のイベント

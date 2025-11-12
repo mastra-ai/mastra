@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # MastraAuthWorkos Class
 
-The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
+The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `experimental_auth` option.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ WORKOS_CLIENT_ID=client_...
 Before you can use the `MastraAuthWorkos` class you have to install the `@mastra/auth-workos` package.
 
 ```bash copy
-npm install @mastra/auth-workos@beta
+npm install @mastra/auth-workos@latest
 ```
 
 ## Usage examples
@@ -41,13 +41,13 @@ npm install @mastra/auth-workos@beta
 ### Basic usage with environment variables
 
 ```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
   // ..
   server: {
-    auth: new MastraAuthWorkos(),
+    experimental_auth: new MastraAuthWorkos(),
   },
 });
 ```
@@ -55,13 +55,13 @@ export const mastra = new Mastra({
 ### Custom configuration
 
 ```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core/mastra";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
   // ..
   server: {
-    auth: new MastraAuthWorkos({
+    experimental_auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
       clientId: process.env.WORKOS_CLIENT_ID,
     }),
@@ -94,7 +94,7 @@ const workosAuth = new MastraAuthWorkos({
 });
 ```
 
-> See the [MastraAuthWorkos](/reference/v1/auth/workos) API reference for all available configuration options.
+> See the [MastraAuthWorkos](/reference/auth/workos) API reference for all available configuration options.
 
 ## Client-side setup
 
@@ -135,7 +135,7 @@ export const authenticateWithWorkos = async (
 
 ## Configuring `MastraClient`
 
-When `auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
+When `experimental_auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
 ```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
 import { MastraClient } from "@mastra/client-js";
@@ -152,7 +152,7 @@ export const createMastraClient = (accessToken: string) => {
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server-db/mastra-client) for more configuration options.
+> See [Mastra Client SDK](/docs/server-db/mastra-client) for more configuration options.
 
 ### Making authenticated requests
 

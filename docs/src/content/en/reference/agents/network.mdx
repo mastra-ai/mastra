@@ -21,8 +21,7 @@ import { workflow1 } from "./workflows";
 import { tool1, tool2 } from "./tools";
 
 const agent = new Agent({
-  id: "network-agent",
-  name: "Network Agent",
+  name: "network-agent",
   instructions:
     "You are a network agent that can help users with a variety of tasks.",
   model: openai("gpt-4o"),
@@ -121,16 +120,16 @@ await agent.network(`
       type: "TracingContext",
       isOptional: true,
       description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+        "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
           parameters: [
             {
               name: "currentSpan",
-              type: "Span",
+              type: "AISpan",
               isOptional: true,
               description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+                "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
             },
           ],
         },
@@ -140,7 +139,7 @@ await agent.network(`
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for Tracing configuration.",
+      description: "Options for AI tracing configuration.",
       properties: [
         {
           parameters: [
@@ -160,7 +159,7 @@ await agent.network(`
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for OTLP telemetry collection during streaming (not Tracing).",
+        "Settings for OTLP telemetry collection during streaming (not AI tracing).",
       properties: [
         {
           parameters: [
@@ -301,18 +300,18 @@ await agent.network(`
         "Unique ID for this generation run. Useful for tracking and debugging purposes.",
     },
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
       description:
-        "Request Context for dependency injection and contextual information.",
+        "Runtime context for dependency injection and contextual information.",
     },
     {
       name: "traceId",
       type: "string",
       isOptional: true,
       description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+        "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />

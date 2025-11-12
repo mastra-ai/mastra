@@ -1,0 +1,44 @@
+---
+title: "例：テキストチャンクの埋め込み | RAG | Mastra Docs"
+description: 類似検索のために単一のテキストチャンクの埋め込みを生成する方法を、Mastraを用いて示す例。
+---
+
+import GithubLink from "@site/src/components/GithubLink";
+
+
+<div id="embed-text-chunk">
+  # テキストチャンクの埋め込み
+</div>
+
+個々のテキストチャンクを扱う場合は、類似検索のために数値ベクトルへ変換する必要があります。`embed` メソッドは、選択したプロバイダーとモデルを使って、単一のテキストチャンクを埋め込みベクトルに変換します。
+
+```tsx copy
+import { openai } from "@ai-sdk/openai";
+import { MDocument } from "@mastra/rag";
+import { embed } from "ai";
+
+const doc = MDocument.fromText("テキストの内容...");
+
+const chunks = await doc.chunk();
+
+const { embedding } = await embed({
+  model: openai.embedding("text-embedding-3-small"),
+  value: chunks[0].text,
+});
+```
+
+<br />
+
+<br />
+
+<hr className="dark:border-[#404040] border-gray-300" />
+
+<br />
+
+<br />
+
+<GithubLink
+  link={
+"https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/embed-text-chunk"
+}
+/>

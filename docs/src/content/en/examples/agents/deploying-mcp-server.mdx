@@ -14,7 +14,7 @@ This example guides you through setting up a basic Mastra MCPServer using the st
 Install the necessary packages:
 
 ```bash
-pnpm add @mastra/mcp@beta @mastra/core@beta tsup
+pnpm add @mastra/mcp @mastra/core tsup
 ```
 
 ## Set up MCP Server
@@ -29,8 +29,7 @@ pnpm add @mastra/mcp@beta @mastra/core@beta tsup
     import { weatherTool } from "./tools";
 
     const server = new MCPServer({
-      id: "my-mcp-server",
-      name: "My MCP Server",
+      name: "my-mcp-server",
       version: "1.0.0",
       tools: { weatherTool },
     });

@@ -17,16 +17,14 @@ import { Agent } from "@mastra/core/agent";
 
 // String instructions
 export const agent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
+  name: "test-agent",
   instructions: "You are a helpful assistant that provides concise answers.",
   model: openai("gpt-4o"),
 });
 
 // System message object
 export const agent2 = new Agent({
-  id: "test-agent-2",
-  name: "Test Agent 2",
+  name: "test-agent-2",
   instructions: {
     role: "system",
     content: "You are an expert programmer",
@@ -36,8 +34,7 @@ export const agent2 = new Agent({
 
 // Array of system messages
 export const agent3 = new Agent({
-  id: "test-agent-3",
-  name: "Test Agent 3",
+  name: "test-agent-3",
   instructions: [
     { role: "system", content: "You are a helpful assistant" },
     { role: "system", content: "You have expertise in TypeScript" },
@@ -55,8 +52,7 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const agent = new Agent({
-  id: "core-message-agent",
-  name: "Core Message Agent",
+  name: "core-message-agent",
   instructions: {
     role: "system",
     content:
@@ -84,8 +80,7 @@ const preferredTone = {
 };
 
 export const agent = new Agent({
-  id: "multi-message-agent",
-  name: "Multi Message Agent",
+  name: "multi-message-agent",
   instructions: [
     { role: "system", content: "You are a customer service representative." },
     preferredTone,
@@ -110,13 +105,13 @@ export const agent = new Agent({
       type: "string",
       isOptional: true,
       description:
-        "Unique identifier for the agent. Defaults to `name` if not provided.",
+        "Optional unique identifier for the agent. Defaults to `name` if not provided.",
     },
     {
       name: "name",
       type: "string",
       isOptional: false,
-      description: "Display name for the agent. Used as the identifier if `id` is not provided.",
+      description: "Unique identifier for the agent.",
     },
     {
       name: "description",
@@ -127,58 +122,58 @@ export const agent = new Agent({
     },
     {
       name: "instructions",
-      type: "SystemMessage | ({ requestContext: RequestContext }) => SystemMessage | Promise<SystemMessage>",
+      type: "SystemMessage | ({ runtimeContext: RuntimeContext }) => SystemMessage | Promise<SystemMessage>",
       isOptional: false,
-      description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object, 
-        array of system messages, or a function that returns any of these types dynamically. 
+      description: `Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+        array of system messages, or a function that returns any of these types dynamically.
         SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]`,
     },
     {
       name: "model",
-      type: "MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+      type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
       description:
         "The language model used by the agent. Can be provided statically or resolved at runtime.",
     },
     {
       name: "agents",
-      type: "Record<string, Agent> | ({ requestContext: RequestContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
+      type: "Record<string, Agent> | ({ runtimeContext: RuntimeContext }) => Record<string, Agent> | Promise<Record<string, Agent>>",
       isOptional: true,
       description:
         "Sub-Agents that the agent can access. Can be provided statically or resolved dynamically.",
     },
     {
       name: "tools",
-      type: "ToolsInput | ({ requestContext: RequestContext }) => ToolsInput | Promise<ToolsInput>",
+      type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,
       description:
         "Tools that the agent can access. Can be provided statically or resolved dynamically.",
     },
     {
       name: "workflows",
-      type: "Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
+      type: "Record<string, Workflow> | ({ runtimeContext: RuntimeContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>",
       isOptional: true,
       description:
         "Workflows that the agent can execute. Can be static or dynamically resolved.",
     },
     {
-      name: "defaultOptions",
-      type: "AgentExecutionOptions | ({ requestContext: RequestContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
+      name: "defaultGenerateOptions",
+      type: "AgentGenerateOptions | ({ runtimeContext: RuntimeContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
+      isOptional: true,
+      description: "Default options used when calling `generate()`.",
+    },
+    {
+      name: "defaultStreamOptions",
+      type: "AgentStreamOptions | ({ runtimeContext: RuntimeContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
+      isOptional: true,
+      description: "Default options used when calling `stream()`.",
+    },
+    {
+      name: "defaultStreamOptions",
+      type: "AgentExecutionOptions | ({ runtimeContext: RuntimeContext }) => AgentExecutionOptions | Promise<AgentExecutionOptions>",
       isOptional: true,
       description:
-        "Default options used when calling `stream()` and `generate()`.",
-    },
-    {
-      name: "defaultGenerateOptionsLegacy",
-      type: "AgentGenerateOptions | ({ requestContext: RequestContext }) => AgentGenerateOptions | Promise<AgentGenerateOptions>",
-      isOptional: true,
-      description: "Default options used when calling `generateLegacy()`.",
-    },
-    {
-      name: "defaultStreamOptionsLegacy",
-      type: "AgentStreamOptions | ({ requestContext: RequestContext }) => AgentStreamOptions | Promise<AgentStreamOptions>",
-      isOptional: true,
-      description: "Default options used when calling `streamLegacy()`.",
+        "Default options used when calling `stream()` in vNext mode.",
     },
     {
       name: "mastra",
@@ -189,7 +184,7 @@ export const agent = new Agent({
     },
     {
       name: "scorers",
-      type: "MastraScorers | ({ requestContext: RequestContext }) => MastraScorers | Promise<MastraScorers>",
+      type: "MastraScorers | ({ runtimeContext: RuntimeContext }) => MastraScorers | Promise<MastraScorers>",
       isOptional: true,
       description:
         "Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.",
@@ -202,7 +197,7 @@ export const agent = new Agent({
     },
     {
       name: "memory",
-      type: "MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>",
+      type: "MastraMemory | ({ runtimeContext: RuntimeContext }) => MastraMemory | Promise<MastraMemory>",
       isOptional: true,
       description:
         "Memory module used for storing and retrieving stateful context.",
@@ -215,14 +210,14 @@ export const agent = new Agent({
     },
     {
       name: "inputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
       description:
         "Input processors that can modify or validate messages before they are processed by the agent. Must implement the `processInput` function.",
     },
     {
       name: "outputProcessors",
-      type: "Processor[] | ({ requestContext: RequestContext }) => Processor[] | Promise<Processor[]>",
+      type: "Processor[] | ({ runtimeContext: RuntimeContext }) => Processor[] | Promise<Processor[]>",
       isOptional: true,
       description:
         "Output processors that can modify or validate messages from the agent, before it is sent to the client. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
@@ -244,5 +239,5 @@ export const agent = new Agent({
 
 ## Related
 
-- [Agents overview](/docs/v1/agents/overview)
-- [Calling Agents](/examples/v1/agents/calling-agents)
+- [Agents overview](/docs/agents/overview)
+- [Calling Agents](/examples/agents/calling-agents)

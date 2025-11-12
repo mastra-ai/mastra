@@ -4,14 +4,13 @@
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
-import { join } from "path/posix";
 import prismMastraDark from "./src/theme/prism-mastra-dark.js";
 import prismMastraLight from "./src/theme/prism-mastra-light.js";
 import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Mastra Docs v1 Beta",
+  title: "Mastra Docs",
   tagline: "TypeScript agent framework",
   favicon: "/img/favicon.ico",
 
@@ -28,14 +27,21 @@ const config = {
     hooks: {
       onBrokenMarkdownLinks: "warn",
     },
-    parseFrontMatter: async (params) => {
-      const result = await params.defaultParseFrontMatter(params);
-      result.frontMatter.description = `Mastra v1 Beta: ${result.frontMatter.description}`;
-      return result;
-    },
   },
-  // Enable v4 features in prod
 
+  // Internationalization
+  // By default, Docusuarus will look for translations in:
+  //
+  //    i18n/{locale}/docusaurus-plugin-content-{name}/current/*.{filetype}
+  //
+  // We fetch all source files and store them there using the "transform" option
+  // in gt.config.json
+  i18n: {
+    defaultLocale: "en",
+    locales: ["en", "ja"],
+  },
+
+  // Enable v4 features in prod
   ...(process.env.NODE_ENV === "production" && {
     future: {
       v4: {
@@ -60,39 +66,51 @@ const config = {
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
   },
 
-  // Preconnect to Google Fonts
   headTags: [
+    // Block Google Fonts using Content Security Policy
     {
-      tagName: "link",
+      tagName: "meta",
       attributes: {
-        rel: "preconnect",
-        href: "https://fonts.googleapis.com",
-      },
-    },
-    {
-      tagName: "link",
-      attributes: {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossorigin: "anonymous",
+        "http-equiv": "Content-Security-Policy",
+        content: "font-src 'self' data:;",
       },
     },
   ],
 
   plugins: [
-    // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
-    ...(process.env.POSTHOG_API_KEY
-      ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
+    // Custom webpack/rspack configuration plugin to handle process.env polyfill
+    function customWebpackPlugin(context, options) {
+      return {
+        name: "custom-webpack-config",
+        configureWebpack(config, isServer, { currentBundler }) {
+          // Use currentBundler.instance to work with both Webpack and Rspack
+          const { DefinePlugin, ProvidePlugin } = currentBundler.instance;
+
+          return {
+            resolve: {
+              fallback: {
+                // Polyfill process for browser to prevent "process is undefined" errors
+                // Use .js extension for ESM compatibility
+                process: require.resolve("process/browser.js"),
+              },
             },
-          ],
-        ]
-      : []),
+            plugins: [
+              // Provide process globally so gt-react can check process.env
+              // This works with both Webpack and Rspack
+              new ProvidePlugin({
+                process: "process/browser.js",
+              }),
+              // Define process.env.NEXT_RUNTIME to prevent "Cannot read properties of undefined" errors
+              new DefinePlugin({
+                "process.env.NEXT_RUNTIME": JSON.stringify(undefined),
+              }),
+            ],
+          };
+        },
+      };
+    },
+    // PostHog analytics is initialized manually in src/theme/Root.tsx
+    // to support PostHog React hooks for cookie consent and feature flags
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
       "@docusaurus/plugin-vercel-analytics",
@@ -106,7 +124,7 @@ const config = {
       {
         id: "models",
         path: "src/content/en/models",
-        routeBasePath: "models/v1",
+        routeBasePath: "models",
         sidebarPath: "./src/content/en/models/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -116,7 +134,7 @@ const config = {
       {
         id: "guides",
         path: "src/content/en/guides",
-        routeBasePath: "guides/v1",
+        routeBasePath: "guides",
         sidebarPath: "./src/content/en/guides/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -126,7 +144,7 @@ const config = {
       {
         id: "examples",
         path: "src/content/en/examples",
-        routeBasePath: "examples/v1",
+        routeBasePath: "examples",
         sidebarPath: "./src/content/en/examples/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
@@ -136,37 +154,11 @@ const config = {
       {
         id: "reference",
         path: "src/content/en/reference",
-        routeBasePath: "reference/v1",
+        routeBasePath: "reference",
         sidebarPath: "./src/content/en/reference/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
       },
     ],
-    function assetPlugin() {
-      return {
-        name: "asset-plugin",
-        configureWebpack(config, isServer, utils, content) {
-          if (!isServer) {
-            for (const plugin of config.plugins) {
-              if (plugin.constructor.name === "CssExtractRspackPlugin") {
-                plugin.options.filename = join("v1", plugin.options.filename);
-                plugin.options.chunkFilename = join(
-                  "v1",
-                  plugin.options.chunkFilename,
-                );
-              }
-            }
-
-            return {
-              plugins: config.plugins,
-              output: {
-                filename: join("v1", config.output?.filename),
-                chunkFilename: join("v1", config.output?.chunkFilename),
-              },
-            };
-          }
-        },
-      };
-    },
   ],
 
   presets: [
@@ -176,7 +168,7 @@ const config = {
       ({
         docs: {
           path: "src/content/en/docs",
-          routeBasePath: "docs/v1",
+          routeBasePath: "docs",
           sidebarPath: "./src/content/en/docs/sidebars.js",
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
@@ -213,7 +205,7 @@ const config = {
             items: [
               {
                 label: "Docs",
-                to: "/docs/v1",
+                to: "/docs",
               },
 
               {
@@ -280,7 +272,6 @@ const config = {
       prism: {
         theme: prismMastraLight,
         darkTheme: prismMastraDark,
-        additionalLanguages: ["diff"],
       },
     }),
 };

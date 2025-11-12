@@ -15,6 +15,7 @@ import {
 import { Label } from "./ui/label";
 import { CancelIcon } from "./copy-page-icons";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { useGT, T } from "gt-react";
 
 const feedbackSchema = z.object({
   feedback: z.string().min(5, "Please enter your feedback"),
@@ -107,6 +108,7 @@ export const FeedbackForm = ({
   onClose,
   currentPage,
 }: FeedbackFormProps) => {
+  const gt = useGT();
   const { siteConfig } = useDocusaurusContext();
   const { mastraWebsite } = siteConfig.customFields as {
     mastraWebsite?: string;
@@ -180,17 +182,21 @@ export const FeedbackForm = ({
     <div className="p-4 pt-2 px-0 border max-h-[400px] border-gray-200 dark:border-borders-1 rounded-[10px] bg-white dark:bg-[var(--primary-bg)]">
       {submitStatus === "success" ? (
         <div className="text-center py-4 px-2">
-          <p className="text-sm mb-0! text-black dark:text-white">
-            Thank you! Your feedback has been submitted
-          </p>
+          <T>
+            <p className="text-sm mb-0! text-black dark:text-white">
+              Thank you! Your feedback has been submitted
+            </p>
+          </T>
         </div>
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <div className="flex items-center px-4 pb-2 border-b-[0.5px] border-(--border) justify-between ">
-              <Label htmlFor="feedback" className="font-semibold">
-                Was this helpful?
-              </Label>
+              <T>
+                <Label htmlFor="feedback" className="font-semibold">
+                  Was this helpful?
+                </Label>
+              </T>
               <Button
                 type="button"
                 variant="ghost"
@@ -230,7 +236,7 @@ export const FeedbackForm = ({
                   <FormItem className="flex-1 w-full">
                     <FormControl>
                       <Textarea
-                        placeholder="Your feedback..."
+                        placeholder={gt("Your feedback...")}
                         className="min-h-[60px] w-full text-black  dark:text-white resize-none text-sm"
                         {...field}
                       />
@@ -248,7 +254,7 @@ export const FeedbackForm = ({
                 {isSubmitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
-                  "Send"
+                  gt("Send")
                 )}
               </Button>
             </div>
@@ -256,7 +262,7 @@ export const FeedbackForm = ({
             {errorMessage && (
               <div className="mt-3 mx-4 p-2 rounded-[10px] bg-red-50 dark:bg-red-900/20">
                 <p className="text-xs mb-0! text-red-500 font-mono dark:text-red-400">
-                  Something went wrong. Please try again
+                  <T>Something went wrong. Please try again</T>
                   {errorMessage && (
                     <span className="block mt-1 opacity-75">
                       {errorMessage}

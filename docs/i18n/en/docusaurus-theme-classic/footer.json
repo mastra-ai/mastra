@@ -1,0 +1,66 @@
+{
+  "link.title.Developer": {
+    "message": "Developer",
+    "description": "The title of the footer links column with title=Developer in the footer"
+  },
+  "link.title.Company": {
+    "message": "Company",
+    "description": "The title of the footer links column with title=Company in the footer"
+  },
+  "link.title.Legal": {
+    "message": "Legal",
+    "description": "The title of the footer links column with title=Legal in the footer"
+  },
+  "link.item.label.Docs": {
+    "message": "Docs",
+    "description": "The label of footer link with label=Docs linking to /docs"
+  },
+  "link.item.label.Templates": {
+    "message": "Templates",
+    "description": "The label of footer link with label=Templates linking to https://mastra.ai/templates"
+  },
+  "link.item.label.Principles of Building AI Agents": {
+    "message": "Principles of Building AI Agents",
+    "description": "The label of footer link with label=Principles of Building AI Agents linking to https://mastra.ai/book"
+  },
+  "link.item.label.llms.txt": {
+    "message": "llms.txt",
+    "description": "The label of footer link with label=llms.txt linking to https://mastra.ai/llms.txt"
+  },
+  "link.item.label.llms-full.txt": {
+    "message": "llms-full.txt",
+    "description": "The label of footer link with label=llms-full.txt linking to https://mastra.ai/llms-full.txt"
+  },
+  "link.item.label.MCP Registry Registry": {
+    "message": "MCP Registry Registry",
+    "description": "The label of footer link with label=MCP Registry Registry linking to https://mastra.ai/mcp-registry-registry"
+  },
+  "link.item.label.Mastra Cloud Status": {
+    "message": "Mastra Cloud Status",
+    "description": "The label of footer link with label=Mastra Cloud Status linking to https://statuspage.incident.io/mastra-cloud"
+  },
+  "link.item.label.GitHub": {
+    "message": "GitHub",
+    "description": "The label of footer link with label=GitHub linking to https://github.com/mastra-ai/mastra"
+  },
+  "link.item.label.Discord": {
+    "message": "Discord",
+    "description": "The label of footer link with label=Discord linking to https://discord.gg/BTYqqHKUrf"
+  },
+  "link.item.label.X": {
+    "message": "X",
+    "description": "The label of footer link with label=X linking to https://x.com/mastra_ai"
+  },
+  "link.item.label.YouTube": {
+    "message": "YouTube",
+    "description": "The label of footer link with label=YouTube linking to https://www.youtube.com/@mastra-ai"
+  },
+  "link.item.label.Privacy Policy": {
+    "message": "Privacy Policy",
+    "description": "The label of footer link with label=Privacy Policy linking to https://mastra.ai/privacy-policy"
+  },
+  "copyright": {
+    "message": "© 2025 Mastra.",
+    "description": "The footer copyright"
+  }
+}

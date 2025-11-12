@@ -7,6 +7,8 @@ description: "Use Weights & Biases models with Mastra. 10 models available."
 
 
 
+
+
 # <img src="https://models.dev/logos/wandb.svg" alt="Weights & Biases logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Weights & Biases
 
 Access 10 Weights & Biases models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
@@ -18,11 +20,10 @@ WANDB_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
+  name: "my-agent",
   instructions: "You are a helpful assistant",
   model: "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507"
 });
@@ -176,7 +177,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
-  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.inference.wandb.ai/v1",
@@ -193,10 +193,9 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "wandb/moonshotai/Kimi-K2-Instruct"
       : "wandb/Qwen/Qwen3-235B-A22B-Instruct-2507";

@@ -1,0 +1,113 @@
+---
+title: "リファレンス: Cloudflare Storage | Storage | Mastra ドキュメント"
+description: Mastra における Cloudflare KV ストレージ実装のドキュメント
+---
+
+<div id="cloudflare-storage">
+  # Cloudflare Storage
+</div>
+
+Cloudflare KV ストレージ実装は、Cloudflare Workers KV を使用して、グローバルに分散したサーバーレスのキー値ストアを提供します。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash copy
+npm install @mastra/cloudflare@latest
+```
+
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript copy showLineNumbers
+import { CloudflareStore } from "@mastra/cloudflare";
+
+// --- 例 1: Workers のバインディングを使用 ---
+const storageWorkers = new CloudflareStore({
+  bindings: {
+    threads: THREADS_KV, // スレッド用テーブルの KVNamespace バインディング
+    messages: MESSAGES_KV, // メッセージ用テーブルの KVNamespace バインディング
+    // 必要に応じて他のテーブルを追加
+  },
+  keyPrefix: "dev_", // 任意: 環境ごとにキーを分ける
+});
+
+// --- 例 2: REST API を使用 ---
+const storageRest = new CloudflareStore({
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare アカウントID
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API トークン
+  namespacePrefix: "dev_", // 任意: 環境ごとにネームスペースを分ける
+});
+```
+
+
+<div id="parameters">
+  ## パラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "bindings",
+      type: "Record<string, KVNamespace>",
+      description: "Cloudflare Workers KV のバインディング（Workers ランタイム向け）",
+      isOptional: true,
+    },
+    {
+      name: "accountId",
+      type: "string",
+      description: "Cloudflare アカウント ID（REST API 向け）",
+      isOptional: true,
+    },
+    {
+      name: "apiToken",
+      type: "string",
+      description: "Cloudflare API トークン（REST API 向け）",
+      isOptional: true,
+    },
+    {
+      name: "namespacePrefix",
+      type: "string",
+      description:
+        "すべてのネームスペース名に付ける任意のプレフィックス（環境分離に有用）",
+      isOptional: true,
+    },
+    {
+      name: "keyPrefix",
+      type: "string",
+      description:
+        "すべてのキーに付ける任意のプレフィックス（環境分離に有用）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="additional-notes">
+  #### 追記
+</div>
+
+<div id="schema-management">
+  ### スキーマ管理
+</div>
+
+ストレージ実装はスキーマの作成と更新を自動で行います。次のテーブルが作成されます：
+
+- `threads`: 会話スレッドを格納
+- `messages`: 個々のメッセージを格納
+- `metadata`: スレッドおよびメッセージの追加メタデータを格納
+
+<div id="consistency-propagation">
+  ### 一貫性と伝播
+</div>
+
+Cloudflare KV は最終的整合性型のストアであり、書き込み後もすべてのリージョンでデータが直ちに利用可能になるとは限りません。
+
+<div id="key-structure-namespacing">
+  ### キー構造と名前空間
+</div>
+
+Cloudflare KV のキーは、設定可能なプレフィックスとテーブル固有の形式（例: `threads:threadId`）の組み合わせで構成されます。
+Workers へのデプロイでは、`keyPrefix` を使用して同一名前空間内のデータを分離します。REST API でのデプロイでは、`namespacePrefix` を使用して、環境やアプリケーション間で名前空間全体を切り分けます。

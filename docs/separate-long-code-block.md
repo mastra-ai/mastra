@@ -23,7 +23,6 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
 
 const copywriterAgent = new Agent({
-  id: "copywriter",
   name: "Copywriter",
   instructions: "You are a copywriter agent that writes blog post copy.",
   model: anthropic("claude-3-5-sonnet-20241022"),
@@ -46,7 +45,6 @@ const copywriterStep = new Step({
 });
 
 const editorAgent = new Agent({
-  id: "editor",
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
   model: openai("gpt-4o-mini"),
@@ -79,7 +77,7 @@ const myWorkflow = new Workflow({
 // Run steps sequentially.
 myWorkflow.step(copywriterStep).then(editorStep).commit();
 
-const run = await myWorkflow.createRun();
+const run = await myWorkflow.createRunAsync();
 const { runId, start } = run;
 
 const res = await start({
@@ -94,7 +92,6 @@ First, set up the copywriter agent:
 
 ```typescript
 const copywriterAgent = new Agent({
-  id: "copywriter",
   name: "Copywriter",
   instructions: "You are a copywriter agent that writes blog post copy.",
   model: anthropic("claude-3-5-sonnet-20241022"),
@@ -125,7 +122,6 @@ Set up the editor agent:
 
 ```typescript
 const editorAgent = new Agent({
-  id: "editor",
   name: "Editor",
   instructions: "You are an editor agent that edits blog post copy.",
   model: openai("gpt-4o-mini"),

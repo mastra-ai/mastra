@@ -1,0 +1,50 @@
+{
+  "version.label": {
+    "message": "次へ",
+    "description": "現在のバージョンのラベル"
+  },
+  "sidebar.guidesSidebar.category.Guides": {
+    "message": "ガイド一覧",
+    "description": "サイドバー「guidesSidebar」にあるカテゴリ「Guides」のラベル"
+  },
+  "sidebar.guidesSidebar.category.Migrations": {
+    "message": "移行",
+    "description": "サイドバー「guidesSidebar」のカテゴリ「Migrations」のラベル"
+  },
+  "sidebar.guidesSidebar.doc.Agents: Chef Michel": {
+    "message": "担当者: Chef Michel",
+    "description": "サイドバー「guidesSidebar」にあるドキュメント項目「Agents: Chef Michel」のラベルで、ドキュメント guide/chef-michel へのリンクです"
+  },
+  "sidebar.guidesSidebar.doc.Tools: Stock Agent": {
+    "message": "ツール: Stock Agent",
+    "description": "サイドバー「guidesSidebar」にあるドキュメント項目「Tools: Stock Agent」のラベルで、ドキュメント guide/stock-agent へのリンク"
+  },
+  "sidebar.guidesSidebar.doc.Workflows: AI Recruiter": {
+    "message": "ワークフロー：AIリクルーター",
+    "description": "サイドバー「guidesSidebar」内で、ドキュメント「guide/ai-recruiter」へリンクするドキュメント項目「Workflows: AI Recruiter」のラベル"
+  },
+  "sidebar.guidesSidebar.doc.RAG: Research Assistant": {
+    "message": "RAG：リサーチ・アシスタント",
+    "description": "サイドバー「guidesSidebar」にあるドキュメント項目「RAG: Research Assistant」のラベル。ドキュメント guide/research-assistant へのリンク"
+  },
+  "sidebar.guidesSidebar.doc.MCP Server: Notes MCP Server": {
+    "message": "MCP サーバー：Notes MCP サーバー",
+    "description": "サイドバー「guidesSidebar」で、ドキュメント guide/notes-mcp-server へリンクするドキュメント項目「MCP Server: Notes MCP Server」のラベル"
+  },
+  "sidebar.guidesSidebar.doc.Tools: Web Search": {
+    "message": "ツール：Web 検索",
+    "description": "サイドバー「guidesSidebar」にあるドキュメント項目「Tools: Web Search」のラベル。ドキュメント「guide/web-search」へのリンクです"
+  },
+  "sidebar.guidesSidebar.doc.v1.0": {
+    "message": "v1.0",
+    "description": "サイドバー「guidesSidebar」にあるドキュメント項目「v1.0」のラベル。ドキュメント「migrations/upgrade-to-v1」へのリンク。"
+  },
+  "sidebar.guidesSidebar.doc.VNext to Standard APIs": {
+    "message": "VNext から Standard API への移行",
+    "description": "サイドバー「guidesSidebar」内で、ドキュメント migrations/vnext-to-standard-apis にリンクするドキュメント項目「VNext to Standard APIs」のラベル"
+  },
+  "sidebar.guidesSidebar.doc.AgentNetwork to .network()": {
+    "message": "AgentNetwork を .network() に変更",
+    "description": "サイドバー「guidesSidebar」にある、ドキュメント「migrations/agentnetwork」へのリンクに使われるドキュメント項目「AgentNetwork to .network()」のラベル"
+  }
+}

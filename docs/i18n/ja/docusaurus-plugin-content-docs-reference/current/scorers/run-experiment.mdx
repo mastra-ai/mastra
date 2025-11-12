@@ -1,0 +1,248 @@
+---
+title: "リファレンス: runExperiment | Scorers | Mastra ドキュメント"
+description: "Mastra の runExperiment 関数に関するドキュメント。複数のスコアラーを使って、エージェントやワークフローを一括評価できます。"
+---
+
+<div id="runexperiment">
+  # runExperiment
+</div>
+
+`runExperiment` 関数は、スコアラーに対して複数のテストケースを並行実行することで、エージェントやワークフローを一括評価できます。これは、体系的なテスト、パフォーマンス分析、AI システムの検証に不可欠です。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { runExperiment } from "@mastra/core/scores";
+import { myAgent } from "./agents/my-agent";
+import { myScorer1, myScorer2 } from "./scorers";
+
+const result = await runExperiment({
+  target: myAgent,
+  data: [
+    { input: "機械学習とは何ですか?" },
+    { input: "ニューラルネットワークを説明してください" },
+    { input: "AIはどのように動作しますか?" },
+  ],
+  scorers: [myScorer1, myScorer2],
+  concurrency: 2,
+  onItemComplete: ({ item, targetResult, scorerResults }) => {
+    console.log(`完了: ${item.input}`);
+    console.log(`スコア:`, scorerResults);
+  },
+});
+
+console.log(`平均スコア:`, result.scores);
+console.log(`${result.summary.totalItems} 件のアイテムを処理しました`);
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "target",
+      type: "Agent | Workflow",
+      description: "評価対象のエージェントまたはワークフロー。",
+      isOptional: false,
+    },
+    {
+      name: "data",
+      type: "RunExperimentDataItem[]",
+      description:
+        "入力データと任意の正解（グラウンドトゥルース）を含むテストケースの配列。",
+      isOptional: false,
+    },
+    {
+      name: "scorers",
+      type: "MastraScorer[] | WorkflowScorerConfig",
+      description:
+        "エージェント向けのスコアラー配列、またはワークフローおよび各ステップに対するスコアラーを指定するワークフロー用設定オブジェクト。",
+      isOptional: false,
+    },
+    {
+      name: "concurrency",
+      type: "number",
+      description: "同時に実行するテストケース数。",
+      isOptional: true,
+      defaultValue: "1",
+    },
+    {
+      name: "onItemComplete",
+      type: "function",
+      description:
+        "各テストケース完了後に呼び出されるコールバック関数。item、target の結果、scorer の結果を受け取る。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="data-item-structure">
+  ## データ項目の構造
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | string[] | CoreMessage[] | any",
+      description:
+        "ターゲットへの入力データ。エージェントの場合: メッセージまたは文字列。ワークフローの場合: ワークフローの入力データ。",
+      isOptional: false,
+    },
+    {
+      name: "groundTruth",
+      type: "any",
+      description:
+        "スコアリング時の比較に用いる期待値または参照出力。",
+      isOptional: true,
+    },
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      description: "実行時にターゲットへ渡すリクエストコンテキスト。",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      description: "可観測性とデバッグのためのトレーシングコンテキスト。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="workflow-scorer-configuration">
+  ## ワークフローのスコアラー設定
+</div>
+
+ワークフローでは、`WorkflowScorerConfig` を用いて、複数のレベルでスコアラーを指定できます。
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "MastraScorer[]",
+      description: "ワークフロー全体の出力を評価するためのスコアラーの配列。",
+      isOptional: true,
+    },
+    {
+      name: "steps",
+      type: "Record<string, MastraScorer[]>",
+      description:
+        "個々のステップ出力を評価するスコアラー配列に、ステップIDを対応付けるオブジェクト。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "scores",
+      type: "Record<string, any>",
+      description:
+        "すべてのテストケースにおける平均スコア。スコアラー名ごとに整理されています。",
+    },
+    {
+      name: "summary",
+      type: "object",
+      description: "実験実行に関する概要情報。",
+    },
+    {
+      name: "summary.totalItems",
+      type: "number",
+      description: "処理されたテストケースの合計数。",
+    },
+  ]}
+/>
+
+<div id="examples">
+  ## 例
+</div>
+
+<div id="agent-evaluation">
+  ### エージェント評価
+</div>
+
+```typescript
+import { runExperiment } from "@mastra/core/scores";
+import { createScorer } from "@mastra/core/scores";
+
+const myScorer = createScorer({
+  name: "私のスコアラー",
+  description: "エージェントの応答に正解が含まれているかチェックする",
+  type: "agent",
+}).generateScore(({ run }) => {
+  const response = run.output[0]?.content || "";
+  const expectedResponse = run.groundTruth;
+  return response.includes(expectedResponse) ? 1 : 0;
+});
+
+const result = await runExperiment({
+  target: chatAgent,
+  data: [
+    {
+      input: "AIとは何ですか？",
+      groundTruth:
+        "AIは知的な機械を作成するコンピュータサイエンスの分野です。",
+    },
+    {
+      input: "機械学習はどのように機能しますか？",
+      groundTruth:
+        "機械学習はアルゴリズムを使用してデータからパターンを学習します。",
+    },
+  ],
+  scorers: [relevancyScorer],
+  concurrency: 3,
+});
+```
+
+
+<div id="workflow-evaluation">
+  ### ワークフロー評価
+</div>
+
+```typescript
+const workflowResult = await runExperiment({
+  target: myWorkflow,
+  data: [
+    { input: { query: "このデータを処理", priority: "high" } },
+    { input: { query: "別のタスク", priority: "low" } },
+  ],
+  scorers: {
+    workflow: [outputQualityScorer],
+    steps: {
+      "validation-step": [validationScorer],
+      "processing-step": [processingScorer],
+    },
+  },
+  onItemComplete: ({ item, targetResult, scorerResults }) => {
+    console.log(`ワークフロー完了: ${item.input.query}`);
+    if (scorerResults.workflow) {
+      console.log("ワークフロースコア:", scorerResults.workflow);
+    }
+    if (scorerResults.steps) {
+      console.log("ステップスコア:", scorerResults.steps);
+    }
+  },
+});
+```
+
+
+<div id="related">
+  ## 関連
+</div>
+
+- [createScorer()](../../reference/scorers/create-scorer) - 実験用のカスタムスコアラーを作成する
+- [MastraScorer](../../reference/scorers/mastra-scorer) - スコアラーの構造とメソッドについて学ぶ
+- [Custom Scorers](../../docs/scorers/custom-scorers) - 評価ロジック構築ガイド
+- [Scorers Overview](../../docs/scorers/overview) - スコアラーの基本概念を理解する

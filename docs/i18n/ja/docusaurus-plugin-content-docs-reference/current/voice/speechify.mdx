@@ -1,0 +1,166 @@
+---
+title: "リファレンス: Speechify | Voice | Mastra Docs"
+description: "Speechify の音声実装に関するドキュメント。テキスト読み上げ機能を提供します。"
+---
+
+<div id="speechify">
+  # Speechify
+</div>
+
+Mastra における Speechify の音声機能実装は、Speechify の API を利用してテキスト読み上げ（TTS）機能を提供します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript
+import { SpeechifyVoice } from "@mastra/voice-speechify";
+
+// 既定の設定で初期化（SPEECHIFY_API_KEY 環境変数を使用）
+const voice = new SpeechifyVoice();
+
+// カスタム設定で初期化
+const voice = new SpeechifyVoice({
+  speechModel: {
+    name: "simba-english",
+    apiKey: "your-api-key",
+  },
+  speaker: "george", // 既定の音声
+});
+
+// テキスト読み上げ（TTS）
+const audioStream = await voice.speak("Hello, world!", {
+  speaker: "henry", // 既定の音声を上書き
+});
+```
+
+
+<div id="constructor-parameters">
+  ## コンストラクターの引数
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "speechModel",
+      type: "SpeechifyConfig",
+      description: "テキスト読み上げ（TTS）機能用の設定",
+      isOptional: true,
+      defaultValue: "{ name: 'simba-english' }",
+    },
+    {
+      name: "speaker",
+      type: "SpeechifyVoiceId",
+      description: "音声合成で使用する既定のボイスID",
+      isOptional: true,
+      defaultValue: "'george'",
+    },
+  ]}
+/>
+
+<div id="speechifyconfig">
+  ### SpeechifyConfig
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "VoiceModelName",
+      description: "使用する Speechify のモデル",
+      isOptional: true,
+      defaultValue: "'simba-english'",
+    },
+    {
+      name: "apiKey",
+      type: "string",
+      description:
+        "Speechify の API キー。未指定の場合は環境変数 SPEECHIFY_API_KEY が使用されます",
+      isOptional: true,
+    },
+  ]}
+/>
+
+<div id="methods">
+  ## 手法
+</div>
+
+<div id="speak">
+  ### speak()
+</div>
+
+設定済みの音声モデルとボイスで、テキストを音声に変換します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "string | NodeJS.ReadableStream",
+      description:
+        "音声に変換するテキスト。ストリームが渡された場合は、先にテキストへ変換されます。",
+      isOptional: false,
+    },
+    {
+      name: "options.speaker",
+      type: "string",
+      description: "このリクエストでデフォルトの話者設定を上書きします",
+      isOptional: true,
+      defaultValue: "コンストラクターで指定された話者",
+    },
+    {
+      name: "options.model",
+      type: "VoiceModelName",
+      description: "このリクエストでデフォルトのモデル設定を上書きします",
+      isOptional: true,
+      defaultValue: "コンストラクターで指定されたモデル",
+    },
+  ]}
+/>
+
+戻り値: `Promise<NodeJS.ReadableStream>`
+
+<div id="getspeakers">
+  ### getSpeakers()
+</div>
+
+利用可能な音声オプションの配列を返します。各要素には次が含まれます:
+
+<PropertiesTable
+  content={[
+    {
+      name: "voiceId",
+      type: "string",
+      description: "音声の固有識別子",
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "音声の表示名",
+    },
+    {
+      name: "language",
+      type: "string",
+      description: "音声の言語コード",
+    },
+    {
+      name: "gender",
+      type: "string",
+      description: "音声の性別",
+    },
+  ]}
+/>
+
+<div id="listen">
+  ### listen()
+</div>
+
+このメソッドはSpeechifyではサポートされておらず、エラーを発生させます。Speechifyは音声認識（speech-to-text）機能を提供していません。
+
+<div id="notes">
+  ## 注意事項
+</div>
+
+- Speechify の認証には API キーが必要です
+- 既定のモデルは「simba-english」です
+- 音声認識（speech-to-text）機能には対応していません
+- 追加の音声ストリームオプションは、speak() メソッドの options パラメータで指定できます

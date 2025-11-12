@@ -1,0 +1,86 @@
+---
+title: "リファレンス: Agent.listAgents() | エージェント | Mastra ドキュメント"
+description: "Mastra のエージェントにおける `Agent.listAgents()` メソッドのドキュメント。エージェントがアクセスできるサブエージェントを取得します。"
+---
+
+<div id="agentlistagents">
+  # Agent.listAgents()
+</div>
+
+`.listAgents()` メソッドは、エージェントに設定されたサブエージェントを取得し、それらが関数である場合は評価して実体化します。これらのサブエージェントにより、エージェントは他のエージェントへアクセスし、複雑な処理を実行できます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.listAgents();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "Promise<Record<string, Agent>>",
+      description:
+        "エージェント名をキー、対応する Agent インスタンスを値とするレコードに解決される Promise。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 使い方の拡張例
+</div>
+
+```typescript copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+await agent.listAgents({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションのパラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性の注入やコンテキスト情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [Agents の概要](/docs/agents/overview)

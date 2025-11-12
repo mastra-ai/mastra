@@ -118,7 +118,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
-      description: "Tracing context for span hierarchy and metadata.",
+      description: "AI tracing context for span hierarchy and metadata.",
     },
     {
       name: "returnScorerData",
@@ -348,7 +348,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "Settings for OTLP telemetry collection during generation (not Tracing).",
+        "Settings for OTLP telemetry collection during generation (not AI tracing).",
       properties: [
         {
           parameters: [
@@ -607,27 +607,27 @@ const aiSdkResult = await agent.generate("message for agent", {
       description: "Unique identifier for this execution run.",
     },
     {
-      name: "requestContext",
-      type: "RequestContext",
+      name: "runtimeContext",
+      type: "RuntimeContext",
       isOptional: true,
       description:
-        "Request Context containing dynamic configuration and state.",
+        "Runtime context containing dynamic configuration and state.",
     },
     {
       name: "tracingContext",
       type: "TracingContext",
       isOptional: true,
       description:
-        "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
+        "AI tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
       properties: [
         {
           parameters: [
             {
               name: "currentSpan",
-              type: "Span",
+              type: "AISpan",
               isOptional: true,
               description:
-                "Current span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
+                "Current AI span for creating child spans and adding metadata. Use this to create custom child spans or update span attributes during execution.",
             },
           ],
         },
@@ -637,7 +637,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       name: "tracingOptions",
       type: "TracingOptions",
       isOptional: true,
-      description: "Options for Tracing configuration.",
+      description: "Options for AI tracing configuration.",
       properties: [
         {
           parameters: [
@@ -677,7 +677,7 @@ const aiSdkResult = await agent.generate("message for agent", {
       type: "string",
       isOptional: true,
       description:
-        "The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.",
+        "The trace ID associated with this execution when AI tracing is enabled. Use this to correlate logs and debug execution flow.",
     },
   ]}
 />

@@ -56,7 +56,6 @@ import { z } from "zod";
 
 // Have the agent do something
 export const speechToSpeechServer = new Agent({
-  id: "speech-to-speech-agent",
   name: "mastra",
   instructions: "You are a helpful assistant.",
   voice: new OpenAIRealtimeVoice(),
@@ -67,8 +66,8 @@ export const speechToSpeechServer = new Agent({
       description: "Read the result of the tool",
       inputSchema: z.object({ name: z.string() }),
       outputSchema: z.object({ message: z.string() }),
-      execute: async (inputData) => {
-        return { message: `Hello ${inputData.name}!` };
+      execute: async ({ context }) => {
+        return { message: `Hello ${context.name}!` };
       },
     }),
   },

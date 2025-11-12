@@ -23,7 +23,7 @@ export default function VersionControl({
   // Initialize to stable to match SSR output and prevent hydration mismatch
   // Stable = 0.x (default /docs), Beta = v1 (/docs/v1)
   const [currentVersion, setCurrentVersion] = useState<"beta" | "stable">(
-    "beta",
+    "stable",
   );
 
   // this is always stable on load
@@ -46,6 +46,10 @@ export default function VersionControl({
     let newPath: string;
 
     if (nextVersion === "beta") {
+      if (pathChunks?.[1] === "ja") {
+        pathChunks.splice(1, 1);
+        newPath = pathChunks.join("/");
+      }
       if (pathChunks?.[2] !== "v1") {
         pathChunks.splice(2, 0, "v1");
         newPath = pathChunks.join("/");

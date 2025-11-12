@@ -1,0 +1,160 @@
+---
+title: "リファレンス: Run.start() | Workflows | Mastra Docs"
+description: ワークフローで使用する `Run.start()` メソッドのドキュメント。入力データを使ってワークフローの実行を開始します。
+---
+
+<div id="runstart">
+  # Run.start()
+</div>
+
+`.start()` メソッドは入力データを受け取り、ワークフローの実行を開始します。これにより、ワークフローを最初から実行できます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+const result = await run.start({
+  inputData: {
+    value: "初期のデータ",
+  },
+});
+```
+
+
+<div id="parameters">
+  ## パラメーター
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "inputData",
+      type: "z.infer<TInput>",
+      description: "ワークフローの入力スキーマに合致する入力データ",
+      isOptional: true,
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      description: "ワークフロー実行時に使用するランタイムコンテキストデータ",
+      isOptional: true,
+    },
+    {
+      name: "writableStream",
+      type: "WritableStream<ChunkType>",
+      description: "ワークフロー出力をストリーミングするための任意の書き込み可能ストリーム",
+      isOptional: true,
+    },
+    {
+      name: "tracingContext",
+      type: "TracingContext",
+      isOptional: true,
+      description:
+        "子スパンの作成やメタデータの追加に使う AI トレーシング用コンテキスト。Mastra のトレーシングシステム使用時は自動注入されます。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "currentSpan",
+              type: "AISpan",
+              isOptional: true,
+              description:
+                "子スパンの作成やメタデータの追加に用いる現在の AI スパン。実行中にカスタム子スパンを作成したり、スパン属性を更新する際に使用します。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "tracingOptions",
+      type: "TracingOptions",
+      isOptional: true,
+      description: "AI トレーシング設定のオプション。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "metadata",
+              type: "Record<string, any>",
+              isOptional: true,
+              description:
+                "ルートトレーススパンに追加するメタデータ。ユーザー ID、セッション ID、フィーチャーフラグなどのカスタム属性の付与に有用です。",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "outputOptions",
+      type: "OutputOptions",
+      isOptional: true,
+      description: "出力に関するオプション。",
+      properties: [
+        {
+          parameters: [
+            {
+              name: "includeState",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "結果にワークフローの実行状態を含めるかどうか。",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "result",
+      type: "Promise<WorkflowResult<TState, TOutput, TSteps>>",
+      description:
+        "ステップの出力とステータスを含むワークフロー実行結果に解決される Promise",
+    },
+    {
+      name: "traceId",
+      type: "string",
+      isOptional: true,
+      description:
+        "AI トレーシングが有効な場合、この実行に関連付けられるトレース ID。ログの相関付けや実行フローのデバッグに使用します。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用例
+</div>
+
+```typescript showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/runtime-context";
+
+const run = await workflow.createRunAsync();
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set("variable", false);
+
+const result = await run.start({
+  inputData: {
+    value: "初期データ",
+  },
+  runtimeContext,
+});
+```
+
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [Workflows の概要](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](../workflow-methods/create-run)

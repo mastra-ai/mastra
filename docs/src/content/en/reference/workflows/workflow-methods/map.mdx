@@ -80,7 +80,6 @@ Import `mapVariable()` from the workflows module:
 ```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { mapVariable } from "@mastra/core/workflows";
 ```
-
 ### Extracting fields from step outputs
 
 Use `mapVariable()` with `step` to extract a specific field from a step's output and map it to a new field name. The `path` parameter specifies which field to extract.
@@ -113,7 +112,3 @@ testWorkflow
     })
   })
 ```
-
-## Related
-
-- [Input Data Mapping](/docs/v1/workflows/control-flow#input-data-mapping)

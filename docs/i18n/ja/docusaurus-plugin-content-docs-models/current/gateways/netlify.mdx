@@ -1,0 +1,91 @@
+---
+title: "Netlify | モデル | Mastra"
+description: "Netlify 経由で AI モデルを利用する。"
+---
+
+{/* このファイルは generate-model-docs.ts によって自動生成されています。手動で編集しないでください */}
+
+import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
+
+
+# <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
+
+Netlify AI Gateway は、キャッシュとオブザーバビリティを備え、複数のプロバイダーへの一元的なアクセスを提供します。Mastra のモデルルーターを通じて 34 のモデルにアクセスできます。
+
+詳しくは [Netlify ドキュメント](https://docs.netlify.com/build/ai-gateway/overview/)をご覧ください。
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```typescript
+import { Agent } from "@mastra/core";
+
+const agent = new Agent({
+  name: "my-agent",
+  instructions: "あなたは親切なアシスタントです",
+  model: "netlify/anthropic/claude-3-5-haiku-20241022"
+});
+```
+
+:::info
+
+Mastra は OpenAI 互換の `/chat/completions` エンドポイントを使用します。プロバイダー固有の機能の一部は利用できない場合があります。詳細は [Netlify のドキュメント](https://docs.netlify.com/build/ai-gateway/overview/)をご確認ください。
+
+:::
+
+
+<div id="configuration">
+  ## 設定
+</div>
+
+```bash
+# ゲートウェイAPIキーを使用
+NETLIFY_API_KEY=your-gateway-key
+
+# またはプロバイダーのAPIキーを直接使用
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=ant-...
+```
+
+
+<div id="available-models">
+  ## 利用可能なモデル
+</div>
+
+| モデル |
+|-------|
+| `anthropic/claude-3-5-haiku-20241022` |
+| `anthropic/claude-3-5-haiku-latest` |
+| `anthropic/claude-3-7-sonnet-20250219` |
+| `anthropic/claude-3-7-sonnet-latest` |
+| `anthropic/claude-3-haiku-20240307` |
+| `anthropic/claude-haiku-4-5-20251001` |
+| `anthropic/claude-opus-4-1-20250805` |
+| `anthropic/claude-opus-4-20250514` |
+| `anthropic/claude-sonnet-4-20250514` |
+| `anthropic/claude-sonnet-4-5-20250929` |
+| `gemini/gemini-2.0-flash` |
+| `gemini/gemini-2.0-flash-lite` |
+| `gemini/gemini-2.5-flash` |
+| `gemini/gemini-2.5-flash-image-preview` |
+| `gemini/gemini-2.5-flash-lite` |
+| `gemini/gemini-2.5-flash-lite-preview-09-2025` |
+| `gemini/gemini-2.5-flash-preview-09-2025` |
+| `gemini/gemini-2.5-pro` |
+| `gemini/gemini-flash-latest` |
+| `gemini/gemini-flash-lite-latest` |
+| `openai/codex-mini-latest` |
+| `openai/gpt-4.1` |
+| `openai/gpt-4.1-mini` |
+| `openai/gpt-4.1-nano` |
+| `openai/gpt-4o` |
+| `openai/gpt-4o-mini` |
+| `openai/gpt-5` |
+| `openai/gpt-5-codex` |
+| `openai/gpt-5-mini` |
+| `openai/gpt-5-nano` |
+| `openai/gpt-5-pro` |
+| `openai/o3` |
+| `openai/o3-mini` |
+| `openai/o4-mini` |

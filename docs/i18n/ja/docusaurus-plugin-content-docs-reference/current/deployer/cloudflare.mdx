@@ -1,0 +1,102 @@
+---
+title: "リファレンス: CloudflareDeployer | Deployer | Mastra ドキュメント"
+description: "Mastra アプリケーションを Cloudflare Workers にデプロイする CloudflareDeployer クラスのドキュメント。"
+---
+
+<div id="cloudflaredeployer">
+  # CloudflareDeployer
+</div>
+
+`CloudflareDeployer` クラスは、スタンドアロンの Mastra アプリケーションを Cloudflare Workers にデプロイするためのクラスです。構成とデプロイを管理し、Cloudflare 向けの機能を追加してベースの [Deployer](/reference/deployer/) クラスを拡張します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new CloudflareDeployer({
+    projectName: "hello-mastra",
+    routes: [
+      {
+        pattern: "example.com/*",
+        zone_name: "example.com",
+        custom_domain: true
+      }
+    ],
+    workerNamespace: "my-namespace",
+    env: {
+      NODE_ENV: "production",
+      API_KEY: "<api-key>"
+    },
+    d1Databases: [
+      {
+        binding: "DB",
+        database_name: "my-database",
+        database_id: "d1-database-id",
+        preview_database_id: "your-preview-database-id"
+      }
+    ],
+    kvNamespaces: [
+      {
+        binding: "CACHE",
+        id: "kv-namespace-id"
+      }
+    ]
+});
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "projectName",
+      type: "string",
+      description: "Worker プロジェクト名。",
+      isOptional: true,
+      defaultValue: "'mastra'",
+    },
+    {
+      name: "routes",
+      type: "CFRoute[]",
+      description:
+        "Worker のルート設定配列。各ルートには次が必要です: pattern (string), zone_name (string), custom_domain (boolean、任意)。",
+      isOptional: true,
+    },
+    {
+      name: "workerNamespace",
+      type: "string",
+      description: "Worker のネームスペース。",
+      isOptional: true,
+    },
+    {
+      name: "env",
+      type: "Record<string, any>",
+      description:
+        "Worker の設定に含める環境変数。",
+      isOptional: true,
+    },
+    {
+      name: "d1Databases",
+      type: "D1DatabaseBinding[]",
+      description:
+        "D1 データベースバインディングの配列。各バインディングには次が必要です: binding (string), database_name (string), database_id (string), preview_database_id (string、任意)。",
+      isOptional: true,
+    },
+    {
+      name: "kvNamespaces",
+      type: "KVNamespaceBinding[]",
+      description:
+        "KV ネームスペースバインディングの配列。各バインディングには次が必要です: binding (string), id (string)。",
+      isOptional: true,
+    },
+  ]}
+/>

@@ -7,6 +7,8 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 5 models available."
 
 
 
+
+
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
 
 Access 5 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
@@ -18,11 +20,10 @@ ZHIPU_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
+import { Agent } from "@mastra/core";
 
 const agent = new Agent({
-  id: "my-agent",
-  name: "My Agent",
+  name: "my-agent",
   instructions: "You are a helpful assistant",
   model: "zhipuai-coding-plan/glm-4.5"
 });
@@ -116,7 +117,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
-  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://open.bigmodel.cn/api/coding/paas/v4",
@@ -133,10 +133,9 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
-  model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+  name: "dynamic-agent",
+  model: ({ runtimeContext }) => {
+    const useAdvanced = runtimeContext.task === "complex";
     return useAdvanced
       ? "zhipuai-coding-plan/glm-4.6"
       : "zhipuai-coding-plan/glm-4.5";

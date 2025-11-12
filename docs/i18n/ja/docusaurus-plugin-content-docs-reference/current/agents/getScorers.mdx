@@ -1,0 +1,85 @@
+---
+title: "リファレンス: Agent.getScorers() | Agents | Mastra Docs"
+description: "Mastra のエージェントにおける `Agent.getScorers()` メソッドのリファレンス。スコアリング設定を取得します。"
+---
+
+<div id="agentgetscorers">
+  # Agent.getScorers()
+</div>
+
+`.getScorers()` メソッドは、エージェントに設定されたスコアリング構成を取得し、それが関数の場合は評価（解決）します。このメソッドにより、エージェントの応答やパフォーマンスを評価するために使用されるスコアリングシステムにアクセスできます。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+await agent.getScorers();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runtimeContext?: RuntimeContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "ランタイムコンテキストを含むオプションの設定オブジェクト。",
+    },
+  ]}
+/>
+
+<div id="returns">
+  ## 返り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorers",
+      type: "MastraScorers | Promise<MastraScorers>",
+      description:
+        "エージェントに設定されたスコアリングの構成。MastraScorers オブジェクト、または scorers に解決される Promise のいずれかです。",
+    },
+  ]}
+/>
+
+<div id="extended-usage-example">
+  ## 応用例（拡張）
+</div>
+
+```typescript copy
+await agent.getScorers({
+  runtimeContext: new RuntimeContext(),
+});
+```
+
+
+<div id="options-parameters">
+  ### オプションパラメータ
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      defaultValue: "new RuntimeContext()",
+      description:
+        "依存性の注入や文脈情報のためのランタイムコンテキスト。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [エージェントの概要](/docs/agents/overview)
+- [ランタイムコンテキスト](/docs/server-db/runtime-context)

@@ -1,0 +1,60 @@
+---
+title: "リファレンス: Run.observeStream() | ストリーミング | Mastra ドキュメント"
+description: ワークフローにおける `Run.observeStream()` メソッドのドキュメント。実行中のワークフロー実行のストリームを再度開くことができます。
+---
+
+<div id="runobservestream">
+  # Run.observeStream()
+</div>
+
+`.observeStream()` メソッドは、現在実行中のワークフロー実行に対して新たに `ReadableStream` を開き、元のストリームが利用できない場合でもイベントのストリームを観測できるようにします。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript showLineNumbers copy
+const run = await workflow.createRunAsync();
+
+run.stream({
+  inputData: {
+    value: "初期データ",
+  },
+});
+
+const { stream } = await run.observeStream();
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+
+<div id="returns">
+  ## 返戻値
+</div>
+
+`ReadableStream<ChunkType>`
+
+<div id="stream-events">
+  ## ストリームイベント
+</div>
+
+ストリームはワークフローの実行中にさまざまなイベントタイプを発行します。各イベントには `type` フィールドと、関連データを含む `payload` が含まれます:
+
+- **`start`**: ワークフローの実行が開始される
+- **`step-start`**: ステップの実行が開始される
+- **`tool-call`**: ツール呼び出しが開始される
+- **`tool-call-streaming-start`**: ツール呼び出しのストリーミングが開始される
+- **`tool-call-delta`**: ツール出力の差分更新
+- **`step-result`**: ステップが結果とともに完了する
+- **`step-finish`**: ステップの実行が終了する
+- **`finish`**: ワークフローの実行が完了する
+
+<div id="related">
+  ## 関連
+</div>
+
+- [Workflows の概要](/docs/workflows/overview#running-workflows)
+- [Workflow.createRunAsync()](/reference/workflows/workflow-methods/create-run)
+- [Run.stream()](./stream)

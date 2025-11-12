@@ -1,0 +1,47 @@
+---
+title: "リファレンス: Mastra.getStorage() | Core | Mastra Docs"
+description: "Mastra の `Mastra.getStorage()` メソッドに関するドキュメント。設定済みのストレージインスタンスを取得します。"
+---
+
+<div id="mastragetstorage">
+  # Mastra.getStorage()
+</div>
+
+`.getStorage()` メソッドは、Mastra インスタンスで設定されたストレージインスタンスを取得するために使用します。
+
+<div id="usage-example">
+  ## 使い方の例
+</div>
+
+```typescript copy
+mastra.getStorage();
+```
+
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+このメソッドはパラメータを受け取りません。
+
+<div id="returns">
+  ## 戻り値
+</div>
+
+<PropertiesTable
+  content={[
+    {
+      name: "storage",
+      type: "MastraStorage | undefined",
+      description:
+        "設定済みのストレージインスタンス。ストレージが未設定の場合は undefined になります。",
+    },
+  ]}
+/>
+
+<div id="related">
+  ## 関連項目
+</div>
+
+- [ストレージの概要](/docs/server-db/storage)
+- [ストレージ リファレンス](/reference/storage/libsql)

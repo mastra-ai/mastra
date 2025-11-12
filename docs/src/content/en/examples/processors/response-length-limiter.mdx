@@ -21,8 +21,7 @@ type ResponseLengthLimiterOptions = {
 };
 
 export class ResponseLengthLimiter implements Processor {
-  readonly id = "response-length-limiter";
-  readonly name = "Response Length Limiter";
+  readonly name = "response-length-limiter";
   private maxLength: number;
   private strategy: "block" | "warn" | "truncate";
 
@@ -44,7 +43,7 @@ export class ResponseLengthLimiter implements Processor {
   }: {
     part: ChunkType;
     streamParts: ChunkType[];
-    state: Record<string, unknown>;
+    state: Record<string, any>;
     abort: (reason?: string) => never;
   }): Promise<ChunkType | null | undefined> {
     if (!state.cumulativeLength) {
@@ -112,8 +111,7 @@ import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
 export const blockingAgent = new Agent({
-  id: "blocking-agent",
-  name: "Blocking Agent",
+  name: "blocking-agent",
   instructions: "You are a helpful assistant with response length limits",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -129,8 +127,7 @@ import { Agent } from "@mastra/core/agent";
 import { ResponseLengthLimiter } from "../processors/response-length-limiter";
 
 export const simpleAgent = new Agent({
-  id: "simple-agent",
-  name: "Simple Agent",
+  name: "simple-agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   outputProcessors: [new ResponseLengthLimiter(300)],
@@ -147,8 +144,7 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Create agent with generous response limit
 export const agent = new Agent({
-  id: "response-limited-agent",
-  name: "Response Limited Agent",
+  name: "response-limited-agent",
   instructions: "You are a helpful assistant. Keep responses concise.",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -181,8 +177,7 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Reuse same agent but with stricter response limit
 export const agent = new Agent({
-  id: "response-limited-agent",
-  name: "Response Limited Agent",
+  name: "response-limited-agent",
   instructions: "You are a helpful assistant.",
   model: "openai/gpt-4o",
   outputProcessors: [
@@ -221,8 +216,7 @@ import { ResponseLengthLimiter } from "./mastra/processors/response-length-limit
 
 // Reuse same agent but with very strict response limit
 export const agent = new Agent({
-  id: "response-limited-agent",
-  name: "Response Limited Agent",
+  name: "response-limited-agent",
   instructions:
     "You are a verbose assistant who provides detailed explanations.",
   model: "openai/gpt-4o",
