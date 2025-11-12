@@ -15,16 +15,18 @@ import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-met
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
 import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
+import {
+  useReorderModelList,
+  useResetAgentModel,
+  useUpdateAgentModel,
+  useUpdateModelInModelList,
+} from '../../hooks/use-agents';
 
 export interface AgentMetadataProps {
   agentId: string;
   agent: GetAgentResponse;
   hasMemoryEnabled: boolean;
   modelVersion: string;
-  updateModel: AgentMetadataModelSwitcherProps['updateModel'];
-  resetModel: AgentMetadataModelSwitcherProps['resetModel'];
-  updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
-  reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
 
 export interface AgentMetadataNetworkListProps {
@@ -53,16 +55,12 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
   );
 };
 
-export const AgentMetadata = ({
-  agentId,
-  agent,
-  hasMemoryEnabled,
-  updateModel,
-  resetModel,
-  updateModelInModelList,
-  reorderModelList,
-  modelVersion,
-}: AgentMetadataProps) => {
+export const AgentMetadata = ({ agentId, agent, hasMemoryEnabled, modelVersion }: AgentMetadataProps) => {
+  const { mutate: reorderModelList } = useReorderModelList(agentId);
+  const { mutateAsync: resetModel } = useResetAgentModel(agentId);
+  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
+
   const networkAgentsMap = agent.agents ?? {};
   const networkAgents = Object.keys(networkAgentsMap).map(key => ({ ...networkAgentsMap[key], id: key }));
 
