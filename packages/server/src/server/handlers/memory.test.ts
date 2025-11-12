@@ -690,7 +690,10 @@ describe('Memory Handlers', () => {
         },
         storage,
       });
-      vi.spyOn(storage, 'getThreadById').mockResolvedValue(null);
+
+      const memoryStore = storage.getStore('memory')!;
+
+      vi.spyOn(memoryStore, 'getThreadById').mockResolvedValue(null);
       await expect(listMessagesHandler({ mastra, threadId: 'non-existent', agentId: 'test-agent' })).rejects.toThrow(
         new HTTPException(404, { message: 'Thread not found' }),
       );
@@ -723,8 +726,10 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      vi.spyOn(storage, 'getThreadById').mockResolvedValue(createThread({}));
-      vi.spyOn(storage, 'listMessages').mockResolvedValue(mockResult);
+      const memoryStore = storage.getStore('memory')!;
+
+      vi.spyOn(memoryStore, 'getThreadById').mockResolvedValue(createThread({}));
+      vi.spyOn(memoryStore, 'listMessages').mockResolvedValue(mockResult);
 
       const result = await listMessagesHandler({
         mastra,
@@ -739,8 +744,8 @@ describe('Memory Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(storage.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
-      expect(storage.listMessages).toHaveBeenCalledWith({
+      expect(memoryStore.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
+      expect(memoryStore.listMessages).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',
         perPage: 10,

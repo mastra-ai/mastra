@@ -59,20 +59,21 @@ function resolveTracingStorageStrategy(
   storage: MastraStorage,
   logger: IMastraLogger,
 ): TracingStorageStrategy {
+  const observabilityStore = storage.getStore('observability');
   if (config.strategy && config.strategy !== 'auto') {
-    const hints = storage.tracingStrategy;
-    if (hints.supported.includes(config.strategy)) {
+    const hints = observabilityStore?.tracingStrategy;
+    if (hints?.supported?.includes(config.strategy)) {
       return config.strategy;
     }
     // Log warning and fall through to auto-selection
     logger.warn('User-specified tracing strategy not supported by storage adapter, falling back to auto-selection', {
       userStrategy: config.strategy,
       storageAdapter: storage.constructor.name,
-      supportedStrategies: hints.supported,
-      fallbackStrategy: hints.preferred,
+      supportedStrategies: hints?.supported,
+      fallbackStrategy: hints?.preferred,
     });
   }
-  return storage.tracingStrategy.preferred;
+  return observabilityStore?.tracingStrategy?.preferred ?? 'batch-with-updates';
 }
 
 export class DefaultExporter extends BaseExporter {
@@ -402,13 +403,19 @@ export class DefaultExporter extends BaseExporter {
    * Handles realtime strategy - processes each event immediately
    */
   private async handleRealtimeEvent(event: TracingEvent, storage: MastraStorage): Promise<void> {
+    const observabilityStore = storage.getStore('observability');
+    if (!observabilityStore) {
+      this.logger.warn('Observability store not configured, skipping span storage');
+      return;
+    }
+
     const span = event.exportedSpan;
     const spanKey = this.buildSpanKey(span.traceId, span.id);
 
     // Event spans only have an end event
     if (span.isEvent) {
       if (event.type === TracingEventType.SPAN_ENDED) {
-        await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
+        await observabilityStore.createSpan(this.buildCreateRecord(event.exportedSpan));
         // For event spans in realtime, we don't need to track them since they're immediately complete
       } else {
         this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
@@ -416,19 +423,19 @@ export class DefaultExporter extends BaseExporter {
     } else {
       switch (event.type) {
         case TracingEventType.SPAN_STARTED:
-          await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
+          await observabilityStore.createSpan(this.buildCreateRecord(event.exportedSpan));
           // Track this span as created persistently
           this.allCreatedSpans.add(spanKey);
           break;
         case TracingEventType.SPAN_UPDATED:
-          await storage.updateSpan({
+          await observabilityStore.updateSpan({
             traceId: span.traceId,
             spanId: span.id,
             updates: this.buildUpdateRecord(span),
           });
           break;
         case TracingEventType.SPAN_ENDED:
-          await storage.updateSpan({
+          await observabilityStore.updateSpan({
             traceId: span.traceId,
             spanId: span.id,
             updates: this.buildUpdateRecord(span),
@@ -552,11 +559,17 @@ export class DefaultExporter extends BaseExporter {
    * Attempts to flush with exponential backoff retry logic
    */
   private async flushWithRetries(storage: MastraStorage, buffer: BatchBuffer, attempt: number): Promise<void> {
+    const observabilityStore = storage.getStore('observability');
+    if (!observabilityStore) {
+      this.logger.warn('Observability store not configured, skipping batch flush');
+      return;
+    }
+
     try {
       if (this.#resolvedStrategy === 'batch-with-updates') {
         // Process creates first (always safe)
         if (buffer.creates.length > 0) {
-          await storage.batchCreateSpans({ records: buffer.creates });
+          await observabilityStore.batchCreateSpans({ records: buffer.creates });
         }
 
         // Sort updates by span, then by sequence number
@@ -569,12 +582,12 @@ export class DefaultExporter extends BaseExporter {
             return a.sequenceNumber - b.sequenceNumber;
           });
 
-          await storage.batchUpdateSpans({ records: sortedUpdates });
+          await observabilityStore.batchUpdateSpans({ records: sortedUpdates });
         }
       } else if (this.#resolvedStrategy === 'insert-only') {
         // Simple batch insert for insert-only strategy
         if (buffer.insertOnly.length > 0) {
-          await storage.batchCreateSpans({ records: buffer.insertOnly });
+          await observabilityStore.batchCreateSpans({ records: buffer.insertOnly });
         }
       }
 

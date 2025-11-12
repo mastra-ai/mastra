@@ -68,8 +68,8 @@ export type InngestWorkflowConfig<
 // Compile-time compatibility assertion
 type _AssertInngestCompatibility =
   InngestFlowControlConfig extends Pick<Parameters<Inngest['createFunction']>[0], keyof InngestFlowControlConfig>
-    ? true
-    : never;
+  ? true
+  : never;
 const _compatibilityCheck: _AssertInngestCompatibility = true;
 
 export type InngestEngineType = {
@@ -297,15 +297,15 @@ export class InngestRun<
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
     step:
-      | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
-      | string
-      | string[];
+    | Step<string, any, any, TResumeSchema, any>
+    | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+    | string
+    | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
+        this.closeStreamAction?.().catch(() => { });
       }
 
       return result;
@@ -318,10 +318,10 @@ export class InngestRun<
   async _resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
     step:
-      | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
-      | string
-      | string[];
+    | Step<string, any, any, TResumeSchema, any>
+    | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+    | string
+    | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const storage = this.#mastra?.getStorage();
@@ -422,7 +422,7 @@ export class InngestRun<
         }
         // watch events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
-      } catch {}
+      } catch { }
     });
 
     this.closeStreamAction = async () => {
@@ -444,7 +444,7 @@ export class InngestRun<
 
     this.executionResults = this._start({ inputData, requestContext, format: 'legacy' }).then(result => {
       if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => {});
+        this.closeStreamAction?.().catch(() => { });
       }
 
       return result;
@@ -479,7 +479,7 @@ export class InngestRun<
       return this.streamOutput;
     }
 
-    this.closeStreamAction = async () => {};
+    this.closeStreamAction = async () => { };
 
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
@@ -524,9 +524,9 @@ export class InngestRun<
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
             // this will trigger a finish event with workflow status set to suspended
-            self.closeStreamAction?.().catch(() => {});
+            self.closeStreamAction?.().catch(() => { });
           } else if (executionResults.status !== 'suspended') {
-            self.closeStreamAction?.().catch(() => {});
+            self.closeStreamAction?.().catch(() => { });
           }
           if (self.streamOutput) {
             self.streamOutput.updateResults(
@@ -535,7 +535,7 @@ export class InngestRun<
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => {});
+          self.closeStreamAction?.().catch(() => { });
         }
       },
     });
@@ -612,7 +612,7 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.listWorkflowRuns({ workflowId: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
+    return storage.getStore('workflows')?.listWorkflowRuns({ workflowId: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
@@ -624,7 +624,7 @@ export class InngestWorkflow<
         ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = (await storage.getWorkflowRunById({ runId, workflowId: this.id })) as unknown as WorkflowRun;
+    const run = (await storage.getStore('workflows')?.getWorkflowRunById({ runId, workflowId: this.id })) as unknown as WorkflowRun;
 
     return (
       run ??
@@ -790,7 +790,7 @@ export class InngestWorkflow<
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
-              void emitter.emit('watch', chunk).catch(() => {});
+              void emitter.emit('watch', chunk).catch(() => { });
             },
           }),
         });
@@ -899,27 +899,27 @@ export function createStep<
 >(
   params:
     | {
-        id: TStepId;
-        description?: string;
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        resumeSchema?: TResumeSchema;
-        suspendSchema?: TSuspendSchema;
-        execute: ExecuteFunction<
-          z.infer<TState>,
-          z.infer<TStepInput>,
-          z.infer<TStepOutput>,
-          z.infer<TResumeSchema>,
-          z.infer<TSuspendSchema>,
-          InngestEngineType
-        >;
-      }
+      id: TStepId;
+      description?: string;
+      inputSchema: TStepInput;
+      outputSchema: TStepOutput;
+      resumeSchema?: TResumeSchema;
+      suspendSchema?: TSuspendSchema;
+      execute: ExecuteFunction<
+        z.infer<TState>,
+        z.infer<TStepInput>,
+        z.infer<TStepOutput>,
+        z.infer<TResumeSchema>,
+        z.infer<TSuspendSchema>,
+        InngestEngineType
+      >;
+    }
     | Agent<any, any>
     | (Tool<TStepInput, TStepOutput, any> & {
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
-      }),
+      inputSchema: TStepInput;
+      outputSchema: TStepOutput;
+      execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
+    }),
   agentOptions?: AgentStepOptions,
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
@@ -1263,8 +1263,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               getInitData: () => stepResults?.input as any,
               getStepResult: getStepResult.bind(this, stepResults),
               // TODO: this function shouldn't have suspend probably?
-              suspend: async (_suspendPayload: any): Promise<any> => {},
-              bail: () => {},
+              suspend: async (_suspendPayload: any): Promise<any> => { },
+              bail: () => { },
               abort: () => {
                 abortController?.abort();
               },
@@ -1381,8 +1381,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               getInitData: () => stepResults?.input as any,
               getStepResult: getStepResult.bind(this, stepResults),
               // TODO: this function shouldn't have suspend probably?
-              suspend: async (_suspendPayload: any): Promise<any> => {},
-              bail: () => {},
+              suspend: async (_suspendPayload: any): Promise<any> => { },
+              bail: () => { },
               abort: () => {
                 abortController?.abort();
               },
@@ -1842,12 +1842,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         e instanceof Error
           ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
           : {
-              status: 'failed' as const,
-              error: e instanceof Error ? e.message : String(e),
-              payload: inputData,
-              startedAt,
-              endedAt: Date.now(),
-            };
+            status: 'failed' as const,
+            error: e instanceof Error ? e.message : String(e),
+            payload: inputData,
+            startedAt,
+            endedAt: Date.now(),
+          };
 
       stepRes = {
         result: stepFailure,
@@ -2027,8 +2027,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                     getInitData: () => stepResults?.input as any,
                     getStepResult: getStepResult.bind(this, stepResults),
                     // TODO: this function shouldn't have suspend probably?
-                    suspend: async (_suspendPayload: any) => {},
-                    bail: () => {},
+                    suspend: async (_suspendPayload: any) => { },
+                    bail: () => { },
                     abort: () => {
                       abortController.abort();
                     },

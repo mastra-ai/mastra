@@ -35,7 +35,11 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
-    const trace = await storage.getTrace(traceId);
+    const observabilityStore = storage.getStore('observability');
+    if (!observabilityStore) {
+      throw new HTTPException(500, { message: 'Mastra Storage: Observability store is not configured.' });
+    }
+    const trace = await observabilityStore.getTrace(traceId);
 
     if (!trace) {
       throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });

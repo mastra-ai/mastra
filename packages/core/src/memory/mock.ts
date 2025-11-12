@@ -31,7 +31,16 @@ export class MockMemory extends MastraMemory {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    return this.storage.saveThread({ thread });
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_SAVE_THREAD_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    return memoryStore.saveThread({ thread });
   }
 
   async saveMessages({
@@ -47,20 +56,47 @@ export class MockMemory extends MastraMemory {
       .add(messages, 'memory')
       .get.all.db();
 
-    return this.storage.saveMessages({ messages: dbMessages });
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_SAVE_MESSAGES_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    return memoryStore.saveMessages({ messages: dbMessages });
   }
 
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_LIST_THREADS_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    return memoryStore.listThreadsByResourceId(args);
   }
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage
-    const result = await this.storage.listMessages({
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    const result = await memoryStore.listMessages({
       threadId: args.threadId,
       resourceId: args.resourceId,
       perPage: args.perPage,
@@ -73,14 +109,32 @@ export class MockMemory extends MastraMemory {
     return result;
   }
   async deleteThread(threadId: string) {
-    return this.storage.deleteThread({ threadId });
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_DELETE_THREAD_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    return memoryStore.deleteThread({ threadId });
   }
 
   async deleteMessages(messageIds: MessageDeleteInput): Promise<void> {
     const ids = Array.isArray(messageIds)
       ? messageIds?.map(item => (typeof item === 'string' ? item : item.id))
       : [messageIds];
-    return this.storage.deleteMessages(ids);
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_DELETE_MESSAGES_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    return memoryStore.deleteMessages(ids);
   }
 
   // Add missing method implementations
@@ -141,7 +195,16 @@ export class MockMemory extends MastraMemory {
   }
 
   async updateMessages({ messages }: { messages: MastraDBMessage[] }): Promise<MastraDBMessage[]> {
-    const result = await this.saveMessages({ messages });
-    return result.messages;
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_UPDATE_MESSAGES_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    const result = await memoryStore.updateMessages({ messages });
+    return result;
   }
 }
