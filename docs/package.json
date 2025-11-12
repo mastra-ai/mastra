@@ -59,7 +59,7 @@
     "@docusaurus/tsconfig": "^3.9.1",
     "@docusaurus/types": "^3.9.1",
     "@tailwindcss/postcss": "^4.0.7",
-    "@types/node": "^20.0.0",
+    "@types/node": "^24.10.1",
     "postcss": "^8.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwind-merge": "^3.0.1",

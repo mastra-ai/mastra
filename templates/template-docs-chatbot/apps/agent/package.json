@@ -30,7 +30,7 @@
     "@mastra/memory": "latest"
   },
   "devDependencies": {
-    "@types/node": "^24.0.10",
+    "@types/node": "^24.10.1",
     "mastra": "latest",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
