@@ -3,7 +3,7 @@
 import { format, formatDate, isValid } from 'date-fns';
 import { CalendarIcon, CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
-import type { DayPickerSingleProps } from 'react-day-picker';
+import type { DayPickerProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { Button } from '../buttons';
@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { TimePicker } from './time-picker';
 import { InputField } from '../form-fields';
 
-type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
+type CommonProps = Omit<DayPickerProps, 'mode' | 'selected' | 'onSelect'> & {
   value: Date | undefined | null;
   minValue?: Date | null;
   maxValue?: Date | null;

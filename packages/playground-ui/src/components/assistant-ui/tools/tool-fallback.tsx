@@ -4,7 +4,6 @@ import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
-import { useToolCall } from '@/services/tool-call-provider';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {

@@ -1,5 +1,5 @@
 import { ParsedField, ParsedSchema, SchemaValidation } from '@autoform/core';
-import { getFieldConfigInZodStack, ZodProvider } from '@autoform/zod/v4';
+import { getFieldConfigInZodStack, ZodProvider } from '@autoform/zod';
 import { z } from 'zod';
 import { z as zV3 } from 'zod/v3';
 import { inferFieldType } from './field-type-inference';
