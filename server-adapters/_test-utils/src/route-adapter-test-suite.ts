@@ -4,7 +4,7 @@ import type { Mastra } from '@mastra/core';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { buildRouteRequest, expectValidSchema } from '@mastra/server/server-adapter';
-import { createDefaultTestContext, parseDatesInResponse } from './mock-helpers';
+import { createDefaultTestContext, parseDatesInResponse } from './test-helpers';
 
 /**
  * Test context for adapter integration tests
