@@ -1,5 +1,4 @@
 import { getErrorFromUnknown, type SerializableError } from './utils.js';
-export { getErrorFromUnknown, type SerializableError } from './utils.js';
 
 export enum ErrorDomain {
   TOOL = 'TOOL',

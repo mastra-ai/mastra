@@ -5,7 +5,6 @@ import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
-import type { MastraError } from '../error';
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
