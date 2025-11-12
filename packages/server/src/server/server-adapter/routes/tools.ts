@@ -9,6 +9,15 @@ import {
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
+/**
+ * Wrapper for executeToolHandler to properly handle the curried function signature.
+ * executeToolHandler is curried: executeToolHandler(tools) returns the actual handler.
+ */
+const executeToolHandlerWrapper = async (params: any) => {
+  const { tools } = params;
+  return executeToolHandler(tools);
+};
+
 export const TOOLS_ROUTES: ServerRoute[] = [
   createRoute({
     method: 'GET',
@@ -34,7 +43,7 @@ export const TOOLS_ROUTES: ServerRoute[] = [
   createRoute({
     method: 'POST',
     responseType: 'json',
-    handler: executeToolHandler as unknown as ServerRouteHandler,
+    handler: executeToolHandlerWrapper as unknown as ServerRouteHandler,
     path: '/api/tools/:toolId/execute',
     pathParamSchema: toolIdPathParams,
     bodySchema: executeToolBodySchema,

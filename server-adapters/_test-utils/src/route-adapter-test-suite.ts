@@ -66,8 +66,6 @@ export interface RouteAdapterTestSuiteConfig {
 
   /**
    * Execute HTTP request through the adapter's framework (Express/Hono)
-   * - Express: Use supertest
-   * - Hono: Use app.request() or app.fetch()
    */
   executeHttpRequest: (app: any, request: HttpRequest) => Promise<HttpResponse>;
 

@@ -1,5 +1,6 @@
 import { describe } from 'vitest';
 import express, { type Application } from 'express';
+import { Server } from 'http';
 import { ExpressServerAdapter } from '../index';
 import {
   createRouteAdapterTestSuite,
@@ -42,17 +43,29 @@ describe('Express Server Adapter', () => {
       return { adapter, app };
     },
 
-    executeHttpRequest: async (app: Application, request: HttpRequest): Promise<HttpResponse> => {
-      return new Promise((resolve, reject) => {
+    executeHttpRequest: async (app: Application, httpRequest: HttpRequest): Promise<HttpResponse> => {
+      // Start server on random port
+      const server: Server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      try {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Failed to get server address');
+        }
+        const port = address.port;
+        const baseUrl = `http://localhost:${port}`;
+
         // Build URL with query params
-        let url = request.path;
-        if (request.query) {
+        let url = `${baseUrl}${httpRequest.path}`;
+        if (httpRequest.query) {
           const queryParams = new URLSearchParams();
-          Object.entries(request.query).forEach(([key, value]) => {
+          Object.entries(httpRequest.query).forEach(([key, value]) => {
             if (Array.isArray(value)) {
-              value.forEach(v => queryParams.append(key, v));
+              value.forEach(v => queryParams.append(key, String(v)));
             } else {
-              queryParams.append(key, value);
+              queryParams.append(key, String(value));
             }
           });
           const queryString = queryParams.toString();
@@ -61,134 +74,72 @@ describe('Express Server Adapter', () => {
           }
         }
 
-        // Create Node.js http request
-        const req = {
-          method: request.method,
-          url,
+        // Build fetch options
+        const fetchOptions: RequestInit = {
+          method: httpRequest.method,
           headers: {
-            'content-type': 'application/json',
-            ...(request.headers || {}),
+            'Content-Type': 'application/json',
+            ...(httpRequest.headers || {}),
           },
-          body: request.body,
         };
 
-        // Mock response object
-        const chunks: Buffer[] = [];
-        let statusCode = 200;
+        // Add body for POST/PUT/PATCH
+        if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+          fetchOptions.body = JSON.stringify(httpRequest.body);
+        }
+
+        // Execute request
+        const response = await fetch(url, fetchOptions);
+
+        // Extract headers
         const headers: Record<string, string> = {};
-
-        const mockRes: any = {
-          status(code: number) {
-            statusCode = code;
-            return this;
-          },
-          json(data: unknown) {
-            if (data === undefined) {
-              resolve({
-                status: statusCode,
-                type: 'json',
-                data: null,
-                headers,
-              });
-              return;
-            }
-            const jsonData = JSON.stringify(data);
-            const parsedData = JSON.parse(jsonData);
-            resolve({
-              status: statusCode,
-              type: 'json',
-              data: parsedData,
-              headers,
-            });
-          },
-          send(data: unknown) {
-            resolve({
-              status: statusCode,
-              type: 'json',
-              data,
-              headers,
-            });
-          },
-          setHeader(name: string, value: string) {
-            headers[name.toLowerCase()] = value;
-          },
-          write(chunk: unknown) {
-            if (typeof chunk === 'string') {
-              chunks.push(Buffer.from(chunk));
-            } else if (Buffer.isBuffer(chunk)) {
-              chunks.push(chunk);
-            }
-          },
-          end() {
-            // Check if this is a stream response based on headers
-            const contentType = headers['content-type'] || '';
-            const transferEncoding = headers['transfer-encoding'] || '';
-            const isStream = contentType.includes('text/plain') || transferEncoding === 'chunked';
-
-            if (isStream || chunks.length > 0) {
-              // Convert chunks to ReadableStream for compatibility with test suite
-              const buffer = chunks.length > 0 ? Buffer.concat(chunks) : Buffer.from('');
-              const stream = new ReadableStream({
-                start(controller) {
-                  if (buffer.length > 0) {
-                    controller.enqueue(buffer);
-                  }
-                  controller.close();
-                },
-              });
-              resolve({
-                status: statusCode,
-                type: 'stream',
-                stream,
-                headers,
-              });
-            } else {
-              resolve({
-                status: statusCode,
-                type: 'json',
-                data: null,
-                headers,
-              });
-            }
-          },
-          sendStatus(code: number) {
-            statusCode = code;
-            resolve({
-              status: code,
-              type: 'json',
-              data: null,
-              headers,
-            });
-          },
-          locals: {},
-        };
-
-        // Mock request object
-        const mockReq: any = {
-          method: request.method,
-          url,
-          path: request.path,
-          params: {},
-          query: request.query || {},
-          body: request.body,
-          headers: req.headers,
-        };
-
-        // Call Express app
-        app(mockReq, mockRes, (err: Error) => {
-          if (err) {
-            reject(err);
-          } else {
-            // No route matched
-            resolve({
-              status: 404,
-              type: 'json',
-              data: { error: 'Not Found' },
-              headers: {},
-            });
-          }
+        response.headers.forEach((value, key) => {
+          headers[key] = value;
         });
-      });
+
+        // Check if stream response
+        const contentType = response.headers.get('content-type') || '';
+        const transferEncoding = response.headers.get('transfer-encoding') || '';
+        const isStream = contentType.includes('text/plain') || transferEncoding === 'chunked';
+
+        if (isStream && response.body) {
+          // Return stream response
+          return {
+            status: response.status,
+            type: 'stream',
+            stream: response.body,
+            headers,
+          };
+        } else {
+          // JSON response - check content type to decide how to parse
+          let data: unknown;
+          const responseContentType = response.headers.get('content-type') || '';
+
+          if (responseContentType.includes('application/json')) {
+            try {
+              data = await response.json();
+            } catch {
+              // If JSON parsing fails, return empty object
+              data = {};
+            }
+          } else {
+            // Not JSON content type, read as text
+            data = await response.text();
+          }
+
+          return {
+            status: response.status,
+            type: 'json',
+            data,
+            headers,
+          };
+        }
+      } finally {
+        // Always close server
+        await new Promise<void>(resolve => {
+          server.close(() => resolve());
+        });
+      }
     },
   });
 });
