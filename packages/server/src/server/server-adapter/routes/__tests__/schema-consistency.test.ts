@@ -1,8 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { SERVER_ROUTES } from '../index';
-import { extractPathParams } from './test-helpers';
+import { createRouteTestSuite } from './route-test-suite';
+import { extractPathParams } from './route-test-utils';
 
 describe('Schema Consistency Across All Routes', () => {
+  describe('Route Validation', () => {
+    createRouteTestSuite({
+      routes: SERVER_ROUTES,
+    });
+  });
   describe('OpenAPI Specification', () => {
     it('all routes should have OpenAPI specs except ALL method routes', () => {
       SERVER_ROUTES.forEach(route => {

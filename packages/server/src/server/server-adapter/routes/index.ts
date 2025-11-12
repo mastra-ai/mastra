@@ -50,12 +50,4 @@ export { createRoute } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';
 
 // Export test utilities for adapter integration tests
-export {
-  generateContextualValue,
-  generateValidDataFromSchema,
-  getDefaultValidPathParams,
-  getDefaultInvalidPathParams,
-  buildRouteRequest,
-  convertQueryValues,
-  expectValidSchema,
-} from './__tests__/route-test-utils';
+export { getDefaultValidPathParams, buildRouteRequest, expectValidSchema } from './__tests__/route-test-utils';

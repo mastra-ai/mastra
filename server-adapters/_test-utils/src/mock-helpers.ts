@@ -288,19 +288,6 @@ async function mockWorkflowRun(workflow: Workflow) {
 }
 
 /**
- * Create a mock RequestContext
- */
-export function createMockRequestContext(context?: Record<string, any>): RequestContext {
-  const requestContext = new RequestContext();
-  if (context) {
-    Object.entries(context).forEach(([key, value]) => {
-      requestContext.set(key, value);
-    });
-  }
-  return requestContext;
-}
-
-/**
  * Creates a mock voice provider
  */
 export function createMockVoice() {
