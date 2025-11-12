@@ -79,7 +79,7 @@ export const ConversationScrollButton = ({
   }, [scrollToBottom]);
 
   return (
-    !isAtBottom && (
+    // !isAtBottom && (
       <Button
         className={cn(
           "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full",
@@ -93,6 +93,6 @@ export const ConversationScrollButton = ({
       >
         <ArrowDownIcon className="size-4" />
       </Button>
-    )
+    // )
   );
 };
