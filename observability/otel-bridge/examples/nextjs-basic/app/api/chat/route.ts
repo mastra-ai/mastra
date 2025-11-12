@@ -1,11 +1,16 @@
 /**
  * Chat API route with OTEL context extraction
+ *
+ * This demonstrates standard OTEL auto-instrumentation pattern:
+ * - OTEL SDK sets up AsyncLocalStorage for context propagation (via instrumentation.ts)
+ * - OtelBridge reads from ambient context automatically
+ * - No middleware or explicit context extraction needed
  */
 
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Observability } from '@mastra/observability';
-import { OtelBridge, getNextOtelContext } from '@mastra/otel-bridge';
+import { OtelBridge } from '@mastra/otel-bridge';
 
 // Create agent instance
 const chatAgentDef = new Agent({
@@ -20,11 +25,8 @@ const mastra = new Mastra({
   observability: new Observability({
     configs: {
       default: {
-        serviceName: 'otel-bridge-example-nextjs',
-        bridge: new OtelBridge({
-          extractFrom: 'headers',
-          logLevel: 'debug',
-        }),
+        serviceName: 'otel-bridge-example-nextjs-basic',
+        bridge: new OtelBridge(),
       },
     },
   }),
@@ -42,33 +44,15 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Message is required' }, { status: 400 });
     }
 
-    // Extract OTEL context from request headers
-    const requestContext = getNextOtelContext(request);
-    const hasOtelContext = !!requestContext;
-    const otelHeaders = requestContext?.get('otel.headers') as
-      | { traceparent?: string; tracestate?: string }
-      | undefined;
+    console.info('Request received:', { message });
 
-    console.log('Request received:', {
-      message,
-      hasOtelContext,
-      contextKeys: requestContext ? Array.from(requestContext.keys()) : [],
-      otelHeaders,
-    });
-
-    // Pass requestContext to agent - this contains extracted OTEL headers
-    const result = await chatAgent.generate([{ role: 'user', content: message }], {
-      requestContext,
-    });
+    // No context extraction needed! Bridge reads from OTEL's ambient context automatically
+    const result = await chatAgent.generate([{ role: 'user', content: message }]);
 
     return Response.json({
       response: result.text,
       otelContext: {
-        extracted: hasOtelContext,
-        message: hasOtelContext
-          ? 'OTEL trace context was successfully extracted from headers'
-          : 'No OTEL trace context found in request headers',
-        headers: otelHeaders,
+        message: 'OTEL context automatically propagated via AsyncLocalStorage',
       },
     });
   } catch (error) {

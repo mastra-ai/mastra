@@ -1,22 +1,21 @@
 /**
  * Minimal example showing OpenTelemetry bridge with Fastify
  *
- * This demonstrates Scenario A: HTTP service receiving W3C trace context headers
+ * This demonstrates standard OTEL auto-instrumentation pattern:
+ * - OTEL SDK sets up AsyncLocalStorage for context propagation
+ * - OtelBridge reads from ambient context automatically
+ * - No plugin registration needed in application code
  */
 
-import { config } from 'dotenv';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+// IMPORTANT: Import instrumentation FIRST!
+// eslint-disable-next-line import/order
+import { memoryExporter } from './instrumentation';
 
-// Load environment variables from parent examples directory
-const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, '../.env') });
-
-import Fastify from 'fastify';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Observability } from '@mastra/observability';
-import { OtelBridge, fastifyPlugin } from '@mastra/otel-bridge';
+import { OtelBridge } from '@mastra/otel-bridge';
+import Fastify from 'fastify';
 
 // Create agent instance
 const chatAgentDef = new Agent({
@@ -32,10 +31,7 @@ const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'otel-bridge-example-fastify',
-        bridge: new OtelBridge({
-          extractFrom: 'headers', // Extract from HTTP headers
-          logLevel: 'debug',
-        }),
+        bridge: new OtelBridge(),
       },
     },
   }),
@@ -48,11 +44,10 @@ const fastify = Fastify({
   logger: false,
 });
 
-// Register OTEL plugin to extract trace context
-await fastify.register(fastifyPlugin);
+// No plugin needed! OTEL auto-instrumentation handles context propagation
 
 // Health check endpoint
-fastify.get('/health', async (request, reply) => {
+fastify.get('/health', async (_request, _reply) => {
   return { status: 'ok' };
 });
 
@@ -66,31 +61,15 @@ fastify.post<{ Body: { message: string } }>('/chat', async (request, reply) => {
   }
 
   try {
-    const hasOtelContext = !!request.requestContext;
-    const otelHeaders = request.requestContext?.get('otel.headers') as
-      | { traceparent?: string; tracestate?: string }
-      | undefined;
+    console.info('Request received:', { message });
 
-    console.log('Request received:', {
-      message,
-      hasOtelContext,
-      contextKeys: request.requestContext ? Array.from(request.requestContext.keys()) : [],
-      otelHeaders,
-    });
-
-    // Pass requestContext to agent - this contains extracted OTEL headers
-    const result = await chatAgent.generate([{ role: 'user', content: message }], {
-      requestContext: request.requestContext,
-    });
+    // No context extraction needed! Bridge reads from OTEL's ambient context automatically
+    const result = await chatAgent.generate([{ role: 'user', content: message }]);
 
     return {
       response: result.text,
       otelContext: {
-        extracted: hasOtelContext,
-        message: hasOtelContext
-          ? 'OTEL trace context was successfully extracted from headers'
-          : 'No OTEL trace context found in request headers',
-        headers: otelHeaders,
+        message: 'OTEL context automatically propagated via AsyncLocalStorage',
       },
     };
   } catch (error) {
@@ -100,6 +79,19 @@ fastify.post<{ Body: { message: string } }>('/chat', async (request, reply) => {
   }
 });
 
+// Test-only endpoints to inspect captured spans
+if (process.env.NODE_ENV === 'test' && memoryExporter) {
+  fastify.get('/test/spans', async (_request, _reply) => {
+    const spans = memoryExporter!.getFinishedSpans();
+    return { spans };
+  });
+
+  fastify.post('/test/reset-spans', async (_request, _reply) => {
+    memoryExporter!.reset();
+    return { success: true };
+  });
+}
+
 const PORT = 3457;
 
 fastify.listen({ port: PORT }, (err, address) => {
@@ -107,8 +99,8 @@ fastify.listen({ port: PORT }, (err, address) => {
     console.error(err);
     process.exit(1);
   }
-  console.log(`Server running on ${address}`);
-  console.log(
+  console.info(`Server running on ${address}`);
+  console.info(
     `\nTest with:\ncurl -X POST ${address}/chat -H "Content-Type: application/json" -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" -d '{"message":"Hello!"}'`,
   );
 });

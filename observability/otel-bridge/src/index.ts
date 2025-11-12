@@ -18,9 +18,7 @@
  *     configs: {
  *       default: {
  *         serviceName: 'my-service',
- *         bridge: new OtelBridge({
- *           extractFrom: 'both',
- *         }),
+ *         bridge: new OtelBridge(),
  *       }
  *     }
  *   }

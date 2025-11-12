@@ -1,23 +1,25 @@
 /**
  * Minimal example showing OpenTelemetry bridge with Hono
  *
- * This demonstrates Scenario A: HTTP service receiving W3C trace context headers
+ * This demonstrates standard OTEL auto-instrumentation pattern:
+ * - OTEL SDK sets up AsyncLocalStorage for context propagation
+ * - OtelBridge reads from ambient context automatically
+ * - No middleware needed in application code
  */
 
-import { config } from 'dotenv';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+// IMPORTANT: Import instrumentation FIRST!
+// eslint-disable-next-line import/order
+import { memoryExporter } from './instrumentation';
 
-// Load environment variables from parent examples directory
-const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, '../.env') });
-
-import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Observability } from '@mastra/observability';
-import { OtelBridge, honoMiddleware } from '@mastra/otel-bridge';
+import { OtelBridge } from '@mastra/otel-bridge';
+import { Hono } from 'hono';
+
+// Optional: Add @hono/otel middleware for Hono-specific spans
+// import { instrument } from '@hono/otel';
 
 // Create agent instance
 const chatAgentDef = new Agent({
@@ -33,10 +35,7 @@ const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'otel-bridge-example-hono',
-        bridge: new OtelBridge({
-          extractFrom: 'headers', // Extract from HTTP headers
-          logLevel: 'debug',
-        }),
+        bridge: new OtelBridge(),
       },
     },
   }),
@@ -47,8 +46,10 @@ const chatAgent = mastra.getAgent('chatAgent');
 
 const app = new Hono();
 
-// Add OTEL middleware to extract trace context
-app.use('*', honoMiddleware());
+// No middleware needed! OTEL auto-instrumentation handles context propagation
+
+// Optional: Add Hono middleware for enhanced observability
+// app.use('*', instrument('hono-example'));
 
 // Health check endpoint
 app.get('/health', c => {
@@ -65,32 +66,15 @@ app.post('/chat', async c => {
   }
 
   try {
-    const requestContext = c.get('requestContext');
-    const hasOtelContext = !!requestContext;
-    const otelHeaders = requestContext?.get('otel.headers') as
-      | { traceparent?: string; tracestate?: string }
-      | undefined;
+    console.info('Request received:', { message });
 
-    console.log('Request received:', {
-      message,
-      hasOtelContext,
-      contextKeys: requestContext ? Array.from(requestContext.keys()) : [],
-      otelHeaders,
-    });
-
-    // Pass requestContext to agent - this contains extracted OTEL headers
-    const result = await chatAgent.generate([{ role: 'user', content: message }], {
-      requestContext,
-    });
+    // No context extraction needed! Bridge reads from OTEL's ambient context automatically
+    const result = await chatAgent.generate([{ role: 'user', content: message }]);
 
     return c.json({
       response: result.text,
       otelContext: {
-        extracted: hasOtelContext,
-        message: hasOtelContext
-          ? 'OTEL trace context was successfully extracted from headers'
-          : 'No OTEL trace context found in request headers',
-        headers: otelHeaders,
+        message: 'OTEL context automatically propagated via AsyncLocalStorage',
       },
     });
   } catch (error) {
@@ -99,6 +83,19 @@ app.post('/chat', async c => {
   }
 });
 
+// Test-only endpoints to inspect captured spans
+if (process.env.NODE_ENV === 'test' && memoryExporter) {
+  app.get('/test/spans', c => {
+    const spans = memoryExporter!.getFinishedSpans();
+    return c.json({ spans });
+  });
+
+  app.post('/test/reset-spans', c => {
+    memoryExporter!.reset();
+    return c.json({ success: true });
+  });
+}
+
 const PORT = 3458;
 
 serve({
@@ -106,7 +103,7 @@ serve({
   port: PORT,
 });
 
-console.log(`Server running on http://localhost:${PORT}`);
-console.log(
+console.info(`Server running on http://localhost:${PORT}`);
+console.info(
   `\nTest with:\ncurl -X POST http://localhost:${PORT}/chat -H "Content-Type: application/json" -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" -d '{"message":"Hello!"}'`,
 );

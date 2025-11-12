@@ -2,9 +2,9 @@
  * Fastify plugin for automatic OTEL context extraction
  */
 
+import { RequestContext } from '@mastra/core/di';
 import type { FastifyPluginCallback } from 'fastify';
 import fp from 'fastify-plugin';
-import { RequestContext } from '@mastra/core/di';
 import { extractOtelHeaders } from '../helpers.js';
 
 declare module 'fastify' {

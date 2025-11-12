@@ -1,17 +1,15 @@
 # Fastify Basic Example - OtelBridge
 
-> **Note**: This is a minimal example demonstrating the OtelBridge plugin integration with Fastify. The Mastra agent configuration may need adjustments based on your specific setup and API version.
-
 Minimal example demonstrating OpenTelemetry context propagation with Mastra using Fastify.
 
 ## What This Demonstrates
 
-**Scenario A**: HTTP service receiving W3C trace context headers
+Standard OTEL auto-instrumentation pattern:
 
-- Fastify server with OtelBridge plugin
-- Extracts `traceparent` and `tracestate` headers from incoming requests
-- Passes trace context to Mastra agent
-- Mastra spans become children of the incoming trace
+- OTEL SDK sets up AsyncLocalStorage for context propagation
+- OtelBridge reads from ambient context automatically
+- No plugin or explicit context extraction needed
+- Mastra spans automatically become children of incoming traces
 
 ## Setup
 
@@ -73,51 +71,61 @@ The `traceparent` header format is: `version-traceId-parentSpanId-flags`
 - `00f067aa0ba902b7` = 16-char hex parentSpanId
 - `01` = sampled flag
 
-### With Trace State
-
-```bash
-curl -X POST http://localhost:3457/chat \
-  -H "Content-Type: application/json" \
-  -H "traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" \
-  -H "tracestate: vendorname1=opaqueValue1,vendorname2=opaqueValue2" \
-  -d '{"message":"Tell me a joke"}'
-```
-
 ## How It Works
 
-1. **Plugin Registration**: `fastifyPlugin` is registered with Fastify to extract OTEL headers and store them in `request.requestContext`
+1. **Instrumentation Setup** (`instrumentation.ts`):
+   - Imports MUST happen first, before any other application code
+   - Configures OTEL SDK with tracer provider and span processor
+   - Sets up AsyncLocalStorage-based context propagation
+   - Registers Fastify auto-instrumentation
 
-2. **Bridge Configuration**: `OtelBridge` is configured to extract from headers:
+2. **OtelBridge Configuration**:
 
    ```typescript
-   new OtelBridge({
-     extractFrom: 'headers',
-     logLevel: 'debug',
+   new Observability({
+     configs: {
+       default: {
+         serviceName: 'otel-bridge-example-fastify',
+         bridge: new OtelBridge(),
+       },
+     },
    });
    ```
 
-3. **Context Passing**: The `requestContext` is passed to the agent:
+3. **Automatic Context Propagation**:
+   - OTEL SDK automatically extracts `traceparent` headers
+   - Context is stored in AsyncLocalStorage
+   - OtelBridge reads from active context automatically
+   - No plugin or manual context passing needed
+
+4. **Agent Usage**:
 
    ```typescript
-   await chatAgent.generate([{ role: 'user', content: message }], {
-     requestContext: request.requestContext,
-   });
+   const result = await chatAgent.generate([{ role: 'user', content: message }]);
    ```
 
-4. **Span Creation**: Mastra uses the bridge to extract `traceId` and `parentSpanId`, creating spans that belong to the same trace
+   - No requestContext parameter needed
+   - Bridge automatically reads from ambient OTEL context
 
 ## Expected Output
 
 When you send a request with trace context, the server logs should show:
 
 ```
-[OtelBridge] Extracted context from headers [traceId=4bf92f3577b34da6a3ce929d0e0e4736]
+[OtelBridge] Extracted context from active span [traceId=4bf92f3577b34da6a3ce929d0e0e4736]
 ```
 
 The Mastra spans will use the provided traceId and parentSpanId, maintaining trace continuity.
 
+## Key Implementation Details
+
+- **Import Order**: `instrumentation.ts` MUST be imported first
+- **No Plugin**: OTEL auto-instrumentation handles everything
+- **No Config**: `OtelBridge()` needs no configuration parameters
+- **AsyncLocalStorage**: Context propagates automatically through async calls
+
 ## Next Steps
 
 - Add OpenTelemetry exporter (OTLP, Jaeger, Zipkin) to visualize traces
-- Use `@opentelemetry/auto-instrumentations-node` for automatic HTTP instrumentation
+- Configure additional auto-instrumentations for databases, HTTP clients, etc.
 - Connect to an observability backend (Arize, Honeycomb, Datadog, etc.)

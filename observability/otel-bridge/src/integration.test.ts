@@ -7,16 +7,15 @@
  * and that the examples stay up-to-date.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawn, ChildProcess } from 'child_process';
-import { fileURLToPath } from 'url';
+import type { ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
 import { dirname, resolve } from 'path';
-import { config } from 'dotenv';
+import { fileURLToPath } from 'url';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load environment variables from examples/.env if not already set
-config({ path: resolve(__dirname, '../examples/.env') });
+// Note: Environment variables are loaded from .env via vitest.config.ts
 
 // Define framework configurations
 const frameworks = [
@@ -63,7 +62,7 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
     beforeAll(async () => {
       // Skip tests if no OpenAI API key is provided
       if (!process.env.OPENAI_API_KEY) {
-        console.log(`Skipping ${framework.name} integration tests: OPENAI_API_KEY not set`);
+        console.info(`Skipping ${framework.name} integration tests: OPENAI_API_KEY not set`);
         return;
       }
 
@@ -74,13 +73,13 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
       if (framework.serverFile) {
         const examplePath = resolve(exampleDir, framework.serverFile);
         serverProcess = spawn('npx', ['tsx', examplePath], {
-          env: { ...process.env },
+          env: { ...process.env, NODE_ENV: 'test' },
           cwd: exampleDir,
         });
       } else {
         // Next.js - use pnpm dev
         serverProcess = spawn('pnpm', ['dev'], {
-          env: { ...process.env },
+          env: { ...process.env, NODE_ENV: 'test' },
           cwd: exampleDir,
           shell: true,
         });
@@ -141,6 +140,11 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
       'should handle chat request without OTEL trace context',
       { skip: !process.env.OPENAI_API_KEY, timeout: 30000 },
       async () => {
+        // Reset spans before test
+        if (framework.serverFile) {
+          await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
+        }
+
         const response = await fetch(`http://localhost:${testPort}${framework.routePrefix}/chat`, {
           method: 'POST',
           headers: {
@@ -151,12 +155,22 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
 
         const data = await response.json();
 
+        // Verify HTTP response
         expect(response.status).toBe(200);
         expect(data).toHaveProperty('response');
         expect(typeof data.response).toBe('string');
         expect(data.response.length).toBeGreaterThan(0);
-        expect(data.otelContext.extracted).toBe(false);
-        expect(data.otelContext.message).toBe('No OTEL trace context found in request headers');
+
+        // Verify OTEL spans were created (for non-Next.js frameworks)
+        if (framework.serverFile) {
+          const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
+          const spansData = await spansResponse.json();
+          expect(spansData.spans).toBeDefined();
+          expect(Array.isArray(spansData.spans)).toBe(true);
+          // Should have HTTP server spans
+          const httpSpans = spansData.spans.filter((s: any) => s.name.includes('POST'));
+          expect(httpSpans.length).toBeGreaterThan(0);
+        }
       },
     );
 
@@ -164,7 +178,13 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
       'should extract OTEL trace context from traceparent header',
       { skip: !process.env.OPENAI_API_KEY, timeout: 30000 },
       async () => {
+        // Reset spans before test
+        if (framework.serverFile) {
+          await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
+        }
+
         const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+        const expectedTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
 
         const response = await fetch(`http://localhost:${testPort}${framework.routePrefix}/chat`, {
           method: 'POST',
@@ -177,17 +197,23 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
 
         const data = await response.json();
 
+        // Verify HTTP response
         expect(response.status).toBe(200);
         expect(data).toHaveProperty('response');
         expect(typeof data.response).toBe('string');
         expect(data.response.length).toBeGreaterThan(0);
-        expect(data.otelContext.extracted).toBe(true);
-        expect(data.otelContext.message).toBe('OTEL trace context was successfully extracted from headers');
 
-        // Verify traceparent was extracted
-        expect(data.otelContext.headers).toBeDefined();
-        expect(data.otelContext.headers.traceparent).toBe(traceparent);
-        expect(data.otelContext.headers.tracestate).toBeUndefined();
+        // Verify OTEL trace propagation via spans (for non-Next.js frameworks)
+        if (framework.serverFile) {
+          const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
+          const spansData = await spansResponse.json();
+          expect(spansData.spans).toBeDefined();
+          expect(Array.isArray(spansData.spans)).toBe(true);
+
+          // Verify at least one span has the expected trace ID
+          const spansWithTraceId = spansData.spans.filter((s: any) => s.traceId === expectedTraceId);
+          expect(spansWithTraceId.length).toBeGreaterThan(0);
+        }
       },
     );
 
@@ -195,8 +221,14 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
       'should extract OTEL trace context with tracestate header',
       { skip: !process.env.OPENAI_API_KEY, timeout: 30000 },
       async () => {
+        // Reset spans before test
+        if (framework.serverFile) {
+          await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
+        }
+
         const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
         const tracestate = 'vendorname1=opaqueValue1,vendorname2=opaqueValue2';
+        const expectedTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
 
         const response = await fetch(`http://localhost:${testPort}${framework.routePrefix}/chat`, {
           method: 'POST',
@@ -210,17 +242,23 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
 
         const data = await response.json();
 
+        // Verify HTTP response
         expect(response.status).toBe(200);
         expect(data).toHaveProperty('response');
         expect(typeof data.response).toBe('string');
         expect(data.response.length).toBeGreaterThan(0);
-        expect(data.otelContext.extracted).toBe(true);
-        expect(data.otelContext.message).toBe('OTEL trace context was successfully extracted from headers');
 
-        // Verify both traceparent and tracestate were extracted
-        expect(data.otelContext.headers).toBeDefined();
-        expect(data.otelContext.headers.traceparent).toBe(traceparent);
-        expect(data.otelContext.headers.tracestate).toBe(tracestate);
+        // Verify OTEL trace propagation via spans (for non-Next.js frameworks)
+        if (framework.serverFile) {
+          const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
+          const spansData = await spansResponse.json();
+          expect(spansData.spans).toBeDefined();
+          expect(Array.isArray(spansData.spans)).toBe(true);
+
+          // Verify at least one span has the expected trace ID
+          const spansWithTraceId = spansData.spans.filter((s: any) => s.traceId === expectedTraceId);
+          expect(spansWithTraceId.length).toBeGreaterThan(0);
+        }
       },
     );
 

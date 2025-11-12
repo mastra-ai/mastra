@@ -1,7 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // Enable experimental features if needed
+  // instrumentation.ts is now available by default in Next.js
+  // No experimental flag needed
 };
 
 export default nextConfig;

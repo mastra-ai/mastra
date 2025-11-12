@@ -5,10 +5,11 @@
  * Compatible with both Node.js and Edge runtimes
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import type { RequestContext } from '@mastra/core/di';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { extractOtelHeaders } from '../helpers.js';
 // Dynamic import to avoid loading @mastra/core in Edge runtime
-import type { RequestContext } from '@mastra/core/di';
 
 // Custom header names to pass OTEL context through Next.js middleware
 const INTERNAL_TRACEPARENT_HEADER = 'x-mastra-otel-traceparent';

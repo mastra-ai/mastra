@@ -2,8 +2,8 @@
  * Express middleware for automatic OTEL context extraction
  */
 
-import type { Request, Response, NextFunction } from 'express';
 import { RequestContext } from '@mastra/core/di';
+import type { Request, Response, NextFunction } from 'express';
 import { extractOtelHeaders } from '../helpers.js';
 
 declare global {

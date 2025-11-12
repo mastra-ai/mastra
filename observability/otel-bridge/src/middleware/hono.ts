@@ -7,8 +7,8 @@
  * - Any platform that supports Hono
  */
 
-import { createMiddleware } from 'hono/factory';
 import { RequestContext } from '@mastra/core/di';
+import { createMiddleware } from 'hono/factory';
 import { extractOtelHeaders } from '../helpers.js';
 
 /**

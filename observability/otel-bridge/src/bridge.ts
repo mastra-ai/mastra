@@ -7,33 +7,25 @@
  * 3. Exporting Mastra spans to OTEL collectors
  */
 
-import { trace, context as otelContext } from '@opentelemetry/api';
-import { W3CTraceContextPropagator } from '@opentelemetry/core';
-import { BaseExporter } from '@mastra/observability';
-import type { ObservabilityBridge, TracingEvent, InitBridgeOptions } from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/di';
+import type { ObservabilityBridge, TracingEvent } from '@mastra/core/observability';
+import { TracingEventType } from '@mastra/core/observability';
+import { BaseExporter } from '@mastra/observability';
+import { trace, context as otelContext } from '@opentelemetry/api';
 
 /**
  * Configuration for the OtelBridge
  */
 export interface OtelBridgeConfig {
-  /**
-   * Where to extract OTEL context from
-   * - 'active-context': From trace.getSpan(context.active())
-   * - 'headers': From RequestContext with 'otel.headers' key
-   * - 'both': Try active context first, then headers (DEFAULT)
-   */
-  extractFrom?: 'active-context' | 'headers' | 'both';
-
-  /**
-   * Log level for the bridge
-   */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  // Currently no configuration options
+  // Log level is inherited from observability instance configuration
 }
 
 /**
  * OpenTelemetry Bridge implementation
+ *
+ * Extracts trace context from active OTEL spans using AsyncLocalStorage.
+ * Requires OTEL auto-instrumentation to be configured in your application.
  *
  * @example
  * ```typescript
@@ -46,9 +38,7 @@ export interface OtelBridgeConfig {
  *     configs: {
  *       default: {
  *         serviceName: 'my-service',
- *         bridge: new OtelBridge({
- *           extractFrom: 'both',  // Default
- *         }),
+ *         bridge: new OtelBridge(),
  *       }
  *     }
  *   }
@@ -58,52 +48,30 @@ export interface OtelBridgeConfig {
 export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel-bridge';
 
-  private config: Required<OtelBridgeConfig>;
-  private propagator: W3CTraceContextPropagator;
-
   constructor(config: OtelBridgeConfig = {}) {
-    super({ logLevel: config.logLevel });
-
-    this.config = {
-      extractFrom: config.extractFrom ?? 'both',
-      logLevel: config.logLevel ?? 'info',
-    };
-
-    // Use OTEL's standard W3C propagator
-    this.propagator = new W3CTraceContextPropagator();
+    super(config);
   }
 
   /**
    * Get current OTEL context for span creation
    *
-   * @param requestContext - Optional request context with headers
+   * Extracts context from the active OTEL span using AsyncLocalStorage.
+   * Requires OTEL auto-instrumentation to be configured.
+   *
+   * @param _requestContext - Unused, kept for compatibility
    * @returns OTEL context or undefined if not available
    */
-  getCurrentContext(requestContext?: RequestContext):
+  getCurrentContext(_requestContext?: RequestContext):
     | {
         traceId: string;
         parentSpanId?: string;
         isSampled: boolean;
       }
     | undefined {
-    const { extractFrom } = this.config;
-
-    // Strategy 1: Try active OTEL context (Scenario B)
-    if (extractFrom === 'active-context' || extractFrom === 'both') {
-      const activeContext = this.getActiveContext();
-      if (activeContext) {
-        this.logger.debug(`[OtelBridge] Extracted context from active span [traceId=${activeContext.traceId}]`);
-        return activeContext;
-      }
-    }
-
-    // Strategy 2: Try W3C headers from RequestContext (Scenario A)
-    if (extractFrom === 'headers' || extractFrom === 'both') {
-      const headerContext = this.getHeaderContext(requestContext);
-      if (headerContext) {
-        this.logger.debug(`[OtelBridge] Extracted context from headers [traceId=${headerContext.traceId}]`);
-        return headerContext;
-      }
+    const activeContext = this.getActiveContext();
+    if (activeContext) {
+      this.logger.debug(`[OtelBridge] Extracted context from active span [traceId=${activeContext.traceId}]`);
+      return activeContext;
     }
 
     this.logger.debug('[OtelBridge] No OTEL context found');
@@ -111,7 +79,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   }
 
   /**
-   * Extract context from active OTEL span (Scenario B)
+   * Extract context from active OTEL span
    */
   private getActiveContext():
     | {
@@ -139,52 +107,6 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       };
     } catch (error) {
       this.logger.debug('[OtelBridge] Failed to get active OTEL context:', error);
-      return undefined;
-    }
-  }
-
-  /**
-   * Extract context from W3C headers via RequestContext (Scenario A)
-   */
-  private getHeaderContext(requestContext?: RequestContext):
-    | {
-        traceId: string;
-        parentSpanId?: string;
-        isSampled: boolean;
-      }
-    | undefined {
-    if (!requestContext) {
-      return undefined;
-    }
-
-    try {
-      // Look for headers in RequestContext
-      // Convention: headers stored under 'otel.headers' key
-      const headers = requestContext.get('otel.headers') as { traceparent?: string; tracestate?: string } | undefined;
-      if (!headers?.traceparent) {
-        return undefined;
-      }
-
-      // Extract context using W3C propagator
-      const extractedContext = this.propagator.extract(otelContext.active(), headers, {
-        get: (carrier: any, key: string) => carrier[key],
-        keys: (carrier: any) => Object.keys(carrier),
-      });
-
-      // Get span from extracted context
-      const span = trace.getSpan(extractedContext);
-      if (!span) {
-        return undefined;
-      }
-
-      const spanContext = span.spanContext();
-      return {
-        traceId: spanContext.traceId,
-        parentSpanId: spanContext.spanId,
-        isSampled: (spanContext.traceFlags & 1) === 1,
-      };
-    } catch (error) {
-      this.logger.debug('[OtelBridge] Failed to extract context from headers:', error);
       return undefined;
     }
   }
