@@ -7,6 +7,7 @@ export const listLogsQuerySchema = createPagePaginationSchema().extend({
   toDate: z.coerce.date().optional(),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
   filters: z.union([z.string(), z.array(z.string())]).optional(),
+  transportId: z.string(),
 });
 
 // Response schemas

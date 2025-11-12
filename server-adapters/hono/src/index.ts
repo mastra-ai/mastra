@@ -167,7 +167,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     const urlParams = request.param();
     const queryParams = request.query();
     let body: unknown;
-    if (route.method === 'POST' || route.method === 'PUT') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
       try {
         body = await request.json();
       } catch {}

@@ -20,14 +20,6 @@ export const agentIdQuerySchema = z.object({
 });
 
 /**
- * Legacy network ID query parameter (maps to agentId)
- * Used for backward compatibility with /network routes
- */
-export const networkIdQuerySchema = z.object({
-  networkId: z.string(),
-});
-
-/**
  * Storage order by configuration
  */
 const storageOrderBySchema = z.object({
@@ -112,27 +104,26 @@ export const getWorkingMemoryQuerySchema = z.object({
 /**
  * GET /api/memory/network/status
  */
-export const getMemoryStatusNetworkQuerySchema = networkIdQuerySchema;
+export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * GET /api/memory/network/threads
  */
 export const listThreadsNetworkQuerySchema = createOffsetPaginationSchema(100).extend({
-  networkId: z.string(),
-  resourceid: z.string(), // Legacy field name (lowercase 'id')
+  agentId: z.string(),
+  resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
 });
 
 /**
  * GET /api/memory/network/threads/:threadId
  */
-export const getThreadByIdNetworkQuerySchema = networkIdQuerySchema;
+export const getThreadByIdNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * GET /api/memory/network/threads/:threadId/messages
  */
 export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).extend({
-  networkId: z.string(),
   agentId: z.string(),
   resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
@@ -143,27 +134,27 @@ export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).ext
 /**
  * POST /api/memory/network/save-messages
  */
-export const saveMessagesNetworkQuerySchema = networkIdQuerySchema;
+export const saveMessagesNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * POST /api/memory/network/threads
  */
-export const createThreadNetworkQuerySchema = networkIdQuerySchema;
+export const createThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * PATCH /api/memory/network/threads/:threadId
  */
-export const updateThreadNetworkQuerySchema = networkIdQuerySchema;
+export const updateThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * DELETE /api/memory/network/threads/:threadId
  */
-export const deleteThreadNetworkQuerySchema = networkIdQuerySchema;
+export const deleteThreadNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * POST /api/memory/network/messages/delete
  */
-export const deleteMessagesNetworkQuerySchema = networkIdQuerySchema;
+export const deleteMessagesNetworkQuerySchema = agentIdQuerySchema;
 
 // ============================================================================
 // Response Schemas

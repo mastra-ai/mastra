@@ -47,7 +47,6 @@ import {
   createThreadNetworkQuerySchema,
   updateThreadNetworkQuerySchema,
   deleteThreadNetworkQuerySchema,
-  deleteMessagesNetworkQuerySchema,
 } from '../../schemas/memory';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
@@ -306,7 +305,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: deleteMessagesHandler as unknown as ServerRouteHandler,
     path: '/api/memory/network/messages/delete',
-    queryParamSchema: deleteMessagesNetworkQuerySchema,
+    queryParamSchema: deleteMessagesQuerySchema.extend(agentIdQuerySchema.shape),
     responseSchema: deleteMessagesResponseSchema,
     summary: 'Delete one or more messages',
     description: 'Delete one or more messages',
