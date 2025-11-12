@@ -13,6 +13,7 @@ import {
   createThreadHandler,
   listMessagesHandler,
   deleteMessagesHandler,
+  getTextContent,
 } from './memory';
 
 function createThread(overrides?: Partial<StorageThreadType>): StorageThreadType {
@@ -25,17 +26,6 @@ function createThread(overrides?: Partial<StorageThreadType>): StorageThreadType
     updatedAt: now,
     ...overrides,
   };
-}
-
-function getTextContent(message: MastraDBMessage): string {
-  if (typeof message.content === 'string') {
-    return message.content;
-  }
-  if (message.content && typeof message.content === 'object' && 'parts' in message.content) {
-    const textPart = message.content.parts.find((p: any) => p.type === 'text');
-    return textPart?.text || '';
-  }
-  return '';
 }
 
 describe('Memory Handlers', () => {

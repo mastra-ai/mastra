@@ -16,6 +16,17 @@ interface MemoryContext extends Context {
   requestContext?: RequestContext;
 }
 
+export function getTextContent(message: MastraDBMessage): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content && typeof message.content === 'object' && 'parts' in message.content) {
+    const textPart = message.content.parts.find(p => p.type === 'text');
+    return textPart?.text || '';
+  }
+  return '';
+}
+
 async function getMemoryFromContext({
   mastra,
   agentId,
@@ -619,15 +630,9 @@ export async function searchMemoryHandler({
     const fetched = await Promise.all(threadIds.map((id: string) => memory.getThreadById({ threadId: id })));
     const threadMap = new Map(fetched.filter(Boolean).map(t => [t!.id, t!]));
 
-    const getContent = (message: MastraDBMessage): string => {
-      if (typeof message.content === 'string') {
-        return message.content;
-      }
-      return message.content.parts?.map(p => (p.type === 'text' ? p.text : '')).join(' ') || '';
-    };
     // Process each message in the results
     for (const msg of result.messages) {
-      const content = getContent(msg);
+      const content = getTextContent(msg);
 
       const msgThreadId = msg.threadId || threadId;
       const thread = threadMap.get(msgThreadId);
@@ -650,13 +655,13 @@ export async function searchMemoryHandler({
           before: threadMessages.slice(Math.max(0, messageIndex - beforeRange), messageIndex).map(m => ({
             id: m.id,
             role: m.role,
-            content: getContent(m),
+            content: getTextContent(m),
             createdAt: m.createdAt || new Date(),
           })),
           after: threadMessages.slice(messageIndex + 1, messageIndex + afterRange + 1).map(m => ({
             id: m.id,
             role: m.role,
-            content: getContent(m),
+            content: getTextContent(m),
             createdAt: m.createdAt || new Date(),
           })),
         };
