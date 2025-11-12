@@ -507,10 +507,8 @@ const createMockWorkflowStream = () => {
   });
 };
 
-export async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
-  // Manually trigger the attachment of Mastra to workflows before creating runs
-  // This ensures runs are created AFTER workflows have storage access
-  for (const [id, workflow] of Object.entries(workflows)) {
+async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
+  for (const workflow of Object.values(workflows)) {
     workflow.__registerMastra(mastra);
     workflow.__registerPrimitives({
       logger: mastra.getLogger(),
@@ -519,23 +517,7 @@ export async function setupWorkflowRegistryMocks(workflows: Record<string, Workf
       tts: mastra.getTTS(),
       vectors: mastra.getVectors(),
     });
-  }
-  // Mock workflow.createRun to add stream mocks to runs created AFTER workflow is attached to Mastra
-  for (const workflow of Object.values(workflows)) {
-    const originalCreateRun = workflow.createRun.bind(workflow);
-    vi.spyOn(workflow, 'createRun').mockImplementation(async config => {
-      const run = await originalCreateRun(config);
-      // Mock stream methods on the run
-      vi.spyOn(run, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
-      vi.spyOn(run, 'observeStreamLegacy').mockReturnValue({
-        stream: createMockWorkflowStream(),
-      } as any);
-      return run;
-    });
-    const workflowRun = await workflow.createRun({
-      runId: 'test-run',
-    });
-    await workflowRun.start({ inputData: {} }).catch(() => {});
+    await mockWorkflowRun(workflow);
   }
 
   // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
@@ -555,4 +537,16 @@ export async function setupWorkflowRegistryMocks(workflows: Record<string, Workf
       WorkflowRegistry['additionalWorkflows'][id] = workflow;
     }
   });
+}
+
+async function mockWorkflowRun(workflow: Workflow) {
+  const workflowBuilderRun = await workflow.createRun({
+    runId: 'test-run',
+  });
+  vi.spyOn(workflowBuilderRun, 'streamLegacy').mockResolvedValue(createMockWorkflowStream() as any);
+  // observeStreamLegacy returns an object with a stream property
+  vi.spyOn(workflowBuilderRun, 'observeStreamLegacy').mockReturnValue({
+    stream: createMockWorkflowStream(),
+  } as any);
+  await workflowBuilderRun.start({ inputData: {} }).catch(() => {});
 }

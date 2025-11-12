@@ -4,7 +4,7 @@ import type { Mastra } from '@mastra/core';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { buildRouteRequest, expectValidSchema } from '@mastra/server/server-adapter';
-import { createDefaultTestContext } from './mock-helpers';
+import { createDefaultTestContext, parseDatesInResponse } from './mock-helpers';
 
 /**
  * Test context for adapter integration tests
@@ -100,10 +100,7 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
     createTestContext,
   } = config;
 
-  console.log('createRouteAdapterTestSuite called with', routes.length, 'routes');
-
   describe(suiteName, () => {
-    console.log('Inside describe block');
     let context: AdapterTestContext;
     let app: any;
 
@@ -121,12 +118,8 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
       app = setup.app;
     });
 
-    console.log('About to forEach over', routes.length, 'routes');
-
     routes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
-      console.log('Creating describe for:', testName);
-
       describe(testName, () => {
         it('should execute with valid request', async () => {
           // Build HTTP request with auto-generated test data
@@ -152,7 +145,8 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
 
             // Validate response schema (if defined)
             if (route.responseSchema) {
-              expectValidSchema(route.responseSchema, response.data);
+              const parsedData = parseDatesInResponse(response.data);
+              expectValidSchema(route.responseSchema, parsedData);
             }
 
             // Verify JSON is serializable (no circular refs, functions, etc)

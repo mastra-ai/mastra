@@ -195,13 +195,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Create Mastra instance with all test entities
   const mastra = new Mastra({
     logger: false,
+    storage: new InMemoryStore(),
     agents: {
       'test-agent': agent,
     },
     workflows: {
       'test-workflow': workflow,
-      'merge-template': mergeTemplateWorkflow,
-      'workflow-builder': workflowBuilderWorkflow,
     },
     scorers: { 'test-scorer': testScorer },
   });
@@ -263,27 +262,10 @@ export function createMockRequestContext(context?: Record<string, any>): Request
 }
 
 /**
- * Pre-populates a taskStore with test tasks
- */
-export async function populateTaskStore(taskStore: any, tasks: Array<{ agentId: string; task: any }>) {
-  for (const { agentId, task } of tasks) {
-    await taskStore.save({ agentId, data: task });
-  }
-}
-
-/**
  * Creates a mock voice provider
  */
 export function createMockVoice() {
   return new CompositeVoice({});
-}
-
-/**
- * Creates an InMemoryTaskStore for A2A testing
- */
-export function createTaskStore() {
-  // Import InMemoryTaskStore dynamically to avoid circular deps
-  return new InMemoryTaskStore();
 }
 
 /**
@@ -381,3 +363,76 @@ export function createTestTask(
     },
   };
 }
+
+/**
+ * Recursively converts ISO date strings to Date objects in response data.
+ * This is needed because HTTP responses serialize dates to strings via JSON.stringify(),
+ * but schemas expect Date objects for validation.
+ *
+ * @param data - The response data from HTTP (with dates as ISO strings)
+ * @returns The same data with ISO date strings converted to Date objects
+ */
+export function parseDatesInResponse(data: any): any {
+  if (data === null || data === undefined) {
+    return data;
+  }
+
+  if (typeof data === 'string') {
+    // Check if string matches ISO 8601 date format
+    const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
+    if (isoDateRegex.test(data)) {
+      const parsed = new Date(data);
+      // Verify it's a valid date (not NaN)
+      if (!isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(parseDatesInResponse);
+  }
+
+  if (typeof data === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = parseDatesInResponse(value);
+    }
+    return result;
+  }
+
+  return data;
+}
+
+// async function setupWorkflowRegistryMocks(workflows: Record<string, Workflow>, mastra: Mastra) {
+//   for (const workflow of Object.values(workflows)) {
+//     workflow.__registerMastra(mastra);
+//     workflow.__registerPrimitives({
+//       logger: mastra.getLogger(),
+//       storage: mastra.getStorage(),
+//       agents: mastra.listAgents(),
+//       tts: mastra.getTTS(),
+//       vectors: mastra.getVectors(),
+//     });
+//     await mockWorkflowRun(workflow);
+//   }
+
+//   // Mock WorkflowRegistry.registerTemporaryWorkflows to attach Mastra to workflows
+//   vi.spyOn(WorkflowRegistry, 'registerTemporaryWorkflows').mockImplementation(() => {
+//     for (const [id, workflow] of Object.entries(workflows)) {
+//       // Register Mastra instance with the workflow
+//       if (mastra) {
+//         workflow.__registerMastra(mastra);
+//         workflow.__registerPrimitives({
+//           logger: mastra.getLogger(),
+//           storage: mastra.getStorage(),
+//           agents: mastra.listAgents(),
+//           tts: mastra.getTTS(),
+//           vectors: mastra.getVectors(),
+//         });
+//       }
+//       WorkflowRegistry['additionalWorkflows'][id] = workflow;
+//     }
+//   });
+// }

@@ -248,7 +248,12 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
           return this.sendResponse(route, c, result);
         } catch (error) {
           console.error('Error calling handler', error);
-          return c.status(500);
+          // Check if it's an HTTPException with a status code
+          if (error && typeof error === 'object' && 'status' in error) {
+            const status = (error as any).status;
+            return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, status);
+          }
+          return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
         }
       },
     );
