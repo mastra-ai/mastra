@@ -14,3 +14,4 @@ export * from './hooks/use-agent';
 export * from './hooks/use-execute-agent-tool';
 export * from './components/AgentToolPanel';
 export * from './components/agent-information/agent-information';
+export * from './components/agent-entity-header';
