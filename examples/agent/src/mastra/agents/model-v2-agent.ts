@@ -9,6 +9,7 @@ import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
 import { APICallError, wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -34,7 +35,24 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
     },
+    semanticRecall: {
+      topK: 3, // Retrieve 3 most similar messages
+      messageRange: 2, // Include 2 messages before and after each match
+      scope: 'resource', // Search across all threads for this user (default setting if omitted)
+    },
   },
+
+  storage: new LibSQLStore({
+    id: 'agent-storage',
+    url: 'file:./local.db',
+  }),
+  // this is the default vector db if omitted
+  vector: new LibSQLVector({
+    id: 'agent-vector',
+    connectionUrl: 'file:./local.db',
+  }),
+
+  embedder: 'openai/text-embedding-3-small',
 });
 
 const testAPICallError = new APICallError({
