@@ -74,7 +74,7 @@ export default function Dataset() {
               <Icon>
                 <GaugeIcon />
               </Icon>
-              Scorers
+              Datasets
             </Crumb>
 
             <Crumb as={Link} to={`/datasets/${datasetId}`} isCurrent>
