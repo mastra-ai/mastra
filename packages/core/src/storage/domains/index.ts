@@ -1,4 +1,4 @@
-export * from './scores';
+export * from './evals';
 export * from './observability';
 export * from './operations';
 export * from './workflows';

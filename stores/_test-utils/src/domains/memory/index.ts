@@ -18,7 +18,7 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
     const start = Date.now();
     console.log('Clearing tables before each test');
 
-    await Promise.all([storage.getStore('memory')?.dropData(), storage.getStore('scores')?.dropData()]);
+    await Promise.all([storage.getStore('memory')?.dropData(), storage.getStore('evals')?.dropData()]);
     const end = Date.now();
     console.log(`Tables cleared in ${end - start}ms`);
   });

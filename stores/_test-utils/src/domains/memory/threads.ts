@@ -5,16 +5,22 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'crypto';
 
 export function createThreadsTest({ storage }: { storage: MastraStorage }) {
+  const memoryStore = storage.getStore('memory');
+
+  if (!memoryStore) {
+    throw new Error('Memory store not found');
+  }
+
   describe('Threads', () => {
     it('should create and retrieve a thread', async () => {
       const thread = createSampleThread();
 
       // Save thread
-      const savedThread = await storage.getStore('memory')?.saveThread({ thread });
+      const savedThread = await memoryStore.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-      const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const retrievedThread = await memoryStore.getThreadById({ threadId: thread.id });
 
       expect(retrievedThread?.title).toEqual(thread.title);
     });
@@ -27,11 +33,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       const thread = createSampleThreadWithParams(exampleThreadId, exampleResourceId, createdAt, updatedAt);
 
       // Save thread
-      const savedThread = await storage.getStore('memory')?.saveThread({ thread });
+      const savedThread = await memoryStore.saveThread({ thread });
       expect(savedThread).toEqual(thread);
 
       // Retrieve thread
-      const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const retrievedThread = await memoryStore.getThreadById({ threadId: thread.id });
       expect(retrievedThread?.id).toEqual(exampleThreadId);
       expect(retrievedThread?.resourceId).toEqual(exampleResourceId);
       expect(retrievedThread?.title).toEqual(thread.title);
@@ -50,7 +56,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return null for non-existent thread', async () => {
-      const result = await storage.getStore('memory')?.getThreadById({ threadId: 'non-existent' });
+      const result = await memoryStore.getThreadById({ threadId: 'non-existent' });
       expect(result).toBeNull();
     });
 
@@ -58,10 +64,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
 
-      await storage.getStore('memory')?.saveThread({ thread: thread1 });
-      await storage.getStore('memory')?.saveThread({ thread: thread2 });
+      await memoryStore?.saveThread({ thread: thread1 });
+      await memoryStore?.saveThread({ thread: thread2 });
 
-      const { threads } = await storage.getStore('memory')?.listThreadsByResourceId({
+      const { threads } = await memoryStore?.listThreadsByResourceId({
         resourceId: thread1.resourceId,
         page: 0,
         perPage: 10,
@@ -72,10 +78,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     it('should update thread title and metadata', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore?.saveThread({ thread });
 
       const newMetadata = { newKey: 'newValue' };
-      const updatedThread = await storage.getStore('memory')?.updateThread({
+      const updatedThread = await memoryStore?.updateThread({
         id: thread.id,
         title: 'Updated Title',
         metadata: newMetadata,
@@ -88,45 +94,45 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       // Verify persistence
-      const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const retrievedThread = await memoryStore.getThreadById({ threadId: thread.id });
       console.log('retrievedThread', retrievedThread);
       expect(retrievedThread).toEqual(updatedThread);
     });
 
     it('should delete thread', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
-      await storage.getStore('memory')?.deleteThread({ threadId: thread.id });
+      await memoryStore.deleteThread({ threadId: thread.id });
 
-      const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const retrievedThread = await memoryStore.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toBeNull();
     });
 
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       // Add some messages
       const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
-      await storage.getStore('memory')?.saveMessages({ messages });
+      await memoryStore.saveMessages({ messages });
 
-      await storage.getStore('memory')?.deleteThread({ threadId: thread.id });
+      await memoryStore.deleteThread({ threadId: thread.id });
 
-      const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const retrievedThread = await memoryStore.getThreadById({ threadId: thread.id });
       expect(retrievedThread).toBeNull();
 
       // Verify messages were also deleted
-      const { messages: retrievedMessages } = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await memoryStore.listMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
 
     it('should update thread updatedAt when a message is saved to it', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       // Get the initial thread to capture the original updatedAt
-      const initialThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const initialThread = await memoryStore.getThreadById({ threadId: thread.id });
       expect(initialThread).toBeDefined();
       const originalUpdatedAt = initialThread!.updatedAt;
 
@@ -158,7 +164,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     it('should handle stringified JSON content without double-nesting', async () => {
       const threadData = createSampleThread();
-      const thread = await storage.getStore('memory')?.saveThread({ thread: threadData as StorageThreadType });
+      const thread = await memoryStore?.saveThread({ thread: threadData as StorageThreadType });
 
       // Simulate user passing stringified JSON as message content (like the original bug report)
       const stringifiedContent = JSON.stringify({ userInput: 'test data', metadata: { key: 'value' } });
@@ -176,10 +182,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       };
 
       // Save the message - this should stringify the whole content object for storage
-      await storage.getStore('memory')?.saveMessages({ messages: [message] });
+      await memoryStore?.saveMessages({ messages: [message] });
 
       // Retrieve the message - this is where double-nesting could occur
-      const { messages: retrievedMessages } = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await memoryStore?.listMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(1);
 
       const retrievedMessage = retrievedMessages[0] as MastraDBMessage;
@@ -204,18 +210,18 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
     it('should return paginated threads with total count', async () => {
       const resourceId = `pg-paginated-resource-${randomUUID()}`;
       const threadPromises = Array.from({ length: 17 }, () =>
-        storage.saveThread({ thread: { ...createSampleThread(), resourceId } }),
+        memoryStore.saveThread({ thread: { ...createSampleThread(), resourceId } }),
       );
       await Promise.all(threadPromises);
 
-      const page1 = await storage.getStore('memory')?.listThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+      const page1 = await memoryStore?.listThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
       expect(page1.threads).toHaveLength(7);
       expect(page1.total).toBe(17);
       expect(page1.page).toBe(0);
       expect(page1.perPage).toBe(7);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await storage.getStore('memory')?.listThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+      const page3 = await memoryStore?.listThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
       expect(page3.threads).toHaveLength(3); // 17 total, page 2 (skip 14), get 3 remaining
       expect(page3.total).toBe(17);
       expect(page3.hasMore).toBe(false);
@@ -223,9 +229,9 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
     it('should return paginated results when no pagination params for listThreadsByResourceId', async () => {
       const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
-      await storage.getStore('memory')?.saveThread({ thread: { ...createSampleThread(), resourceId } });
+      await memoryStore?.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
-      const results = await storage.getStore('memory')?.listThreadsByResourceId({ resourceId, page: 0, perPage: 100 });
+      const results = await memoryStore?.listThreadsByResourceId({ resourceId, page: 0, perPage: 100 });
       expect(Array.isArray(results.threads)).toBe(true);
       expect(results.threads.length).toBe(1);
       expect(results.total).toBe(1);
@@ -248,8 +254,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         metadata: largeMetadata,
       };
 
-      await storage.getStore('memory')?.saveThread({ thread: threadWithLargeMetadata });
-      const retrieved = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      await memoryStore?.saveThread({ thread: threadWithLargeMetadata });
+      const retrieved = await memoryStore?.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.metadata).toEqual(largeMetadata);
     });
@@ -260,19 +266,20 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         title: 'Special \'quotes\' and "double quotes" and emoji 🎉',
       };
 
-      await storage.getStore('memory')?.saveThread({ thread });
-      const retrieved = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      await memoryStore?.saveThread({ thread });
+      const retrieved = await memoryStore?.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
     });
 
     it('should handle concurrent thread updates', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+
+      await memoryStore?.saveThread({ thread });
 
       // Perform multiple updates concurrently
       const updates = Array.from({ length: 5 }, (_, i) =>
-        storage.updateThread({
+        memoryStore.updateThread({
           id: thread.id,
           title: `Update ${i}`,
           metadata: { update: i },
@@ -282,7 +289,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       await expect(Promise.all(updates)).resolves.toBeDefined();
 
       // Verify final state
-      const finalThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const finalThread = await memoryStore?.getThreadById({ threadId: thread.id });
       expect(finalThread).toBeDefined();
     });
   });
@@ -296,8 +303,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   //     const now = new Date();
   //     const thread = createSampleThread({ date: now });
 
-  //     await storage.getStore('memory')?.saveThread({ thread });
-  //     const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+  //     await memoryStore?.saveThread({ thread });
+  //     const retrievedThread = await memoryStore?.getThreadById({ threadId: thread.id });
 
   //     expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
   //     expect(retrievedThread?.updatedAt).toBeInstanceOf(Date);
@@ -309,8 +316,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   //     const now = new Date();
   //     const thread = createSampleThread({ date: now });
 
-  //     await storage.getStore('memory')?.saveThread({ thread });
-  //     const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+  //     await memoryStore?.saveThread({ thread });
+  //     const retrievedThread = await memoryStore?.getThreadById({ threadId: thread.id });
   //     expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
   //     expect(retrievedThread?.updatedAt).toBeInstanceOf(Date);
   //     expect(retrievedThread?.createdAt.toISOString()).toBe(now.toISOString());
@@ -321,8 +328,8 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   //     const now = new Date();
   //     const thread = createSampleThread({ date: now });
 
-  //     await storage.getStore('memory')?.saveThread({ thread });
-  //     const retrievedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+  //     await memoryStore?.saveThread({ thread });
+  //     const retrievedThread = await memoryStore?.getThreadById({ threadId: thread.id });
   //     expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
   //     expect(retrievedThread?.updatedAt).toBeInstanceOf(Date);
   //     expect(retrievedThread?.createdAt.toISOString()).toBe(now.toISOString());
@@ -337,7 +344,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
   //     await Promise.all(threads.map(thread => storage.saveThread({ thread })));
 
-  //     const { threads: retrievedThreads } = await storage.getStore('memory')?.listThreadsByResourceId({
+  //     const { threads: retrievedThreads } = await memoryStore?.listThreadsByResourceId({
   //       resourceId: threads[0]?.resourceId!,
   //       offset: 0,
   //       limit: 10,
@@ -433,14 +440,14 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       // Save all threads
       threads = [];
       for (const threadInfo of threadData) {
-        const savedThread = await storage.getStore('memory')?.saveThread({ thread: threadInfo });
+        const savedThread = await memoryStore.saveThread({ thread: threadInfo });
         threads.push(savedThread);
       }
     });
 
     describe('listThreadsByResourceId sorting', () => {
       it('should sort paginated threads by createdAt DESC by default', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           page: 0,
           perPage: 3,
@@ -452,7 +459,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by createdAt ASC', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           page: 0,
           perPage: 3,
@@ -465,7 +472,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort threads by createdAt DESC', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
           page: 0,
@@ -478,7 +485,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by updatedAt ASC', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           page: 0,
           perPage: 3,
@@ -491,7 +498,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort paginated threads by updatedAt DESC', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           page: 0,
           perPage: 3,
@@ -504,7 +511,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt DESC when only field is specified (direction defaults to DESC)', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'createdAt' },
           page: 0,
@@ -517,7 +524,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by updatedAt DESC when only field is specified (direction defaults to DESC)', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'updatedAt' },
           page: 0,
@@ -530,7 +537,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt ASC when only direction ASC is specified (field defaults to createdAt)', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           orderBy: { direction: 'ASC' },
           page: 0,
@@ -543,7 +550,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       });
 
       it('should sort by createdAt DESC when only direction DESC is specified (field defaults to createdAt)', async () => {
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId,
           orderBy: { direction: 'DESC' },
           page: 0,
@@ -557,7 +564,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       it('should maintain sort order consistency across pages', async () => {
         // Get all threads sorted by updatedAt DESC for comparison
-        const { threads: allThreads } = await storage.getStore('memory')?.listThreadsByResourceId({
+        const { threads: allThreads } = await memoryStore.listThreadsByResourceId({
           resourceId,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
           page: 0,
@@ -565,21 +572,21 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         });
 
         // Get paginated results
-        const page1 = await storage.getStore('memory')?.listThreadsByResourceId({
+        const page1 = await memoryStore.listThreadsByResourceId({
           resourceId,
           page: 0,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
-        const page2 = await storage.getStore('memory')?.listThreadsByResourceId({
+        const page2 = await memoryStore.listThreadsByResourceId({
           resourceId,
           page: 1,
           perPage: 2,
           orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
 
-        const page3 = await storage.getStore('memory')?.listThreadsByResourceId({
+        const page3 = await memoryStore.listThreadsByResourceId({
           resourceId,
           page: 2,
           perPage: 2,
@@ -597,7 +604,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       it('should handle empty results with sorting parameters', async () => {
         const emptyResourceId = `empty-resource-${randomUUID()}`;
 
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId: emptyResourceId,
           page: 0,
           perPage: 10,
@@ -613,11 +620,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       it('should handle single thread with sorting parameters', async () => {
         const singleResourceId = `single-resource-${randomUUID()}`;
-        const singleThread = await storage.getStore('memory')?.saveThread({
+        const singleThread = await memoryStore.saveThread({
           thread: { ...createSampleThread(), resourceId: singleResourceId },
         });
 
-        const result = await storage.getStore('memory')?.listThreadsByResourceId({
+        const result = await memoryStore.listThreadsByResourceId({
           resourceId: singleResourceId,
           page: 0,
           perPage: 10,
@@ -637,7 +644,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         const sameDate = new Date('2024-01-01T12:00:00Z');
 
         const identicalThreads = await Promise.all([
-          storage.saveThread({
+          memoryStore.saveThread({
             thread: {
               id: `identical-1-${randomUUID()}`,
               resourceId: identicalResourceId,
@@ -647,7 +654,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
               metadata: { index: 1 },
             },
           }),
-          storage.saveThread({
+          memoryStore.saveThread({
             thread: {
               id: `identical-2-${randomUUID()}`,
               resourceId: identicalResourceId,
@@ -657,7 +664,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
               metadata: { index: 2 },
             },
           }),
-          storage.saveThread({
+          memoryStore.saveThread({
             thread: {
               id: `identical-3-${randomUUID()}`,
               resourceId: identicalResourceId,
@@ -669,7 +676,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
           }),
         ]);
 
-        const { threads: result } = await storage.getStore('memory')?.listThreadsByResourceId({
+        const { threads: result } = await memoryStore.listThreadsByResourceId({
           resourceId: identicalResourceId,
           page: 0,
           perPage: 3,

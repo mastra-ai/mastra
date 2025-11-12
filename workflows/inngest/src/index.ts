@@ -158,7 +158,7 @@ export class InngestRun<
 
   async getRunOutput(eventId: string) {
     let runs = await this.getRuns(eventId);
-    const storage = this.#mastra?.getStorage();
+    const storage = this.#mastra?.getStorage('workflows');
 
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -186,7 +186,7 @@ export class InngestRun<
   }
 
   async cancel() {
-    const storage = this.#mastra?.getStorage();
+    const storage = this.#mastra?.getStorage('workflows');
 
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
@@ -243,7 +243,7 @@ export class InngestRun<
     };
     format?: 'legacy' | 'vnext' | undefined;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    await this.#mastra.getStorage()?.createWorkflowSnapshot({
+    await this.#mastra.getStorage('workflows')?.createWorkflowSnapshot({
       workflowId: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -324,7 +324,7 @@ export class InngestRun<
     | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const storage = this.#mastra?.getStorage();
+    const storage = this.#mastra?.getStorage('workflows');
 
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -606,17 +606,17 @@ export class InngestWorkflow<
     page?: number;
     resourceId?: string;
   }) {
-    const storage = this.#mastra?.getStorage();
+    const storage = this.#mastra?.getStorage('workflows');
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return { runs: [], total: 0 };
     }
 
-    return storage.getStore('workflows')?.listWorkflowRuns({ workflowId: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
+    return storage?.listWorkflowRuns({ workflowId: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
-    const storage = this.#mastra?.getStorage();
+    const storage = this.#mastra?.getStorage('workflows');
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       //returning in memory run if no storage is initialized
@@ -624,7 +624,7 @@ export class InngestWorkflow<
         ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = (await storage.getStore('workflows')?.getWorkflowRunById({ runId, workflowId: this.id })) as unknown as WorkflowRun;
+    const run = (await storage?.getWorkflowRunById({ runId, workflowId: this.id })) as unknown as WorkflowRun;
 
     return (
       run ??
@@ -691,7 +691,7 @@ export class InngestWorkflow<
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.createWorkflowSnapshot({
+      await this.mastra?.getStorage('workflows')?.createWorkflowSnapshot({
         workflowId: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -1509,8 +1509,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           // @ts-ignore
           runId = stepResults[resume?.steps?.[0]]?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
 
-          const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
-            workflowName: step.id,
+          const snapshot: any = await this.mastra?.getStorage('workflows')?.getWorkflowSnapshot({
+            workflowId: step.id,
             runId: runId,
           });
 
@@ -1918,7 +1918,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           return;
         }
 
-        await this.mastra?.getStorage()?.createWorkflowSnapshot({
+        await this.mastra?.getStorage('workflows')?.createWorkflowSnapshot({
           workflowId,
           runId,
           resourceId,

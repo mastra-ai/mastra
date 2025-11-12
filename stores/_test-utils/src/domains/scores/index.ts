@@ -33,7 +33,7 @@ async function createScores(
 }
 
 export function createScoresTest({ storage }: { storage: MastraStorage }) {
-  const scoresStore = storage.getStore('scores');
+  const scoresStore = storage.getStore('evals');
   if (!scoresStore) {
     throw new Error('Scores store not found');
   }

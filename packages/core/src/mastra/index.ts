@@ -17,7 +17,7 @@ import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage, WorkflowRuns } from '../storage';
+import type { MastraStorage, WorkflowRuns, StorageDomains } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
@@ -420,9 +420,9 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ default: { enabled: true } }). ' +
-            'Observability has been disabled.',
+          'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
+          'then pass: observability: new Observability({ default: { enabled: true } }). ' +
+          'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
       }
@@ -1691,7 +1691,7 @@ export class Mastra<
   }
 
   /**
-   * Gets the currently configured storage provider.
+   * Gets the currently configured storage provider or a specific storage domain.
    *
    * @example
    * ```typescript
@@ -1699,7 +1699,14 @@ export class Mastra<
    *   storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./data.db' })
    * });
    *
-   * // Use the storage in agent memory
+   * // Get the entire storage instance
+   * const storage = mastra.getStorage();
+   *
+   * // Or get a specific domain directly
+   * const memoryStore = mastra.getStorage('memory');
+   * await memoryStore?.saveThread({ thread });
+   *
+   * // Use in agent memory
    * const agent = new Agent({
    *   id: 'assistant',
    *   name: 'assistant',
@@ -1709,7 +1716,12 @@ export class Mastra<
    * });
    * ```
    */
-  public getStorage() {
+  public getStorage<K extends keyof StorageDomains>(domain: K): StorageDomains[K] | undefined;
+  public getStorage(): MastraStorage | undefined;
+  public getStorage<K extends keyof StorageDomains>(domain?: K): MastraStorage | StorageDomains[K] | undefined {
+    if (domain) {
+      return this.#storage?.getStore(domain);
+    }
     return this.#storage;
   }
 

@@ -26,7 +26,7 @@ export function createTestSuite(storage: MastraStorage) {
       // Clear tables after tests
       await Promise.all([
         storage.getStore('workflows')?.dropData(),
-        storage.getStore('scores')?.dropData(),
+        storage.getStore('evals')?.dropData(),
         storage.getStore('memory')?.dropData(),
         storage.supports.observabilityInstance && storage.getStore('observability')?.dropData(),
       ]);

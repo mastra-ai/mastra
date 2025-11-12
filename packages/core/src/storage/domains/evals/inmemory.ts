@@ -1,11 +1,11 @@
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
 import type { PaginationInfo, StoragePagination } from '../../types';
-import { ScoresStorageBase } from './base';
+import { EvalsStorageBase } from './base';
 
 export type ScoresStorageData = Map<string, ScoreRowData>;
 
-export class ScoresStorage extends ScoresStorageBase {
+export class EvalsStorage extends EvalsStorageBase {
   collection: ScoresStorageData;
 
   constructor() {

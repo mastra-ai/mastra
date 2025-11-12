@@ -522,7 +522,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         snapshot,
       });
 
-      const updatedSnapshot = await storage.updateWorkflowResults({
+      const updatedSnapshot = await workflowStore.updateWorkflowResults({
         workflowId: workflowName,
         runId,
         stepId: 'step-1',
@@ -549,7 +549,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
 
       await Promise.all([
-        storage.updateWorkflowResults({
+        workflowStore.updateWorkflowResults({
           workflowId: workflowName,
           runId,
           stepId: 'step-1',
@@ -562,7 +562,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
           },
           requestContext: { test: 'test' },
         }),
-        storage.updateWorkflowResults({
+        workflowStore.updateWorkflowResults({
           workflowId: workflowName,
           runId,
           stepId: 'step-2',
@@ -616,7 +616,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
 
       await Promise.all([
-        storage.updateWorkflowState({
+        workflowStore.updateWorkflowState({
           workflowId: workflowName,
           runId,
           opts: {
@@ -626,7 +626,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
             },
           },
         }),
-        storage.updateWorkflowState({
+        workflowStore.updateWorkflowState({
           workflowId: workflowName,
           runId,
           opts: {

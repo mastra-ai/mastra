@@ -6,7 +6,7 @@ import type { StorageThreadType } from '../memory/types';
 import type { TracingStorageStrategy } from '../observability';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
-import type { ObservabilityStorageBase, WorkflowsStorageBase, ScoresStorageBase, MemoryStorageBase, IndexManagementBase } from './domains';
+import type { ObservabilityStorageBase, WorkflowsStorageBase, EvalsStorageBase, MemoryStorageBase, IndexManagementBase } from './domains';
 import type {
   PaginationInfo,
   StorageColumn,
@@ -27,7 +27,7 @@ import type {
 
 export type StorageDomains = {
   workflows: WorkflowsStorageBase;
-  scores: ScoresStorageBase;
+  evals: EvalsStorageBase;
   memory: MemoryStorageBase;
   observability?: ObservabilityStorageBase;
   indexManagement?: IndexManagementBase;
@@ -333,9 +333,9 @@ export class MastraStorage extends MastraBase {
       initTasks.push(this.stores.workflows.init());
     }
 
-    // Initialize scores domain (scorers)
-    if (this.stores?.scores) {
-      initTasks.push(this.stores.scores.init());
+    // Initialize scores domain (evals)
+    if (this.stores?.evals) {
+      initTasks.push(this.stores.evals.init());
     }
 
     // Initialize observability domain (traces, spans)
@@ -425,113 +425,6 @@ export class MastraStorage extends MastraBase {
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `Getting workflow run by ID is not implemented by this storage adapter (${this.constructor.name})`,
-    });
-  }
-
-  /**
-   * SCORERS
-   */
-
-  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    if (this.stores?.scores) {
-      return this.stores.scores.getScoreById({ id });
-    }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_GET_SCORE_BY_ID_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `Getting score by ID is not implemented by this storage adapter (${this.constructor.name})`,
-    });
-  }
-
-  async saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }> {
-    if (this.stores?.scores) {
-      return this.stores.scores.saveScore(score);
-    }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_SAVE_SCORE_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `Saving score is not implemented by this storage adapter (${this.constructor.name})`,
-    });
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    source,
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    if (this.stores?.scores) {
-      return this.stores.scores.listScoresByScorerId({ scorerId, source, entityId, entityType, pagination });
-    }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_LIST_SCORES_BY_SCORER_ID_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `Listing scores by scorer ID is not implemented by this storage adapter (${this.constructor.name})`,
-    });
-  }
-
-  async listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    if (this.stores?.scores) {
-      return this.stores.scores.listScoresByRunId({ runId, pagination });
-    }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_LIST_SCORES_BY_RUN_ID_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `Listing scores by run ID is not implemented by this storage adapter (${this.constructor.name})`,
-    });
-  }
-
-  async listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    if (this.stores?.scores) {
-      return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
-    }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_LIST_SCORES_BY_ENTITY_ID_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `Listing scores by entity ID is not implemented by this storage adapter (${this.constructor.name})`,
-    });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination: _pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    throw new MastraError({
-      id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: { traceId, spanId },
     });
   }
 

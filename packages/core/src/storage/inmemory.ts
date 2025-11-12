@@ -1,19 +1,16 @@
 import type { MastraDBMessage } from '../agent';
-import type { ScoreRowData, ScoringSource } from '../evals/types';
 import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
+import { EvalsStorage } from './domains/evals/inmemory';
 import { MemoryStorage } from './domains/memory/inmemory';
 import { ObservabilityStorage } from './domains/observability/inmemory';
-import { ScoresStorage } from './domains/scores/inmemory';
 import { WorkflowsStorage } from './domains/workflows/inmemory';
 
 import type {
   SpanRecord,
   TraceRecord,
-  PaginationInfo,
-  StoragePagination,
   StorageResourceType,
   WorkflowRun,
 } from './types';
@@ -26,7 +23,7 @@ export class InMemoryStore extends MastraStorage {
     // MockStore doesn't need async initialization
     this.hasInitialized = Promise.resolve(true);
 
-    const scoresStorage = new ScoresStorage();
+    const evalsStorage = new EvalsStorage();
 
     const workflowsStorage = new WorkflowsStorage();
 
@@ -36,7 +33,7 @@ export class InMemoryStore extends MastraStorage {
 
     this.stores = {
       workflows: workflowsStorage,
-      scores: scoresStorage,
+      evals: evalsStorage,
       memory: memoryStorage,
       observability: observabilityStorage,
     };
@@ -149,64 +146,6 @@ export class InMemoryStore extends MastraStorage {
 
   async deleteMessages(messageIds: string[]): Promise<void> {
     return this.stores.memory.deleteMessages(messageIds);
-  }
-
-  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id });
-  }
-
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(score);
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    entityId,
-    entityType,
-    source,
-    pagination,
-  }: {
-    scorerId: string;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
-  }
-
-  async listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId, pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    entityId: string;
-    entityType: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
   async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {

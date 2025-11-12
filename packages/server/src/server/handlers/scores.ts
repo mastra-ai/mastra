@@ -120,7 +120,7 @@ export async function listScoresByRunIdHandler({
   pagination,
 }: Context & { runId: string; pagination: StoragePagination }) {
   try {
-    const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
+    const scoreResults = (await mastra.getStorage('evals')?.listScoresByRunId?.({
       runId,
       pagination,
     })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
@@ -141,7 +141,7 @@ export async function listScoresByScorerIdHandler({
   entityType,
 }: Context & { scorerId: string; pagination: StoragePagination; entityId?: string; entityType?: string }) {
   try {
-    const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
+    const scoreResults = (await mastra.getStorage('evals')?.listScoresByScorerId?.({
       scorerId,
       pagination,
       entityId,
@@ -173,7 +173,7 @@ export async function listScoresByEntityIdHandler({
       entityIdToUse = workflow.id;
     }
 
-    const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
+    const scoreResults = (await mastra.getStorage('evals')?.listScoresByEntityId?.({
       entityId: entityIdToUse,
       entityType,
       pagination,
@@ -204,7 +204,7 @@ function getTraceDetails(traceIdWithSpanId?: string) {
 
 export async function saveScoreHandler({ mastra, score }: Context & { score: ScoreRowData }) {
   try {
-    const scores = (await mastra.getStorage()?.saveScore?.(score)) || [];
+    const scores = (await mastra.getStorage('evals')?.saveScore?.(score)) || [];
     return scores;
   } catch (error) {
     return handleError(error, 'Error saving score');

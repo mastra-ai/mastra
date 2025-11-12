@@ -3,11 +3,11 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../../../evals/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 
-export abstract class ScoresStorageBase extends MastraBase {
+export abstract class EvalsStorageBase extends MastraBase {
   constructor() {
     super({
       component: 'STORAGE',
-      name: 'SCORES',
+      name: 'EVALS',
     });
   }
 

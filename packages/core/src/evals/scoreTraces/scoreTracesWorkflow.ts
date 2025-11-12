@@ -159,12 +159,12 @@ export async function runScorerOnTarget({
 }
 
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
-  const scoresStore = storage.getStore('scores');
-  if (!scoresStore) {
+  const evalsStore = storage.getStore('evals');
+  if (!evalsStore) {
     throw new Error('Mastra Storage: Scores store is not configured.');
   }
   const payloadToSave = saveScorePayloadSchema.parse(scorerResult);
-  const result = await scoresStore.saveScore(payloadToSave);
+  const result = await evalsStore.saveScore(payloadToSave);
   return result.score;
 }
 
