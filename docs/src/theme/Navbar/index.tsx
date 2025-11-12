@@ -6,7 +6,7 @@ import VersionControl from "@site/src/components/version-control";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import { type ReactNode } from "react";
-import SearchContainer from "./Search";
+import SearchContainer, { AskAI } from "./Search";
 import { Logo } from "./logo";
 import { TabSwitcher } from "./tab-switcher";
 
@@ -39,7 +39,10 @@ function NavbarContentDesktop() {
         </div>
 
         <div className="hidden @[798px]:block">
-          <SearchContainer locale="en" />
+          <div className="flex gap-2 items-center">
+            <SearchContainer locale="en" />
+            <AskAI />
+          </div>
         </div>
         <NavbarMobileSidebarToggle />
       </div>
