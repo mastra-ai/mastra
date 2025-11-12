@@ -2630,8 +2630,8 @@ export class Run<
       throw new Error(`Snapshot not found for run ${this.runId}`);
     }
 
-    if (['success', 'failed', 'running'].includes(snapshot.status)) {
-      throw new Error(`Cannot time travel this workflow run, current run status is ${snapshot.status}`);
+    if (snapshot.status === 'running') {
+      throw new Error('This workflow run is still running, cannot time travel');
     }
 
     let steps: string[];
@@ -2739,7 +2739,6 @@ export class Run<
           endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
           suspendedAt: stepContext?.suspendedAt,
           resumedAt: stepContext?.resumedAt,
-          error: isCompleteStatus ? stepContext?.error : undefined,
         };
         if (
           currentExecPathLength > 0 &&

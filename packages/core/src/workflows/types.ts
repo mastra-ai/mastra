@@ -93,7 +93,6 @@ export type TimeTravelContext<P, R, S, T> = Record<
     status: WorkflowRunStatus;
     payload: P;
     output: T;
-    error?: string | Error;
     resumePayload?: R;
     suspendPayload?: S;
     suspendOutput?: T;
