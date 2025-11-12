@@ -48,13 +48,13 @@ export function workflowRoute({
             schema: {
               type: 'object',
               properties: {
-                runId: { type: 'string', additionalProperties: true },
-                resourceId: { type: 'string', additionalProperties: true },
+                runId: { type: 'string' },
+                resourceId: { type: 'string' },
                 inputData: { type: 'object', additionalProperties: true },
                 resumeData: { type: 'object', additionalProperties: true },
                 requestContext: { type: 'object', additionalProperties: true },
                 tracingOptions: { type: 'object', additionalProperties: true },
-                step: { type: 'string', additionalProperties: true },
+                step: { type: 'string' },
               },
             },
           },
