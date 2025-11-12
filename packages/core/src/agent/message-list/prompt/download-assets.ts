@@ -53,6 +53,7 @@ export async function downloadAssetsFromMessages({
 }) {
   const pMap = (await import('p-map')).default;
 
+  console.log(supportedUrls);
   const filesToDownload = messages
     .filter(message => message.role === 'user')
     .map(message => message.content)
@@ -73,23 +74,23 @@ export async function downloadAssetsFromMessages({
     })
 
     .filter((part): part is { mediaType: string | undefined; data: URL } => part.data instanceof URL)
-    .map(part => ({
-      url: part.data,
-      isUrlSupportedByModel:
-        part.mediaType != null &&
-        isUrlSupported({
-          url: part.data.toString(),
-          mediaType: part.mediaType,
-          supportedUrls: supportedUrls ?? {},
-        }),
-    }))
-    // Only download URLs that are NOT supported by the provider
-    .filter(fileItem => !fileItem.isUrlSupportedByModel);
+    .map(part => {
+      return {
+        url: part.data,
+        isUrlSupportedByModel:
+          part.mediaType != null &&
+          isUrlSupported({
+            url: part.data.toString(),
+            mediaType: part.mediaType,
+            supportedUrls: supportedUrls ?? {},
+          }),
+      };
+    });
 
   const downloadedFiles = await pMap(
     filesToDownload,
     async fileItem => {
-      if (!fileItem.isUrlSupportedByModel) {
+      if (fileItem.isUrlSupportedByModel) {
         return null;
       }
       return {
