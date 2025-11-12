@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Make suspendPayload optional when calling `suspend()` ([#9926](https://github.com/mastra-ai/mastra/pull/9926))
+  Save value returned as `suspendOutput` if user returns data still after calling `suspend()`
+  Automatically call `commit()` on uncommitted workflows when registering in Mastra instance
+  Show actual suspendPayload on Studio in suspend/resume flow
+
 ## 1.0.0-beta.1
 
 ### Patch Changes
@@ -7,6 +16,8 @@
 - Set correct peer dependency range for `@mastra/observability` ([#9908](https://github.com/mastra-ai/mastra/pull/9908))
 
 - Add visual styles and labels for more workflow node types ([#9777](https://github.com/mastra-ai/mastra/pull/9777))
+
+- `registerApiRoute` now accepts a `requiresAuth` option, so custom endpoints can opt in/out of Mastra auth without mutating the returned route object.
 
 ## 1.0.0-beta.0
 

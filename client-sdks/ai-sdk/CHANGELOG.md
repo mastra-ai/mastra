@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Improve ai-sdk transformers, handle custom data from agent sub workflow, sug agent tools ([#9919](https://github.com/mastra-ai/mastra/pull/9919))
+
+- Updated dependencies [[`465ac05`](https://github.com/mastra-ai/mastra/commit/465ac0526a91d175542091c675181f1a96c98c46)]:
+  - @mastra/core@1.0.0-beta.2
+
 ## 1.0.0-beta.0
 
 ### Major Changes

@@ -10,7 +10,7 @@ interface StartOptions {
 
 export async function start(options: StartOptions = {}) {
   // Load environment variables from .env files
-  config({ path: [options.env || '.env.production', '.env'] });
+  config({ path: [options.env || '.env.production', '.env'], quiet: true });
 
   const outputDir = options.dir || '.mastra/output';
 

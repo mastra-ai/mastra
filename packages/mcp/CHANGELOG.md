@@ -1,5 +1,16 @@
 # @mastra/mcp
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Fix MCP auth context propagation to tools called by agents ([#9948](https://github.com/mastra-ai/mastra/pull/9948))
+
+  Fixes the issue where MCP authentication context wasn't being passed to tools when called by agents. Tools can now access MCP context via `context.requestContext.get('mcp.extra')` when invoked via agents.
+
+- Updated dependencies [[`465ac05`](https://github.com/mastra-ai/mastra/commit/465ac0526a91d175542091c675181f1a96c98c46)]:
+  - @mastra/core@1.0.0-beta.2
+
 ## 1.0.0-beta.0
 
 ### Major Changes

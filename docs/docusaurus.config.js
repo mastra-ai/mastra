@@ -11,9 +11,9 @@ import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Mastra Documentation",
+  title: "Mastra Docs v1 Beta",
   tagline: "TypeScript agent framework",
-  favicon: "/favicon.ico",
+  favicon: "/img/favicon.ico",
 
   // Set the production url of your site here
   url: "https://mastra.ai",
@@ -27,6 +27,11 @@ const config = {
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: "warn",
+    },
+    parseFrontMatter: async (params) => {
+      const result = await params.defaultParseFrontMatter(params);
+      result.frontMatter.description = `Mastra v1 Beta: ${result.frontMatter.description}`;
+      return result;
     },
   },
   // Enable v4 features in prod

@@ -70,6 +70,16 @@ To migrate, rename the method and update pagination parameters. You can now use 
 + });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-get-messages-paginated .
+```
+
+:::
+
 ### `getThreadsByResourceId` to `listThreadsByResourceId`
 
 The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
@@ -84,6 +94,16 @@ To migrate, rename the method call and update pagination parameters.
 +   perPage: 20,
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-get-threads-by-resource .
+```
+
+:::
 
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
@@ -101,6 +121,16 @@ To migrate, rename the method call and update pagination parameters.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-list-workflow-runs .
+```
+
+:::
+
 ### `getMessagesById` to `listMessagesById`
 
 The `getMessagesById()` method has been renamed to `listMessagesById()`. This change aligns with the convention that `list*` methods return collections.
@@ -113,6 +143,16 @@ To migrate, rename the method call.
     messageIds: ['msg-1', 'msg-2'],
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-list-messages-by-id .
+```
+
+:::
 
 ### Storage `getMessages` and `saveMessages` signatures
 
@@ -189,6 +229,16 @@ To migrate, pass the connection string as an object property.
 + });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/vector-pg-constructor .
+```
+
+:::
+
 ### PGVector `defineIndex` to `buildIndex`
 
 The `defineIndex()` method has been removed in favor of `buildIndex()`. This change provides clearer naming for the index building operation.
@@ -217,6 +267,16 @@ To migrate, rename the parameter.
 +   schemaName: customSchema,
   });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/storage-postgres-schema-name .
+```
+
+:::
 
 ### Score storage methods to `listScoresBy*` pattern
 
