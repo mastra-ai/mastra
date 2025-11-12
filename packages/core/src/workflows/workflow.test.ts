@@ -11506,7 +11506,7 @@ describe('Workflow', () => {
 
       const run = await workflow.createRun();
       const result = await run.timeTravel({
-        step: 'step2',
+        step: step2,
         context: {
           step1: {
             payload: { value: 0 },
@@ -11794,7 +11794,7 @@ describe('Workflow', () => {
 
       const run2 = await workflow.createRun();
       const result2 = await run2.timeTravel({
-        step: 'nestedWorkflow.step3',
+        step: [nestedWorkflow, step3],
         inputData: { step2Result: 3 },
       });
 
