@@ -82,8 +82,8 @@ export const textToSpeechTool = createTool({
       return {
         audioGenerated: true,
         filePath: path.join(process.cwd(), 'audio', filename),
-        speaker: speaker || 'onyx',
-        speed: speed || 1,
+        speaker,
+        speed,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -96,8 +96,8 @@ export const textToSpeechTool = createTool({
 
       return {
         audioGenerated: false,
-        speaker: speaker || 'onyx',
-        speed: speed || 1,
+        speaker,
+        speed,
       };
     }
   },

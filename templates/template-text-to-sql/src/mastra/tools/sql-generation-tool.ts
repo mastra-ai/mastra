@@ -81,7 +81,7 @@ Please provide:
 4. Any assumptions you made
 5. List of tables used`;
 
-    const sqlGenerationAgent = context?.mastra?.getAgent('sql-generation-agent');
+    const sqlGenerationAgent = context?.mastra?.getAgentById('sql-generation-agent');
     if (!sqlGenerationAgent) {
       throw new Error('SQL generation agent not found');
     }

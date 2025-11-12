@@ -14,8 +14,6 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const USERNAME = process.env.USERNAME;
 const EMAIL = process.env.EMAIL;
 
-// No longer needed - templates now use MODEL environment variable
-
 // Initialize Octokit
 const octokit = new Octokit({
   auth: GITHUB_TOKEN,
