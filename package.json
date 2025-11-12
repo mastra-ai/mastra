@@ -13,7 +13,7 @@
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.8"
   },
   "private": true,
   "scripts": {

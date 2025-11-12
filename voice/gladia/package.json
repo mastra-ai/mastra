@@ -40,7 +40,7 @@
     "pnpm": "10.18.2",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
+    "vitest": "^4.0.8",
     "@internal/types-builder": "workspace:*",
     "zod": "^3.25.76"
   },

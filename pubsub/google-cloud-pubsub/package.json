@@ -45,7 +45,7 @@
     "@types/node": "^20.19.0",
     "typescript": "^5.8.3",
     "eslint": "^9.37.0",
-    "vitest": "^3.2.4",
+    "vitest": "^4.0.8",
     "tsup": "^8.4.0"
   },
   "peerDependencies": {

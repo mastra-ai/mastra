@@ -5,7 +5,7 @@
   "devDependencies": {
     "globby": "^14.1.0",
     "resolve.exports": "^2.0.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.8"
   },
   "scripts": {
     "test": "vitest"
