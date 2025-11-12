@@ -147,7 +147,11 @@ export class BraintrustExporter extends BaseExporter {
       name: span.name,
       type: mapSpanType(span.type),
       ...(shouldOmitParentIds
-        ? {} // Let Braintrust auto-link to parent
+        ? {
+            metadata: {
+              traceId: span.traceId,
+            },
+          } // Let Braintrust auto-link to parent
         : {
             parentSpanIds: span.parentSpanId
               ? { spanId: span.parentSpanId, rootSpanId: span.traceId }
