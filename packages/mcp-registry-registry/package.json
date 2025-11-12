@@ -41,7 +41,7 @@
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@types/node": "^24.10.1",
+    "@types/node": "22.13.17",
     "@wong2/mcp-cli": "^1.10.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",

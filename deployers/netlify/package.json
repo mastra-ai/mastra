@@ -43,7 +43,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^24.10.1",
+    "@types/node": "22.13.17",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

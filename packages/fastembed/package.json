@@ -44,7 +44,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "^24.10.1",
+    "@types/node": "22.13.17",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",

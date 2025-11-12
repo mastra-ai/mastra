@@ -39,7 +39,7 @@ Your template folder **must** include the following files:
     "@ai-sdk/openai": "^1.3.23"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
+    "@types/node": "22.13.17",
     "mastra": "latest",
     "typescript": "^5.8.3"
   }
