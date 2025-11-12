@@ -54,7 +54,9 @@ describe('LangSmithExporter', () => {
 
     // Mock RunTree constructor
     MockRunTreeClass = vi.mocked(RunTree);
-    MockRunTreeClass.mockImplementation(() => mockRunTree);
+    MockRunTreeClass.mockImplementation(function () {
+      return mockRunTree;
+    });
 
     // Set up mock for Client
     mockClient = {
@@ -63,7 +65,9 @@ describe('LangSmithExporter', () => {
     };
 
     MockClientClass = vi.mocked(Client);
-    MockClientClass.mockImplementation(() => mockClient);
+    MockClientClass.mockImplementation(function () {
+      return mockClient;
+    });
 
     config = {
       apiKey: 'test-api-key',
