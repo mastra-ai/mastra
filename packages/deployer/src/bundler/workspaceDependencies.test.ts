@@ -10,11 +10,13 @@ import {
   getWorkspaceInformation,
 } from './workspaceDependencies';
 
-vi.mock('find-workspaces', () => ({
-  findWorkspacesRoot: vi.fn().mockReturnValue({ location: '/mock-root' }),
-  findWorkspaces: vi.fn(),
-  createWorkspacesCache: vi.fn(),
-}));
+vi.mock('find-workspaces', function () {
+  return {
+    findWorkspacesRoot: vi.fn().mockReturnValue({ location: '/mock-root' }),
+    findWorkspaces: vi.fn(),
+    createWorkspacesCache: vi.fn(),
+  };
+});
 
 vi.mock('empathic/package', () => ({
   up: vi.fn().mockReturnValue('/workspace/packages/pkg-a/package.json'),
@@ -24,13 +26,17 @@ vi.mock('fs-extra', () => ({
   ensureDir: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../services', () => ({
-  DepsService: vi.fn().mockImplementation(() => ({
-    __setLogger: vi.fn(),
-    getWorkspaceDependencyPath: vi.fn().mockReturnValue('mock-tgz-path'),
-    pack: vi.fn().mockResolvedValue('mock-tgz-path'),
-  })),
-}));
+vi.mock('../services', function () {
+  return {
+    DepsService: vi.fn().mockImplementation(function () {
+      return {
+        __setLogger: vi.fn(),
+        getWorkspaceDependencyPath: vi.fn().mockReturnValue('mock-tgz-path'),
+        pack: vi.fn().mockResolvedValue('mock-tgz-path'),
+      };
+    }),
+  };
+});
 
 describe('workspaceDependencies', () => {
   const mockLogger = {
@@ -130,7 +136,9 @@ describe('workspaceDependencies', () => {
 
     beforeEach(() => {
       vi.mocked(findWorkspacesRoot).mockReturnValue(mockRoot as unknown as WorkspacesRoot);
-      vi.mocked(DepsService).mockImplementation(() => mockDepsService as unknown as DepsService);
+      vi.mocked(DepsService).mockImplementation(function () {
+        return mockDepsService as unknown as DepsService;
+      });
     });
 
     it('should package workspace dependencies in batches', async () => {
