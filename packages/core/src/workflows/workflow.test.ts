@@ -11,8 +11,8 @@ import { RequestContext } from '../di';
 import { MastraError } from '../error';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
-import type { ChunkType, StreamEvent, WorkflowStreamEvent } from './types';
 import { createTool } from '../tools';
+import type { ChunkType, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -5863,7 +5863,7 @@ describe('Workflow', () => {
       expect(String(failedStepResult.error)).not.toContain('\n');
     });
 
-    it.only('should persist MastraError message without stack trace in snapshot', async () => {
+    it('should persist MastraError message without stack trace in snapshot', async () => {
       const mockStorage = new MockStore();
       const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
 
@@ -9291,15 +9291,12 @@ describe('Workflow', () => {
       expect((result.steps.step2 as any).error.toJSON()).toMatchObject({
         message: 'Step failed',
         code: 'WORKFLOW_STEP_INVOKE_FAILED',
+        category: 'USER',
+        domain: 'MASTRA_WORKFLOW',
         details: {
-          message: 'Step failed',
-          domain: 'MASTRA_WORKFLOW',
-          category: 'USER',
-          details: {
-            workflowId: 'test-workflow',
-            runId: expect.any(String),
-            stepId: 'step2',
-          },
+          workflowId: 'test-workflow',
+          runId: expect.any(String),
+          stepId: 'step2',
         },
       });
 
