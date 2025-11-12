@@ -76,7 +76,7 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 
 <StepItem>
 
-Create a chat route for the Assistant UI frontend by using the `chatRoute()` helper from `@mastra/ai-sdk`. First, add it to your Mastra project:
+Create a chat route for the Assistant UI frontend by using the `chatRoute()` helper from `@mastra/ai-sdk`. Add it to your Mastra project:
 
 ```bash copy
 npm install @mastra/ai-sdk@beta
@@ -84,33 +84,13 @@ npm install @mastra/ai-sdk@beta
 
 In your `src/mastra/index.ts` file, register the chat route:
 
-```typescript copy title="src/mastra/index.ts" {2,27-33}
+```typescript copy title="src/mastra/index.ts" {2,7-13}
 import { Mastra } from '@mastra/core/mastra';
 import { chatRoute } from '@mastra/ai-sdk';
-import { PinoLogger } from '@mastra/loggers';
-import { LibSQLStore } from '@mastra/libsql';
-import { Observability } from '@mastra/observability';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
-import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';
+// Rest of the imports...
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent },
-  scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },
-  storage: new LibSQLStore({
-    id: "mastra-storage",
-    // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ":memory:",
-  }),
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
-  observability: new Observability({
-    // Enables DefaultExporter and CloudExporter for tracing
-    default: { enabled: true },
-  }),
+  // Rest of the configuration...
   server: {
     apiRoutes: [
       chatRoute({
