@@ -198,7 +198,11 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
             params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
           } catch (error) {
             console.error('Error parsing query params', error);
-            return res.status(500).json({ error: 'Internal server error' });
+            // Zod validation errors should return 400 Bad Request, not 500
+            return res.status(400).json({
+              error: 'Invalid query parameters',
+              details: error instanceof Error ? error.message : 'Unknown error',
+            });
           }
         }
 
@@ -207,7 +211,11 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
             console.error('Error parsing body', error);
-            return res.status(500).json({ error: 'Internal server error' });
+            // Zod validation errors should return 400 Bad Request, not 500
+            return res.status(400).json({
+              error: 'Invalid request body',
+              details: error instanceof Error ? error.message : 'Unknown error',
+            });
           }
         }
 

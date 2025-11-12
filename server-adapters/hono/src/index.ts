@@ -219,7 +219,14 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
             params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
           } catch (error) {
             console.error('Error parsing query params', error);
-            return c.status(500);
+            // Zod validation errors should return 400 Bad Request, not 500
+            return c.json(
+              {
+                error: 'Invalid query parameters',
+                details: error instanceof Error ? error.message : 'Unknown error',
+              },
+              400,
+            );
           }
         }
 
@@ -228,7 +235,14 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
             console.error('Error parsing body', error);
-            return c.status(500);
+            // Zod validation errors should return 400 Bad Request, not 500
+            return c.json(
+              {
+                error: 'Invalid request body',
+                details: error instanceof Error ? error.message : 'Unknown error',
+              },
+              400,
+            );
           }
         }
 

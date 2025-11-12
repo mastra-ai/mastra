@@ -285,7 +285,7 @@ export const voiceSpeakersResponseSchema = z.array(
  */
 const toolCallActionBodySchema = z.object({
   runId: z.string(),
-  requestContext: z.string().optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
 });
 

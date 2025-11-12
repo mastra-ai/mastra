@@ -295,9 +295,26 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
         }
 
         // RequestContext tests - test for POST/PUT routes that accept body
-        // Note: RequestContext support varies by route, some expect object, some expect string
-        // Skipping these tests for now as they need route-specific handling
-        // TODO: Add requestContext tests with proper route-specific expectations
+        if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
+          it('should accept requestContext in body', async () => {
+            const request = buildRouteRequest(route);
+
+            const httpRequest: HttpRequest = {
+              method: request.method,
+              path: request.path,
+              query: request.query,
+              body: {
+                ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                requestContext: { userId: 'test-user-123', sessionId: 'session-456' },
+              },
+            };
+
+            const response = await executeHttpRequest(app, httpRequest);
+
+            // Should succeed - requestContext is optional and should not cause errors
+            expect(response.status).toBeLessThan(500);
+          });
+        }
 
         // Body field spreading test - for POST/PUT routes with body
         if (['POST', 'PUT'].includes(route.method) && route.bodySchema) {
@@ -385,6 +402,34 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
           errorData.statusCode !== undefined;
 
         expect(hasErrorField).toBe(true);
+      });
+
+      it('should return 400 for empty body when fields are required', async () => {
+        // Find a POST route with body schema
+        const postRoute = routes.find(r => r.method === 'POST' && r.bodySchema);
+        if (!postRoute) return;
+
+        const request = buildRouteRequest(postRoute);
+
+        const httpRequest: HttpRequest = {
+          method: request.method,
+          path: request.path,
+          query: request.query,
+          body: {}, // Empty body - missing required fields
+        };
+
+        const response = await executeHttpRequest(app, httpRequest);
+
+        // Should return 400 Bad Request for missing required fields
+        // (or 200/201 if all fields are optional)
+        expect([200, 201, 400]).toContain(response.status);
+
+        if (response.status === 400) {
+          expect(response.type).toBe('json');
+          const errorData = response.data as any;
+          expect(errorData).toBeDefined();
+          expect(errorData.error || errorData.message || errorData.details).toBeDefined();
+        }
       });
     });
   });
