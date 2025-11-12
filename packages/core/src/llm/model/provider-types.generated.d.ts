@@ -476,6 +476,7 @@ export type ProviderModelsMap = {
   readonly baseten: readonly [
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
+    'moonshotai/Kimi-K2-Thinking',
     'zai-org/GLM-4.6',
   ];
   readonly huggingface: readonly [
