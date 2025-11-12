@@ -1,7 +1,8 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import type { PosthogAnalytics } from '../../analytics/index';
 
+import pkgJson from '../../../package.json';
+import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
@@ -12,6 +13,8 @@ import type { Component, LLMProvider } from '../init/utils';
 import { getPackageManager } from '../utils.js';
 
 import { createMastraProject } from './utils';
+
+const version = pkgJson.version;
 
 export const create = async (args: {
   projectName?: string;
@@ -27,7 +30,13 @@ export const create = async (args: {
   analytics?: PosthogAnalytics;
 }) => {
   if (args.template !== undefined) {
-    await createFromTemplate({ ...args, injectedAnalytics: args.analytics });
+    await createFromTemplate({
+      projectName: args.projectName,
+      template: args.template,
+      timeout: args.timeout,
+      injectedAnalytics: args.analytics,
+      llmProvider: args.llmProvider,
+    });
     return;
   }
 
@@ -217,6 +226,7 @@ async function createFromTemplate(args: {
   template?: string | boolean;
   timeout?: number;
   injectedAnalytics?: PosthogAnalytics;
+  llmProvider?: LLMProvider;
 }) {
   let selectedTemplate: Template | undefined;
 
@@ -282,6 +292,29 @@ async function createFromTemplate(args: {
     projectName = response as string;
   }
 
+  // Get LLM provider if not specified
+  let llmProvider = args.llmProvider;
+  if (!llmProvider) {
+    const providerResponse = await p.select({
+      message: 'Select a default provider:',
+      options: [
+        { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+        { value: 'anthropic', label: 'Anthropic' },
+        { value: 'groq', label: 'Groq' },
+        { value: 'google', label: 'Google' },
+        { value: 'cerebras', label: 'Cerebras' },
+        { value: 'mistral', label: 'Mistral' },
+      ],
+    });
+
+    if (p.isCancel(providerResponse)) {
+      p.log.info('Project creation cancelled.');
+      return;
+    }
+
+    llmProvider = providerResponse as LLMProvider;
+  }
+
   try {
     // Track template usage
     const analytics = args.injectedAnalytics || getAnalytics();
@@ -290,12 +323,25 @@ async function createFromTemplate(args: {
         template_slug: selectedTemplate.slug,
         template_title: selectedTemplate.title,
       });
+
+      // Track model provider selection
+      if (llmProvider) {
+        analytics.trackEvent('cli_model_provider_selected', {
+          provider: llmProvider,
+          selection_method: args.llmProvider ? 'cli_args' : 'interactive',
+        });
+      }
     }
+
+    const isBeta = version?.includes('beta') ?? false;
+    const branch = isBeta ? 'beta' : undefined;
 
     // Clone the template
     const projectPath = await cloneTemplate({
       template: selectedTemplate,
       projectName,
+      branch,
+      llmProvider,
     });
 
     // Install dependencies

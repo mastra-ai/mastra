@@ -17,6 +17,7 @@ import {
   windsurfGlobalMCPConfigPath,
 } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
+import type { ModelRouterModelId } from '@mastra/core/llm/model';
 
 const exec = util.promisify(child_process.exec);
 
@@ -40,20 +41,22 @@ export function areValidComponents(values: string[]): values is Component[] {
   return values.every(value => COMPONENTS.includes(value as Component));
 }
 
-export const getModelIdentifier = (llmProvider: LLMProvider) => {
-  if (llmProvider === 'openai') {
-    return `'openai/gpt-4o-mini'`;
-  } else if (llmProvider === 'anthropic') {
-    return `'anthropic/claude-sonnet-4-5-20250929'`;
+export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
+  let model: ModelRouterModelId = 'openai/gpt-4o';
+
+  if (llmProvider === 'anthropic') {
+    model = 'anthropic/claude-sonnet-4-5';
   } else if (llmProvider === 'groq') {
-    return `'groq/llama-3.3-70b-versatile'`;
+    model = 'groq/llama-3.3-70b-versatile';
   } else if (llmProvider === 'google') {
-    return `'google/gemini-2.5-pro'`;
+    model = 'google/gemini-2.5-pro';
   } else if (llmProvider === 'cerebras') {
-    return `'cerebras/llama-3.3-70b'`;
+    model = 'cerebras/llama-3.3-70b';
   } else if (llmProvider === 'mistral') {
-    return `'mistral/mistral-medium-2508'`;
+    model = 'mistral/mistral-medium-2508';
   }
+
+  return model;
 };
 
 export async function writeAgentSample(
