@@ -222,10 +222,30 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
           taskStore: res.locals.taskStore,
         };
 
-        console.dir({ params }, { depth: null });
-        const result = await route.handler(handlerParams);
-        console.dir({ result }, { depth: null });
-        await this.sendResponse(route, res, result);
+        try {
+          const result = await route.handler(handlerParams);
+          await this.sendResponse(route, res, result);
+        } catch (error) {
+          console.error('Error calling handler', error);
+          // Check if it's an HTTPException or MastraError with a status code
+          let status = 500;
+          if (error && typeof error === 'object') {
+            // Check for direct status property (HTTPException)
+            if ('status' in error) {
+              status = (error as any).status;
+            }
+            // Check for MastraError with status in details
+            else if (
+              'details' in error &&
+              error.details &&
+              typeof error.details === 'object' &&
+              'status' in error.details
+            ) {
+              status = (error.details as any).status;
+            }
+          }
+          res.status(status).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+        }
       },
     );
   }

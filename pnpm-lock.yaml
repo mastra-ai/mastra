@@ -2952,6 +2952,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/server-adapter-test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../../stores/_test-utils
