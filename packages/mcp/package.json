@@ -48,21 +48,23 @@
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "22.13.17",
+    "@types/node": "^20.19.0",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "ai": "^5.0.60",
     "eslint": "^9.37.0",
-    "hono-mcp-server-sse-transport": "0.0.7",
     "hono": "^4.9.7",
+    "hono-mcp-server-sse-transport": "0.0.7",
     "tsup": "^8.5.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
+    "vitest": "catalog:",
     "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.24.6",
-    "@internal/types-builder": "workspace:*"
+    "zod-to-json-schema": "^3.24.6"
   },
   "homepage": "https://mastra.ai",
   "repository": {
