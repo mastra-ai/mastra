@@ -20,6 +20,14 @@ export const agentIdQuerySchema = z.object({
 });
 
 /**
+ * Legacy network ID query parameter (maps to agentId)
+ * Used for backward compatibility with /network routes
+ */
+export const networkIdQuerySchema = z.object({
+  networkId: z.string(),
+});
+
+/**
  * Storage order by configuration
  */
 const storageOrderBySchema = z.object({
@@ -81,7 +89,7 @@ export const getThreadByIdQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads/:threadId/messages
  */
-export const getMessagesQuerySchema = createPagePaginationSchema(40).extend({
+export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string(),
   orderBy: storageOrderBySchema.optional(),
   include: z.unknown().optional(),
@@ -96,6 +104,66 @@ export const getWorkingMemoryQuerySchema = z.object({
   resourceId: z.string().optional(),
   memoryConfig: z.record(z.string(), z.unknown()).optional(), // Complex config object
 });
+
+// ============================================================================
+// Legacy /network Query Parameter Schemas (backward compatibility)
+// ============================================================================
+
+/**
+ * GET /api/memory/network/status
+ */
+export const getMemoryStatusNetworkQuerySchema = networkIdQuerySchema;
+
+/**
+ * GET /api/memory/network/threads
+ */
+export const listThreadsNetworkQuerySchema = createOffsetPaginationSchema(100).extend({
+  networkId: z.string(),
+  resourceid: z.string(), // Legacy field name (lowercase 'id')
+  orderBy: storageOrderBySchema.optional(),
+});
+
+/**
+ * GET /api/memory/network/threads/:threadId
+ */
+export const getThreadByIdNetworkQuerySchema = networkIdQuerySchema;
+
+/**
+ * GET /api/memory/network/threads/:threadId/messages
+ */
+export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).extend({
+  networkId: z.string(),
+  agentId: z.string(),
+  resourceId: z.string().optional(),
+  orderBy: storageOrderBySchema.optional(),
+  include: z.unknown().optional(),
+  filter: z.unknown().optional(),
+});
+
+/**
+ * POST /api/memory/network/save-messages
+ */
+export const saveMessagesNetworkQuerySchema = networkIdQuerySchema;
+
+/**
+ * POST /api/memory/network/threads
+ */
+export const createThreadNetworkQuerySchema = networkIdQuerySchema;
+
+/**
+ * PATCH /api/memory/network/threads/:threadId
+ */
+export const updateThreadNetworkQuerySchema = networkIdQuerySchema;
+
+/**
+ * DELETE /api/memory/network/threads/:threadId
+ */
+export const deleteThreadNetworkQuerySchema = networkIdQuerySchema;
+
+/**
+ * POST /api/memory/network/messages/delete
+ */
+export const deleteMessagesNetworkQuerySchema = networkIdQuerySchema;
 
 // ============================================================================
 // Response Schemas
@@ -137,7 +205,7 @@ export const getThreadByIdResponseSchema = threadSchema;
 /**
  * Response for GET /api/memory/threads/:threadId/messages
  */
-export const getMessagesResponseSchema = z.object({
+export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
   uiMessages: z.unknown(), // Converted messages in UI format
 });
@@ -192,18 +260,6 @@ export const updateWorkingMemoryBodySchema = z.object({
 });
 
 /**
- * Query schema for GET /api/memory/messages
- */
-export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
-  agentId: z.string(),
-  threadId: z.string(),
-  resourceId: z.string().optional(),
-  orderBy: storageOrderBySchema.optional(),
-  include: z.unknown().optional(),
-  filter: z.unknown().optional(),
-});
-
-/**
  * Query schema for DELETE /api/memory/messages
  */
 export const deleteMessagesQuerySchema = z.object({
@@ -234,11 +290,6 @@ export const deleteThreadResponseSchema = z.object({
 });
 
 export const updateWorkingMemoryResponseSchema = successResponseSchema;
-
-export const listMessagesResponseSchema = z.object({
-  messages: z.array(coreMessageSchema),
-  pagination: paginationInfoSchema.optional(),
-});
 
 export const deleteMessagesResponseSchema = successResponseSchema.extend({
   message: z.string(),
