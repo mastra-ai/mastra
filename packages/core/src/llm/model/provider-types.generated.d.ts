@@ -476,6 +476,7 @@ export type ProviderModelsMap = {
   readonly baseten: readonly [
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
+    'moonshotai/Kimi-K2-Thinking',
     'zai-org/GLM-4.6',
   ];
   readonly huggingface: readonly [
@@ -507,6 +508,7 @@ export type ProviderModelsMap = {
     'gpt-5-codex',
     'grok-code',
     'kimi-k2',
+    'kimi-k2-thinking',
     'minimax-m2',
     'qwen3-coder',
   ];
@@ -635,6 +637,7 @@ export type ProviderModelsMap = {
     'google/gemma-3-27b-it',
     'google/gemma-3n-e4b-it',
     'google/gemma-3n-e4b-it:free',
+    'kwaipilot/kat-coder-pro:free',
     'meta-llama/llama-3.2-11b-vision-instruct',
     'meta-llama/llama-3.3-70b-instruct:free',
     'meta-llama/llama-4-scout:free',

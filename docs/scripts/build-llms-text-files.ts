@@ -13,7 +13,8 @@ function extractFrontMatter(content: string) {
   fields.forEach((field) => {
     const match = frontMatterStr.match(new RegExp(`${field}:\\s*([^\n]+)`));
     if (match) {
-      result[field] = match[1].trim().replace(/['"]|\\'/g, "");
+      // Remove only surrounding quotes (single or double)
+      result[field] = match[1].trim().replace(/^["']|["']$/g, "");
     }
   });
 

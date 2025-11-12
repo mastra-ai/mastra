@@ -23,6 +23,7 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
   const stepId = `step-${randomUUID()}`;
   const timestamp = createdAt || new Date();
   const snapshot: WorkflowRunState = {
+    status: status as WorkflowRunState['status'],
     value: { [threadId]: 'running' },
     context: {
       [stepId]: {
@@ -36,11 +37,11 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
     } as WorkflowRunState['context'],
     serializedStepGraph: [],
     activePaths: [],
+    activeStepsPath: {},
     suspendedPaths: {},
     resumeLabels: {},
     waitingPaths: {},
     runId,
-    status: status as WorkflowRunState['status'],
     timestamp: timestamp.getTime(),
     requestContext: {},
   };

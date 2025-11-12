@@ -25,7 +25,7 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod@beta v1/workflows-get-workflows .
+npx @mastra/codemod@beta v1/mastra-plural-apis .
 ```
 
 :::
@@ -68,6 +68,16 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 + await workflow.createRun({ input: { ... } });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-create-run-async .
+```
+
+:::
+
 ### `runCount` to `retryCount` (deprecated)
 
 The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. This change provides clearer naming that better describes retry behavior. The old `runCount` still works but shows deprecation warnings.
@@ -83,6 +93,16 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-run-count .
+```
+
+:::
+
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
@@ -93,6 +113,16 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 - const runs = await workflow.getWorkflowRuns({ fromDate, toDate });
 + const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-list-runs .
+```
+
+:::
 
 ## Removed
 

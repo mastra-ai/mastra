@@ -1,6 +1,6 @@
 {
   "name": "@mastra/longmemeval",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "LongMemEval benchmark implementation for Mastra Memory",
   "scripts": {
     "test": "vitest",
@@ -47,7 +47,7 @@
   },
   "devDependencies": {
     "@ai-sdk/google": "^1.2.19",
-    "@types/node": "^22.10.2",
+    "@types/node": "22.13.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

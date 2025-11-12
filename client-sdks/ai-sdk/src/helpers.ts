@@ -401,6 +401,13 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
           toolCallId: part.toolCallId,
           payload: part.output,
         };
+      } else if (isDataChunkType(part.output)) {
+        if (!('data' in part.output)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
+          );
+        }
+        return part.output;
       }
       return;
     }
