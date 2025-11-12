@@ -1,9 +1,12 @@
 import { z } from 'zod';
-import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
+import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 
 interface StreamStepOptions {
@@ -17,6 +20,7 @@ interface StreamStepOptions {
   };
   agentId: string;
   toolCallId?: string;
+  methodType: AgentMethodType;
 }
 
 export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
@@ -27,6 +31,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   resumeContext,
   agentId,
   toolCallId,
+  methodType,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -53,6 +58,8 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
             : capabilities.outputProcessors
           : []);
 
+      const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
+
       const streamResult = capabilities.llm.stream({
         ...validatedInputData,
         outputProcessors: processors,
@@ -65,6 +72,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         },
         agentId,
         toolCallId,
+        methodType: modelMethodType,
       });
 
       return streamResult;

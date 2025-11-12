@@ -3,6 +3,7 @@ import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } 
 import { APICallError } from 'ai-v5';
 import type { ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
@@ -39,6 +40,7 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   */
   headers?: Record<string, string | undefined>;
   shouldThrowError?: boolean;
+  methodType: ModelMethodType;
 };
 
 export function execute<OUTPUT extends OutputSchema = undefined>({
@@ -55,6 +57,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   structuredOutput,
   headers,
   shouldThrowError,
+  methodType,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',

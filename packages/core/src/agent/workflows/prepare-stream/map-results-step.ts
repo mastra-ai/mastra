@@ -1,4 +1,6 @@
-import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
+import { ErrorDomain, MastraError } from '../../../error';
+import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
+import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
 import type { Span, SpanType, TracingContext } from '../../../observability';
@@ -8,6 +10,7 @@ import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
 interface MapResultsStepOptions<
@@ -24,6 +27,7 @@ interface MapResultsStepOptions<
   saveQueueManager: SaveQueueManager;
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
+  methodType: AgentMethodType;
 }
 
 export function createMapResultsStep<
@@ -40,6 +44,7 @@ export function createMapResultsStep<
   saveQueueManager,
   agentSpan,
   agentId,
+  methodType,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
     inputData,
@@ -137,7 +142,10 @@ export function createMapResultsStep<
 
     const messageList = memoryData.messageList!;
 
+    const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
+
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
+      methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
       tracingContext: { currentSpan: agentSpan },
