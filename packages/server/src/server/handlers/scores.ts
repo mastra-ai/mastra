@@ -117,9 +117,14 @@ export async function getScorerHandler({
 export async function listScoresByRunIdHandler({
   mastra,
   runId,
-  pagination,
-}: Context & { runId: string; pagination: StoragePagination }) {
+  page,
+  perPage,
+}: Context & { runId: string; page: number; perPage: number | false }) {
   try {
+    const pagination: StoragePagination = {
+      page: page ?? 0,
+      perPage: perPage ?? 10,
+    };
     const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
       runId,
       pagination,
@@ -167,8 +172,9 @@ export async function listScoresByEntityIdHandler({
   mastra,
   entityId,
   entityType,
-  pagination,
-}: Context & { entityId: string; entityType: string; pagination: StoragePagination }) {
+  page,
+  perPage,
+}: Context & { entityId: string; entityType: string; page: number; perPage: number | false }) {
   try {
     let entityIdToUse = entityId;
 
@@ -179,6 +185,11 @@ export async function listScoresByEntityIdHandler({
       const workflow = mastra.getWorkflowById(entityId);
       entityIdToUse = workflow.id;
     }
+
+    const pagination: StoragePagination = {
+      page: page ?? 0,
+      perPage: perPage ?? 10,
+    };
 
     const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
       entityId: entityIdToUse,

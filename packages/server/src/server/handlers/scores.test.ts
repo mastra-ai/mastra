@@ -69,7 +69,8 @@ describe('Scores Handlers', () => {
       const result = await listScoresByRunIdHandler({
         mastra,
         runId: mockScores?.[0]?.runId,
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage,
       });
 
       expect(result.scores).toHaveLength(1);
@@ -93,7 +94,8 @@ describe('Scores Handlers', () => {
       const result = await listScoresByRunIdHandler({
         mastra: mastraWithoutStorage,
         runId: 'test-run-1',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage,
       });
 
       expect(result).toEqual({
@@ -117,7 +119,8 @@ describe('Scores Handlers', () => {
         listScoresByRunIdHandler({
           mastra,
           runId: 'test-run-1',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -135,7 +138,8 @@ describe('Scores Handlers', () => {
         listScoresByRunIdHandler({
           mastra,
           runId: 'test-run-1',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -152,7 +156,8 @@ describe('Scores Handlers', () => {
         mastra,
         entityId: 'test-agent',
         entityType: 'AGENT',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage,
       });
 
       expect(result.scores).toHaveLength(1);
@@ -177,7 +182,8 @@ describe('Scores Handlers', () => {
         mastra: mastraWithoutStorage,
         entityId: 'test-agent',
         entityType: 'agent',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage,
       });
 
       expect(result).toEqual({
@@ -202,7 +208,8 @@ describe('Scores Handlers', () => {
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -221,7 +228,8 @@ describe('Scores Handlers', () => {
           mastra,
           entityId: 'test-agent',
           entityType: 'agent',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -238,7 +246,8 @@ describe('Scores Handlers', () => {
         mastra,
         entityId: 'test-workflow',
         entityType: 'WORKFLOW',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage,
       });
 
       expect(result.scores).toHaveLength(1);

@@ -92,13 +92,12 @@ describe('Hono Server Adapter', () => {
       }
 
       // Parse response
-      const contentType = response.headers.get('content-type') || '';
-      const isJson = contentType.includes('application/json');
-      const isStream = contentType.includes('text/plain') || response.headers.get('transfer-encoding') === 'chunked';
+      const contentType = response.headers?.get('content-type') || '';
+      const isStream = contentType.includes('text/plain') || response.headers?.get('transfer-encoding') === 'chunked';
 
       // Extract headers
       const headers: Record<string, string> = {};
-      response.headers.forEach((value, key) => {
+      response.headers?.forEach((value, key) => {
         headers[key] = value;
       });
 

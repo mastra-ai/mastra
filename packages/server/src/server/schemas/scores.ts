@@ -60,15 +60,12 @@ export const entityPathParams = z.object({
 });
 
 // Query parameter schemas
-// Note: Handlers expect pagination as a nested object, not flat page/perPage
-// This matches the deployer pattern where query params are transformed into pagination object
-const nestedPaginationSchema = z.object({
-  page: z.coerce.number(),
-  perPage: z.coerce.number(),
-});
+// HTTP query params must be flat (e.g., ?page=0&perPage=10)
+// Adapters should transform these into nested pagination objects for handlers if needed
 
 export const listScoresByRunIdQuerySchema = z.object({
-  pagination: nestedPaginationSchema,
+  page: z.coerce.number().optional().default(0),
+  perPage: z.coerce.number().optional().default(10),
 });
 
 export const listScoresByScorerIdQuerySchema = z.object({
@@ -79,7 +76,8 @@ export const listScoresByScorerIdQuerySchema = z.object({
 });
 
 export const listScoresByEntityIdQuerySchema = z.object({
-  pagination: nestedPaginationSchema,
+  page: z.coerce.number().optional().default(0),
+  perPage: z.coerce.number().optional().default(10),
 });
 
 // Body schema for saving scores

@@ -1,5 +1,4 @@
 import type { ScoreRowData } from '@mastra/core/evals';
-import type { StoragePagination } from '@mastra/core/storage';
 import {
   listScorersHandler as getOriginalListScorersHandler,
   listScoresByRunIdHandler as getOriginalScoresByRunIdHandler,
@@ -43,13 +42,13 @@ export async function listScoresByRunIdHandler(c: Context) {
   const runId = c.req.param('runId');
   const page = parsePage(c.req.query('page'));
   const perPage = parsePerPage(c.req.query('perPage'), 10);
-  const pagination: StoragePagination = { page, perPage };
 
   try {
     const scores = await getOriginalScoresByRunIdHandler({
       mastra,
       runId,
-      pagination,
+      page,
+      perPage,
     });
 
     return c.json(scores);
@@ -89,14 +88,13 @@ export async function listScoresByEntityIdHandler(c: Context) {
   const page = parsePage(c.req.query('page'));
   const perPage = parsePerPage(c.req.query('perPage'), 10);
 
-  const pagination: StoragePagination = { page, perPage };
-
   try {
     const scores = await getOriginalScoresByEntityIdHandler({
       mastra,
       entityId,
       entityType,
-      pagination,
+      page,
+      perPage,
     });
 
     return c.json(scores);
