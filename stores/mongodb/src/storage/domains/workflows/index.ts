@@ -14,13 +14,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -31,11 +31,11 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -49,13 +49,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     throw new Error('Method not implemented.');
   }
 
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -63,10 +63,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     try {
       const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.updateOne(
-        { workflow_name: workflowName, run_id: runId },
+        { workflow_name: workflowId, run_id: runId },
         {
           $set: {
-            workflow_name: workflowName,
+            workflow_name: workflowId,
             run_id: runId,
             resourceId,
             snapshot,
@@ -82,25 +82,25 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
 
-  async loadWorkflowSnapshot({
-    workflowName,
+  async getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
       const result = await this.operations.load<any[]>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
         },
       });
@@ -116,7 +116,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -127,8 +127,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     const options = args || {};
     try {
       const query: any = {};
-      if (options.workflowName) {
-        query['workflow_name'] = options.workflowName;
+      if (options.workflowId) {
+        query['workflow_name'] = options.workflowId;
       }
       if (options.status) {
         query['snapshot.status'] = options.status;
@@ -193,7 +193,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           id: 'STORAGE_MONGODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: options.workflowName || 'unknown' },
+          details: { workflowName: options.workflowId || 'unknown' },
         },
         error,
       );

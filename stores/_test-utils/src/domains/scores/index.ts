@@ -34,7 +34,7 @@ async function createScores(
 export function createScoresTest({ storage }: { storage: MastraStorage }) {
   describe('Score Operations', () => {
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TABLE_SCORERS });
+      await storage.getStore('scores')?.dropData();
     });
 
     it('should retrieve scores by scorer id', async () => {

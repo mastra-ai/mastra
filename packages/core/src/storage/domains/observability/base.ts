@@ -10,7 +10,7 @@ import type {
   UpdateSpanRecord,
 } from '../../types';
 
-export class ObservabilityStorage extends MastraBase {
+export abstract class ObservabilityStorageBase extends MastraBase {
   constructor() {
     super({
       component: 'STORAGE',
@@ -18,6 +18,14 @@ export class ObservabilityStorage extends MastraBase {
     });
   }
 
+  init(): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_INITIALIZE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider has not been initialized',
+    });
+  }
   /**
    * Provides hints for tracing strategy selection by the DefaultExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
@@ -121,4 +129,6 @@ export class ObservabilityStorage extends MastraBase {
       text: 'This storage provider does not support batch deleting traces',
     });
   }
+
+  abstract dropData(): Promise<void>;
 }

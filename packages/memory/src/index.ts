@@ -26,6 +26,7 @@ import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -60,7 +61,9 @@ export class Memory extends MastraMemory {
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
-    const thread = await this.storage.getThreadById({ threadId });
+    const memoryStore = this.storage.getStore('memory');
+
+    const thread = await memoryStore?.getThreadById({ threadId });
 
     // For resource-scoped semantic recall, we don't need to validate that the specific thread exists
     // because we're searching across all threads for the resource
@@ -221,7 +224,20 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_GET_THREAD_BY_ID_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    const thread = await memoryStore.getThreadById({ threadId });
+    if (!thread) {
+      return null;
+    }
+    return thread;
   }
 
   async listThreadsByResourceId(
@@ -328,6 +344,16 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_UPDATE_RESOURCE_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+
     this.checkStorageFeatureSupport(config);
 
     const scope = config.workingMemory.scope || 'resource';
@@ -342,18 +368,18 @@ export class Memory extends MastraMemory {
 
     if (scope === 'resource' && resourceId) {
       // Update working memory in resource table
-      await this.storage.updateResource({
+      await memoryStore.updateResource({
         resourceId,
         workingMemory,
       });
     } else {
       // Update working memory in thread metadata (existing behavior)
-      const thread = await this.storage.getThreadById({ threadId });
+      const thread = await memoryStore.getThreadById({ threadId });
       if (!thread) {
         throw new Error(`Thread ${threadId} not found`);
       }
 
-      await this.storage.updateThread({
+      await memoryStore.updateThread({
         id: threadId,
         title: thread.title || 'Untitled Thread',
         metadata: {
@@ -385,6 +411,17 @@ export class Memory extends MastraMemory {
 
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
+    }
+
+    const memoryStore = this.storage.getStore('memory');
+
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_UPDATE_RESOURCE_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
     }
 
     this.checkStorageFeatureSupport(config);
@@ -453,7 +490,7 @@ ${workingMemory}`;
 
       if (scope === 'resource' && resourceId) {
         // Update working memory in resource table
-        await this.storage.updateResource({
+        await memoryStore.updateResource({
           resourceId,
           workingMemory,
         });
@@ -463,7 +500,7 @@ ${workingMemory}`;
         }
       } else {
         // Update working memory in thread metadata (existing behavior)
-        const thread = await this.storage.getThreadById({ threadId });
+        const thread = await memoryStore.getThreadById({ threadId });
         if (!thread) {
           throw new Error(`Thread ${threadId} not found`);
         }
@@ -737,6 +774,17 @@ ${workingMemory}`;
       return null;
     }
 
+    const memoryStore = this.storage.getStore('memory');
+
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_GET_THREAD_BY_ID_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+
     this.checkStorageFeatureSupport(config);
 
     const scope = config.workingMemory.scope || 'resource';
@@ -752,11 +800,11 @@ ${workingMemory}`;
 
     if (scope === 'resource' && resourceId) {
       // Get working memory from resource table
-      const resource = await this.storage.getResourceById({ resourceId });
+      const resource = await memoryStore.getResourceById({ resourceId });
       workingMemoryData = resource?.workingMemory || null;
     } else {
       // Get working memory from thread metadata (default behavior)
-      const thread = await this.storage.getThreadById({ threadId });
+      const thread = await memoryStore.getThreadById({ threadId });
       workingMemoryData = thread?.metadata?.workingMemory as string;
     }
 

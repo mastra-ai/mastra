@@ -1,25 +1,34 @@
-import type { ScoreRowData, ScoringSource } from '../../../evals/types';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
 import type { PaginationInfo, StoragePagination } from '../../types';
-import { ScoresStorage } from './base';
+import { ScoresStorageBase } from './base';
 
-export type InMemoryScores = Map<string, ScoreRowData>;
+export type ScoresStorageData = Map<string, ScoreRowData>;
 
-export class ScoresInMemory extends ScoresStorage {
-  scores: InMemoryScores;
+export class ScoresStorage extends ScoresStorageBase {
+  collection: ScoresStorageData;
 
-  constructor({ collection }: { collection: InMemoryScores }) {
+  constructor() {
     super();
-    this.scores = collection;
+    this.collection = new Map<string, ScoreRowData>();
+  }
+
+  async init(): Promise<void> {
+    this.collection = new Map<string, ScoreRowData>();
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.scores.get(id) ?? null;
+    return this.collection.get(id) ?? null;
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    const newScore = { id: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date(), ...score };
-    this.scores.set(newScore.id, newScore);
+  async saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }> {
+    const newScore = {
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...score,
+    } as ScoreRowData;
+    this.collection.set(newScore.id, newScore);
     return { score: newScore };
   }
 
@@ -36,7 +45,7 @@ export class ScoresInMemory extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(score => {
+    const scores = Array.from(this.collection.values()).filter(score => {
       let baseFilter = score.scorerId === scorerId;
 
       if (entityId) {
@@ -77,7 +86,7 @@ export class ScoresInMemory extends ScoresStorage {
     runId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(score => score.runId === runId);
+    const scores = Array.from(this.collection.values()).filter(score => score.runId === runId);
 
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
@@ -104,7 +113,7 @@ export class ScoresInMemory extends ScoresStorage {
     entityType: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(score => {
+    const scores = Array.from(this.collection.values()).filter(score => {
       const baseFilter = score.entityId === entityId && score.entityType === entityType;
 
       return baseFilter;
@@ -135,7 +144,7 @@ export class ScoresInMemory extends ScoresStorage {
     spanId: string;
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(
+    const scores = Array.from(this.collection.values()).filter(
       score => score.traceId === traceId && score.spanId === spanId,
     );
     scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -154,5 +163,9 @@ export class ScoresInMemory extends ScoresStorage {
         hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
+  }
+
+  async dropData(): Promise<void> {
+    this.collection.clear();
   }
 }

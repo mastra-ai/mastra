@@ -2,7 +2,7 @@ import { MastraBase } from '../../../base';
 import type { StepResult, WorkflowRunState } from '../../../workflows';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 
-export abstract class WorkflowsStorage extends MastraBase {
+export abstract class WorkflowsStorageBase extends MastraBase {
   constructor() {
     super({
       component: 'STORAGE',
@@ -10,14 +10,16 @@ export abstract class WorkflowsStorage extends MastraBase {
     });
   }
 
+  abstract init(): Promise<void>;
+
   abstract updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
     requestContext,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
@@ -25,11 +27,11 @@ export abstract class WorkflowsStorage extends MastraBase {
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -40,22 +42,26 @@ export abstract class WorkflowsStorage extends MastraBase {
     };
   }): Promise<WorkflowRunState | undefined>;
 
-  abstract persistWorkflowSnapshot(_: {
-    workflowName: string;
+  abstract createWorkflowSnapshot(_: {
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void>;
 
-  abstract loadWorkflowSnapshot({
-    workflowName,
+  abstract getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null>;
 
   abstract listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;
 
-  abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+  abstract getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null>;
+
+  abstract dropData(): Promise<void>;
 }

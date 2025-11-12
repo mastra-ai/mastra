@@ -12,13 +12,15 @@ import type {
   StorageOrderBy,
 } from '../../types';
 
-export abstract class MemoryStorage extends MastraBase {
+export abstract class MemoryStorageBase extends MastraBase {
   constructor() {
     super({
       component: 'STORAGE',
       name: 'MEMORY',
     });
   }
+
+  abstract init(): Promise<void>;
 
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
@@ -100,6 +102,8 @@ export abstract class MemoryStorage extends MastraBase {
           : defaultDirection,
     };
   }
+
+  abstract dropData(): Promise<void>;
 }
 
 const THREAD_ORDER_BY_SET: Record<ThreadOrderBy, true> = {

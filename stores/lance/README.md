@@ -292,7 +292,7 @@ const schema = await storage.getTableSchema(TABLE_MESSAGES);
 - `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state
 - `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
 - `listWorkflowRuns({ workflowName?, pagination? })`: List workflow runs with pagination
-- `getWorkflowRunById({ runId, workflowName? })`: Get a specific workflow run
+- `getWorkflowRunById({ runId, workflowId? })`: Get a specific workflow run
 - `updateWorkflowState({ workflowName, runId, state })`: Update workflow state
 - `updateWorkflowResults({ workflowName, runId, results })`: Update workflow results
 

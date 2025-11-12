@@ -689,7 +689,7 @@ const mockModelV2 = new MockLanguageModelV2({
  */
 function getBaseMastraConfig(testExporter: TestExporter, options = {}) {
   return {
-    storage: new MockStore(),
+    storage: new InMemoryStore(),
     observability: new Observability({
       configs: {
         test: {

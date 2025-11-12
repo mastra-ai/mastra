@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
-import { MockStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
@@ -156,7 +156,7 @@ describe('Agent Builder Handlers', () => {
     mockMastra = new Mastra({
       logger: false,
       workflows: { 'merge-template': mockWorkflow, 'workflow-builder': reusableWorkflow },
-      storage: new MockStore(),
+      storage: new InMemoryStore(),
     });
 
     // Mock the getLogger method
@@ -990,7 +990,7 @@ describe('Agent Builder Handlers', () => {
       const errorMastra = new Mastra({
         logger: false,
         workflows: {}, // Empty workflows to cause "Workflow not found" error
-        storage: new MockStore(),
+        storage: new InMemoryStore(),
       });
       vi.spyOn(errorMastra, 'getLogger').mockReturnValue(mockLogger);
 

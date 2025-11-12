@@ -16,6 +16,7 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
+  WorkflowRunState,
 } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -373,26 +374,30 @@ export class EventedWorkflow<
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-        workflowName: this.id,
-        runId: runIdToUse,
-        snapshot: {
+      const storage = this.mastra?.getStorage();
+      const workflowStore = storage?.getStore('workflows');
+      if (workflowStore) {
+        await workflowStore.createWorkflowSnapshot({
+          workflowId: this.id,
           runId: runIdToUse,
-          status: 'pending',
-          value: {},
-          context: {},
-          activePaths: [],
-          serializedStepGraph: this.serializedStepGraph,
-          activeStepsPath: {},
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          result: undefined,
-          error: undefined,
-          // @ts-ignore
-          timestamp: Date.now(),
-        },
-      });
+          snapshot: {
+            runId: runIdToUse,
+            status: 'pending',
+            value: {},
+            context: {},
+            activePaths: [],
+            serializedStepGraph: this.serializedStepGraph,
+            activeStepsPath: {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            waitingPaths: {},
+            result: undefined,
+            error: undefined,
+            // @ts-ignore
+            timestamp: Date.now(),
+          },
+        });
+      }
     }
 
     return run;
@@ -447,24 +452,28 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      snapshot: {
+    const storage = this.mastra?.getStorage();
+    const workflowStore = storage?.getStore('workflows');
+    if (workflowStore) {
+      await workflowStore.createWorkflowSnapshot({
+        workflowId: this.workflowId,
         runId: this.runId,
-        serializedStepGraph: this.serializedStepGraph,
-        status: 'running',
-        value: {},
-        context: {} as any,
-        requestContext: Object.fromEntries(requestContext.entries()),
-        activePaths: [],
-        activeStepsPath: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        timestamp: Date.now(),
-      },
-    });
+        snapshot: {
+          runId: this.runId,
+          serializedStepGraph: this.serializedStepGraph,
+          status: 'running',
+          value: {},
+          context: {} as any,
+          requestContext: Object.fromEntries(requestContext.entries()),
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        },
+      });
+    }
 
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
@@ -530,10 +539,16 @@ export class EventedRun<
       throw new Error('No steps provided to resume');
     }
 
-    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const storage = this.mastra?.getStorage();
+    const workflowStore = storage?.getStore('workflows');
+    let snapshot: WorkflowRunState | null = null;
+
+    if (workflowStore) {
+      snapshot = await workflowStore.getWorkflowSnapshot({
+        workflowId: this.workflowId,
+        runId: this.runId,
+      });
+    }
 
     const resumePath = snapshot?.suspendedPaths?.[steps[0]!] as any;
     if (!resumePath) {

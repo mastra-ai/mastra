@@ -48,13 +48,13 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -65,11 +65,11 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -83,13 +83,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     throw new Error('Method not implemented.');
   }
 
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -101,7 +101,7 @@ export class WorkflowsPG extends WorkflowsStorage {
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
+        [workflowId, runId, resourceId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
       throw new MastraError(
@@ -115,17 +115,17 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  async loadWorkflowSnapshot({
-    workflowName,
+  async getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
       const result = await this.operations.load<{ snapshot: WorkflowRunState }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: { workflow_name: workflowName, run_id: runId },
+        keys: { workflow_name: workflowId, run_id: runId },
       });
 
       return result ? result.snapshot : null;
@@ -143,7 +143,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   async getWorkflowRunById({
     runId,
-    workflowName,
+    workflowId,
   }: {
     runId: string;
     workflowName?: string;
@@ -200,7 +200,7 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   async listWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     perPage,

@@ -138,27 +138,27 @@ export class UpstashStore extends MastraStorage {
   }
 
   async updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
     requestContext,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowId, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -168,39 +168,33 @@ export class UpstashStore extends MastraStorage {
       waitingPaths?: Record<string, number[]>;
     };
   }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
+    return this.stores.workflows.updateWorkflowState({ workflowId, runId, opts });
   }
 
-  async persistWorkflowSnapshot(params: {
+  async createWorkflowSnapshot(params: {
     namespace: string;
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot(params);
+    return this.stores.workflows.createWorkflowSnapshot(params);
   }
 
-  async loadWorkflowSnapshot(params: {
+  async getWorkflowSnapshot(params: {
     namespace: string;
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot(params);
+    return this.stores.workflows.getWorkflowSnapshot(params);
   }
 
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns(args);
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
+    return this.stores.workflows.getWorkflowRunById({ runId, workflowId });
   }
 
   async close(): Promise<void> {

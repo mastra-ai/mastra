@@ -3,7 +3,7 @@ import path from 'path';
 import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { TABLE_WORKFLOW_SNAPSHOT, MockStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { mapVariable } from '@mastra/core/workflows';
@@ -14,7 +14,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { GoogleCloudPubSub } from '.';
 
-const testStorage = new MockStore();
+const testStorage = new InMemoryStore();
 
 let testRunIdCounter = 0;
 
@@ -23,7 +23,7 @@ describe.sequential(
   () => {
     beforeEach(async () => {
       vi.resetAllMocks();
-      testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      testStorage.getStore('workflows')?.dropData();
     });
 
     describe.sequential('Streaming', () => {
@@ -4340,7 +4340,7 @@ describe.sequential(
       let testStorage;
 
       beforeEach(async () => {
-        testStorage = new MockStore();
+        testStorage = new InMemoryStore();
       });
 
       it('should return empty result when mastra is not initialized', async () => {
@@ -6435,7 +6435,7 @@ describe.sequential(
       });
 
       it('should inject requestContext dependencies into steps during resume', async () => {
-        const initialStorage = new MockStore();
+        const initialStorage = new InMemoryStore();
 
         const requestContext = new RequestContext();
         const testValue = 'test-dependency';

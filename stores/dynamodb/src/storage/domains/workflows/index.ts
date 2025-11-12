@@ -36,13 +36,13 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -53,11 +53,11 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -72,25 +72,25 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   }
 
   // Workflow operations
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
+    this.logger.debug('Persisting workflow snapshot', { workflowId, runId });
 
     try {
       const now = new Date().toISOString();
       // Prepare data including the 'entity' type
       const data = {
         entity: 'workflow_snapshot', // Add entity type
-        workflow_name: workflowName,
+        workflow_name: workflowId,
         run_id: runId,
         snapshot: JSON.stringify(snapshot),
         createdAt: now,
@@ -105,28 +105,28 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           id: 'STORAGE_DYNAMODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
 
-  async loadWorkflowSnapshot({
-    workflowName,
+  async getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
+    this.logger.debug('Loading workflow snapshot', { workflowId, runId });
 
     try {
       // Provide *all* composite key components for the primary index ('entity', 'workflow_name', 'run_id')
       const result = await this.service.entities.workflow_snapshot
         .get({
           entity: 'workflow_snapshot', // Add entity type
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
         })
         .go();
@@ -144,7 +144,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           id: 'STORAGE_DYNAMODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -181,7 +181,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         // Provide *all* composite key components for the PK ('entity', 'workflow_name')
         query = this.service.entities.workflow_snapshot.query.primary({
           entity: 'workflow_snapshot', // Add entity type
-          workflow_name: args.workflowName,
+          workflow_name: args.workflowId,
         });
       } else {
         // If no workflow name, we need to scan
@@ -268,13 +268,13 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     this.logger.debug('Getting workflow run by ID', { runId, workflowName });
 
     try {
-      // If we have a workflowName, we can do a direct get using the primary key
+      // If we have a workflowId, we can do a direct get using the primary key
       if (workflowName) {
         this.logger.debug('WorkflowName provided, using direct GET operation.');
         const result = await this.service.entities.workflow_snapshot
           .get({
             entity: 'workflow_snapshot', // Entity type for PK
-            workflow_name: workflowName,
+            workflow_name: workflowId,
             run_id: runId,
           })
           .go();

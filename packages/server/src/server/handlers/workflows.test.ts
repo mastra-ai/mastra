@@ -104,7 +104,7 @@ describe('vNext Workflow Handlers', () => {
     mockMastra = new Mastra({
       logger: false,
       workflows: { 'test-workflow': mockWorkflow, 'reusable-workflow': reusableWorkflow },
-      storage: new MockStore(),
+      storage: new InMemoryStore(),
     });
   });
 

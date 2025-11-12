@@ -165,8 +165,8 @@ export class InngestRun<
       runs = await this.getRuns(eventId);
 
       if (runs?.[0]?.status === 'Failed') {
-        const snapshot = await storage?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
+        const snapshot = await storage?.getWorkflowSnapshot({
+          workflowId: this.workflowId,
           runId: this.runId,
         });
         return {
@@ -175,8 +175,8 @@ export class InngestRun<
       }
 
       if (runs?.[0]?.status === 'Cancelled') {
-        const snapshot = await storage?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
+        const snapshot = await storage?.getWorkflowSnapshot({
+          workflowId: this.workflowId,
           runId: this.runId,
         });
         return { output: { result: { steps: snapshot?.context, status: 'canceled' } } };
@@ -195,13 +195,13 @@ export class InngestRun<
       },
     });
 
-    const snapshot = await storage?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
+    const snapshot = await storage?.getWorkflowSnapshot({
+      workflowId: this.workflowId,
       runId: this.runId,
     });
     if (snapshot) {
-      await storage?.persistWorkflowSnapshot({
-        workflowName: this.workflowId,
+      await storage?.createWorkflowSnapshot({
+        workflowId: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
         snapshot: {
@@ -243,8 +243,8 @@ export class InngestRun<
     };
     format?: 'legacy' | 'vnext' | undefined;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    await this.#mastra.getStorage()?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
+    await this.#mastra.getStorage()?.createWorkflowSnapshot({
+      workflowId: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
       snapshot: {
@@ -329,8 +329,8 @@ export class InngestRun<
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
-    const snapshot = await storage?.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
+    const snapshot = await storage?.getWorkflowSnapshot({
+      workflowId: this.workflowId,
       runId: this.runId,
     });
 
@@ -612,7 +612,7 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
+    return storage.listWorkflowRuns({ workflowId: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
@@ -624,7 +624,7 @@ export class InngestWorkflow<
         ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
+    const run = (await storage.getWorkflowRunById({ runId, workflowId: this.id })) as unknown as WorkflowRun;
 
     return (
       run ??
@@ -691,8 +691,8 @@ export class InngestWorkflow<
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-        workflowName: this.id,
+      await this.mastra?.getStorage()?.createWorkflowSnapshot({
+        workflowId: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
         snapshot: {
@@ -1918,8 +1918,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           return;
         }
 
-        await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-          workflowName: workflowId,
+        await this.mastra?.getStorage()?.createWorkflowSnapshot({
+          workflowId,
           runId,
           resourceId,
           snapshot: {

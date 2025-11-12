@@ -93,7 +93,7 @@ export type StorageListMessagesOutput = PaginationInfo & {
 };
 
 export type StorageListWorkflowRunsInput = {
-  workflowName?: string;
+  workflowId?: string;
   fromDate?: Date;
   toDate?: Date;
   /**

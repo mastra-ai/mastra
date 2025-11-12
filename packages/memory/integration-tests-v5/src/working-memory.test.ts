@@ -1193,7 +1193,7 @@ describe('Working Memory Tests', () => {
         });
 
         // Verify it's in the resource table
-        const resource = await storage.getResourceById({ resourceId });
+        const resource = await storage.getStore('memory')?.getResourceById({ resourceId });
         expect(resource?.workingMemory).toBe(workingMemoryData);
 
         // The working memory should come from resource, not thread metadata

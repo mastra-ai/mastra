@@ -17,7 +17,7 @@ import { Mastra } from '../mastra';
 import type { MastraDBMessage, StorageThreadType } from '../memory';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
-import { MockStore } from '../storage';
+import { InMemoryStore } from '../storage';
 import type { MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
 import { delay } from '../utils';
@@ -27,7 +27,7 @@ import { Agent } from './index';
 
 config();
 
-const mockStorage = new MockStore();
+const mockStorage = new InMemoryStore();
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
   const list = [

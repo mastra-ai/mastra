@@ -9,13 +9,13 @@ import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
-import { MockStore } from '../../storage/mock';
+import { InMemoryStore } from '../../storage/inmemory';
 import { createTool } from '../../tools';
 import type { StreamEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
-const testStorage = new MockStore();
+const testStorage = new InMemoryStore();
 
 describe('Workflow', () => {
   beforeEach(() => {
@@ -5411,7 +5411,7 @@ describe('Workflow', () => {
     let testStorage;
 
     beforeEach(async () => {
-      testStorage = new MockStore();
+      testStorage = new InMemoryStore();
     });
 
     it('should return empty result when mastra is not initialized', async () => {
@@ -7489,7 +7489,7 @@ describe('Workflow', () => {
     });
 
     it('should inject requestContext dependencies into steps during resume', async () => {
-      const initialStorage = new MockStore();
+      const initialStorage = new InMemoryStore();
 
       const requestContext = new RequestContext();
       const testValue = 'test-dependency';

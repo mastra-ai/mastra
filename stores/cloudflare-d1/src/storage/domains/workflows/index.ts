@@ -17,13 +17,13 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -34,11 +34,11 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -52,13 +52,13 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     throw new Error('Method not implemented.');
   }
 
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -68,7 +68,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
     const currentSnapshot = await this.operations.load({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
+      keys: { workflow_name: workflowId, run_id: runId },
     });
 
     const persisting = currentSnapshot
@@ -79,7 +79,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           updatedAt: now,
         }
       : {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
           resourceId,
           snapshot: snapshot as Record<string, any>,
@@ -99,7 +99,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       updatedAt: 'excluded.updatedAt',
     };
 
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
+    this.logger.debug('Persisting workflow snapshot', { workflowId, runId });
 
     // Use the new insert method with ON CONFLICT
     const query = createSqlBuilder().insert(fullTableName, columns, values, ['workflow_name', 'run_id'], updateMap);
@@ -115,23 +115,23 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to persist workflow snapshot: ${error instanceof Error ? error.message : String(error)}`,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
 
-  async loadWorkflowSnapshot(params: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
-    const { workflowName, runId } = params;
+  async getWorkflowSnapshot(params: { workflowId: string; runId: string }): Promise<WorkflowRunState | null> {
+    const { workflowId, runId } = params;
 
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
+    this.logger.debug('Loading workflow snapshot', { workflowId, runId });
 
     try {
       const d = await this.operations.load<{ snapshot: unknown }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
-          workflow_name: workflowName,
+          workflow_name: workflowId,
           run_id: runId,
         },
       });
@@ -144,7 +144,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to load workflow snapshot: ${error instanceof Error ? error.message : String(error)}`,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -173,7 +173,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
   }
 
   async listWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     page,
@@ -252,7 +252,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
   async getWorkflowRunById({
     runId,
-    workflowName,
+    workflowId,
   }: {
     runId: string;
     workflowName?: string;

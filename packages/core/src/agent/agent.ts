@@ -40,7 +40,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils'
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import type { Workflow } from '../workflows';
+import type { Workflow, WorkflowRunState } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -2775,10 +2775,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
-      workflowName: 'agentic-loop',
-      runId: streamOptions?.runId ?? '',
-    });
+    const storage = this.#mastra?.getStorage();
+    const workflowStore = storage?.getStore('workflows');
+
+    let existingSnapshot: WorkflowRunState | null = null;
+
+    if (workflowStore) {
+      existingSnapshot = await workflowStore.getWorkflowSnapshot({
+        workflowId: 'agentic-loop',
+        runId: streamOptions?.runId ?? '',
+      });
+    }
 
     const result = await this.#execute({
       ...mergedStreamOptions,

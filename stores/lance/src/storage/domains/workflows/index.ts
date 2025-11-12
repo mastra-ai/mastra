@@ -34,13 +34,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
 
   updateWorkflowResults(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // stepId,
       // result,
       // requestContext,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       stepId: string;
       result: StepResult<any, any, any, any>;
@@ -51,11 +51,11 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }
   updateWorkflowState(
     {
-      // workflowName,
+      // workflowId,
       // runId,
       // opts,
     }: {
-      workflowName: string;
+      workflowId: string;
       runId: string;
       opts: {
         status: string;
@@ -69,13 +69,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     throw new Error('Method not implemented.');
   }
 
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
@@ -98,7 +98,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const { status, value, ...rest } = snapshot;
 
       const record = {
-        workflow_name: workflowName,
+        workflow_name: workflowId,
         run_id: runId,
         resourceId,
         snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
@@ -117,17 +117,17 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
     }
   }
-  async loadWorkflowSnapshot({
-    workflowName,
+  async getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
@@ -141,7 +141,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
           id: 'LANCE_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName, runId },
+          details: { workflowId, runId },
         },
         error,
       );
@@ -149,7 +149,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }
 
   async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<{
-    workflowName: string;
+    workflowId: string;
     runId: string;
     snapshot: any;
     createdAt: Date;

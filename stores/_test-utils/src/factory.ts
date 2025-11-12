@@ -12,7 +12,6 @@ import {
 import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
-import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
@@ -32,17 +31,12 @@ export function createTestSuite(storage: MastraStorage) {
     afterAll(async () => {
       // Clear tables after tests
       await Promise.all([
-        storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT }),
-        storage.clearTable({ tableName: TABLE_MESSAGES }),
-        storage.clearTable({ tableName: TABLE_THREADS }),
-        storage.clearTable({ tableName: TABLE_RESOURCES }),
-        storage.clearTable({ tableName: TABLE_SCORERS }),
-        storage.clearTable({ tableName: TABLE_TRACES }),
-        storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_SPANS }),
+        storage.getStore('workflows')?.dropData(),
+        storage.getStore('scores')?.dropData(),
+        storage.getStore('memory')?.dropData(),
+        storage.supports.observabilityInstance && storage.getStore('observability')?.dropData(),
       ]);
     });
-
-    createOperationsTests({ storage });
 
     createWorkflowsTests({ storage });
 

@@ -133,13 +133,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
     requestContext,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
@@ -152,7 +152,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
           sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
-          args: [workflowName, runId],
+          args: [workflowId, runId],
         });
 
         let snapshot: WorkflowRunState;
@@ -185,7 +185,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Update the snapshot within the same transaction
         await tx.execute({
           sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(snapshot), workflowName, runId],
+          args: [JSON.stringify(snapshot), workflowId, runId],
         });
 
         await tx.commit();
@@ -200,11 +200,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -221,7 +221,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Load existing snapshot within transaction
         const existingSnapshotResult = await tx.execute({
           sql: `SELECT snapshot FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
-          args: [workflowName, runId],
+          args: [workflowId, runId],
         });
 
         if (!existingSnapshotResult.rows?.[0]) {
@@ -244,7 +244,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         // Update the snapshot within the same transaction
         await tx.execute({
           sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = ? WHERE workflow_name = ? AND run_id = ?`,
-          args: [JSON.stringify(updatedSnapshot), workflowName, runId],
+          args: [JSON.stringify(updatedSnapshot), workflowId, runId],
         });
 
         await tx.commit();
@@ -258,19 +258,19 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     });
   }
 
-  async persistWorkflowSnapshot({
-    workflowName,
+  async createWorkflowSnapshot({
+    workflowId,
     runId,
     resourceId,
     snapshot,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
   }) {
     const data = {
-      workflow_name: workflowName,
+      workflow_name: workflowId,
       run_id: runId,
       resourceId,
       snapshot,
@@ -278,24 +278,24 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       updatedAt: new Date(),
     };
 
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
+    this.logger.debug('Persisting workflow snapshot', { workflowId, runId, data });
     await this.operations.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: data,
     });
   }
 
-  async loadWorkflowSnapshot({
-    workflowName,
+  async getWorkflowSnapshot({
+    workflowId,
     runId,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
+    this.logger.debug('Loading workflow snapshot', { workflowId, runId });
     const d = await this.operations.load<{ snapshot: WorkflowRunState }>({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
+      keys: { workflow_name: workflowId, run_id: runId },
     });
 
     return d ? d.snapshot : null;
@@ -303,7 +303,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
   async getWorkflowRunById({
     runId,
-    workflowName,
+    workflowId,
   }: {
     runId: string;
     workflowName?: string;
@@ -347,7 +347,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   async listWorkflowRuns({
-    workflowName,
+    workflowId,
     fromDate,
     toDate,
     page,

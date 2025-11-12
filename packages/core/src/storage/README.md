@@ -85,7 +85,7 @@ const thread = await storage.createThread({
 });
 
 // Get thread by ID
-const retrievedThread = await storage.getThreadById({
+const retrievedThread = await storage.getStore('memory')?.getThreadById({
   threadId: thread.id,
 });
 
@@ -129,8 +129,8 @@ console.log(result.hasMore); // Whether more pages exist
 
 ```typescript
 // Save workflow state
-await storage.persistWorkflowSnapshot({
-  workflowName: 'my-workflow',
+await storage.createWorkflowSnapshot({
+  workflowId: 'my-workflow',
   runId: 'run-123',
   snapshot: {
     value: { currentState: 'running' },
@@ -146,8 +146,10 @@ await storage.persistWorkflowSnapshot({
 });
 
 // Load workflow state
-const snapshot = await storage.loadWorkflowSnapshot({
-  workflowName: 'my-workflow',
+const store = storage.getStore('workflows');
+
+const snapshot = await store.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
   runId: 'run-123',
 });
 ```

@@ -7,7 +7,7 @@ import { createRootSpan, createChildSpan } from './data';
 export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
   describe('Span Operations', () => {
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TABLE_SPANS });
+      await storage.getStore('observability')?.dropData();
     });
 
     describe('single span', () => {

@@ -1,4 +1,5 @@
 import { MessageList } from '../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
 import { InMemoryStore } from '../storage';
@@ -17,7 +18,16 @@ export class MockMemory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    const memoryStore = this.storage.getStore('memory');
+    if (!memoryStore) {
+      throw new MastraError({
+        id: 'MASTRA_STORAGE_GET_THREAD_BY_ID_NOT_SUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory store not found',
+      });
+    }
+    return memoryStore.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {

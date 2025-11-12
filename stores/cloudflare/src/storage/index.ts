@@ -200,27 +200,27 @@ export class CloudflareStore extends MastraStorage {
   }
 
   async updateWorkflowResults({
-    workflowName,
+    workflowId,
     runId,
     stepId,
     result,
     requestContext,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
+    return this.stores.workflows.updateWorkflowResults({ workflowId, runId, stepId, result, requestContext });
   }
 
   async updateWorkflowState({
-    workflowName,
+    workflowId,
     runId,
     opts,
   }: {
-    workflowName: string;
+    workflowId: string;
     runId: string;
     opts: {
       status: string;
@@ -230,24 +230,24 @@ export class CloudflareStore extends MastraStorage {
       waitingPaths?: Record<string, number[]>;
     };
   }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
+    return this.stores.workflows.updateWorkflowState({ workflowId, runId, opts });
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById({ messageIds });
   }
 
-  async persistWorkflowSnapshot(params: {
-    workflowName: string;
+  async createWorkflowSnapshot(params: {
+    workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot(params);
+    return this.stores.workflows.createWorkflowSnapshot(params);
   }
 
-  async loadWorkflowSnapshot(params: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot(params);
+  async getWorkflowSnapshot(params: { workflowId: string; runId: string }): Promise<WorkflowRunState | null> {
+    return this.stores.workflows.getWorkflowSnapshot(params);
   }
 
   async batchInsert<T extends TABLE_NAMES>(input: { tableName: T; records: Partial<RecordTypes[T]>[] }): Promise<void> {
@@ -255,7 +255,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   async listWorkflowRuns({
-    workflowName,
+    workflowId,
     perPage = 20,
     page = 0,
     resourceId,
@@ -264,7 +264,7 @@ export class CloudflareStore extends MastraStorage {
     status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns({
-      workflowName,
+      workflowId,
       perPage,
       page,
       resourceId,
@@ -274,14 +274,8 @@ export class CloudflareStore extends MastraStorage {
     });
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId: string }): Promise<WorkflowRun | null> {
+    return this.stores.workflows.getWorkflowRunById({ runId, workflowId });
   }
 
   async updateMessages(args: {

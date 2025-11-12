@@ -1,9 +1,9 @@
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { ScoreRowData, ScoringSource } from '../../../evals/types';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../../../evals/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 
-export abstract class ScoresStorage extends MastraBase {
+export abstract class ScoresStorageBase extends MastraBase {
   constructor() {
     super({
       component: 'STORAGE',
@@ -11,9 +11,11 @@ export abstract class ScoresStorage extends MastraBase {
     });
   }
 
+  abstract init(): Promise<void>;
+
   abstract getScoreById({ id }: { id: string }): Promise<ScoreRowData | null>;
 
-  abstract saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }>;
+  abstract saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }>;
 
   abstract listScoresByScorerId({
     scorerId,
@@ -63,4 +65,6 @@ export abstract class ScoresStorage extends MastraBase {
       details: { traceId, spanId },
     });
   }
+
+  abstract dropData(): Promise<void>;
 }
