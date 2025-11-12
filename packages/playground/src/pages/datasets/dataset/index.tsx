@@ -115,6 +115,11 @@ export default function Dataset() {
                 rows={rows}
                 selectedRowId={selectedRowId}
                 onRowClick={handleRowClick}
+                filtersApplied={Boolean(
+                  selectedVersionId &&
+                    datasetData?.currentVersion.id &&
+                    selectedVersionId !== datasetData?.currentVersion.id,
+                )}
                 // errorMsg={dataset?.errorMsg}
                 // setEndOfListElement={dataset?.setEndOfListElement}
                 // filtersApplied={dataset?.filtersApplied}

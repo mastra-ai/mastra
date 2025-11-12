@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { useLinkComponent } from '@/lib/framework';
 import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
-import { Database, DatabaseIcon, PlusIcon } from 'lucide-react';
+import { DatabaseIcon } from 'lucide-react';
 
 export interface DatasetsTableProps {
   datasets: DatasetRecord[];
@@ -31,6 +31,10 @@ export function DatasetsTable({ datasets, isLoading }: DatasetsTableProps) {
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
+
+  if (rows.length === 0 && !isLoading) {
+    return <EmptyDatasetsTable />;
+  }
 
   const filteredRows = rows;
 
@@ -90,7 +94,7 @@ const EmptyDatasetsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<DatabaseIcon />}
-      titleSlot="Configure Datasets"
+      titleSlot="No Datasets"
       descriptionSlot="Mastra datasets are not configured yet. You can find more information in the documentation."
       actionSlot={
         <Button

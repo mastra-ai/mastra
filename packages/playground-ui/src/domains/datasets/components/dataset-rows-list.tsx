@@ -79,7 +79,7 @@ export function DatasetRowsList({
               </EntryList.Entries>
             ) : (
               <EntryList.Message
-                message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
+                message={filtersApplied ? 'No data items found for applied filters' : 'No data items found yet'}
               />
             )}
           </>

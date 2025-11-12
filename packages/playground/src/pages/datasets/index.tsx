@@ -22,7 +22,7 @@ export default function DatasetsPage() {
             <Button as={Link} to={`/datasets/new`}>
               <Icon>
                 <PlusIcon />
-              </Icon>{' '}
+              </Icon>
               Create New
             </Button>
             <Button as={Link} to="https://mastra.ai/en/docs/datasets/overview" target="_blank">
@@ -31,7 +31,7 @@ export default function DatasetsPage() {
           </HeaderAction>
         </Header>
 
-        <MainContentContent>
+        <MainContentContent className="grid grid-rows-1">
           <DatasetsTable isLoading={isLoading} datasets={data?.datasets || []} />
         </MainContentContent>
       </MainContentLayout>
