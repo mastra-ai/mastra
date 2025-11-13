@@ -655,7 +655,7 @@ export class StoreMemoryLance extends MemoryStorage {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['parts'] };
+        content?: { metadata?: MastraMessageContentV2['metadata']; parts?: MastraMessageContentV2['parts'] };
       }[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;

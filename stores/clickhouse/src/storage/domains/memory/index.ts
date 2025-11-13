@@ -881,7 +881,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       threadId?: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['parts'] };
+      content?: { metadata?: MastraMessageContentV2['metadata']; parts?: MastraMessageContentV2['parts'] };
     })[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
@@ -1049,8 +1049,20 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             let needsRetry = false;
             for (const [key, value] of Object.entries(fieldsToUpdate)) {
               if (key === 'content') {
-                // For content updates, check if the content was updated
-                const expectedContent = typeof value === 'string' ? value : JSON.stringify(value);
+                // For content updates, recompute the merged content like we did before issuing ALTER
+                const existingContent =
+                  typeof existingMessage.content === 'string'
+                    ? JSON.parse(existingMessage.content)
+                    : existingMessage.content;
+                const merged = {
+                  ...existingContent,
+                  ...(typeof value === 'string' ? JSON.parse(value) : value),
+                  metadata: {
+                    ...(existingContent?.metadata || {}),
+                    ...((typeof value === 'string' ? JSON.parse(value) : value)?.metadata || {}),
+                  },
+                };
+                const expectedContent = JSON.stringify(merged);
                 const actualContent =
                   typeof updatedMessage.content === 'string'
                     ? updatedMessage.content

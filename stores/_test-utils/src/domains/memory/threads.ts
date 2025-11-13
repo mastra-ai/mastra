@@ -146,7 +146,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       let originalUpdatedAtTime: number;
 
-      if (updatedThread!.updatedAt instanceof Date) {
+      if (originalUpdatedAt instanceof Date) {
         originalUpdatedAtTime = originalUpdatedAt.getTime();
       } else {
         originalUpdatedAtTime = new Date(originalUpdatedAt).getTime();

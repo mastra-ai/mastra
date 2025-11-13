@@ -86,14 +86,6 @@ const getTextContent = (message: any): string => {
   if (message.content?.text) {
     return message.content.text;
   }
-  // Extract text from parts array
-  if (message.content?.parts) {
-    const textParts = message.content.parts
-      .filter((p: any) => p.type === 'text')
-      .map((p: any) => p.text)
-      .join(' ');
-    if (textParts) return textParts;
-  }
   console.error('Unable to extract text from message:', JSON.stringify(message, null, 2));
   return '';
 };
