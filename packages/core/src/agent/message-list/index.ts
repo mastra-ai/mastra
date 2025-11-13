@@ -311,36 +311,34 @@ export class MessageList {
 
         let messages = [...systemMessages, ...modelMessages];
 
-        if (Object.keys(downloadedAssets || {}).length > 0) {
-          messages = messages.map(message => {
-            if (message.role === 'user') {
-              if (typeof message.content === 'string') {
-                return {
-                  role: 'user' as const,
-                  content: [{ type: 'text' as const, text: message.content }],
-                  providerOptions: message.providerOptions,
-                } as AIV5Type.ModelMessage;
-              }
-
-              const convertedContent = message.content
-                .map(part => {
-                  if (part.type === 'image' || part.type === 'file') {
-                    return convertImageFilePart(part, downloadedAssets);
-                  }
-                  return part;
-                })
-                .filter(part => part.type !== 'text' || part.text !== '');
-
+        messages = messages.map(message => {
+          if (message.role === 'user') {
+            if (typeof message.content === 'string') {
               return {
                 role: 'user' as const,
-                content: convertedContent,
+                content: [{ type: 'text' as const, text: message.content }],
                 providerOptions: message.providerOptions,
               } as AIV5Type.ModelMessage;
             }
 
-            return message;
-          });
-        }
+            const convertedContent = message.content
+              .map(part => {
+                if (part.type === 'image' || part.type === 'file') {
+                  return convertImageFilePart(part, downloadedAssets);
+                }
+                return part;
+              })
+              .filter(part => part.type !== 'text' || part.text !== '');
+
+            return {
+              role: 'user' as const,
+              content: convertedContent,
+              providerOptions: message.providerOptions,
+            } as AIV5Type.ModelMessage;
+          }
+
+          return message;
+        });
 
         messages = ensureGeminiCompatibleMessages(messages);
 
