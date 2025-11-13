@@ -1,23 +1,22 @@
 import Link from "@docusaurus/Link";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import { GithubStarCount } from "@site/src/components/github-star-count";
 import LocaleControl from "@site/src/components/gt/LocaleControl";
-import VersionControl from "@site/src/components/version-control";
+import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
 import { ThemeSwitcher } from "@site/src/components/theme-switcher";
+import VersionControlSmartWrapper from "@site/src/components/version-control-smart-wrapper";
 import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
-import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import { type ReactNode } from "react";
 import SearchContainer from "./Search";
 import { Logo } from "./logo";
 import { TabSwitcher } from "./tab-switcher";
-import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
-import DocsVersionDropdownNavbarItem from "@site/src/components/version-switcher";
 
 function NavbarContentDesktop() {
   const { i18n } = useDocusaurusContext();
   const locale = i18n?.currentLocale;
   return (
-    <div className="flex px-4 border-b-[0.5px] h-[var(--ifm-navbar-height)] border-(--border-subtle) mx-auto w-full items-center justify-between @container">
+    <div className="flex px-4 border-b-[0.5px] h-(--ifm-navbar-height) border-(--border-subtle) mx-auto w-full items-center justify-between @container">
       <div className="flex gap-2 items-center">
         <Link href="/docs">
           <Logo />
@@ -34,14 +33,9 @@ function NavbarContentDesktop() {
         <div className="flex items-center">
           <GithubStarCount />
           <div className="hidden gap-2 items-center lg:flex">
-            <VersionControl
+            <VersionControlSmartWrapper
               size="sm"
               className="px-[13px] bg-white dark:bg-(--mastra-primary) border-transparent rounded-full transition-colors cursor-pointer"
-            />
-            <DocsVersionDropdownNavbarItem
-              dropdownItemsBefore={[]}
-              dropdownItemsAfter={[]}
-              items={[]}
             />
             <LocaleControl
               size="sm"
