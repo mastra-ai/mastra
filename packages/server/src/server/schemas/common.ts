@@ -1,8 +1,16 @@
 import z from 'zod';
 
 // Path parameter schemas
-export const runIdPathParams = z.object({
+export const runIdSchema = z.object({
   runId: z.string().describe('Unique identifier for the run'),
+});
+
+/**
+ * Query parameter schema for runId (optional)
+ * Used by create-run route where runId is optional
+ */
+export const optionalRunIdSchema = z.object({
+  runId: z.string().optional(),
 });
 
 // ============================================================================

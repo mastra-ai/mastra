@@ -15,10 +15,11 @@ import {
   generateResponseSchema,
   streamResponseSchema,
 } from '../../schemas/agents';
-import { workflowIdPathParams, streamWorkflowBodySchema, runIdQuerySchema } from '../../schemas/workflows';
+import { workflowIdPathParams, streamWorkflowBodySchema } from '../../schemas/workflows';
 import { actionIdPathParams } from '../../schemas/agent-builder';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
+import { runIdSchema } from '../../schemas/common';
 
 export const LEGACY_ROUTES: ServerRoute[] = [
   // ============================================================================
@@ -58,7 +59,7 @@ export const LEGACY_ROUTES: ServerRoute[] = [
     handler: streamLegacyWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/stream-legacy',
     pathParamSchema: workflowIdPathParams,
-    queryParamSchema: runIdQuerySchema,
+    queryParamSchema: runIdSchema,
     bodySchema: streamWorkflowBodySchema,
     summary: '[DEPRECATED] Stream workflow with legacy format',
     description:
@@ -71,7 +72,7 @@ export const LEGACY_ROUTES: ServerRoute[] = [
     handler: observeStreamLegacyWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/observe-stream-legacy',
     pathParamSchema: workflowIdPathParams,
-    queryParamSchema: runIdQuerySchema,
+    queryParamSchema: runIdSchema,
     bodySchema: streamWorkflowBodySchema,
     summary: '[DEPRECATED] Observe workflow stream with legacy format',
     description:
@@ -88,7 +89,7 @@ export const LEGACY_ROUTES: ServerRoute[] = [
     handler: streamLegacyAgentBuilderActionHandler as unknown as ServerRouteHandler,
     path: '/api/agent-builder/:actionId/stream-legacy',
     pathParamSchema: actionIdPathParams,
-    queryParamSchema: runIdQuerySchema,
+    queryParamSchema: runIdSchema,
     bodySchema: streamWorkflowBodySchema,
     summary: '[DEPRECATED] Stream agent-builder action with legacy format',
     description:
@@ -101,7 +102,7 @@ export const LEGACY_ROUTES: ServerRoute[] = [
     handler: observeStreamLegacyAgentBuilderActionHandler as unknown as ServerRouteHandler,
     path: '/api/agent-builder/:actionId/observe-stream-legacy',
     pathParamSchema: actionIdPathParams,
-    queryParamSchema: runIdQuerySchema,
+    queryParamSchema: runIdSchema,
     bodySchema: streamWorkflowBodySchema,
     summary: '[DEPRECATED] Observe agent-builder action stream with legacy format',
     description:

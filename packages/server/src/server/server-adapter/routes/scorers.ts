@@ -20,7 +20,7 @@ import {
 } from '../../schemas/scores';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
-import { runIdPathParams } from '../../schemas/common';
+import { runIdSchema } from '../../schemas/common';
 
 export const SCORES_ROUTES: ServerRoute[] = [
   createRoute({
@@ -50,7 +50,7 @@ export const SCORES_ROUTES: ServerRoute[] = [
     responseType: 'json',
     handler: listScoresByRunIdHandler as unknown as ServerRouteHandler,
     path: '/api/scores/run/:runId',
-    pathParamSchema: runIdPathParams,
+    pathParamSchema: runIdSchema,
     queryParamSchema: listScoresByRunIdQuerySchema,
     responseSchema: scoresWithPaginationResponseSchema,
     summary: 'List scores by run ID',

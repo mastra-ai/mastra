@@ -89,22 +89,6 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
 });
 
 /**
- * Query parameter schema for runId (required)
- * Used by stream, resume-stream, start-async routes where runId comes from query
- */
-export const runIdQuerySchema = z.object({
-  runId: z.string(),
-});
-
-/**
- * Query parameter schema for runId (optional)
- * Used by create-run route where runId is optional
- */
-export const optionalRunIdQuerySchema = z.object({
-  runId: z.string().optional(),
-});
-
-/**
  * Base schema for workflow execution with input data and tracing
  */
 const workflowExecutionBodySchema = z.object({

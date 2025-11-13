@@ -83,6 +83,7 @@ export const getThreadByIdQuerySchema = agentIdQuerySchema;
  */
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string(),
+  resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
   include: z.unknown().optional(),
   filter: z.unknown().optional(),

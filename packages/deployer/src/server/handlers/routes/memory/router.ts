@@ -51,7 +51,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       tags: ['networkMemory'],
       parameters: [
         {
-          name: 'resourceid',
+          name: 'resourceId',
           in: 'query',
           required: true,
           schema: { type: 'string' },

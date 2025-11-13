@@ -10,6 +10,7 @@ import {
   executeToolBodySchema,
   executeToolResponseSchema,
 } from '../../schemas/agents';
+import { optionalRunIdSchema } from '../../schemas/common';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 
@@ -50,6 +51,7 @@ export const TOOLS_ROUTES: ServerRoute[] = [
     handler: executeToolHandler as unknown as ServerRouteHandler,
     path: '/api/tools/:toolId/execute',
     pathParamSchema: toolIdPathParams,
+    queryParamSchema: optionalRunIdSchema,
     bodySchema: executeToolBodySchema,
     responseSchema: executeToolResponseSchema,
     summary: 'Execute tool',
