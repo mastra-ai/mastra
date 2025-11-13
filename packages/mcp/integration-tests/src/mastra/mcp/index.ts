@@ -3,6 +3,7 @@ import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
 
 export const myMcpServer = new MCPServer({
+  id: 'myMcpServer',
   name: 'My Calculation & Data MCP Server',
   version: '1.0.0',
   tools: {
@@ -57,7 +58,7 @@ export const myMcpServer = new MCPServer({
           mastraType: typeof mastra,
           // Verify that the mastra instance has the expected properties
           mastraHasAgents: mastra ? 'listAgents' in mastra : false,
-          mastraHasMCPServers: mastra ? 'getMCPServers' in mastra : false,
+          mastraHasMCPServers: mastra ? 'listMCPServers' in mastra : false,
           mastraHasLogger: mastra ? 'getLogger' in mastra : false,
           timestamp: new Date().toISOString(),
         };

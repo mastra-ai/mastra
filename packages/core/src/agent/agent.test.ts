@@ -2,9 +2,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
-import type { CoreMessage, CoreSystemMessage } from '@internal/ai-sdk-v4/message';
-import type { LanguageModelV1 } from '@internal/ai-sdk-v4/model';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import type { CoreMessage, CoreSystemMessage, LanguageModelV1 } from '@internal/ai-sdk-v4';
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { APICallError, stepCountIs } from 'ai-v5';
 import type { SystemModelMessage } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
@@ -706,6 +705,50 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }, 500000);
       });
     });
+
+    it('should call tool without input or output schemas', async () => {
+      const noSchemaTool = createTool({
+        id: 'noSchemaTool',
+        description: 'Returns test data with arbitrary structure',
+        // No inputSchema or outputSchema defined
+        execute: async () => {
+          return { success: true, data: { arbitrary: 'value', count: 42 } };
+        },
+      });
+
+      const testAgent = new Agent({
+        name: 'Test agent',
+        instructions: 'You are an agent that can use the noSchemaTool to get test data.',
+        model: openaiModel,
+        tools: { noSchemaTool },
+      });
+
+      const mastra = new Mastra({
+        agents: { testAgent },
+        logger: false,
+      });
+
+      const agent = mastra.getAgent('testAgent');
+
+      let toolCall;
+      let response;
+      if (version === 'v1') {
+        response = await agent.generateLegacy('Use the noSchemaTool to get test data', {
+          maxSteps: 2,
+          toolChoice: 'required',
+        });
+        toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
+      } else {
+        response = await agent.generate('Use the noSchemaTool to get test data');
+        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
+      }
+
+      // Verify the result contains the arbitrary data (no output validation)
+      expect(toolCall?.result).toEqual({ success: true, data: { arbitrary: 'value', count: 42 } });
+
+      // Verify no validation error was returned
+      expect(toolCall?.result?.error).toBeUndefined();
+    }, 15000);
 
     it('should call findUserTool', async () => {
       const findUserTool = createTool({
@@ -4352,7 +4395,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(caught).toBe(true);
 
         // After interruption, check what was saved
-        const result = await mockMemory.getMessages({
+        const result = await mockMemory.recall({
           threadId: 'thread-partial-rescue-generate',
           resourceId: 'resource-partial-rescue-generate',
         });
@@ -4420,7 +4463,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         }
 
         expect(saveCallCount).toBeGreaterThan(1);
-        const result = await mockMemory.getMessages({
+        const result = await mockMemory.recall({
           threadId: 'thread-echo-generate',
           resourceId: 'resource-echo-generate',
         });
@@ -4497,7 +4540,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           );
         }
         expect(saveCallCount).toBeGreaterThan(1);
-        const result = await mockMemory.getMessages({
+        const result = await mockMemory.recall({
           threadId: 'thread-multi-generate',
           resourceId: 'resource-multi-generate',
         });
@@ -4536,7 +4579,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
           });
         }
 
-        const result = await mockMemory.getMessages({
+        const result = await mockMemory.recall({
           threadId: 'thread-1-generate',
           resourceId: 'resource-1-generate',
         });
@@ -4551,12 +4594,6 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
       it('should only call saveMessages for the user message when no assistant parts are generated', async () => {
         const mockMemory = new MockMemory();
-
-        let messages = await mockMemory.getMessages({
-          threadId: `thread-2-${version}-generate`,
-          resourceId: `resource-2-${version}-generate`,
-          format: 'v2',
-        });
 
         let saveCallCount = 0;
 
@@ -4587,11 +4624,11 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
         expect(saveCallCount).toBe(1);
 
-        const result = await mockMemory.getMessages({
+        const result = await mockMemory.recall({
           threadId: `thread-2-${version}-generate`,
           resourceId: `resource-2-${version}-generate`,
         });
-        messages = result?.messages || [];
+        const messages = result?.messages ?? [];
 
         expect(messages.length).toBe(1);
         expect(messages[0].role).toBe('user');
@@ -4632,7 +4669,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         expect(err.message).toBe('Immediate interruption');
       }
 
-      const result = await mockMemory.getMessages({
+      const result = await mockMemory.recall({
         threadId: 'thread-3-generate',
         resourceId: 'resource-3-generate',
       });
@@ -5782,12 +5819,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
       // Verify messages were saved with metadata
-      const result = await mockMemory.getMessages({
+      const result = await mockMemory.recall({
         threadId: 'support-thread',
         resourceId: 'customer-12345',
-        selectBy: {
-          last: 10,
-        },
+        perPage: 10,
       });
       const savedMessages = result.messages;
 
@@ -5863,12 +5898,10 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       expect(finalText).toBe('Response acknowledging metadata');
 
       // Verify messages were saved with metadata
-      const result = await mockMemory.getMessages({
+      const result = await mockMemory.recall({
         threadId: 'mobile-thread',
         resourceId: 'user-mobile',
-        selectBy: {
-          last: 10,
-        },
+        perPage: 10,
       });
       const savedMessages = result.messages;
 
@@ -5944,14 +5977,12 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         });
       }
       // Verify messages were saved correctly
-      const result = await mockMemory.getMessages({
+      const result = await mockMemory.recall({
         threadId: 'mixed-thread',
         resourceId: 'mixed-user',
-        selectBy: {
-          last: 10,
-        },
+        perPage: 10,
       });
-      const savedMessages = result?.messages || [];
+      const savedMessages = result.messages;
 
       expect(savedMessages.length).toBeGreaterThan(0);
 

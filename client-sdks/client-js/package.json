@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.16.4",
+  "version": "1.0.0-beta.2",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -45,20 +45,16 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "json-schema": "^0.4.0",
-    "rxjs": "7.8.1",
     "zod-to-json-schema": "^3.24.6"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.28.3",
-    "@babel/preset-typescript": "^7.27.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@tsconfig/recommended": "^1.0.10",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "zod": "^3.25.76",
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@^5",
@@ -66,5 +62,8 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

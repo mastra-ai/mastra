@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { AISpan, AISpanType } from '../../../observability';
+import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
@@ -26,7 +26,7 @@ interface CreatePrepareStreamWorkflowOptions<
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
+  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
@@ -52,7 +52,7 @@ export function createPrepareStreamWorkflow<
   resourceId,
   runId,
   requestContext,
-  agentAISpan,
+  agentSpan,
   methodType,
   instructions,
   memoryConfig,
@@ -71,7 +71,7 @@ export function createPrepareStreamWorkflow<
     resourceId,
     runId,
     requestContext,
-    agentAISpan,
+    agentSpan,
     methodType,
     memory,
   });
@@ -83,7 +83,7 @@ export function createPrepareStreamWorkflow<
     resourceId,
     runId,
     requestContext,
-    agentAISpan,
+    agentSpan,
     methodType,
     instructions,
     memoryConfig,
@@ -109,7 +109,7 @@ export function createPrepareStreamWorkflow<
     memory,
     memoryConfig,
     saveQueueManager,
-    agentAISpan,
+    agentSpan,
     agentId,
   });
 

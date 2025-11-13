@@ -18,7 +18,6 @@ import {
   getAgentBuilderActionRunByIdHandler as getOriginalGetAgentBuilderActionRunByIdHandler,
   getAgentBuilderActionRunExecutionResultHandler as getOriginalGetAgentBuilderActionRunExecutionResultHandler,
   cancelAgentBuilderActionRunHandler as getOriginalCancelAgentBuilderActionRunHandler,
-  sendAgentBuilderActionRunEventHandler as getOriginalSendAgentBuilderActionRunEventHandler,
 } from '@mastra/server/handlers/agent-builder';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -359,27 +358,6 @@ export async function cancelAgentBuilderActionRunHandler(c: Context) {
     return c.json(result);
   } catch (error) {
     return handleError(error, 'Error cancelling agent builder action run');
-  }
-}
-
-export async function sendAgentBuilderActionRunEventHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const actionId = c.req.param('actionId');
-    const runId = c.req.param('runId');
-    const { event, data } = await c.req.json();
-
-    const result = await getOriginalSendAgentBuilderActionRunEventHandler({
-      mastra,
-      actionId,
-      runId,
-      event,
-      data,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error sending agent builder action run event');
   }
 }
 

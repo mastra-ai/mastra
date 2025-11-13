@@ -1,4 +1,4 @@
-import { AISpanType, AITracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { describe, expect, it, vi } from 'vitest';
 import { ConsoleExporter } from './console';
 
@@ -16,7 +16,7 @@ describe('DefaultConsoleExporter', () => {
     const mockSpan = {
       id: 'test-span-1',
       name: 'test-span',
-      type: AISpanType.AGENT_RUN,
+      type: SpanType.AGENT_RUN,
       startTime: new Date(),
       endTime: new Date(),
       traceId: 'trace-123',
@@ -26,8 +26,8 @@ describe('DefaultConsoleExporter', () => {
       isEvent: false,
     };
 
-    await exporter.exportEvent({
-      type: AITracingEventType.SPAN_STARTED,
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
       exportedSpan: mockSpan,
     });
 
@@ -54,7 +54,7 @@ describe('DefaultConsoleExporter', () => {
 
     const exporter = new ConsoleExporter({ logger } as any);
 
-    await exporter.exportEvent({
+    await exporter.exportTracingEvent({
       type: 'unknown_event' as any,
       exportedSpan: {} as any,
     });

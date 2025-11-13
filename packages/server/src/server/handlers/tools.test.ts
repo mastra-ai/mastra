@@ -179,7 +179,7 @@ describe('Tools Handlers', () => {
           data: {},
           requestContext: new RequestContext(),
         }),
-      ).rejects.toThrow('Agent with name non-existent not found');
+      ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw 404 when tool is not found in agent', async () => {
@@ -300,7 +300,7 @@ describe('Tools Handlers', () => {
         }),
       ).rejects.toThrow(
         new HTTPException(404, {
-          message: 'Agent with name non-existent not found',
+          message: 'Agent with id non-existent not found',
         }),
       );
     });

@@ -1,7 +1,7 @@
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
-import type { AISpan, AISpanType, TracingContext } from '../../../observability';
+import type { Span, SpanType, TracingContext } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
@@ -22,7 +22,7 @@ interface MapResultsStepOptions<
   memory?: MastraMemory;
   memoryConfig?: MemoryConfig;
   saveQueueManager: SaveQueueManager;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
+  agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
 }
 
@@ -38,7 +38,7 @@ export function createMapResultsStep<
   memory,
   memoryConfig,
   saveQueueManager,
-  agentAISpan,
+  agentSpan,
   agentId,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
@@ -140,7 +140,7 @@ export function createMapResultsStep<
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
       agentId,
       requestContext: result.requestContext!,
-      tracingContext: { currentSpan: agentAISpan },
+      tracingContext: { currentSpan: agentSpan },
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
@@ -175,7 +175,7 @@ export function createMapResultsStep<
               resourceId,
               memoryConfig,
               requestContext,
-              agentAISpan: agentAISpan,
+              agentSpan: agentSpan,
               runId,
               messageList,
               threadExists: memoryData.threadExists,

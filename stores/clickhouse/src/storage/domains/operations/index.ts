@@ -51,6 +51,10 @@ export class StoreOperationsClickhouse extends StoreOperations {
         .map(([name, def]) => {
           const constraints = [];
           if (!def.nullable) constraints.push('NOT NULL');
+          // Add DEFAULT '{}' for metadata columns to prevent empty string issues
+          if (name === 'metadata' && def.type === 'text' && def.nullable) {
+            constraints.push("DEFAULT '{}'");
+          }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
           return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })

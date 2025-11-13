@@ -26,12 +26,14 @@ ${getFinancialModelingAgentPrompt(true)}
 
     return getFinancialModelingAgentPrompt(false);
   },
-  model: 'anthropic/claude-3-7-sonnet-20250219',
+  model: process.env.MODEL || 'anthropic/claude-3-7-sonnet-20250219',
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'financial-modeling-agent-storage',
       url: 'file:../../mastra.db',
     }),
     vector: new LibSQLVector({
+      id: 'financial-modeling-agent-vector',
       connectionUrl: 'file:../../mastra.db',
     }),
     embedder: fastembed,
@@ -45,9 +47,7 @@ ${getFinancialModelingAgentPrompt(true)}
       workingMemory: {
         enabled: true,
       },
-      threads: {
-        generateTitle: true,
-      },
+      generateTitle: true,
     },
   }),
   tools: async ({ requestContext }) => {

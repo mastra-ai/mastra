@@ -44,19 +44,22 @@ async function initializeAndRun() {
     switch (storageType) {
       case 'libsql':
         const { LibSQLStore, LibSQLVector } = await import('@mastra/libsql');
-        store = new LibSQLStore(storageConfig as LibSQLConfig);
-        vector = new LibSQLVector(vectorConfig as LibSQLVectorConfig);
+        store = new LibSQLStore({ ...(storageConfig as LibSQLConfig), id: 'libsql-storage' });
+        vector = new LibSQLVector({ ...(vectorConfig as LibSQLVectorConfig), id: 'libsql-vector' });
         break;
       case 'upstash':
         const { UpstashStore } = await import('@mastra/upstash');
         const { LibSQLVector: UpstashLibSQLVector } = await import('@mastra/libsql');
-        store = new UpstashStore(storageConfig as UpstashConfig);
-        vector = new UpstashLibSQLVector({ connectionUrl: 'file:upstash-test-vector.db' });
+        store = new UpstashStore({ ...(storageConfig as UpstashConfig), id: 'upstash-storage' });
+        vector = new UpstashLibSQLVector({ connectionUrl: 'file:upstash-test-vector.db', id: 'upstash-vector' });
         break;
       case 'pg':
         const { PostgresStore, PgVector } = await import('@mastra/pg');
-        store = new PostgresStore(storageConfig as PostgresStoreConfig);
-        vector = new PgVector({ connectionString: (storageConfig as { connectionString: string }).connectionString });
+        store = new PostgresStore({ ...(storageConfig as PostgresStoreConfig), id: 'pg-storage' });
+        vector = new PgVector({
+          connectionString: (storageConfig as { connectionString: string }).connectionString,
+          id: 'pg-vector',
+        });
         break;
       default:
         throw new Error(`Unsupported storageType in worker: ${storageType}`);

@@ -41,6 +41,7 @@ const parseConnectionString = (url: string) => {
     user: parsedUrl.username,
     password: parsedUrl.password,
     database: parsedUrl.pathname.slice(1),
+    id: randomUUID(),
   };
 };
 
@@ -48,7 +49,7 @@ describe('Memory with PostgresStore Integration', () => {
   const config = parseConnectionString(connectionString);
   const memory = new Memory({
     storage: new PostgresStore(config),
-    vector: new PgVector({ connectionString }),
+    vector: new PgVector({ connectionString, id: 'test-vector' }),
     embedder: fastembed,
     options: {
       lastMessages: 10,
@@ -112,6 +113,7 @@ describe('Memory with PostgresStore Integration', () => {
         resourceId,
         page: 0,
         perPage: 3,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result1.messages, 'Page 0 with perPage 3 should return exactly 3 messages').toHaveLength(3);
@@ -128,6 +130,7 @@ describe('Memory with PostgresStore Integration', () => {
         resourceId,
         page: 1,
         perPage: 3,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result2.messages, 'Page 1 with perPage 3 should return exactly 3 messages').toHaveLength(3);
@@ -142,6 +145,7 @@ describe('Memory with PostgresStore Integration', () => {
         resourceId,
         page: 0,
         perPage: 1,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result3.messages, 'Page 0 with perPage 1 should return exactly 1 message').toHaveLength(1);
@@ -154,6 +158,7 @@ describe('Memory with PostgresStore Integration', () => {
         resourceId,
         page: 9,
         perPage: 1,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result4.messages, 'Page 9 with perPage 1 should return exactly 1 message').toHaveLength(1);
@@ -166,6 +171,7 @@ describe('Memory with PostgresStore Integration', () => {
         resourceId,
         page: 1,
         perPage: 5,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result5.messages, 'Page 1 with perPage 5 should return exactly 5 messages').toHaveLength(5);
@@ -178,6 +184,7 @@ describe('Memory with PostgresStore Integration', () => {
         threadId,
         resourceId,
         perPage: 5,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       expect(result6.messages, 'Query with last: 5 should return exactly 5 messages').toHaveLength(5);
@@ -230,7 +237,7 @@ describe('Memory with PostgresStore Integration', () => {
     it('should support HNSW index configuration', async () => {
       const hnswMemory = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           lastMessages: 5,
@@ -286,7 +293,7 @@ describe('Memory with PostgresStore Integration', () => {
     it('should support IVFFlat index configuration with custom lists', async () => {
       const ivfflatMemory = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           lastMessages: 5,
@@ -341,7 +348,7 @@ describe('Memory with PostgresStore Integration', () => {
     it('should support flat (no index) configuration', async () => {
       const flatMemory = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           lastMessages: 5,
@@ -394,7 +401,7 @@ describe('Memory with PostgresStore Integration', () => {
       // Start with IVFFlat
       const memory1 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {
@@ -428,7 +435,7 @@ describe('Memory with PostgresStore Integration', () => {
       // Now switch to HNSW - should trigger index recreation
       const memory2 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {
@@ -468,7 +475,7 @@ describe('Memory with PostgresStore Integration', () => {
       // First, create with HNSW
       const memory1 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {
@@ -503,7 +510,7 @@ describe('Memory with PostgresStore Integration', () => {
       // Create another memory instance without index config - should preserve HNSW
       const memory2 = new Memory({
         storage: new PostgresStore(config),
-        vector: new PgVector({ connectionString }),
+        vector: new PgVector({ connectionString, id: 'test-vector' }),
         embedder: fastembed,
         options: {
           semanticRecall: {

@@ -11,12 +11,13 @@ export const useTools = () => {
   });
 };
 
-export const useTool = (toolId: string) => {
+export const useTool = (toolId: string, options?: { enabled?: boolean }) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
     queryKey: ['tool', toolId],
     queryFn: () => client.getTool(toolId).details(requestContext),
+    enabled: options?.enabled !== false,
   });
 };

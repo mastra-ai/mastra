@@ -118,7 +118,9 @@ describe('Handlers', () => {
 
     mockMastra = {
       getAgent: vi.fn((id: string) => (id === 'test-agent' ? mockAgent : undefined)),
+      getAgentById: vi.fn((id: string) => (id === 'test-agent' ? mockAgent : undefined)),
       getLogger: vi.fn(() => mockLogger),
+      listAgents: vi.fn(() => [mockAgent]),
     } as any;
 
     mockContext = {

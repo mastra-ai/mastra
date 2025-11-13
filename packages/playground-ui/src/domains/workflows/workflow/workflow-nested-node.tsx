@@ -9,41 +9,60 @@ import { WorkflowNestedGraphContext } from '../context/workflow-nested-graph-con
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
+import { Badge } from '@/ds/components/Badge';
 import { Clock } from './workflow-clock';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
-import { WorkflowSendEventFormProps } from './workflow-run-event-form';
+import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 
 export type NestedNode = Node<
   {
     label: string;
+    stepId?: string;
     description?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
     stepGraph: SerializedStepFlowEntry[];
     mapConfig?: string;
-    event?: string;
+    isParallel?: boolean;
+    canSuspend?: boolean;
+    isForEach?: boolean;
   },
   'nested-node'
 >;
 
 export interface WorkflowNestedNodeProps {
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
   parentWorkflowName?: string;
 }
 
-export function WorkflowNestedNode({
-  data,
-  parentWorkflowName,
-  onSendEvent,
-}: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
-  const { steps, runId } = useCurrentRun();
+export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
+  const { steps } = useCurrentRun();
   const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
 
-  const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig, event } = data;
+  const {
+    label,
+    stepId,
+    description,
+    withoutTopHandle,
+    withoutBottomHandle,
+    stepGraph,
+    mapConfig,
+    isParallel,
+    canSuspend,
+    isForEach,
+  } = data;
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
+  const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
 
-  const step = steps[fullLabel];
+  const step = steps[stepKey];
+
+  const { isForEachNode, isMapNode, isNestedWorkflow, hasSpecialBadge } = getNodeBadgeInfo({
+    isForEach,
+    mapConfig,
+    canSuspend,
+    isParallel,
+    stepGraph,
+  });
 
   return (
     <>
@@ -53,7 +72,8 @@ export function WorkflowNestedNode({
         data-workflow-node
         data-workflow-step-status={step?.status}
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
+          'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
+          hasSpecialBadge ? 'pt-0' : 'pt-2',
           step?.status === 'success' && 'bg-accent1Darker',
           step?.status === 'failed' && 'bg-accent2Darker',
           step?.status === 'suspended' && 'bg-accent3Darker',
@@ -61,6 +81,33 @@ export function WorkflowNestedNode({
           step?.status === 'running' && 'bg-accent6Darker',
         )}
       >
+        {hasSpecialBadge && (
+          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
+            {canSuspend && (
+              <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
+                SUSPEND/RESUME
+              </Badge>
+            )}
+            {isParallel && (
+              <Badge icon={<BADGE_ICONS.parallel className="text-current" style={{ color: BADGE_COLORS.parallel }} />}>
+                PARALLEL
+              </Badge>
+            )}
+            {isNestedWorkflow && (
+              <Badge icon={<BADGE_ICONS.workflow className="text-current" style={{ color: BADGE_COLORS.workflow }} />}>
+                WORKFLOW
+              </Badge>
+            )}
+            {isForEachNode && (
+              <Badge icon={<BADGE_ICONS.forEach className="text-current" style={{ color: BADGE_COLORS.forEach }} />}>
+                FOREACH
+              </Badge>
+            )}
+            {isMapNode && (
+              <Badge icon={<BADGE_ICONS.map className="text-current" style={{ color: BADGE_COLORS.map }} />}>MAP</Badge>
+            )}
+          </div>
+        )}
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
           <Icon>
             {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
@@ -84,15 +131,14 @@ export function WorkflowNestedNode({
 
         <WorkflowStepActionBar
           stepName={label}
+          stepId={stepId}
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}
+          suspendOutput={step?.suspendOutput}
           error={step?.error}
           mapConfig={mapConfig}
           onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}
-          onSendEvent={onSendEvent}
-          event={step?.status === 'waiting' ? event : undefined}
-          runId={runId}
           status={step?.status}
         />
       </div>

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "0.12.12",
+  "version": "1.0.0-beta.0",
   "description": "",
   "type": "module",
   "files": [
@@ -33,7 +33,6 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "@rollup/plugin-virtual": "3.0.2",
     "fs-extra": "^11.3.2"
   },
   "devDependencies": {
@@ -41,7 +40,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
@@ -59,5 +58,8 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

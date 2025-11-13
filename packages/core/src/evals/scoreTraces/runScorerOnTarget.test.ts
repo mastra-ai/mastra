@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
-import { AISpanType } from '../../observability';
-import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
+import { SpanType } from '../../observability';
+import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import type { MastraScorer } from '../base';
 
 vi.mock('./utils', () => ({
@@ -11,13 +11,13 @@ vi.mock('./utils', () => ({
 
 import { runScorerOnTarget } from './scoreTracesWorkflow';
 
-function createMockAISpanRecord(overrides: Partial<AISpanRecord> = {}): AISpanRecord {
+function createMockSpanRecord(overrides: Partial<SpanRecord> = {}): SpanRecord {
   return {
     spanId: 'span-1',
     traceId: 'trace-1',
     parentSpanId: null,
     name: 'test-span',
-    spanType: AISpanType.AGENT_RUN,
+    spanType: SpanType.AGENT_RUN,
     input: { test: 'input' },
     output: { test: 'output' },
     startedAt: '2025-01-01T00:00:00Z',
@@ -31,7 +31,7 @@ function createMockAISpanRecord(overrides: Partial<AISpanRecord> = {}): AISpanRe
     error: null,
     isEvent: false,
     ...overrides,
-  } as AISpanRecord;
+  } as SpanRecord;
 }
 
 function createMockScorerResult(overrides: any = {}) {
@@ -57,9 +57,9 @@ class TestContext {
 
   reset() {
     this.mockStorage = {
-      getAITrace: vi.fn(),
+      getTrace: vi.fn(),
       saveScore: vi.fn(),
-      updateAISpan: vi.fn(),
+      updateSpan: vi.fn(),
     } as unknown as MastraStorage;
 
     this.mockLogger = {
@@ -84,32 +84,32 @@ class TestContext {
   }
 
   setupSuccessfulScenario(target: { traceId: string; spanId?: string } = { traceId: 'trace-1' }) {
-    const mockTrace: AITraceRecord = {
+    const mockTrace: TraceRecord = {
       traceId: target.traceId,
       spans: target.spanId
         ? [
-            createMockAISpanRecord({
+            createMockSpanRecord({
               spanId: 'span-1',
               traceId: target.traceId,
               parentSpanId: null,
               name: 'root-span',
-              spanType: AISpanType.AGENT_RUN,
+              spanType: SpanType.AGENT_RUN,
             }),
-            createMockAISpanRecord({
+            createMockSpanRecord({
               spanId: target.spanId,
               traceId: target.traceId,
               parentSpanId: 'span-1',
               name: 'child-span',
-              spanType: AISpanType.MODEL_GENERATION,
+              spanType: SpanType.MODEL_GENERATION,
             }),
           ]
         : [
-            createMockAISpanRecord({
+            createMockSpanRecord({
               spanId: 'span-1',
               traceId: target.traceId,
               parentSpanId: null,
               name: 'root-span',
-              spanType: AISpanType.AGENT_RUN,
+              spanType: SpanType.AGENT_RUN,
             }),
           ],
     };
@@ -127,10 +127,10 @@ class TestContext {
       createdAt: new Date(),
     };
 
-    (this.mockStorage.getAITrace as any).mockResolvedValue(mockTrace);
+    (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
     (this.mockScorer.run as any).mockResolvedValue(mockScorerResult);
     (this.mockStorage.saveScore as any).mockResolvedValue({ score: mockSavedScore });
-    (this.mockStorage.updateAISpan as any).mockResolvedValue(undefined);
+    (this.mockStorage.updateSpan as any).mockResolvedValue(undefined);
 
     return this;
   }
@@ -141,39 +141,39 @@ class TestContext {
   ) {
     switch (scenarioType) {
       case 'trace-not-found':
-        (this.mockStorage.getAITrace as any).mockResolvedValue(null);
+        (this.mockStorage.getTrace as any).mockResolvedValue(null);
         break;
 
       case 'span-not-found':
-        const mockTrace: AITraceRecord = {
+        const mockTrace: TraceRecord = {
           traceId: errorDetails?.traceId || 'trace-1',
           spans: [
-            createMockAISpanRecord({
+            createMockSpanRecord({
               spanId: 'span-1',
               traceId: errorDetails?.traceId || 'trace-1',
               parentSpanId: null,
               name: 'root-span',
-              spanType: AISpanType.AGENT_RUN,
+              spanType: SpanType.AGENT_RUN,
             }),
           ],
         };
-        (this.mockStorage.getAITrace as any).mockResolvedValue(mockTrace);
+        (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
         break;
 
       case 'no-root-span':
-        const mockTraceNoRoot: AITraceRecord = {
+        const mockTraceNoRoot: TraceRecord = {
           traceId: errorDetails?.traceId || 'trace-1',
           spans: [
-            createMockAISpanRecord({
+            createMockSpanRecord({
               spanId: 'span-1',
               traceId: errorDetails?.traceId || 'trace-1',
               parentSpanId: 'parent-span', // Not a root span
               name: 'child-span',
-              spanType: AISpanType.MODEL_GENERATION,
+              spanType: SpanType.MODEL_GENERATION,
             }),
           ],
         };
-        (this.mockStorage.getAITrace as any).mockResolvedValue(mockTraceNoRoot);
+        (this.mockStorage.getTrace as any).mockResolvedValue(mockTraceNoRoot);
         break;
 
       case 'scorer-failure':
@@ -182,7 +182,7 @@ class TestContext {
         break;
 
       case 'storage-failure':
-        (this.mockStorage.getAITrace as any).mockRejectedValue(errorDetails?.error || new Error('Storage error'));
+        (this.mockStorage.getTrace as any).mockRejectedValue(errorDetails?.error || new Error('Storage error'));
         break;
     }
     return this;
@@ -217,19 +217,19 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.getAITrace).toHaveBeenCalledWith('trace-1');
+      expect(testContext.mockStorage.getTrace).toHaveBeenCalledWith('trace-1');
       expect(testContext.mockScorer.run).toHaveBeenCalled();
       expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: 'run-123',
           scorerId: 'test-scorer',
           entityId: 'root-span',
-          entityType: AISpanType.AGENT_RUN,
+          entityType: SpanType.AGENT_RUN,
           source: 'TEST',
           traceId: 'trace-1',
         }),
       );
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
+      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
     });
   });
 
@@ -277,7 +277,7 @@ describe('runScorerOnTarget Function', () => {
       testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
       expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
+      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
     });
 
     it('should select specific span when spanId provided', async () => {
@@ -285,7 +285,7 @@ describe('runScorerOnTarget Function', () => {
       testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
       expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateAISpan).toHaveBeenCalled();
+      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
     });
   });
 
@@ -315,7 +315,7 @@ describe('runScorerOnTarget Function', () => {
           },
           traceId: 'trace-1', // No spanId suffix
           entityId: 'root-span',
-          entityType: AISpanType.AGENT_RUN,
+          entityType: SpanType.AGENT_RUN,
           entity: { traceId: 'trace-1', spanId: 'span-1' },
           source: 'TEST',
           scorerId: 'test-scorer',
@@ -349,7 +349,7 @@ describe('runScorerOnTarget Function', () => {
           traceId: 'trace-1',
           spanId: 'span-2',
           entityId: 'child-span',
-          entityType: AISpanType.MODEL_GENERATION,
+          entityType: SpanType.MODEL_GENERATION,
           entity: { traceId: 'trace-1', spanId: 'span-2' },
           source: 'TEST',
           scorerId: 'test-scorer',

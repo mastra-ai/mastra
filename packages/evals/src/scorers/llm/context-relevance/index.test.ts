@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
 import { describe, it, expect, vi } from 'vitest';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createTestMessage, getTextContentFromMastraDBMessage } from '../../utils';
 import { createContextRelevanceScorerLLM } from '.';
 
 describe('Context Relevance Scorer', () => {
@@ -196,14 +196,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: "Tell me about Einstein's achievements",
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Einstein won the Nobel Prize for his work on the photoelectric effect',
@@ -223,7 +223,8 @@ describe('Context Relevance Scorer', () => {
     it('should handle dynamic context from extractor', async () => {
       const contextExtractor = (input: ScorerRunInputForAgent) => {
         // Extract context based on the query
-        const userQuery = input?.inputMessages?.[0]?.content || '';
+        const userMessage = input?.inputMessages?.[0];
+        const userQuery = userMessage ? getTextContentFromMastraDBMessage(userMessage) : '';
         if (userQuery.toLowerCase().includes('einstein')) {
           return [
             'Einstein won the Nobel Prize for his discovery of the photoelectric effect',
@@ -235,14 +236,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: "What were Einstein's major contributions to physics?",
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: "Einstein's major contributions include the photoelectric effect and relativity theory",
@@ -264,14 +265,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: 'Test question',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Test response',
@@ -303,14 +304,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: 'Test question',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Test response',
@@ -380,14 +381,14 @@ describe('Context Relevance Scorer', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'user-1',
             role: 'user',
             content: 'Test question',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'assistant-1',
             role: 'assistant',
             content: 'Test response using extracted context',

@@ -1,4 +1,3 @@
-import { convertMessages } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
@@ -17,6 +16,17 @@ interface MemoryContext extends Context {
   requestContext?: RequestContext;
 }
 
+export function getTextContent(message: MastraDBMessage): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content && typeof message.content === 'object' && 'parts' in message.content) {
+    const textPart = message.content.parts.find(p => p.type === 'text');
+    return textPart?.text || '';
+  }
+  return '';
+}
+
 async function getMemoryFromContext({
   mastra,
   agentId,
@@ -26,7 +36,7 @@ async function getMemoryFromContext({
   let agent;
   if (agentId) {
     try {
-      agent = mastra.getAgent(agentId);
+      agent = mastra.getAgentById(agentId);
     } catch (error) {
       logger.debug('Error getting agent from mastra, searching agents for agent', error);
     }
@@ -309,6 +319,7 @@ export async function deleteThreadHandler({
 
 export async function listMessagesHandler({
   mastra,
+  agentId,
   threadId,
   resourceId,
   perPage,
@@ -316,49 +327,9 @@ export async function listMessagesHandler({
   orderBy,
   include,
   filter,
-}: Pick<MemoryContext, 'mastra'> & StorageListMessagesInput) {
-  try {
-    validateBody({ threadId });
-
-    const storage = mastra.getStorage();
-
-    if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
-    }
-
-    const thread = await storage.getThreadById({ threadId: threadId! });
-
-    if (!thread) {
-      throw new HTTPException(404, { message: 'Thread not found' });
-    }
-
-    const result = await storage.listMessages({
-      threadId: threadId!,
-      resourceId,
-      perPage,
-      page,
-      orderBy,
-      include,
-      filter,
-    });
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error getting messages');
-  }
-}
-
-export async function getMessagesHandler({
-  mastra,
-  agentId,
-  threadId,
-  limit,
   requestContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
-  limit?: number;
-}) {
-  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
-    throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
-  }
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> &
+  Omit<StorageListMessagesInput, 'threadId'>) {
   try {
     validateBody({ threadId });
 
@@ -379,10 +350,14 @@ export async function getMessagesHandler({
 
     const result = await memory.recall({
       threadId: threadId,
-      ...(limit && { perPage: limit }),
+      resourceId,
+      perPage,
+      page,
+      orderBy,
+      include,
+      filter,
     });
-    const uiMessages = convertMessages(result.messages).to('AIV5.UI');
-    return { messages: result.messages, uiMessages };
+    return result;
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
@@ -462,7 +437,7 @@ export async function updateWorkingMemoryHandler({
 interface SearchResult {
   id: string;
   role: string;
-  content: any;
+  content: string;
   createdAt: Date;
   threadId?: string;
   threadTitle?: string;
@@ -503,14 +478,25 @@ export async function deleteMessagesHandler({
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    // Delete the messages - let the memory method handle validation
-    await memory.deleteMessages(messageIds as any);
+    // Normalize messageIds to the format expected by deleteMessages
+    // Convert single values to arrays and extract IDs from objects
+    let normalizedIds: string[] | { id: string }[];
+
+    if (Array.isArray(messageIds)) {
+      // Already an array - keep as is (could be string[] or { id: string }[])
+      normalizedIds = messageIds;
+    } else if (typeof messageIds === 'string') {
+      // Single string ID - wrap in array
+      normalizedIds = [messageIds];
+    } else {
+      // Single object with id property - wrap in array
+      normalizedIds = [messageIds];
+    }
+
+    await memory.deleteMessages(normalizedIds);
 
     // Count messages for response
-    let count = 1;
-    if (Array.isArray(messageIds)) {
-      count = messageIds.length;
-    }
+    const count = Array.isArray(messageIds) ? messageIds.length : 1;
 
     return { success: true, message: `${count} message${count === 1 ? '' : 's'} deleted successfully` };
   } catch (error) {
@@ -646,10 +632,7 @@ export async function searchMemoryHandler({
 
     // Process each message in the results
     for (const msg of result.messages) {
-      const content =
-        typeof msg.content.content === `string`
-          ? msg.content.content
-          : msg.content.parts?.map((p: any) => (p.type === 'text' ? p.text : '')).join(' ') || '';
+      const content = getTextContent(msg);
 
       const msgThreadId = msg.threadId || threadId;
       const thread = threadMap.get(msgThreadId);
@@ -672,13 +655,13 @@ export async function searchMemoryHandler({
           before: threadMessages.slice(Math.max(0, messageIndex - beforeRange), messageIndex).map(m => ({
             id: m.id,
             role: m.role,
-            content: m.content,
+            content: getTextContent(m),
             createdAt: m.createdAt || new Date(),
           })),
           after: threadMessages.slice(messageIndex + 1, messageIndex + afterRange + 1).map(m => ({
             id: m.id,
             role: m.role,
-            content: m.content,
+            content: getTextContent(m),
             createdAt: m.createdAt || new Date(),
           })),
         };

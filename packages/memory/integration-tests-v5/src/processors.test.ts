@@ -32,9 +32,11 @@ beforeEach(async () => {
   const dbPath = join(await mkdtemp(join(tmpdir(), `memory-processor-test-`)), 'test.db');
 
   storage = new LibSQLStore({
+    id: 'processor-test-storage',
     url: `file:${dbPath}`,
   });
   vector = new LibSQLVector({
+    id: 'processor-test-vector',
     connectionUrl: `file:${dbPath}`,
   });
 
@@ -79,6 +81,7 @@ describe('Memory with Processors', () => {
     const queryResult = await memory.recall({
       threadId: thread.id,
       perPage: 20,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
     const result = await memory.processMessages({
       messages: new MessageList({ threadId: thread.id, resourceId }).add(queryResult.messages, 'memory').get.all.core(),
@@ -105,6 +108,7 @@ describe('Memory with Processors', () => {
     const allMessagesQuery = await memory.recall({
       threadId: thread.id,
       perPage: 20,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
     });
     expect(allMessagesQuery.messages.length).toBe(20);
 

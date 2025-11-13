@@ -1,5 +1,5 @@
 ---
-title: "Example: Re-ranking Results | RAG | Mastra Docs"
+title: "Example: Re-ranking Results | RAG"
 description: Example of implementing semantic re-ranking in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -77,6 +77,7 @@ const { embeddings } = await embedMany({
 });
 
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
