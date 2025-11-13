@@ -20,7 +20,7 @@ Use different configurations for different environments:
 ```typescript
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 // Base configuration
 const createSearchTool = (environment: "dev" | "staging" | "prod") => {
@@ -49,8 +49,8 @@ const dynamicSearchTool = createVectorQueryTool({
 
 // Switch environment at runtime
 const switchEnvironment = async (environment: string, query: string) => {
-  const runtimeContext = new RuntimeContext();
-  runtimeContext.set("databaseConfig", {
+  const requestContext = new RequestContext();
+  requestContext.set("databaseConfig", {
     pinecone: {
       namespace: environment,
     },
@@ -59,7 +59,7 @@ const switchEnvironment = async (environment: string, query: string) => {
   return await dynamicSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 ```
@@ -70,7 +70,7 @@ const switchEnvironment = async (environment: string, query: string) => {
 ```javascript
 import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
-import { RuntimeContext } from "@mastra/core/runtime-context";
+import { RequestContext } from "@mastra/core/request-context";
 
 // Base configuration
 const createSearchTool = (environment) => {
@@ -99,8 +99,8 @@ const dynamicSearchTool = createVectorQueryTool({
 
 // Switch environment at runtime
 const switchEnvironment = async (environment, query) => {
-  const runtimeContext = new RuntimeContext();
-  runtimeContext.set("databaseConfig", {
+  const requestContext = new RequestContext();
+  requestContext.set("databaseConfig", {
     pinecone: {
       namespace: environment,
     },
@@ -109,7 +109,7 @@ const switchEnvironment = async (environment, query) => {
   return await dynamicSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 ```
@@ -201,11 +201,11 @@ const balancedTool = createVectorQueryTool({
 
 // Adjust parameters based on load
 const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (isHighLoad) {
     // Reduce quality for speed during high load
-    runtimeContext.set("databaseConfig", {
+    requestContext.set("databaseConfig", {
       pgvector: {
         ef: 75,
         probes: 5,
@@ -217,7 +217,7 @@ const adaptiveSearch = async (query: string, isHighLoad: boolean) => {
   return await balancedTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 ```
@@ -248,10 +248,10 @@ class MultiTenantSearchService {
   }
 
   async searchForTenant(tenant: Tenant, query: string) {
-    const runtimeContext = new RuntimeContext();
+    const requestContext = new RequestContext();
 
     // Isolate search to tenant's namespace
-    runtimeContext.set("databaseConfig", {
+    requestContext.set("databaseConfig", {
       pinecone: {
         namespace: tenant.namespace,
       },
@@ -263,7 +263,7 @@ class MultiTenantSearchService {
         topK: 10,
       },
       mastra,
-      runtimeContext,
+      requestContext,
     });
 
     // Add tenant context to results
@@ -340,11 +340,11 @@ const generateSparseVector = (keywords: string[]) => {
 };
 
 const hybridSearch = async (query: string, keywords: string[]) => {
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
 
   if (keywords.length > 0) {
     const sparseVector = generateSparseVector(keywords);
-    runtimeContext.set("databaseConfig", {
+    requestContext.set("databaseConfig", {
       pinecone: {
         namespace: "production",
         sparseVector,
@@ -355,7 +355,7 @@ const hybridSearch = async (query: string, keywords: string[]) => {
   return await hybridSearchTool.execute({
     context: { queryText: query },
     mastra,
-    runtimeContext,
+    requestContext,
   });
 };
 

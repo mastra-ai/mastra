@@ -53,11 +53,11 @@ const step1 = createStep({
 });
 ```
 
-> See the [Step Class](/reference/workflows/step) for a full list of configuration options.
+> See the [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
 
 ### Using agents and tools
 
-Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/agents/using-tools) page for more information.
+Workflow steps can also call registered agents or import and execute tools directly, visit the [Using Tools](/docs/v1/agents/using-tools) page for more information.
 
 ## Creating a workflow
 
@@ -82,11 +82,11 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See the [Workflow Class](/reference/workflows/workflow) for a full list of configuration options.
+> See the [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
 
 ### Understanding control flow
 
-Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/workflows/control-flow) page for more information.
+Workflows can be composed using a number of different methods. The method you choose determines how each step's schema should be structured. Visit the [Control Flow](/docs/v1/workflows/control-flow) page for more information.
 
 ## Workflow state
 
@@ -146,7 +146,7 @@ export const testWorkflow = createWorkflow({
 
 ## Workflows as steps
 
-Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
+Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/v1/workflows/control-flow).
 
 ```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const step1 = createStep({...});
@@ -221,17 +221,16 @@ const testWorkflow = mastra.getWorkflow("testWorkflow");
 `mastra.getWorkflow()` is preferred over a direct import, since it provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores).
 :::
 
-
 ## Running workflows
 
 Workflows can be run in two modes: start waits for all steps to complete before returning, and stream emits events during execution. Choose the approach that fits your use case: start when you only need the final result, and stream when you want to monitor progress or trigger actions as steps complete.
 
 <Tabs>
   <TabItem value="start" label="Start">
-Create a workflow run instance using `createRunAsync()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
+Create a workflow run instance using `createRun()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
 ```typescript showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -243,10 +242,10 @@ console.log(result);
 ```
   </TabItem>
   <TabItem value="stream" label="Stream">
-Create a workflow run instance using `.createRunAsync()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
+Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
 
 ```typescript showLineNumbers copy
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const result = await run.stream({
   inputData: {
@@ -260,6 +259,7 @@ for await (const chunk of result.stream) {
 ```
   </TabItem>
 </Tabs>
+
 
 ### Workflow status types
 
@@ -302,9 +302,9 @@ The workflow output includes the full execution lifecycle, showing the input and
 }
 ```
 
-## Using `RuntimeContext`
+## Using `RequestContext`
 
-Use [RuntimeContext](/docs/server-db/runtime-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/v1/server-db/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
 export type UserTier = {
@@ -313,8 +313,8 @@ export type UserTier = {
 
 const step1 = createStep({
   // ...
-  execute: async ({ runtimeContext }) => {
-    const userTier = runtimeContext.get("user-tier") as UserTier["user-tier"];
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     const maxResults = userTier === "enterprise"
       ? 1000
@@ -325,16 +325,16 @@ const step1 = createStep({
 });
 ```
 
-> See [Runtime Context](/docs/server-db/runtime-context) for more information.
+> See [Request Context](/docs/v1/server-db/request-context) for more information.
 
 ## Testing with Studio
 
-Use [Studio](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use [Studio](/docs/v1/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 
-For a closer look at workflows, see our [Workflow Guide](/guides/guide/ai-recruiter), which walks through the core concepts with a practical example.
+For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-recruiter), which walks through the core concepts with a practical example.
 
-- [Control Flow](/docs/workflows/control-flow)
-- [Suspend & Resume](/docs/workflows/suspend-and-resume)
-- [Error Handling](/docs/workflows/error-handling)
+- [Control Flow](/docs/v1/workflows/control-flow)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Error Handling](/docs/v1/workflows/error-handling)

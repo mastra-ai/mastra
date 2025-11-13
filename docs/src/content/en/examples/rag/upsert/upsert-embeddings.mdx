@@ -32,6 +32,7 @@ const { embeddings } = await embedMany({
 });
 
 const pgVector = new PgVector({
+  id: 'pg-vector',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 
@@ -78,6 +79,7 @@ const { embeddings } = await embedMany({
 });
 
 const pinecone = new PineconeVector({
+  id: 'pinecone-vector',
   apiKey: process.env.PINECONE_API_KEY!,
 });
 
@@ -125,6 +127,7 @@ const { embeddings } = await embedMany({
 });
 
 const qdrant = new QdrantVector({
+  id: 'qdrant-vector',
   url: process.env.QDRANT_URL,
   apiKey: process.env.QDRANT_API_KEY,
 });
@@ -163,10 +166,13 @@ const { embeddings } = await embedMany({
 });
 
 // Running Chroma locally
-const store = new ChromaVector();
+const store = new ChromaVector({
+  id: 'chroma-vector',
+});
 
 // Running on Chroma Cloud
 const store = new ChromaVector({
+  id: 'chroma-vector',
   apiKey: process.env.CHROMA_API_KEY,
   tenant: process.env.CHROMA_TENANT,
   database: process.env.CHROMA_DATABASE,
@@ -255,6 +261,7 @@ const { embeddings } = await embedMany({
 });
 
 const libsql = new LibSQLVector({
+  id: 'libsql-vector',
   connectionUrl: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
 });
@@ -302,6 +309,7 @@ const { embeddings } = await embedMany({
 });
 
 const upstash = new UpstashVector({
+  id: 'upstash-vector',
   url: process.env.UPSTASH_URL,
   token: process.env.UPSTASH_TOKEN,
 });

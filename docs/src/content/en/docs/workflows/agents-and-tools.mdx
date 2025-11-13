@@ -39,6 +39,8 @@ const step1 = createStep({
 });
 ```
 
+> See [Calling Agents](/examples/v1/agents/calling-agents) for more examples.
+
 ### Agents as steps
 
 Compose an agent as a step using `createStep()` when you don't need to modify the agent call. Use `.map()` to transform the previous step's output into a `prompt` the agent can use.
@@ -64,7 +66,7 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [.map()](/reference/workflows/workflow-methods/map) for more information.
+> See [Input Data Mapping](./input-data-mapping) for more information.
 
 Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
@@ -92,14 +94,14 @@ import { testTool } from "../tools/test-tool";
 
 const step2 = createStep({
   // ...
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     const { formatted } = inputData;
 
     const response = await testTool.execute({
       context: {
         text: formatted,
       },
-      runtimeContext,
+      requestContext,
     });
 
     return {
@@ -108,6 +110,8 @@ const step2 = createStep({
   },
 });
 ```
+
+> See [Calling Tools](/docs/v1/workflows/agents-and-tools#calling-tools) for more examples.
 
 ### Tools as steps
 
@@ -134,9 +138,9 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [.map()](/reference/workflows/workflow-methods/map) for more information.
+> See [Input Data Mapping](./input-data-mapping) for more information.
 
 ## Related
 
-- [Using Agents](/docs/agents/overview)
-- [Using Tools](/docs/tools-mcp/overview)
+- [Using Agents](/docs/v1/agents/overview)
+- [Using Tools](/docs/v1/tools-mcp/overview)

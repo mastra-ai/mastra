@@ -42,21 +42,21 @@ await memory?.deleteMessages(["671ae63f-3a91-4082-a907-fe7de78e10ec"]);
 
 ```typescript title="src/test-memory.ts" showLineNumbers copy
 import { mastra } from "./mastra";
-import { UIMessageWithMetadata } from "@mastra/core/agent";
+import { MastraDBMessage } from "@mastra/core";
 
 const agent = mastra.getAgent("agent");
 const memory = await agent.getMemory();
 
-const { uiMessages } = await memory!.query({ threadId: "thread-123" });
+const { messages } = await memory!.recall({ threadId: "thread-123" });
 
-const messageIds = uiMessages.map(
-  (message: UIMessageWithMetadata) => message.id,
+const messageIds = messages.map(
+  (message: MastraDBMessage) => message.id,
 );
 await memory?.deleteMessages([...messageIds]);
 ```
 
 ## Related
 
-- [Memory Class Reference](/reference/memory/memory-class)
-- [query](/reference/memory/query)
-- [Getting Started with Memory](/docs/memory/overview)
+- [Memory Class Reference](/reference/v1/memory/memory-class)
+- [recall](/reference/v1/memory/recall)
+- [Getting Started with Memory](/docs/v1/memory/overview)

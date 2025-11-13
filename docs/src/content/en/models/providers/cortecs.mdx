@@ -7,8 +7,6 @@ description: "Use Cortecs models with Mastra. 11 models available."
 
 
 
-
-
 # <img src="https://models.dev/logos/cortecs.svg" alt="Cortecs logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cortecs
 
 Access 11 Cortecs models through Mastra's model router. Authentication is handled automatically using the `CORTECS_API_KEY` environment variable.
@@ -20,10 +18,11 @@ CORTECS_API_KEY=your-api-key
 ```
 
 ```typescript
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "cortecs/claude-4-5-sonnet"
 });
@@ -189,6 +188,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {
     url: "https://api.cortecs.ai/v1",
@@ -205,9 +205,10 @@ const agent = new Agent({
 
 ```typescript
 const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "cortecs/qwen3-coder-480b-a35b-instruct"
       : "cortecs/claude-4-5-sonnet";

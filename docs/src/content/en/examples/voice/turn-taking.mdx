@@ -19,6 +19,7 @@ import { Agent } from "@mastra/core/agent";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const optimistAgent = new Agent({
+  id: "optimist-agent",
   name: "Optimist",
   instructions:
     "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
@@ -29,6 +30,7 @@ export const optimistAgent = new Agent({
 });
 
 export const skepticAgent = new Agent({
+  id: "skeptic-agent",
   name: "Skeptic",
   instructions:
     "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
@@ -45,7 +47,7 @@ Next, register both agents with your Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { optimistAgent, skepticAgent } from "./agents";
 
 export const mastra = new Mastra({
@@ -388,7 +390,7 @@ export default function DebateInterface() {
 
   return (
     <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">AI Debate with Turn Taking</h1>
+      <h1 className="text-2xl font-semibold mb-4">AI Debate with Turn Taking</h1>
 
       <div className="mb-6">
         <label className="block mb-2">Debate Topic:</label>
@@ -436,7 +438,7 @@ export default function DebateInterface() {
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <div className="font-bold">{response.agent}:</div>
+                  <div className="font-semibold">{response.agent}:</div>
                   <button
                     onClick={() => playAudio(response.text, response.agent)}
                     disabled={isPlaying}

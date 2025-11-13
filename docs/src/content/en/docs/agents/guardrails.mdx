@@ -28,7 +28,8 @@ import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
-  name: "moderated-agent",
+  id: "moderated-agent",
+  name: "Moderated Agent",
   instructions: "You are a helpful assistant",
   model: openai("gpt-4o-mini"),
   inputProcessors: [
@@ -55,6 +56,8 @@ The `UnicodeNormalizer` is an input processor that cleans and normalizes user in
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const normalizedAgent = new Agent({
+  id: "normalized-agent",
+  name: "Normalized Agent",
   // ...
   inputProcessors: [
     new UnicodeNormalizer({
@@ -65,7 +68,7 @@ export const normalizedAgent = new Agent({
 });
 ```
 
-> See [UnicodeNormalizer](/reference/processors/unicode-normalizer) for a full list of configuration options.
+> See [UnicodeNormalizer](/reference/v1/processors/unicode-normalizer) for a full list of configuration options.
 
 ### Preventing prompt injection
 
@@ -75,6 +78,8 @@ The `PromptInjectionDetector` is an input processor that scans user messages for
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 export const secureAgent = new Agent({
+  id: "secure-agent",
+  name: "Secure Agent",
   // ...
   inputProcessors: [
     new PromptInjectionDetector({
@@ -87,7 +92,7 @@ export const secureAgent = new Agent({
 });
 ```
 
-> See [PromptInjectionDetector](/reference/processors/prompt-injection-detector) for a full list of configuration options.
+> See [PromptInjectionDetector](/reference/v1/processors/prompt-injection-detector) for a full list of configuration options.
 
 ### Detecting and translating language
 
@@ -97,6 +102,8 @@ The `LanguageDetector` is an input processor that detects and translates user me
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const multilingualAgent = new Agent({
+  id: "multilingual-agent",
+  name: "Multilingual Agent",
   // ...
   inputProcessors: [
     new LanguageDetector({
@@ -109,7 +116,7 @@ export const multilingualAgent = new Agent({
 });
 ```
 
-> See [LanguageDetector](/reference/processors/language-detector) for a full list of configuration options.
+> See [LanguageDetector](/reference/v1/processors/language-detector) for a full list of configuration options.
 
 ## Output processors
 
@@ -123,6 +130,8 @@ The `BatchPartsProcessor` is an output processor that combines multiple stream p
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const batchedAgent = new Agent({
+  id: "batched-agent",
+  name: "Batched Agent",
   // ...
   outputProcessors: [
     new BatchPartsProcessor({
@@ -134,7 +143,7 @@ export const batchedAgent = new Agent({
 });
 ```
 
-> See [BatchPartsProcessor](/reference/processors/batch-parts-processor) for a full list of configuration options.
+> See [BatchPartsProcessor](/reference/v1/processors/batch-parts-processor) for a full list of configuration options.
 
 ### Limiting token usage
 
@@ -144,6 +153,8 @@ The `TokenLimiterProcessor` is an output processor that limits the number of tok
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const limitedAgent = new Agent({
+  id: "limited-agent",
+  name: "Limited Agent",
   // ...
   outputProcessors: [
     new TokenLimiterProcessor({
@@ -155,7 +166,7 @@ export const limitedAgent = new Agent({
 });
 ```
 
-> See [TokenLimiterProcessor](/reference/processors/token-limiter-processor) for a full list of configuration options.
+> See [TokenLimiterProcessor](/reference/v1/processors/token-limiter-processor) for a full list of configuration options.
 
 ### Scrubbing system prompts
 
@@ -165,6 +176,8 @@ The `SystemPromptScrubber` is an output processor that detects and redacts syste
 import { SystemPromptScrubber } from "@mastra/core/processors";
 
 const scrubbedAgent = new Agent({
+  id: "scrubbed-agent",
+  name: "Scrubbed Agent",
   outputProcessors: [
     new SystemPromptScrubber({
       model: openai("gpt-4.1-nano"),
@@ -180,7 +193,7 @@ const scrubbedAgent = new Agent({
 });
 ```
 
-> See [SystemPromptScrubber](/reference/processors/system-prompt-scrubber) for a full list of configuration options.
+> See [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
 
 ## Hybrid processors
 
@@ -194,6 +207,8 @@ The `ModerationProcessor` is a hybrid processor that detects inappropriate or ha
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
+  id: "moderated-agent",
+  name: "Moderated Agent",
   // ...
   inputProcessors: [
     new ModerationProcessor({
@@ -211,7 +226,7 @@ export const moderatedAgent = new Agent({
 });
 ```
 
-> See [ModerationProcessor](/reference/processors/moderation-processor) for a full list of configuration options.
+> See [ModerationProcessor](/reference/v1/processors/moderation-processor) for a full list of configuration options.
 
 ### Detecting and redacting PII
 
@@ -221,6 +236,8 @@ The `PIIDetector` is a hybrid processor that detects and removes personally iden
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "Private Agent",
   // ...
   inputProcessors: [
     new PIIDetector({
@@ -240,7 +257,7 @@ export const privateAgent = new Agent({
 });
 ```
 
-> See [PIIDetector](/reference/processors/pii-detector) for a full list of configuration options.
+> See [PIIDetector](/reference/v1/processors/pii-detector) for a full list of configuration options.
 
 ## Applying multiple processors
 
@@ -263,6 +280,8 @@ import {
 } from "@mastra/core/processors";
 
 export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
   // ...
   inputProcessors: [
     new UnicodeNormalizer({
@@ -291,6 +310,8 @@ Most strategies allow the request to continue without interruption. When `block`
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
+  id: "private-agent",
+  name: "Private Agent",
   // ...
   inputProcessors: [
     new PIIDetector({
@@ -344,6 +365,6 @@ If the built-in processors don’t cover your needs, you can create your own by 
 
 Available examples:
 
-- [Message Length Limiter](../../examples/processors/message-length-limiter)
-- [Response Length Limiter](../../examples/processors/response-length-limiter)
-- [Response Validator](../../examples/processors/response-validator)
+- [Message Length Limiter](/examples/v1/processors/message-length-limiter)
+- [Response Length Limiter](/examples/v1/processors/response-length-limiter)
+- [Response Validator](/examples/v1/processors/response-validator)

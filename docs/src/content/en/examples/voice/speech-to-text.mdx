@@ -7,7 +7,7 @@ import GithubLink from "@site/src/components/GithubLink";
 
 # Smart Voice Memo App
 
-The following code snippets provide example implementations of Speech-to-Text (STT) functionality in a smart voice memo application using Next.js with direct integration of Mastra. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/docs/frameworks/web-frameworks/next-js) documentation.
+The following code snippets provide example implementations of Speech-to-Text (STT) functionality in a smart voice memo application using Next.js with direct integration of Mastra. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/docs/v1/frameworks/web-frameworks/next-js) documentation.
 
 ## Creating an Agent with STT Capabilities
 
@@ -23,6 +23,7 @@ You are an AI note assistant tasked with providing concise, structured summaries
 `;
 
 export const noteTakerAgent = new Agent({
+  id: "note-taker-agent",
   name: "Note Taker Agent",
   instructions: instructions,
   model: openai("gpt-4o"),
@@ -36,7 +37,7 @@ This snippet demonstrates how to register the STT-enabled agent with your Mastra
 
 ```typescript title="src/mastra/index.ts"
 import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { noteTakerAgent } from "./agents";
 

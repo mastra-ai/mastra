@@ -23,20 +23,20 @@ export const longRunningTool = createTool({
   id: "long-computation",
   description: "Performs a potentially long computation",
   inputSchema: z.object({ /* ... */ }),
-  execute: async ({ context }, { abortSignal }) => {
+  execute: async (inputData, context) => {
     // Example: Forwarding signal to fetch
     const response = await fetch("https://api.example.com/data", {
-      signal: abortSignal, // Pass the signal here
+      signal: context?.abortSignal, // Pass the signal here
     });
 
-    if (abortSignal?.aborted) {
+    if (context?.abortSignal?.aborted) {
       console.log("Tool execution aborted.");
       throw new Error("Aborted");
     }
 
     // Example: Checking signal during a loop
     for (let i = 0; i < 1000000; i++) {
-      if (abortSignal?.aborted) {
+      if (context?.abortSignal?.aborted) {
         console.log("Tool execution aborted during loop.");
         throw new Error("Aborted");
       }
@@ -115,6 +115,7 @@ import { vercelWeatherTool } from "../tools/vercelWeatherTool"; // Vercel AI SDK
 import { mastraTool } from "../tools/mastraTool"; // Mastra createTool tool
 
 export const mixedToolsAgent = new Agent({
+  id: "mixed-tools-agent",
   name: "Mixed Tools Agent",
   instructions: "You can use tools defined in different formats.",
   model: openai("gpt-4o-mini"),

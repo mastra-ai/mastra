@@ -12,6 +12,7 @@ The `.setStorage()` method is used to set the storage instance for the Mastra in
 ```typescript copy
 mastra.setStorage(
   new LibSQLStore({
+    id: 'mastra-storage',
     url: ":memory:",
   }),
 );
@@ -35,5 +36,5 @@ This method does not return a value.
 
 ## Related
 
-- [Storage overview](/docs/server-db/storage)
-- [Storage reference](/reference/storage/libsql)
+- [Storage overview](/docs/v1/server-db/storage)
+- [Storage reference](/reference/v1/storage/libsql)

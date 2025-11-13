@@ -10,7 +10,7 @@ This example demonstrates how to build an Inngest workflow with Mastra.
 ## Setup
 
 ```sh copy
-npm install @mastra/inngest inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
+npm install @mastra/inngest@beta inngest @mastra/core@beta @mastra/deployer@beta @hono/node-server @ai-sdk/openai
 
 docker run --rm -p 8288:8288 \
   inngest/inngest \
@@ -29,6 +29,7 @@ import { openai } from "@ai-sdk/openai";
 
 // Create a new planning agent that uses the OpenAI model
 const planningAgent = new Agent({
+  id: "planning-agent",
   name: "planningAgent",
   model: openai("gpt-4o"),
   instructions: `
@@ -318,7 +319,7 @@ export { activityPlanningWorkflow };
 Register the agents and workflow with the mastra instance. This allows access to the agents within the workflow.
 
 ```ts showLineNumbers copy title="index.ts"
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { PinoLogger } from "@mastra/loggers";
 import { Inngest } from "inngest";
@@ -380,7 +381,7 @@ const srv = serve({
 });
 
 const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 // Start the workflow with the required input data (city name)
 // This will trigger the workflow steps and stream the result to the console

@@ -72,6 +72,7 @@ Set up the Mastra agent that will handle the responses:
 
 ```typescript copy showLineNumbers{17} title="index.ts"
 export const ragAgent = new Agent({
+  id: "rag-agent",
   name: "RAG Agent",
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
@@ -89,6 +90,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{29} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 

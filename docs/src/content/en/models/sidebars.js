@@ -7,7 +7,12 @@
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   modelsSidebar: [
-    "index",
+    {
+      type: "doc",
+      id: "index",
+      key: "models.overview",
+      label: "Overview",
+    },
     "embeddings",
     {
       type: "category",
@@ -163,6 +168,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/iflowcn",
+          label: "iFlow",
+        },
+        {
+          type: "doc",
           id: "providers/inception",
           label: "Inception",
         },
@@ -209,7 +219,7 @@ const sidebars = {
         {
           type: "doc",
           id: "providers/nebius",
-          label: "Nebius AI Studio",
+          label: "Nebius Token Factory",
         },
         {
           type: "doc",

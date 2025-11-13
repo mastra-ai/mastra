@@ -25,7 +25,7 @@ The system implements filtered vector search using Mastra and PGVector. Here's w
 
 > **Note**: For examples of how to extract metadata from your documents, see the [Metadata Extraction](../embedding/metadata-extraction) guide.
 >
-> To learn how to create and store embeddings, see the [Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) guide.
+> To learn how to create and store embeddings, see the [Upsert Embeddings](/examples/v1/rag/upsert/upsert-embeddings) guide.
 
 ## Setup
 
@@ -54,6 +54,7 @@ Initialize PgVector with your connection string:
 
 ```typescript copy showLineNumbers{4} title="src/index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 ```

@@ -28,7 +28,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const harryPotterAgent = new Agent({
-  name: "harry-potter-agent",
+  id: "harry-potter-agent",
+  name: "Harry Potter Agent",
   description:
     "Provides character-style responses from the Harry Potter universe.",
   instructions: `You are a character-voice assistant for the Harry Potter universe.
@@ -38,14 +39,14 @@ export const harryPotterAgent = new Agent({
 });
 ```
 
-> See [Agent](/reference/agents/agent) for a full list of configuration options.
+> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
 
 ## Registering an agent
 
 To use an agent, register it in your main Mastra instance.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { harryPotterAgent } from "./agents/example-harry-potter-agent";
 

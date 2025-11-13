@@ -64,7 +64,7 @@ Events written to the stream are included in the emitted chunks. These chunks ca
 ```typescript showLineNumbers copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
-const run = await testWorkflow.createRunAsync();
+const run = await testWorkflow.createRun();
 
 const stream = await run.streamVNext({
   inputData: {

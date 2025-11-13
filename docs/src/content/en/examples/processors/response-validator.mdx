@@ -15,7 +15,8 @@ A custom output processor in Mastra implements the `Processor` interface with th
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class ResponseValidator implements Processor {
-  readonly name = "response-validator";
+  readonly id = "response-validator";
+  readonly name = "Response Validator";
 
   constructor(private requiredKeywords: string[] = []) {}
 
@@ -30,7 +31,7 @@ export class ResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");
@@ -62,7 +63,8 @@ import { openai } from "@ai-sdk/openai";
 import { ResponseValidator } from "../processors/response-validator";
 
 export const validatedAgent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions:
     "You are a helpful assistant. Always mention the key concepts in your responses.",
   model: openai("gpt-4o"),
@@ -83,7 +85,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Create agent that requires AI-related keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions:
     "You are an AI expert. Always mention artificial intelligence and machine learning when discussing AI topics.",
   model: openai("gpt-4o"),
@@ -117,7 +120,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require security-related keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -158,7 +162,8 @@ import { ResponseValidator } from "./mastra/processors/response-validator";
 
 // Reuse same agent but require financial keywords
 export const agent = new Agent({
-  name: "validated-agent",
+  id: "validated-agent",
+  name: "Validated Agent",
   instructions: "You are a general assistant.",
   model: openai("gpt-4o"),
   outputProcessors: [
@@ -196,7 +201,8 @@ You can create more sophisticated validators with custom logic:
 import type { Processor, MastraMessageV2 } from "@mastra/core/processors";
 
 export class AdvancedResponseValidator implements Processor {
-  readonly name = "advanced-response-validator";
+  readonly id = "advanced-response-validator";
+  readonly name = "Advanced Response Validator";
 
   constructor(
     private config: {
@@ -219,7 +225,7 @@ export class AdvancedResponseValidator implements Processor {
       .map((msg) =>
         msg.content.parts
           .filter((part) => part.type === "text")
-          .map((part) => (part as any).text)
+          .map((part) => (part.type === "text" ? part.text : ""))
           .join(""),
       )
       .join("");
@@ -276,7 +282,8 @@ export class AdvancedResponseValidator implements Processor {
 
 // Usage example
 export const advancedAgent = new Agent({
-  name: "advanced-validated-agent",
+  id: "advanced-validated-agent",
+  name: "Advanced Validated Agent",
   instructions: "You are a technical writer.",
   model: openai("gpt-4o"),
   outputProcessors: [

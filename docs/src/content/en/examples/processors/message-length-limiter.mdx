@@ -22,7 +22,8 @@ type MessageLengthLimiterOptions = {
 };
 
 export class MessageLengthLimiter implements Processor {
-  readonly name = "message-length-limiter";
+  readonly id  = "message-length-limiter";
+  readonly name = "Message Length Limiter";
   private maxLength: number;
   private strategy: "block" | "warn" | "truncate";
 
@@ -49,7 +50,7 @@ export class MessageLengthLimiter implements Processor {
           sum +
           msg.content.parts
             .filter((part) => part.type === "text")
-            .reduce((partSum, part) => partSum + (part as any).text.length, 0)
+            .reduce((partSum, part) => partSum + (part.type === "text" ? part.text.length : 0), 0)
         );
       }, 0);
 
@@ -95,14 +96,12 @@ export class MessageLengthLimiter implements Processor {
       for (let j = 0; j < parts.length; j++) {
         const part = parts[j];
         if (part.type === "text") {
-          const textPart = part as any;
-          const partLength = textPart.text.length;
+          const partLength = part.text.length;
 
           if (currentLength + partLength > maxLength) {
             const remainingChars = maxLength - currentLength;
             if (remainingChars > 0) {
-              textPart.text =
-                textPart.text.substring(0, remainingChars) + "...";
+              part.text = part.text.substring(0, remainingChars) + "...";
             } else {
               parts.splice(j);
               break;
@@ -149,7 +148,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const blockingAgent = new Agent({
-  name: "blocking-agent",
+  id: "blocking-agent",
+  name: "Blocking Agent",
   instructions: "You are a helpful assistant with input length limits",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -165,7 +165,8 @@ import { Agent } from "@mastra/core/agent";
 import { MessageLengthLimiter } from "../processors/message-length-limiter";
 
 export const simpleAgent = new Agent({
-  name: "simple-agent",
+  id: "simple-agent",
+  name: "Simple Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [new MessageLengthLimiter(500)],
@@ -182,7 +183,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Create agent with generous character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -214,7 +216,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with tighter character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [
@@ -247,7 +250,8 @@ import { MessageLengthLimiter } from "./mastra/processors/message-length-limiter
 
 // Reuse same agent but with very strict character limit
 export const agent = new Agent({
-  name: "length-limited-agent",
+  id: "length-limited-agent",
+  name: "Length Limited Agent",
   instructions: "You are a helpful assistant",
   model: "openai/gpt-4o",
   inputProcessors: [

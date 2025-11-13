@@ -83,8 +83,9 @@ const savedMessages = await mastraClient.saveMessageToMemory({
       content: "Hello!",
       id: "1",
       threadId: "thread-1",
+      resourceId: "resource-1",
       createdAt: new Date(),
-      type: "text",
+      format: 2,
     },
   ],
   agentId: "agent-1",
@@ -96,33 +97,40 @@ const savedMessages = await mastraClient.saveMessageToMemory({
 Get messages associated with a memory thread:
 
 ```typescript
-// Get all messages in the thread
-const { messages } = await thread.getMessages();
+// Get all messages in the thread (paginated)
+const result = await thread.listMessages();
+console.log(result.messages); // Array of messages
+console.log(result.total); // Total count
+console.log(result.hasMore); // Whether more pages exist
 
-// Limit the number of messages retrieved
-const { messages } = await thread.getMessages({ limit: 10 });
+// Get messages with pagination
+const result = await thread.listMessages({
+  page: 0,
+  perPage: 20
+});
+
+// Get messages with ordering
+const result = await thread.listMessages({
+  orderBy: { field: 'createdAt', direction: 'ASC' }
+});
 ```
 
-### Delete a Message
+### Delete Messages
 
-Delete a specific message from a thread:
-
-```typescript
-const result = await thread.deleteMessage("message-id");
-// Returns: { success: true, message: "Message deleted successfully" }
-```
-
-### Delete Multiple Messages
-
-Delete multiple messages from a thread in a single operation:
+Delete one or more messages from a thread:
 
 ```typescript
+// Delete a single message
+const result = await thread.deleteMessages("message-id");
+
+// Delete multiple messages
 const result = await thread.deleteMessages([
   "message-1",
   "message-2",
   "message-3",
 ]);
-// Returns: { success: true, message: "3 messages deleted successfully" }
+
+// Returns: { success: true, message: "Message deleted successfully" }
 ```
 
 ### Get Memory Status

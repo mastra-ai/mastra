@@ -71,10 +71,16 @@ const processor = new UnicodeNormalizer({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'unicode-normalizer'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'unicode-normalizer'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",
@@ -110,4 +116,4 @@ export const agent = new Agent({
 
 ## Related
 
-- [Guardrails](/docs/agents/guardrails)
+- [Guardrails](/docs/v1/agents/guardrails)

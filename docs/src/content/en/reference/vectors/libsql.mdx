@@ -11,7 +11,7 @@ It's part of the `@mastra/libsql` package and offers efficient vector similarity
 ## Installation
 
 ```bash copy
-npm install @mastra/libsql@latest
+npm install @mastra/libsql@beta
 ```
 
 ## Usage
@@ -21,6 +21,7 @@ import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
 const store = new LibSQLVector({
+  id: 'libsql-vector',
   connectionUrl: process.env.DATABASE_URL,
   // Optional: for Turso cloud databases
   authToken: process.env.DATABASE_AUTH_TOKEN,

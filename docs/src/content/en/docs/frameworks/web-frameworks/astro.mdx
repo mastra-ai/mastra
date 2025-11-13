@@ -37,28 +37,28 @@ Install the required Mastra packages:
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+npm install mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+bun add mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
@@ -75,17 +75,17 @@ To integrate Mastra into your project, you have two options:
   Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
   ```bash copy
-  npx mastra@latest init --default
+  npx mastra@beta init --default
   ```
 
-  > See [mastra init](/reference/cli/create-mastra) for more information.
+  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
 
 - Use the Interactive CLI
 
   If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
   ```bash copy
-  npx mastra@latest init
+  npx mastra@beta init
   ```
 
 Add the `dev` and `build` scripts to `package.json`:
@@ -175,7 +175,7 @@ mastra dev:mastra
 </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
 
 </StepItem>
 
@@ -215,7 +215,7 @@ export const server = {
       city: z.string(),
     }),
     handler: async (input) => {
-      const city = input.city;
+      const city = inputData.city;
       const agent = mastra.getAgent("weatherAgent");
 
       const result = await agent.generate(
@@ -330,28 +330,28 @@ Install the required Mastra packages:
 <TabItem value="npm" label="npm">
 
 ```bash copy
-npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+npm install mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
 ```bash copy
-yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash copy
-pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash copy
-bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+bun add mastra@beta @mastra/core@beta @mastra/libsql@beta
 ```
 
 </TabItem>
@@ -368,17 +368,17 @@ To integrate Mastra into your project, you have two options:
   Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
   ```bash copy
-  npx mastra@latest init --default
+  npx mastra@beta init --default
   ```
 
-  > See [mastra init](/reference/cli/create-mastra) for more information.
+  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
 
 - Use the Interactive CLI
 
   If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
   ```bash copy
-  npx mastra@latest init
+  npx mastra@beta init
   ```
 
 Add the `dev` and `build` scripts to `package.json`:
@@ -468,7 +468,7 @@ mastra dev:mastra
 </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/getting-started/studio) for more information.
+> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
 
 </StepItem>
 
@@ -598,5 +598,5 @@ Let me know if you need more information!
 
 ## Next Steps
 
-- [Deployment | With Astro on Vercel](/docs/deployment/web-framework#with-astro-on-vercel)
+- [Deployment | With Astro on Vercel](/docs/v1/deployment/web-framework#with-astro-on-vercel)
 - [Monorepo Deployment](../../deployment/monorepo)

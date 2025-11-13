@@ -5,18 +5,18 @@ description: "API reference for the MastraAuthAuth0 class, which authenticates M
 
 # MastraAuthAuth0 Class
 
-The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `experimental_auth` option.
+The `MastraAuthAuth0` class provides authentication for Mastra using Auth0. It verifies incoming requests using Auth0-issued JWT tokens and integrates with the Mastra server using the `auth` option.
 
 ## Usage example
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
   // ..
   server: {
-    experimental_auth: new MastraAuthAuth0({
+    auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
       audience: process.env.AUTH0_AUDIENCE,
     }),
@@ -118,4 +118,4 @@ The exact properties available depend on your Auth0 configuration, scopes reques
 
 ## Related
 
-[MastraAuthAuth0 Class](/docs/auth/auth0)
+[MastraAuthAuth0 Class](/docs/v1/auth/auth0)

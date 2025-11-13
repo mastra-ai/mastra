@@ -137,9 +137,11 @@ export const agent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new LibSQLStore({
+      id: 'test-agent-storage',
       url: "file:./working-memory.db",
     }),
     vector: new LibSQLVector({
+      id: 'test-agent-vector',
       connectionUrl: "file:./vector-memory.db",
     }),
     options: {
@@ -174,9 +176,11 @@ export const agent = new Agent({
   model: openai("gpt-4o"),
   memory: new Memory({
     storage: new PgStore({
+      id: 'pg-agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),
     vector: new PgVector({
+      id: 'pg-agent-vector',
       connectionString: process.env.DATABASE_URL,
     }),
     embedder: openai.embedding("text-embedding-3-small"),
@@ -203,12 +207,12 @@ export const agent = new Agent({
 
 ### Related
 
-- [Getting Started with Memory](/docs/memory/overview)
-- [Semantic Recall](/docs/memory/semantic-recall)
-- [Working Memory](/docs/memory/working-memory)
-- [Memory Processors](/docs/memory/memory-processors)
-- [createThread](/reference/memory/createThread)
-- [query](/reference/memory/query)
-- [getThreadById](/reference/memory/getThreadById)
-- [getThreadsByResourceId](/reference/memory/getThreadsByResourceId)
-- [deleteMessages](/reference/memory/deleteMessages)
+- [Getting Started with Memory](/docs/v1/memory/overview)
+- [Semantic Recall](/docs/v1/memory/semantic-recall)
+- [Working Memory](/docs/v1/memory/working-memory)
+- [Memory Processors](/docs/v1/memory/memory-processors)
+- [createThread](/reference/v1/memory/createThread)
+- [recall](/reference/v1/memory/recall)
+- [getThreadById](/reference/v1/memory/getThreadById)
+- [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
+- [deleteMessages](/reference/v1/memory/deleteMessages)

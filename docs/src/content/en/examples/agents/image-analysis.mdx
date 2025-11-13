@@ -30,7 +30,8 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const imageAnalysisAgent = new Agent({
-  name: "image-analysis",
+  id: "image-analysis-agent",
+  name: "Image Analysis Agent",
   description: "Analyzes images to identify objects and describe scenes",
   instructions: `
     You can view an image and identify objects, describe scenes, and answer questions about the content.
@@ -40,14 +41,14 @@ export const imageAnalysisAgent = new Agent({
 });
 ```
 
-> See [Agent](/reference/agents/agent) for a full list of configuration options.
+> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
 
 ## Registering an agent
 
 To use an agent, register it in your main Mastra instance.
 
 ```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core/mastra";
+import { Mastra } from "@mastra/core";
 
 import { imageAnalysisAgent } from "./agents/example-image-analysis-agent";
 
