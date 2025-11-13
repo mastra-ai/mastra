@@ -6124,19 +6124,20 @@ describe('Workflow', () => {
       const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('failed');
-
-      if (result.status === 'failed') {
-        expect(result.error).toBeInstanceOf(Error);
-        expect(result.error).toBe(topLevelError);
-        expect(result.error.message).toBe(topLevelMessage);
-        expect((result.error as any).statusCode).toBe(500);
-        // Verify the full error.cause chain is preserved (original error's cause)
-        expect(result.error.cause).toBeInstanceOf(Error);
-        expect((result.error.cause as Error).message).toBe(intermediateMessage);
-        // Verify nested cause (intermediate error's cause)
-        expect((result.error.cause as Error).cause).toBeInstanceOf(Error);
-        expect(((result.error.cause as Error).cause as Error).message).toBe(rootCauseMessage);
+      if (result.status !== 'failed') {
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
       }
+
+      expect(result.error).toBeInstanceOf(Error);
+      expect(result.error).toBe(topLevelError);
+      expect(result.error.message).toBe(topLevelMessage);
+      expect((result.error as any).statusCode).toBe(500);
+      // Verify the full error.cause chain is preserved (original error's cause)
+      expect(result.error.cause).toBeInstanceOf(Error);
+      expect((result.error.cause as Error).message).toBe(intermediateMessage);
+      // Verify nested cause (intermediate error's cause)
+      expect((result.error.cause as Error).cause).toBeInstanceOf(Error);
+      expect(((result.error.cause as Error).cause as Error).message).toBe(rootCauseMessage);
     });
 
     it('should preserve error in both result.error and step result error', async () => {
