@@ -6,6 +6,7 @@ import { parseModelRouterId } from './gateway-resolver.js';
 import type { MastraModelGateway } from './gateways/base.js';
 import { findGatewayForModel } from './gateways/index.js';
 
+import { AzureGateway } from './gateways/azure.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
 import type { ModelRouterModelId } from './provider-registry.js';
@@ -18,7 +19,11 @@ function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
 
-export const defaultGateways = [new NetlifyGateway(), new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`))];
+export const defaultGateways = [
+  new NetlifyGateway(),
+  new ModelsDevGateway(getStaticProvidersByGateway(`models.dev`)),
+  new AzureGateway(),
+];
 
 /**
  * @deprecated Use defaultGateways instead. This export will be removed in a future version.
