@@ -182,11 +182,11 @@ describe('Agent vNext', () => {
     // Verify tool was executed
     expect(executeSpy).toHaveBeenCalledTimes(1);
     expect(executeSpy).toHaveBeenCalledWith(
-      { location: 'NYC' },
       expect.objectContaining({
-        agent: expect.objectContaining({
-          toolCallId,
-        }),
+        context: { location: 'NYC' },
+      }),
+      expect.objectContaining({
+        toolCallId,
       }),
     );
 
@@ -535,11 +535,11 @@ describe('Agent vNext', () => {
     expect(result.finishReason).toBe('stop');
     expect(executeSpy).toHaveBeenCalledTimes(1);
     expect(executeSpy).toHaveBeenCalledWith(
-      { location: 'NYC' },
       expect.objectContaining({
-        agent: expect.objectContaining({
-          toolCallId,
-        }),
+        context: { location: 'NYC' },
+      }),
+      expect.objectContaining({
+        toolCallId,
       }),
     );
 
