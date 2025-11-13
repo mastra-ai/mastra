@@ -36,7 +36,7 @@ export type SerializableError = Error & {
 /**
  * Safely converts an unknown error to an Error instance.
  */
-export function getErrorFromUnknown<SERIALIZABLE extends boolean = true, SERIALIZE_STACK extends boolean = true>(
+export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
   unknown: unknown,
   options: {
     /**
@@ -63,7 +63,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true, SERIALI
      * Only affects JSON serialization when supportSerialization is true.
      * Defaults to `true`
      */
-    serializeStack?: SERIALIZE_STACK;
+    serializeStack?: boolean;
   } = {},
 ): SERIALIZABLE extends true ? SerializableError : Error {
   const defaultOptions = {
