@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { educationalImageTool } from '../tools/educational-image-tool';
 import { LibSQLStore } from '@mastra/libsql';
@@ -114,7 +113,7 @@ Every image should:
 
 Your role is to be the bridge between abstract educational concepts and concrete visual understanding, helping learners create stronger, more memorable connections with their study material.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     educationalImageTool,
   },
