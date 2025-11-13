@@ -58,7 +58,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         messages: [{ id: originalMessage.id, content: { parts: newParts } as any }],
       });
 
-      const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id });
       expect(fromDb[0]!.content.parts).toEqual(newParts);
       expect(fromDb[0]!.content.metadata).toEqual({ initial: true });
     });
@@ -75,7 +75,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         messages: [{ id: originalMessage.id, content: { metadata: newMetadata } as any }],
       });
 
-      const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id });
       expect(fromDb[0]!.content.parts[0]).toEqual({ type: 'text', text: 'old content' });
       expect(fromDb[0]!.content.metadata).toEqual({ initial: true, updated: true });
     });
