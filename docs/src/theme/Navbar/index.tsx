@@ -10,7 +10,7 @@ import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import { type ReactNode } from "react";
 import SearchContainer from "./Search";
 import { Logo } from "./logo";
-import { TabSwitcher } from "./tab-switcher";
+import TabSwitcherVersionedWrapper from "./tab-switcher-versioned-wrapper";
 
 function NavbarContentDesktop() {
   const { i18n } = useDocusaurusContext();
@@ -22,7 +22,7 @@ function NavbarContentDesktop() {
           <Logo />
         </Link>
         <div className="hidden @[1262px]:block">
-          <TabSwitcher />
+          <TabSwitcherVersionedWrapper />
         </div>
         <div className="w-[200px] hidden @[1023px]:block @[1262px]:hidden">
           <MobileDocsDropdown />
