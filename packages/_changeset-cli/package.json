@@ -23,7 +23,7 @@
     "@changesets/types": "^6.1.0",
     "@changesets/write": "^0.4.0",
     "@clack/prompts": "1.0.0-alpha.6",
-    "@inquirer/editor": "^4.2.21",
+    "@inquirer/editor": "^4.2.22",
     "@manypkg/get-packages": "^2.2.2",
     "@manypkg/tools": "^2.1.0",
     "@octokit/rest": "^22.0.1",
@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "^22.10.5",
+    "@types/node": "22.13.17",
     "@types/semver": "^7.7.1",
     "eslint": "^9.37.0",
     "tsx": "^4.19.2",

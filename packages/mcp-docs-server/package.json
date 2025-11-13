@@ -35,21 +35,15 @@
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.17.5",
-    "date-fns": "^4.1.0",
-    "exit-hook": "^4.0.0",
     "jsdom": "^26.1.0",
-    "turndown": "^7.2.1",
-    "uuid": "^11.1.0",
-    "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.24.6"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/jsdom": "^21.1.7",
-    "@types/node": "^20.19.0",
-    "@types/turndown": "^5.0.5",
+    "@types/node": "22.13.17",
     "@wong2/mcp-cli": "^1.10.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",

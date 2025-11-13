@@ -1,4 +1,4 @@
-import { ReadableStream } from 'stream/web';
+import { ReadableStream, WritableStream } from 'stream/web';
 import type { ToolSet } from 'ai-v5';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
