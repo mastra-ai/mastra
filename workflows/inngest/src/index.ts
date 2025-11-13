@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
-import { ReadableStream } from 'node:stream/web';
+import { ReadableStream, WritableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import { AISpanType, wrapMastra } from '@mastra/core/observability';
+import { SpanType, wrapMastra } from '@mastra/core/observability';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
@@ -39,6 +39,7 @@ import type {
   SuspendOptions,
   WorkflowStreamEvent,
   AgentStepOptions,
+  WorkflowEngineType,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import { NonRetriableError, RetryAfterError } from 'inngest';
@@ -135,6 +136,7 @@ export class InngestRun<
       };
       cleanup?: () => void;
       workflowSteps: Record<string, StepWithComponent>;
+      workflowEngineType: WorkflowEngineType;
     },
     inngest: Inngest,
   ) {
@@ -183,13 +185,6 @@ export class InngestRun<
     return runs?.[0];
   }
 
-  async sendEvent(event: string, data: any) {
-    await this.inngest.send({
-      name: `user-event-${event}`,
-      data,
-    });
-  }
-
   async cancel() {
     const storage = this.#mastra?.getStorage();
 
@@ -212,6 +207,7 @@ export class InngestRun<
         snapshot: {
           ...snapshot,
           status: 'canceled' as any,
+          value: snapshot.value,
         },
       });
     }
@@ -254,14 +250,15 @@ export class InngestRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         activePaths: [],
         suspendedPaths: {},
+        activeStepsPath: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 
@@ -590,6 +587,8 @@ export class InngestWorkflow<
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
 
+    this.engineType = 'inngest';
+
     const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
       ([_, value]) => value !== undefined,
     );
@@ -677,6 +676,7 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
           workflowSteps: this.steps,
+          workflowEngineType: this.engineType,
         },
         this.inngest,
       );
@@ -701,6 +701,7 @@ export class InngestWorkflow<
           value: {},
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           waitingPaths: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
@@ -785,7 +786,7 @@ export class InngestWorkflow<
           resume,
           format,
           abortController: new AbortController(),
-          // currentSpan: undefined, // TODO: Pass actual parent AI span from workflow execution context
+          // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
           writableStream: new WritableStream<WorkflowStreamEvent>({
             write(chunk) {
@@ -1231,7 +1232,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     let { duration, fn } = entry;
 
     const sleepSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
         durationMs: duration,
@@ -1348,7 +1349,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     let { date, fn } = entry;
 
     const sleepUntilSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_SLEEP,
+      type: SpanType.WORKFLOW_SLEEP,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
         untilDate: date,
@@ -1435,19 +1436,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
   }
 
-  async executeWaitForEvent({ event, timeout }: { event: string; timeout?: number }): Promise<any> {
-    const eventData = await this.inngestStep.waitForEvent(`user-event-${event}`, {
-      event: `user-event-${event}`,
-      timeout: timeout ?? 5e3,
-    });
-
-    if (eventData === null) {
-      throw 'Timeout waiting for event';
-    }
-
-    return eventData?.data;
-  }
-
   async executeStep({
     step,
     stepResults,
@@ -1477,9 +1465,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const stepAISpan = tracingContext?.currentSpan?.createChildSpan({
+    const stepSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
-      type: AISpanType.WORKFLOW_STEP,
+      type: SpanType.WORKFLOW_STEP,
       input: prevOutput,
       attributes: {
         stepId: step.id,
@@ -1685,7 +1673,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       };
       stepResults: Record<
         string,
-        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
       >;
       executionContext: ExecutionContext;
     };
@@ -1732,7 +1720,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             resumeData: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
             tracingContext: {
-              currentSpan: stepAISpan,
+              currentSpan: stepSpan,
             },
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
@@ -1779,7 +1767,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           };
         } catch (e) {
-          const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } = {
+          const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } = {
             status: 'failed',
             payload: inputData,
             error: e instanceof Error ? e.message : String(e),
@@ -1792,7 +1780,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           execResults = stepFailure;
 
           const fallbackErrorMessage = `Step ${step.id} failed`;
-          stepAISpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
+          stepSpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
           throw new RetryAfterError(execResults.error ?? fallbackErrorMessage, executionContext.retryConfig.delay, {
             cause: execResults,
           });
@@ -1802,6 +1790,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           execResults = {
             status: 'suspended',
             suspendPayload: suspended.payload,
+            ...(execResults.output ? { suspendOutput: execResults.output } : {}),
             payload: inputData,
             suspendedAt: Date.now(),
             startedAt,
@@ -1844,14 +1833,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           });
         }
 
-        stepAISpan?.end({ output: execResults });
+        stepSpan?.end({ output: execResults });
 
         return { result: execResults, executionContext, stepResults };
       });
     } catch (e) {
-      const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } =
+      const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
         e instanceof Error
-          ? (e?.cause as unknown as Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+          ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
           : {
               status: 'failed' as const,
               error: e instanceof Error ? e.message : String(e),
@@ -1882,7 +1871,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             stepId: step.id,
             requestContext,
             disableScorers,
-            tracingContext: { currentSpan: stepAISpan },
+            tracingContext: { currentSpan: stepSpan },
           });
         }
       });
@@ -1935,14 +1924,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resourceId,
           snapshot: {
             runId,
+            status: workflowStatus,
             value: executionContext.state,
             context: stepResults as any,
-            activePaths: [],
+            activePaths: executionContext.executionPath,
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             waitingPaths: {},
             serializedStepGraph,
-            status: workflowStatus,
             result,
             error,
             // @ts-ignore
@@ -1993,7 +1983,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     tracingContext?: TracingContext;
   }): Promise<StepResult<any, any, any, any>> {
     const conditionalSpan = tracingContext?.currentSpan?.createChildSpan({
-      type: AISpanType.WORKFLOW_CONDITIONAL,
+      type: SpanType.WORKFLOW_CONDITIONAL,
       name: `conditional: '${entry.conditions.length} conditions'`,
       input: prevOutput,
       attributes: {
@@ -2008,7 +1998,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         entry.conditions.map((cond, index) =>
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
             const evalSpan = conditionalSpan?.createChildSpan({
-              type: AISpanType.WORKFLOW_CONDITIONAL_EVAL,
+              type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
               name: `condition: '${index}'`,
               input: prevOutput,
               attributes: {
@@ -2114,6 +2104,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, index],
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
@@ -2133,12 +2124,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return result;
       }),
     );
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', suspendPayload: hasSuspended.suspendPayload };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      };
     } else {
       execResults = {
         status: 'success',

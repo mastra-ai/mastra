@@ -3,21 +3,21 @@
  */
 
 import type {
-  AITracing,
-  AISpanType,
+  ObservabilityInstance,
+  SpanType,
   CreateSpanOptions,
   EndSpanOptions,
   UpdateSpanOptions,
   ErrorSpanOptions,
 } from '@mastra/core/observability';
-import { BaseAISpan } from './base';
+import { BaseSpan } from './base';
 
-export class NoOpAISpan<TType extends AISpanType = any> extends BaseAISpan<TType> {
+export class NoOpSpan<TType extends SpanType = any> extends BaseSpan<TType> {
   public id: string;
   public traceId: string;
 
-  constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
-    super(options, aiTracing);
+  constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
+    super(options, observabilityInstance);
     this.id = 'no-op';
     this.traceId = 'no-op-trace';
   }

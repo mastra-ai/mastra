@@ -17,14 +17,12 @@ export const AgentBadgeWrapper = ({
   toolCallId,
   toolApprovalMetadata,
 }: AgentBadgeWrapperProps) => {
-  const { data: memoryMessages } = useAgentMessages({
+  const { data } = useAgentMessages({
     threadId: result?.subAgentThreadId ?? '',
     agentId,
     memory: true,
   });
-  const convertedMessages = memoryMessages?.messages
-    ? (toAISdkV5Messages(memoryMessages.messages) as MastraUIMessage[])
-    : [];
+  const convertedMessages = data?.messages ? (toAISdkV5Messages(data.messages) as MastraUIMessage[]) : [];
   const childMessages = result?.childMessages ?? resolveToChildMessages(convertedMessages);
 
   return (

@@ -146,10 +146,12 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       // Create memory instance with working memory enabled
@@ -244,9 +246,9 @@ describe('Working Memory Tests', () => {
 
       await memory.saveMessages({ messages });
 
-      const remembered = await memory.rememberMessages({
+      const remembered = await memory.recall({
         threadId: thread.id,
-        config: { lastMessages: 10 },
+        perPage: 10,
       });
 
       // Working memory tags should be stripped from the messages
@@ -261,10 +263,12 @@ describe('Working Memory Tests', () => {
       // Create memory instance with working memory disabled
       const disabledMemory = new Memory({
         storage: new LibSQLStore({
+          id: 'disabled-memory-storage',
           url: `file:${dbPath}`,
         }),
         vector: new LibSQLVector({
           connectionUrl: `file:${dbPath}`,
+          id: 'test-vector',
         }),
         embedder: openai.embedding('text-embedding-3-small'),
         options: {
@@ -391,7 +395,7 @@ describe('Working Memory Tests', () => {
         expect(workingMemory).toContain('**Location**: Vancouver Island');
       }
 
-      const history = await memory.query({
+      const history = await memory.recall({
         threadId: thread.id,
         resourceId,
         perPage: 20,
@@ -489,6 +493,7 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
 
@@ -560,10 +565,12 @@ describe('Working Memory Tests', () => {
       beforeEach(async () => {
         const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
         storage = new LibSQLStore({
+          id: 'test-storage',
           url: `file:${dbPath}`,
         });
         vector = new LibSQLVector({
           connectionUrl: `file:${dbPath}`,
+          id: 'test-vector',
         });
 
         memory = new Memory({
@@ -721,10 +728,12 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-jsonschema-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       const jsonSchema: JSONSchema7 = {
@@ -925,10 +934,12 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       // Create memory instance with resource-scoped working memory enabled
@@ -1288,10 +1299,12 @@ describe('Working Memory Tests', () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-thread-working-test-`)), 'test.db');
 
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       // Create memory instance with thread-scoped working memory (explicitly set)

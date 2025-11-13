@@ -42,7 +42,7 @@ export default async function Page(props: { params: Promise<any> }) {
     return notFound();
   }
 
-  const memoryMessages = await mastra.memory?.query({
+  const memoryMessages = await mastra.memory?.recall({
     threadId: id,
   });
 

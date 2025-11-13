@@ -1,4 +1,4 @@
-import type { CoreMessage } from '@internal/ai-sdk-v4/message';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { ModelMessage } from 'ai-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../../error';
 

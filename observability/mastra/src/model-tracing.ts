@@ -9,9 +9,9 @@
  */
 
 import { TransformStream } from 'stream/web';
-import { AISpanType } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type {
-  AISpan,
+  Span,
   EndSpanOptions,
   ErrorSpanOptions,
   TracingContext,
@@ -26,14 +26,14 @@ import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } fro
  * all streaming steps (including after tool calls).
  */
 export class ModelSpanTracker {
-  #modelSpan?: AISpan<AISpanType.MODEL_GENERATION>;
-  #currentStepSpan?: AISpan<AISpanType.MODEL_STEP>;
-  #currentChunkSpan?: AISpan<AISpanType.MODEL_CHUNK>;
+  #modelSpan?: Span<SpanType.MODEL_GENERATION>;
+  #currentStepSpan?: Span<SpanType.MODEL_STEP>;
+  #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
   #accumulator: Record<string, any> = {};
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
 
-  constructor(modelSpan?: AISpan<AISpanType.MODEL_GENERATION>) {
+  constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
   }
 
@@ -50,21 +50,21 @@ export class ModelSpanTracker {
   /**
    * Report an error on the generation span
    */
-  reportGenerationError(options: ErrorSpanOptions<AISpanType.MODEL_GENERATION>): void {
+  reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.error(options);
   }
 
   /**
    * End the generation span
    */
-  endGeneration(options?: EndSpanOptions<AISpanType.MODEL_GENERATION>): void {
+  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.end(options);
   }
 
   /**
    * Update the generation span
    */
-  updateGeneration(options: UpdateSpanOptions<AISpanType.MODEL_GENERATION>): void {
+  updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void {
     this.#modelSpan?.update(options);
   }
 
@@ -74,7 +74,7 @@ export class ModelSpanTracker {
   #startStepSpan(payload?: StepStartPayload) {
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
-      type: AISpanType.MODEL_STEP,
+      type: SpanType.MODEL_STEP,
       attributes: {
         stepIndex: this.#stepIndex,
         ...(payload?.messageId ? { messageId: payload.messageId } : {}),
@@ -131,7 +131,7 @@ export class ModelSpanTracker {
 
     this.#currentChunkSpan = this.#currentStepSpan?.createChildSpan({
       name: `chunk: '${chunkType}'`,
-      type: AISpanType.MODEL_CHUNK,
+      type: SpanType.MODEL_CHUNK,
       attributes: {
         chunkType,
         sequenceNumber: this.#chunkSequence,
@@ -177,7 +177,7 @@ export class ModelSpanTracker {
 
     const span = this.#currentStepSpan?.createEventSpan({
       name: `chunk: '${chunkType}'`,
-      type: AISpanType.MODEL_CHUNK,
+      type: SpanType.MODEL_CHUNK,
       attributes: {
         chunkType,
         sequenceNumber: this.#chunkSequence,

@@ -113,18 +113,6 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Sends an event to a specific workflow run by its ID
-   * @param params - Object containing the runId, event and data
-   * @returns Promise containing a success message
-   */
-  sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${params.runId}/send-event`, {
-      method: 'POST',
-      body: { event: params.event, data: params.data },
-    });
-  }
-
-  /**
    * Creates a new workflow run
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run with methods to control execution
@@ -161,7 +149,7 @@ export class Workflow extends BaseResource {
       step?: string | string[];
       resumeData?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<ReadableStream>;
+    }) => Promise<ReadableStream<StreamVNextChunkType>>;
   }> {
     const searchParams = new URLSearchParams();
 
@@ -631,7 +619,7 @@ export class Workflow extends BaseResource {
     resumeData?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
-  }): Promise<ReadableStream> {
+  }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
     const requestContext = parseClientRequestContext(params.requestContext);

@@ -23,6 +23,7 @@ export const mastra: Mastra = new Mastra({
     daneNewContributor,
   },
   storage: new LibSQLStore({
+    id: 'dane-storage',
     url: ':memory:',
   }),
   workflows: {

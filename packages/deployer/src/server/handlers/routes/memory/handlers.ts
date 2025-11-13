@@ -14,7 +14,6 @@ import {
   createThreadHandler as getOriginalCreateThreadHandler,
   updateThreadHandler as getOriginalUpdateThreadHandler,
   deleteThreadHandler as getOriginalDeleteThreadHandler,
-  getMessagesHandler as getOriginalGetMessagesHandler,
   listMessagesHandler as getOriginalListMessagesHandler,
   getWorkingMemoryHandler as getOriginalGetWorkingMemoryHandler,
   updateWorkingMemoryHandler as getOriginalUpdateWorkingMemoryHandler,
@@ -223,31 +222,10 @@ export async function deleteThreadHandler(c: Context) {
   }
 }
 
-export async function getMessagesHandler(c: Context) {
-  try {
-    const mastra: Mastra = c.get('mastra');
-    const agentId = c.req.query('agentId');
-    const threadId = c.req.param('threadId');
-    const limit = parseLimit(c.req.query('limit'));
-    const requestContext = c.get('requestContext');
-
-    const result = await getOriginalGetMessagesHandler({
-      mastra,
-      agentId,
-      threadId,
-      limit,
-      requestContext,
-    });
-
-    return c.json(result);
-  } catch (error) {
-    return handleError(error, 'Error getting messages');
-  }
-}
-
 export async function listMessagesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
     const resourceId = c.req.query('resourceId');
     const page = parsePage(c.req.query('page'));
@@ -255,9 +233,11 @@ export async function listMessagesHandler(c: Context) {
     const orderBy = parseJsonParam<StorageOrderBy>(c.req.query('orderBy'));
     const include = parseJsonParam<StorageListMessagesInput['include']>(c.req.query('include'));
     const filter = parseJsonParam<StorageListMessagesInput['filter']>(c.req.query('filter'));
+    const requestContext = c.get('requestContext');
 
     const result = await getOriginalListMessagesHandler({
       mastra,
+      agentId,
       threadId,
       resourceId,
       page,
@@ -265,6 +245,7 @@ export async function listMessagesHandler(c: Context) {
       orderBy,
       include,
       filter,
+      requestContext,
     });
 
     return c.json(result);

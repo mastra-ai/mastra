@@ -8,7 +8,6 @@ import { MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   PaginationInfo,
-  StorageGetMessagesArg,
   StorageColumn,
   WorkflowRuns,
   StoragePagination,
@@ -27,6 +26,8 @@ export class LanceStorage extends MastraStorage {
   private lanceClient!: Connection;
   /**
    * Creates a new instance of LanceStorage
+   * @param id The unique identifier for this storage instance
+   * @param name The name for this storage instance
    * @param uri The URI to connect to LanceDB
    * @param options connection options
    *
@@ -34,21 +35,26 @@ export class LanceStorage extends MastraStorage {
    *
    * Connect to a local database
    * ```ts
-   * const store = await LanceStorage.create('/path/to/db');
+   * const store = await LanceStorage.create('my-storage-id', 'MyStorage', '/path/to/db');
    * ```
    *
    * Connect to a LanceDB cloud database
    * ```ts
-   * const store = await LanceStorage.create('db://host:port');
+   * const store = await LanceStorage.create('my-storage-id', 'MyStorage', 'db://host:port');
    * ```
    *
    * Connect to a cloud database
    * ```ts
-   * const store = await LanceStorage.create('s3://bucket/db', { storageOptions: { timeout: '60s' } });
+   * const store = await LanceStorage.create('my-storage-id', 'MyStorage', 's3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
    */
-  public static async create(name: string, uri: string, options?: ConnectionOptions): Promise<LanceStorage> {
-    const instance = new LanceStorage(name);
+  public static async create(
+    id: string,
+    name: string,
+    uri: string,
+    options?: ConnectionOptions,
+  ): Promise<LanceStorage> {
+    const instance = new LanceStorage(id, name);
     try {
       instance.lanceClient = await connect(uri, options);
       const operations = new StoreOperationsLance({ client: instance.lanceClient });
@@ -77,8 +83,8 @@ export class LanceStorage extends MastraStorage {
    * @internal
    * Private constructor to enforce using the create factory method
    */
-  private constructor(name: string) {
-    super({ name });
+  private constructor(id: string, name: string) {
+    super({ id, name });
     const operations = new StoreOperationsLance({ client: this.lanceClient });
 
     this.stores = {
@@ -266,15 +272,6 @@ export class LanceStorage extends MastraStorage {
     return Array.from(allIndices)
       .sort((a, b) => a - b)
       .map(index => records[index]);
-  }
-
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    threadConfig,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy, threadConfig });
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

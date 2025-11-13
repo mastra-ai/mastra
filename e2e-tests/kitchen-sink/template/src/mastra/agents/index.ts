@@ -13,6 +13,7 @@ import { simpleMcpTool } from '../tools';
 const memory = new Memory({
   // ...
   storage: new LibSQLStore({
+    id: 'e2e-libsql-storage',
     url: 'file:../mastra.db',
   }),
 

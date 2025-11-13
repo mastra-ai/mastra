@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
-import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4/message';
-import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4/message';
+import type { UIMessage, CoreMessage, Message } from '@internal/ai-sdk-v4';
+import { appendClientMessage, appendResponseMessages } from '@internal/ai-sdk-v4';
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage, UIMessageWithMetadata } from '../';
 import type { MastraMessageV1 } from '../../../memory';
@@ -3242,7 +3242,7 @@ describe('MessageList', () => {
         resourceId: 'weatherAgent',
       });
 
-      // Step 2: Add memory messages (from rememberMessages)
+      // Step 2: Add memory messages
       const memoryMessagesV2: MastraDBMessage[] = [
         {
           id: 'fbd2f506-90e6-4f52-8ba4-633abe9e8442',

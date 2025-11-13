@@ -1,14 +1,14 @@
 import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4/model';
+import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
-import { AISpanType } from '../../observability';
-import type { AnyAISpan } from '../../observability';
+import { SpanType } from '../../observability';
+import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
@@ -539,7 +539,7 @@ describe('CoreToolBuilder ID Preservation', () => {
 });
 
 describe('Tool Tracing Context Injection', () => {
-  it('should inject tracingContext for Mastra tools when agentAISpan is available', async () => {
+  it('should inject tracingContext for Mastra tools when agentSpan is available', async () => {
     let receivedTracingContext: any = null;
 
     const testTool = createTool({
@@ -560,7 +560,7 @@ describe('Tool Tracing Context Injection', () => {
 
     const mockAgentSpan = {
       createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
-    } as unknown as AnyAISpan;
+    } as unknown as AnySpan;
 
     const builder = new CoreToolBuilder({
       originalTool: testTool,
@@ -584,7 +584,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Verify tool span was created
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
-      type: AISpanType.TOOL_CALL,
+      type: SpanType.TOOL_CALL,
       name: "tool: 'tracing-test-tool'",
       input: { message: 'test' },
       attributes: {
@@ -604,7 +604,7 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-  it('should not inject tracingContext when agentAISpan is not available', async () => {
+  it('should not inject tracingContext when agentSpan is not available', async () => {
     let receivedTracingContext: any = undefined;
 
     const testTool = createTool({
@@ -662,7 +662,7 @@ describe('Tool Tracing Context Injection', () => {
 
     const mockAgentSpan = {
       createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
-    } as unknown as AnyAISpan;
+    } as unknown as AnySpan;
 
     const builder = new CoreToolBuilder({
       originalTool: vercelTool as any,
@@ -685,7 +685,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Verify tool span was created for Vercel tool
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
-      type: AISpanType.TOOL_CALL,
+      type: SpanType.TOOL_CALL,
       name: "tool: 'vercel-tool'",
       input: { input: 'test' },
       attributes: {
@@ -724,7 +724,7 @@ describe('Tool Tracing Context Injection', () => {
 
     const mockAgentSpan = {
       createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
-    } as unknown as AnyAISpan;
+    } as unknown as AnySpan;
 
     const builder = new CoreToolBuilder({
       originalTool: testTool,
@@ -775,7 +775,7 @@ describe('Tool Tracing Context Injection', () => {
 
     const mockAgentSpan = {
       createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
-    } as unknown as AnyAISpan;
+    } as unknown as AnySpan;
 
     const builder = new CoreToolBuilder({
       originalTool: testTool,
@@ -799,7 +799,7 @@ describe('Tool Tracing Context Injection', () => {
 
     // Verify tool span was created with correct toolType attribute
     expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
-      type: AISpanType.TOOL_CALL,
+      type: SpanType.TOOL_CALL,
       name: "tool: 'toolset-tool'",
       input: { message: 'test' },
       attributes: {

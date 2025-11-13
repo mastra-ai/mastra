@@ -5,7 +5,7 @@ import type {
   SharedV2ProviderMetadata,
   LanguageModelV2Source,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4/model';
+import type { LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type {
   StepResult,
   ModelMessage,

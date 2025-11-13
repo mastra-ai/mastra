@@ -239,7 +239,7 @@ async function formatAgentList({
   }));
 
   return {
-    id,
+    id: agent.id || id,
     name: agent.name,
     description,
     instructions,
@@ -268,7 +268,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   let agent;
 
   try {
-    agent = mastra.getAgent(agentId);
+    agent = mastra.getAgentById(agentId);
   } catch (error) {
     logger.debug('Error getting agent from mastra, searching agents for agent', error);
   }
@@ -293,7 +293,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   }
 
   if (!agent) {
-    throw new HTTPException(404, { message: `Agent with name ${agentId} not found` });
+    throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
 
   return agent;
@@ -313,12 +313,13 @@ export async function listAgentsHandler({
       }),
     );
 
-    const serializedAgents = serializedAgentsMap.reduce<
-      Record<string, Omit<(typeof serializedAgentsMap)[number], 'id'>>
-    >((acc, { id, ...rest }) => {
-      acc[id] = rest;
-      return acc;
-    }, {});
+    const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+      (acc, { id, ...rest }) => {
+        acc[id] = { id, ...rest };
+        return acc;
+      },
+      {},
+    );
 
     return serializedAgents;
   } catch (error) {

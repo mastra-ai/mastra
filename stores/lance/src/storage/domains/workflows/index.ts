@@ -95,11 +95,13 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         createdAt = now;
       }
 
+      const { status, value, ...rest } = snapshot;
+
       const record = {
         workflow_name: workflowName,
         run_id: runId,
         resourceId,
-        snapshot: JSON.stringify(snapshot),
+        snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
         createdAt,
         updatedAt: now,
       };
@@ -187,6 +189,17 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
 
       if (args?.workflowName) {
         conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+      }
+
+      if (args?.status) {
+        const escapedStatus = args.status
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "''")
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
+        // Note: Using LIKE pattern since LanceDB doesn't support JSON extraction on string columns
+        // The pattern ensures we match the workflow status (which appears before "value") and not step status
+        conditions.push(`\`snapshot\` LIKE '%"status":"${escapedStatus}","value"%'`);
       }
 
       if (args?.resourceId) {

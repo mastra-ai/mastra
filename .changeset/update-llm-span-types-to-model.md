@@ -8,7 +8,7 @@
 
 Rename LLM span types and attributes to use Model prefix
 
-BREAKING CHANGE: This release renames AI tracing span types and attribute interfaces to use the "Model" prefix instead of "LLM":
+BREAKING CHANGE: This release renames tracing span types and attribute interfaces to use the "Model" prefix instead of "LLM":
 
 - `AISpanType.LLM_GENERATION` → `AISpanType.MODEL_GENERATION`
 - `AISpanType.LLM_STEP` → `AISpanType.MODEL_STEP`

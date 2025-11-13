@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { pdfFetcherTool } from '../tools/download-pdf-tool';
 import { generateQuestionsFromTextTool } from '../tools/generate-questions-from-text-tool';
@@ -8,6 +7,7 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'pdf-question-agent-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });
@@ -63,7 +63,7 @@ When successful, provide:
 
 Always be helpful and provide clear feedback about the process and results.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     pdfFetcherTool,
     generateQuestionsFromTextTool,

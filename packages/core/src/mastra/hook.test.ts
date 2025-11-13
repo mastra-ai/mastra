@@ -269,7 +269,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-abc',
           isValid: true,
           metadata: { sessionId: 'session-789', extra: 'meta' },
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [mockExporter],
           },
         },
@@ -317,7 +317,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-zzz',
           isValid: true,
           metadata: { key: 'value' },
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [exporterA, exporterB],
           },
         },
@@ -369,7 +369,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-def',
           isValid: true,
           metadata: {},
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [exporterWithMethod, exporterWithoutMethod],
           },
         },
@@ -419,7 +419,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-ghi',
           isValid: true,
           metadata: { test: 'data' },
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [mockExporter],
           },
         },

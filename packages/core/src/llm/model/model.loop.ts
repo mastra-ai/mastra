@@ -17,7 +17,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
-import { AISpanType } from '../../observability';
+import { SpanType } from '../../observability';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ModelManagerModelConfig } from '../../stream/types';
@@ -181,7 +181,7 @@ export class MastraLLMVNext extends MastraBase {
 
     const modelSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages: [...messageList.getSystemMessages(), ...messages],
       },
