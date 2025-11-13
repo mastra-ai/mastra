@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { SPAN_SCHEMA, ObservabilityStorageBase, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -10,27 +10,71 @@ import type {
   UpdateSpanRecord,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
+import { PGDomainBase } from '../base';
+import type { PGDomainConfig } from '../base';
+import { IndexManagementPG } from '../operations';
 import type { StoreOperationsPG } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
-export class ObservabilityPG extends ObservabilityStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema?: string;
+export class ObservabilityPG extends ObservabilityStorageBase {
+  private domainBase: PGDomainBase;
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema?: string;
-  }) {
+  constructor(opts: PGDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    this.domainBase = new PGDomainBase(opts);
+  }
+
+  public get client(): IDatabase<{}> {
+    return this.domainBase['client'];
+  }
+
+  private get schema(): string | undefined {
+    return this.domainBase['schema'];
+  }
+
+  private get operations(): StoreOperationsPG {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+
+    // Create indexes for observability domain
+    const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    try {
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['traceId', 'startedAt DESC'],
+      });
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['parentSpanId', 'startedAt DESC'],
+      });
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+        table: TABLE_SPANS,
+        columns: ['name'],
+      });
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['spanType', 'startedAt DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability indexes:', error);
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_SPANS });
   }
 
   public override get tracingStrategy(): {

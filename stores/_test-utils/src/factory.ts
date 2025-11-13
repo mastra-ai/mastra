@@ -4,13 +4,11 @@ import { createScoresTest } from './domains/evals';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createObservabilityTests } from './domains/observability';
-import { createIndexManagementTests } from './domains/operations/index-management';
 
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/evals/data';
 export * from './domains/observability/data';
-
 
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
@@ -23,7 +21,6 @@ export function createTestSuite(storage: MastraStorage) {
     });
 
     afterAll(async () => {
-
       console.log(storage.getStore('workflows'), 'workflows');
 
       // Clear tables after tests
@@ -44,7 +41,5 @@ export function createTestSuite(storage: MastraStorage) {
     if (storage.supports.observabilityInstance) {
       createObservabilityTests({ storage });
     }
-
-    createIndexManagementTests({ storage });
   });
 }

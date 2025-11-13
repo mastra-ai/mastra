@@ -3,12 +3,13 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -18,6 +19,9 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
+import { PGDomainBase } from '../base';
+import type { PGDomainConfig } from '../base';
+import { IndexManagementPG } from '../operations';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -33,24 +37,67 @@ type MessageRowFromDB = {
   resourceId: string;
 };
 
-export class MemoryPG extends MemoryStorage {
-  private client: IDatabase<{}>;
-  private schema: string;
-  private operations: StoreOperationsPG;
+export class MemoryPG extends MemoryStorageBase {
+  private domainBase: PGDomainBase;
 
-  constructor({
-    client,
-    schema,
-    operations,
-  }: {
-    client: IDatabase<{}>;
-    schema: string;
-    operations: StoreOperationsPG;
-  }) {
+  constructor(opts: PGDomainConfig) {
     super();
-    this.client = client;
-    this.schema = schema;
-    this.operations = operations;
+    this.domainBase = new PGDomainBase(opts);
+  }
+
+  private get client(): IDatabase<{}> {
+    return this.domainBase['client'];
+  }
+
+  private get schema(): string {
+    return this.domainBase['schema'];
+  }
+
+  private get operations(): StoreOperationsPG {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+
+    await this.operations.alterTable?.({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+
+    // Create indexes for memory domain
+    const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    try {
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'createdAt DESC'],
+      });
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'createdAt DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create memory indexes:', error);
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearTable({ tableName: TABLE_THREADS }),
+      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
+      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   /**

@@ -5,7 +5,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 
 export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
+  console.log(storage, 'storage');
   const workflowStore = storage.getStore('workflows');
+  console.log(workflowStore, 'workflowStore');
   if (!workflowStore) {
     throw new Error('Workflow store not found');
   }
@@ -137,6 +139,8 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         fromDate: yesterday,
         toDate: now,
       });
+
+      console.log(runs, 'runs');
 
       expect(runs).toHaveLength(2);
       const wfName3Run = runs.find(r => r.workflowName === workflowName3);

@@ -1,8 +1,10 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
+import { PGDomainBase } from '../base';
+import type { PGDomainConfig } from '../base';
 import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
@@ -26,24 +28,45 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   };
 }
 
-export class WorkflowsPG extends WorkflowsStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema: string;
+export class WorkflowsPG extends WorkflowsStorageBase {
+  private domainBase: PGDomainBase;
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema: string;
-  }) {
+  constructor(opts: PGDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    this.domainBase = new PGDomainBase(opts);
+  }
+
+  public get client(): IDatabase<{}> {
+    return this.domainBase['client'];
+  }
+
+  private get schema(): string {
+    return this.domainBase['schema'];
+  }
+
+  private get operations(): StoreOperationsPG {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+
+    await this.operations.alterTable?.({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -88,11 +111,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
       const now = new Date().toISOString();
@@ -101,7 +128,14 @@ export class WorkflowsPG extends WorkflowsStorage {
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowId, runId, resourceId, JSON.stringify(snapshot), now, now],
+        [
+          workflowId,
+          runId,
+          resourceId,
+          JSON.stringify(snapshot),
+          createdAt ? createdAt.toISOString() : now,
+          updatedAt ? updatedAt.toISOString() : now,
+        ],
       );
     } catch (error) {
       throw new MastraError(
@@ -141,13 +175,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowId,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const conditions: string[] = [];
       const values: any[] = [];
@@ -159,9 +187,9 @@ export class WorkflowsPG extends WorkflowsStorage {
         paramIndex++;
       }
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push(`workflow_name = $${paramIndex}`);
-        values.push(workflowName);
+        values.push(workflowId);
         paramIndex++;
       }
 
@@ -191,7 +219,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             runId,
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
           },
         },
         error,
@@ -213,9 +241,9 @@ export class WorkflowsPG extends WorkflowsStorage {
       const values: any[] = [];
       let paramIndex = 1;
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push(`workflow_name = $${paramIndex}`);
-        values.push(workflowName);
+        values.push(workflowId);
         paramIndex++;
       }
 
@@ -238,13 +266,13 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       if (fromDate) {
         conditions.push(`"createdAt" >= $${paramIndex}`);
-        values.push(fromDate);
+        values.push(fromDate instanceof Date ? fromDate.toISOString() : fromDate);
         paramIndex++;
       }
 
       if (toDate) {
         conditions.push(`"createdAt" <= $${paramIndex}`);
-        values.push(toDate);
+        values.push(toDate instanceof Date ? toDate.toISOString() : toDate);
         paramIndex++;
       }
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -288,7 +316,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            workflowName: workflowName || 'all',
+            workflowId: workflowId || 'all',
           },
         },
         error,

@@ -13,7 +13,8 @@ import {
 import type { IDatabase } from 'pg-promise';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
-import { IndexManagementPG, type StoreOperationsPG } from '../operations';
+import { IndexManagementPG } from '../operations';
+import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
