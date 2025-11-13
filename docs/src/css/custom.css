@@ -540,7 +540,7 @@ pre * {
 }
 
 code {
-  --bg-color: : var(--mastra-surface-5);
+  --bg-color: var(--mastra-surface-5);
   font-family: var(--ifm-font-family-monospace);
   border-radius: 0.375rem;
   font-size: 0.875rem;
