@@ -242,7 +242,7 @@
     },
     {
       "source": "/:path(ja)?/docs/integrations",
-      "destination": "/:path/docs/tools-mcp/overview",
+      "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -1131,7 +1131,7 @@
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/tools-mcp/runtime-context",
+      "source": "/:path(ja)?/docs/mcp/runtime-context",
       "destination": "/:path/docs/server-db/runtime-context",
       "permanent": true
     },
@@ -1202,7 +1202,7 @@
     },
     {
       "source": "/:path(ja)?/docs/tools",
-      "destination": "/:path/docs/tools-mcp/overview",
+      "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
     {
@@ -1356,18 +1356,18 @@
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/tools-mcp/mcp-overview",
-      "destination": "/:path/docs/tools-mcp/overview",
+      "source": "/:path(ja)?/docs/mcp/mcp-overview",
+      "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/tools-mcp/advanced-usage",
-      "destination": "/:path/docs/tools-mcp/overview",
+      "source": "/:path(ja)?/docs/mcp/advanced-usage",
+      "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
     {
       "source": "/:path(ja)?/examples/agents/deploying-mcp-server",
-      "destination": "/:path/docs/tools-mcp/deploying-mcp-server",
+      "destination": "/:path/docs/mcp/publishing-mcp-server",
       "permanent": true
     },
     {
@@ -1378,6 +1378,21 @@
     {
       "source": "/:path(ja)?/reference/core/listAgents",
       "destination": "/:path/reference/core/getAgents",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/overview",
+      "destination": "/:path/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/tools-mcp/deploying-mcp-server",
+      "destination": "/:path/docs/mcp/publishing-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/docs/mcp/deploying-mcp-server",
+      "destination": "/:path/docs/mcp/publishing-mcp-server",
       "permanent": true
     }
   ]

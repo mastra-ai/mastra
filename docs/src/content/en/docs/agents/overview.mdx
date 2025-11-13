@@ -245,10 +245,11 @@ curl -X POST http://localhost:4111/api/agents/testAgent/generate \
 **Example output**
 
 ```text
-Well, if I had to choose, I'd say the Gryffindor common room.
-It's where I've spent some of my best moments with Ron and Hermione.
-The warm fire, the cozy armchairs, and the sense of camaraderie make it feel like home.
-Plus, it's where we plan all our adventures!
+1. What time do you plan to start your day?
+2. Do you have any specific tasks or appointments scheduled for today?
+3. Are there any personal goals or activities you want to include (e.g., exercise, reading, hobbies)?
+4. How much time do you want to allocate for work versus personal time?
+5. Do you have any deadlines or priorities that need to be addressed?
 ```
 
 ## Generating responses
@@ -430,7 +431,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Using Tools](./using-tools) for more information.
+> See [Using Tools](/docs/agents/using-tools) for more information.
 
 ## Using `RuntimeContext`
 
@@ -457,11 +458,11 @@ export const testAgent = new Agent({
 
 ## Using `maxSteps`
 
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 5, but can be increased:
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate("Help me organize my day", {
-  maxSteps: 5,
+  maxSteps: 10,
 });
 
 console.log(response.text);
@@ -506,15 +507,12 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview) page.
-
 ## Testing with Studio
 
 Use [Studio](/docs/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
-- [Using Tools](./using-tools)
-- [Agent Memory](./agent-memory)
-- [Runtime Context](/examples/agents/runtime-context)
-- [Calling Agents](/examples/agents/calling-agents)
+- [Using Tools](/docs/agents/using-tools)
+- [Agent Memory](/docs/agents/agent-memory)
+- [Runtime Context](/docs/server-db/runtime-context)

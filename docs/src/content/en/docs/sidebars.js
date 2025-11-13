@@ -161,20 +161,20 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {
           type: "doc",
-          id: "tools-mcp/overview",
-          key: "tools-mcp.overview",
+          id: "mcp/overview",
+          key: "mcp.overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "tools-mcp/deploying-mcp-server",
-          key: "tools-mcp.deploying-mcp-server",
-          label: "Deploying an MCP Server",
+          id: "mcp/publishing-mcp-server",
+          key: "mcp.publishing-mcp-server",
+          label: "Publishing an MCP Server",
         },
       ],
     },
