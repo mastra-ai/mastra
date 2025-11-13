@@ -1,5 +1,6 @@
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { DevBundler } from './DevBundler';
 
 // Mock process.exit and process.argv to avoid CLI triggering
 const mockExit = vi.hoisted(() => vi.fn());
@@ -40,9 +41,6 @@ vi.mock('commander', () => {
     Command: CommandMock,
   };
 });
-
-import { DevBundler } from './DevBundler';
-
 // Don't reference top-level variables in mock definitions
 vi.mock('@mastra/deployer/build', () => {
   return {
