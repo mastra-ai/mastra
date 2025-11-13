@@ -6,9 +6,8 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_TRACES,
-  TABLE_EVALS,
   TABLE_SCORERS,
-  TABLE_AI_SPANS,
+  TABLE_SPANS,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -496,6 +495,19 @@ export class StoreOperationsMSSQL extends StoreOperations {
 
     // If the column is JSONB, stringify the value
     if (columnSchema?.type === 'jsonb') {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+          try {
+            JSON.parse(trimmed);
+            return trimmed;
+          } catch {}
+        }
+        return JSON.stringify(value);
+      }
+      if (typeof value === 'bigint') {
+        return value.toString();
+      }
       return JSON.stringify(value);
     }
 
@@ -1053,34 +1065,29 @@ export class StoreOperationsMSSQL extends StoreOperations {
         columns: ['name', 'seq_id DESC'],
       },
       {
-        name: `${schemaPrefix}mastra_evals_agent_name_seqid_idx`,
-        table: TABLE_EVALS,
-        columns: ['agent_name', 'seq_id DESC'],
-      },
-      {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'seq_id DESC'],
       },
-      // AI Spans indexes for optimal trace querying
+      // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['name'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       },
     ];

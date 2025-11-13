@@ -507,11 +507,16 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
       // Mark streaming parts as done
       const parts = lastMessage.parts.map(part => {
-        if (part.type === 'text' && part.state === 'streaming') {
-          return { ...part, state: 'done' as const };
-        }
-        if (part.type === 'reasoning' && part.state === 'streaming') {
-          return { ...part, state: 'done' as const };
+        if (
+          typeof part === 'object' &&
+          part !== null &&
+          'type' in part &&
+          'state' in part &&
+          part.state === 'streaming'
+        ) {
+          if (part.type === 'text' || part.type === 'reasoning') {
+            return { ...part, state: 'done' as const };
+          }
         }
         return part;
       });

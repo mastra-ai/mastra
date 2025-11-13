@@ -1,6 +1,6 @@
-# @mastra/arize - OpenTelemetry + OpenInference AI Tracing Exporter
+# @mastra/arize - OpenTelemetry + OpenInference Tracing Exporter
 
-Export Mastra AI traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
+Export Mastra traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
 
 For more information on OpenInference, see the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) specification.
 
@@ -18,7 +18,7 @@ You can add `ArizeExporter` to your Mastra configuration to export traces to Ari
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 // required, ends in /v1/traces
 const ENDPOINT = process.env.PHOENIX_ENDPOINT!;
@@ -30,7 +30,7 @@ const PROJECT_NAME = process.env.PHOENIX_PROJECT_NAME || 'mastra-service';
 const mastra = new Mastra({
   ...,
   observability: {
-    // Enables ArizeExporter for AI tracing
+    // Enables ArizeExporter for tracing
     configs: {
       arize: {
         serviceName: PROJECT_NAME,
@@ -62,7 +62,7 @@ const mastra = new Mastra({
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 // required space destination for trace exports
 const SPACE_ID = process.env.ARIZE_SPACE_ID!;
@@ -99,7 +99,7 @@ You can configure the `ArizeExporter` to tweak the underlying OpenTelemetry `Bat
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 const mastra = new Mastra({
   ...,

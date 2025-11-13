@@ -1,11 +1,12 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Txt } from '@/ds/components/Txt';
 
-import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { useWorkflowRunExecutionResult } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
 import { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { WorkflowRunState } from '@mastra/core/workflows';
 
 export interface WorkflowRunDetailProps
   extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId' | 'observeWorkflowStream'> {
@@ -28,7 +29,7 @@ export const WorkflowRunDetail = ({
   observeWorkflowStream,
   ...triggerProps
 }: WorkflowRunDetailProps) => {
-  const { isLoading, data: runs } = useWorkflowRuns(workflowId);
+  const { isLoading, data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId, runId ?? '');
 
   if (isLoading) {
     return (
@@ -38,9 +39,7 @@ export const WorkflowRunDetail = ({
     );
   }
 
-  const actualRuns = runs?.runs || [];
-
-  if (actualRuns.length === 0) {
+  if (!runExecutionResult || !runId) {
     return (
       <div className="p-4">
         <Txt variant="ui-md" className="text-icon6 text-center">
@@ -50,11 +49,16 @@ export const WorkflowRunDetail = ({
     );
   }
 
-  const run = actualRuns.find(run => run.runId === runId);
-  const runSnapshot = run?.snapshot;
-
-  const runResult =
-    runSnapshot && typeof runSnapshot === 'object' ? convertWorkflowRunStateToStreamResult(runSnapshot) : null;
+  const runResult = convertWorkflowRunStateToStreamResult({
+    context: {
+      input: runExecutionResult.payload,
+      ...runExecutionResult.steps,
+    } as any,
+    status: runExecutionResult.status,
+    result: runExecutionResult.result,
+    error: runExecutionResult.error,
+    runId,
+  } as WorkflowRunState);
   const runStatus = runResult?.status;
 
   if (runId) {

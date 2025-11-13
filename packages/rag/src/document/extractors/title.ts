@@ -116,18 +116,19 @@ export class TitleExtractor extends BaseExtractor {
 
       if (this.llm.specificationVersion === 'v2') {
         const miniAgent = new Agent({
+          id: 'title-extractor',
           model: this.llm,
           name: 'title-extractor',
           instructions:
             'You are a title extractor. You are given a list of nodes and you need to extract the title from the nodes.',
         });
-        const result = await miniAgent.generate(
-          [{ role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) }],
-          { format: 'mastra' },
-        );
+        const result = await miniAgent.generate([
+          { role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) },
+        ]);
         title = result.text;
       } else {
         const miniAgent = new Agent({
+          id: 'title-extractor-v1',
           model: this.llm,
           name: 'title-extractor',
           instructions:
@@ -151,6 +152,7 @@ export class TitleExtractor extends BaseExtractor {
 
   private async getTitlesCandidates(nodes: BaseNode[]): Promise<string[]> {
     const miniAgent = new Agent({
+      id: 'titles-candidates-extractor',
       model: this.llm,
       name: 'titles-candidates-extractor',
       instructions:
@@ -160,10 +162,9 @@ export class TitleExtractor extends BaseExtractor {
     const titleJobs = nodes.map(async node => {
       let completion: string;
       if (this.llm.specificationVersion === 'v2') {
-        const result = await miniAgent.generate(
-          [{ role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) }],
-          { format: 'mastra' },
-        );
+        const result = await miniAgent.generate([
+          { role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) },
+        ]);
         completion = result.text;
       } else {
         const result = await miniAgent.generateLegacy([

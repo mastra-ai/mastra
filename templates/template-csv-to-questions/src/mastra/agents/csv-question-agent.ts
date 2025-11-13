@@ -8,11 +8,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'csv-question-agent-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });
 
 export const csvQuestionAgent = new Agent({
+  id: 'csv-question-agent',
   name: 'Generate questions from CSV agent',
   description: 'An agent that can download CSV files, generate summaries, and create questions from CSV content',
   instructions: `

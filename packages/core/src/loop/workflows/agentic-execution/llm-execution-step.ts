@@ -416,6 +416,11 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
           if (attempt > maxRetries) {
             break;
           }
+
+          // Add exponential backoff before retrying to avoid hammering the API
+          // This helps with rate limiting and gives transient failures time to recover
+          const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 1s, 2s, 4s, 8s, max 10s
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
     }
@@ -703,14 +708,14 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
 
       if (toolCalls.length > 0) {
         const assistantContent = [
-          ...(toolCalls.map(toolCall => {
+          ...toolCalls.map(toolCall => {
             return {
-              type: 'tool-call',
+              type: 'tool-call' as const,
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               args: toolCall.args,
             };
-          }) as any),
+          }),
         ];
 
         messageList.add(

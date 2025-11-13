@@ -2,15 +2,15 @@
  * Tests for span hierarchy and parent-child relationships
  */
 
-import { AISpanType } from '@mastra/core/ai-tracing';
+import { SpanType } from '@mastra/core/observability';
 import type {
-  ExportedAISpan,
+  ExportedSpan,
   AgentRunAttributes,
   ModelGenerationAttributes,
   ToolCallAttributes,
   WorkflowRunAttributes,
   WorkflowStepAttributes,
-} from '@mastra/core/ai-tracing';
+} from '@mastra/core/observability';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SpanConverter } from './span-converter.js';
 
@@ -23,11 +23,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
 
   describe('Parent Span ID Preservation', () => {
     it('should preserve parentSpanId from Mastra span', () => {
-      const rootSpan: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const rootSpan: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'root-span',
         traceId: 'trace-1',
         name: 'agent-run',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -38,11 +38,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         } as AgentRunAttributes,
       };
 
-      const childSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const childSpan: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'child-span',
         traceId: 'trace-1',
         name: 'llm-gen',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -61,11 +61,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
     });
 
     it('should handle multi-level hierarchy', () => {
-      const rootSpan: ExportedAISpan<AISpanType.WORKFLOW_RUN> = {
+      const rootSpan: ExportedSpan<SpanType.WORKFLOW_RUN> = {
         id: 'workflow-root',
         traceId: 'trace-1',
         name: 'workflow',
-        type: AISpanType.WORKFLOW_RUN,
+        type: SpanType.WORKFLOW_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -76,11 +76,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         } as WorkflowRunAttributes,
       };
 
-      const stepSpan: ExportedAISpan<AISpanType.WORKFLOW_STEP> = {
+      const stepSpan: ExportedSpan<SpanType.WORKFLOW_STEP> = {
         id: 'step-1',
         traceId: 'trace-1',
         name: 'step',
-        type: AISpanType.WORKFLOW_STEP,
+        type: SpanType.WORKFLOW_STEP,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -91,11 +91,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         } as WorkflowStepAttributes,
       };
 
-      const llmSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const llmSpan: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'llm-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -106,11 +106,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
         } as ModelGenerationAttributes,
       };
 
-      const toolSpan: ExportedAISpan<AISpanType.TOOL_CALL> = {
+      const toolSpan: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'tool-1',
         traceId: 'trace-1',
         name: 'tool',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -138,12 +138,12 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
     it('should maintain trace ID across all spans', () => {
       const traceId = '32-char-trace-id-for-otel-compat';
 
-      const spans: ExportedAISpan<any>[] = [
+      const spans: ExportedSpan<any>[] = [
         {
           id: 'span-1',
           traceId,
           name: 'agent',
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
@@ -155,7 +155,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'span-2',
           traceId,
           name: 'llm',
-          type: AISpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_GENERATION,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
@@ -167,7 +167,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'span-3',
           traceId,
           name: 'tool',
-          type: AISpanType.TOOL_CALL,
+          type: SpanType.TOOL_CALL,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
@@ -191,11 +191,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
     });
 
     it('should preserve span IDs', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'unique-span-id-123',
         traceId: 'trace-abc',
         name: 'agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -214,13 +214,13 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
   describe('Complex Agent Execution Hierarchy', () => {
     it('should handle typical agent execution with tools and LLM calls', () => {
       const baseTime = new Date();
-      const spans: ExportedAISpan<any>[] = [
+      const spans: ExportedSpan<any>[] = [
         // Root agent span
         {
           id: 'agent-1',
           traceId: 'trace-1',
           name: 'agent-run',
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           startTime: baseTime,
           endTime: new Date(baseTime.getTime() + 10000),
           isEvent: false,
@@ -236,7 +236,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'llm-1',
           traceId: 'trace-1',
           name: 'llm-planning',
-          type: AISpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_GENERATION,
           startTime: new Date(baseTime.getTime() + 100),
           endTime: new Date(baseTime.getTime() + 1100),
           isEvent: false,
@@ -252,7 +252,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'tool-1',
           traceId: 'trace-1',
           name: 'search-kb',
-          type: AISpanType.TOOL_CALL,
+          type: SpanType.TOOL_CALL,
           startTime: new Date(baseTime.getTime() + 1200),
           endTime: new Date(baseTime.getTime() + 2200),
           isEvent: false,
@@ -268,7 +268,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
           id: 'llm-2',
           traceId: 'trace-1',
           name: 'llm-response',
-          type: AISpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_GENERATION,
           startTime: new Date(baseTime.getTime() + 2300),
           endTime: new Date(baseTime.getTime() + 3300),
           isEvent: false,
@@ -304,11 +304,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
 
   describe('Orphaned Spans', () => {
     it('should handle spans with non-existent parent IDs', () => {
-      const span: ExportedAISpan<AISpanType.TOOL_CALL> = {
+      const span: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'orphan-span',
         traceId: 'trace-1',
         name: 'tool',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -329,11 +329,11 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
 
   describe('Parallel Execution', () => {
     it('should handle multiple children of the same parent', () => {
-      const rootSpan: ExportedAISpan<AISpanType.WORKFLOW_RUN> = {
+      const rootSpan: ExportedSpan<SpanType.WORKFLOW_RUN> = {
         id: 'workflow-1',
         traceId: 'trace-1',
         name: 'workflow',
-        type: AISpanType.WORKFLOW_RUN,
+        type: SpanType.WORKFLOW_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -351,7 +351,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
             id: stepId,
             traceId: 'trace-1',
             name: stepId,
-            type: AISpanType.WORKFLOW_STEP,
+            type: SpanType.WORKFLOW_STEP,
             startTime: new Date(),
             endTime: new Date(),
             isEvent: false,
@@ -360,7 +360,7 @@ describe('Span Hierarchy and Parent-Child Relationships', () => {
             attributes: {
               stepId,
             } as WorkflowStepAttributes,
-          }) as ExportedAISpan<AISpanType.WORKFLOW_STEP>,
+          }) as ExportedSpan<SpanType.WORKFLOW_STEP>,
       );
 
       const rootResult = converter.convertSpan(rootSpan);

@@ -1,5 +1,5 @@
 ---
-title: "Error Handling | Workflows | Mastra Docs"
+title: "Error Handling | Workflows"
 description: "Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring."
 ---
 
@@ -163,25 +163,6 @@ export const testWorkflow = createWorkflow({...})
   .commit();
 ```
 
-## Monitor errors with `watch()`
-
-You can monitor workflows for errors using the `watch` method:
-
-```typescript {11} title="src/test-workflow.ts" showLineNumbers copy
-import { mastra } from "../src/mastra";
-
-const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
-
-run.watch((event) => {
-  const {
-    payload: { currentStep },
-  } = event;
-
-  console.log(currentStep?.payload?.status);
-});
-```
-
 ## Monitor errors with `stream()`
 
 You can monitor workflows for errors using `stream`:
@@ -191,7 +172,7 @@ import { mastra } from "../src/mastra";
 
 const workflow = mastra.getWorkflow("testWorkflow");
 
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const stream = await run.stream({
   inputData: {
@@ -206,6 +187,6 @@ for await (const chunk of stream.stream) {
 
 ## Related
 
-- [Control Flow](./control-flow)
-- [Conditional Branching](./control-flow#conditional-logic-with-branch)
-- [Running Workflows](/examples/workflows_legacy/creating-a-workflow)
+- [Control Flow](/docs/v1/workflows/control-flow)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)

@@ -1,11 +1,11 @@
 ---
-title: "Reference: Mastra Client SDK | Client SDK | Mastra Docs"
+title: "Reference: Mastra Client SDK | Client SDK"
 description: Learn how to interact with Mastra using the client-js SDK.
 ---
 
 # Mastra Client SDK
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/deployment/server-deployment) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/deployment/building-mastra) from your client environment.
 
 ## Usage example
 
@@ -74,7 +74,7 @@ export const mastraClient = new MastraClient({
 <PropertiesTable
   content={[
     {
-      name: "getAgents()",
+      name: "listAgents()",
       type: "Promise<Record<string, GetAgentResponse>>",
       description: "Returns all available agent instances.",
     },
@@ -95,8 +95,8 @@ export const mastraClient = new MastraClient({
       description: "Creates a new memory thread with the given parameters.",
     },
     {
-      name: "getMemoryThread(threadId)",
-      type: "Promise<MemoryThread>",
+      name: "getMemoryThread({ threadId, agentId })",
+      type: "MemoryThread",
       description: "Fetches a specific memory thread by ID.",
     },
     {
@@ -110,7 +110,7 @@ export const mastraClient = new MastraClient({
       description: "Returns the current status of the memory system.",
     },
     {
-      name: "getTools()",
+      name: "listTools()",
       type: "Record<string, Tool>",
       description: "Returns all available tools.",
     },
@@ -120,7 +120,7 @@ export const mastraClient = new MastraClient({
       description: "Retrieves a specific tool instance by ID.",
     },
     {
-      name: "getWorkflows()",
+      name: "listWorkflows()",
       type: "Record<string, Workflow>",
       description: "Returns all available workflow instances.",
     },
@@ -135,7 +135,7 @@ export const mastraClient = new MastraClient({
       description: "Returns a vector store instance by name.",
     },
     {
-      name: "getLogs(params)",
+      name: "listLogs(params)",
       type: "Promise<LogEntry[]>",
       description: "Fetches system logs matching the provided filters.",
     },
@@ -145,21 +145,21 @@ export const mastraClient = new MastraClient({
       description: "Retrieves a specific log entry by ID or filter.",
     },
     {
-      name: "getLogTransports()",
+      name: "listLogTransports()",
       type: "string[]",
       description: "Returns the list of configured log transport types.",
     },
     {
-      name: "getAITrace(traceId)",
-      type: "Promise<AITraceRecord>",
+      name: "getTrace(traceId)",
+      type: "Promise<TraceRecord>",
       description:
-        "Retrieves a specific AI trace by ID, including all its spans and details.",
+        "Retrieves a specific trace by ID, including all its spans and details.",
     },
     {
-      name: "getAITraces(params)",
-      type: "Promise<GetAITracesResponse>",
+      name: "getTraces(params)",
+      type: "Promise<GetTracesResponse>",
       description:
-        "Retrieves paginated list of AI trace root spans with optional filtering. Use getAITrace() to get complete traces with all spans.",
+        "Retrieves paginated list of trace root spans with optional filtering. Use getTrace() to get complete traces with all spans.",
     },
   ]}
 />

@@ -1,4 +1,4 @@
-import type { ToolCallOptions, ProviderDefinedTool } from '@internal/external-types';
+import type { ProviderDefinedTool, ToolExecutionOptions } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
@@ -9,12 +9,11 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
-import { AISpanType, wrapMastra } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { RuntimeContext } from '../../runtime-context';
+import { SpanType, wrapMastra } from '../../observability';
+import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
@@ -103,18 +102,54 @@ export class CoreToolBuilder extends MastraBase {
       typeof tool.id === 'string' &&
       tool.id.includes('.')
     ) {
-      const parameters = this.getParameters();
-      const outputSchema = this.getOutputSchema();
+      // Get schema directly from provider-defined tool (v4 uses parameters, v5 uses inputSchema)
+      let parameters: unknown =
+        'parameters' in tool ? tool.parameters : 'inputSchema' in tool ? (tool as any).inputSchema : undefined;
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof parameters === 'function') {
+        parameters = parameters();
+      }
+
+      // Get output schema directly from provider-defined tool
+      let outputSchema: unknown = 'outputSchema' in tool ? (tool as any).outputSchema : undefined;
+
+      // If schema is a function, call it to get the actual schema
+      if (typeof outputSchema === 'function') {
+        outputSchema = outputSchema();
+      }
+
+      // Convert parameters to AI SDK Schema format
+      let processedParameters;
+      if (parameters !== undefined && parameters !== null) {
+        if (typeof parameters === 'object' && 'jsonSchema' in parameters) {
+          // Already in AI SDK Schema format
+          processedParameters = parameters;
+        } else {
+          // Convert Zod schema to AI SDK Schema
+          processedParameters = convertZodSchemaToAISDKSchema(parameters as z.ZodType);
+        }
+      }
+
+      // Convert output schema to AI SDK Schema format if present
+      let processedOutputSchema;
+      if (outputSchema !== undefined && outputSchema !== null) {
+        if (typeof outputSchema === 'object' && 'jsonSchema' in outputSchema) {
+          // Already in AI SDK Schema format
+          processedOutputSchema = outputSchema;
+        } else {
+          // Convert Zod schema to AI SDK Schema
+          processedOutputSchema = convertZodSchemaToAISDKSchema(outputSchema as z.ZodType);
+        }
+      }
 
       return {
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: parameters.jsonSchema ? parameters : convertZodSchemaToAISDKSchema(parameters),
-        ...(outputSchema
-          ? { outputSchema: outputSchema.jsonSchema ? outputSchema : convertZodSchemaToAISDKSchema(outputSchema) }
-          : {}),
+        parameters: processedParameters,
+        ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -153,7 +188,7 @@ export class CoreToolBuilder extends MastraBase {
     processedSchema?: z.ZodTypeAny,
   ) {
     // dont't add memory or mastra to logging
-    const { logger, mastra: _mastra, memory: _memory, runtimeContext, model, ...rest } = options;
+    const { logger, mastra: _mastra, memory: _memory, requestContext, model, ...rest } = options;
     const logModelObject = {
       modelId: model?.modelId,
       provider: model?.provider,
@@ -173,7 +208,7 @@ export class CoreToolBuilder extends MastraBase {
 
       // Create tool span if we have a current span available
       const toolSpan = tracingContext?.currentSpan?.createChildSpan({
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
         attributes: {
@@ -197,11 +232,11 @@ export class CoreToolBuilder extends MastraBase {
            * MASTRA INSTANCE TYPES IN TOOL EXECUTION:
            *
            * Full Mastra & MastraPrimitives (has getAgent, getWorkflow, etc.):
-           * - Auto-generated workflow tools from agent.getWorkflows()
+           * - Auto-generated workflow tools from agent.listWorkflows()
            * - These get this.#mastra directly and can be wrapped
            *
            * MastraPrimitives only (limited interface):
-           * - Memory tools (from memory.getTools())
+           * - Memory tools (from memory.listTools())
            * - Assigned tools (agent.tools)
            * - Toolset tools (from toolsets)
            * - Client tools (passed as tools in generate/stream options)
@@ -212,30 +247,86 @@ export class CoreToolBuilder extends MastraBase {
           // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
-          result = await tool?.execute?.(
-            {
-              context: args,
-              threadId: options.threadId,
-              resourceId: options.resourceId,
-              mastra: wrappedMastra,
-              memory: options.memory,
-              runId: options.runId,
-              runtimeContext: options.runtimeContext ?? new RuntimeContext(),
-              writer: new ToolStream(
-                {
-                  prefix: 'tool',
-                  callId: execOptions.toolCallId,
-                  name: options.name,
-                  runId: options.runId!,
-                },
-                options.writableStream || execOptions.writableStream,
-              ),
-              tracingContext: { currentSpan: toolSpan },
-              // Pass MCP context if available (when executed in MCP server context)
+          // Pass raw args as first parameter, context as second
+          // Properly structure context based on execution source
+          const baseContext = {
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            mastra: wrappedMastra,
+            memory: options.memory,
+            runId: options.runId,
+            requestContext: options.requestContext ?? new RequestContext(),
+            writer: new ToolStream(
+              {
+                prefix: 'tool',
+                callId: execOptions.toolCallId,
+                name: options.name,
+                runId: options.runId!,
+              },
+              options.writableStream || execOptions.writableStream,
+            ),
+            tracingContext: { currentSpan: toolSpan },
+            abortSignal: execOptions.abortSignal,
+            suspend: execOptions.suspend,
+            resumeData: execOptions.resumeData,
+          };
+
+          // Check if this is agent execution
+          // Agent execution takes precedence over workflow execution because agents may
+          // use workflows internally for their agentic loop
+          // Note: AI SDK v4 doesn't pass toolCallId/messages, so we also check for agentName and threadId
+          const isAgentExecution =
+            (execOptions.toolCallId && execOptions.messages) ||
+            (options.agentName && options.threadId && !options.workflowId);
+
+          // Check if this is workflow execution (has workflow properties in options)
+          // Only consider it workflow execution if it's NOT agent execution
+          const isWorkflowExecution = !isAgentExecution && (options.workflow || options.workflowId);
+
+          let toolContext;
+          if (isAgentExecution) {
+            // Nest agent-specific properties under 'agent' key
+            // Do NOT include workflow context even if workflow properties exist
+            // (agents use workflows internally but tools should see agent context)
+            const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
+            toolContext = {
+              ...restBaseContext,
+              agent: {
+                toolCallId: execOptions.toolCallId || '',
+                messages: execOptions.messages || [],
+                suspend,
+                resumeData,
+                threadId,
+                resourceId,
+                writableStream: execOptions.writableStream,
+              },
+            };
+          } else if (isWorkflowExecution) {
+            // Nest workflow-specific properties under 'workflow' key
+            const { suspend, resumeData, ...restBaseContext } = baseContext;
+            toolContext = {
+              ...restBaseContext,
+              workflow: options.workflow || {
+                runId: options.runId,
+                workflowId: options.workflowId,
+                state: options.state,
+                setState: options.setState,
+                suspend,
+                resumeData,
+              },
+            };
+          } else if (execOptions.mcp) {
+            // MCP execution context
+            toolContext = {
+              ...baseContext,
               mcp: execOptions.mcp,
-            },
-            execOptions as ToolExecutionOptions & ToolCallOptions,
-          );
+            };
+          } else {
+            // Direct execution or unknown context
+            toolContext = baseContext;
+          }
+
+          result = await tool?.execute?.(args, toolContext);
         }
 
         toolSpan?.end({ output: result });
@@ -378,7 +469,7 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
-    } else {
+    } else if (originalSchema) {
       // No compatibility layer applies, use original schema
       processedZodSchema = originalSchema;
       processedSchema = applyCompatLayer({
@@ -386,6 +477,10 @@ export class CoreToolBuilder extends MastraBase {
         compatLayers: schemaCompatLayers,
         mode: 'aiSdkSchema',
       });
+    } else {
+      // No schema to process, set to undefined
+      processedZodSchema = undefined;
+      processedSchema = undefined;
     }
 
     let processedOutputSchema;
@@ -401,8 +496,6 @@ export class CoreToolBuilder extends MastraBase {
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
-      parameters: this.getParameters(),
-      outputSchema: this.getOutputSchema(),
       requireApproval: this.options.requireApproval,
       execute: this.originalTool.execute
         ? this.createExecute(

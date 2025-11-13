@@ -34,9 +34,9 @@ export function getAuthEntrypoint() {
   }
 
   const serverConfig = mastra.getServer()
-  if (serverConfig && serverConfig.experimental_auth) {
-    const auth = serverConfig.experimental_auth
-    serverConfig.experimental_auth = new MastraCloudAuth(auth)
+  if (serverConfig && serverConfig.auth) {
+    const auth = serverConfig.auth
+    serverConfig.auth = new MastraCloudAuth(auth)
   }
   `;
 }

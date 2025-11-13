@@ -9,14 +9,14 @@ importers:
   .:
     devDependencies:
       '@types/node':
-        specifier: ^22.13.5
-        version: 22.13.5
+        specifier: 22.13.17
+        version: 22.13.17
       tsx:
         specifier: ^4.19.3
         version: 4.19.3
       typescript:
-        specifier: ^5.3.3
-        version: 5.7.3
+        specifier: ^5.8.2
+        version: 5.9.3
 
   examples/basic-usage:
     dependencies:
@@ -1745,6 +1745,9 @@ packages:
 
   '@types/mysql@2.15.26':
     resolution: {integrity: sha512-DSLCOXhkvfS5WNNPbfn2KdICAmk8lLc+/PNvnPnF7gOdMZCxopXduqv0OQ13y/yA/zXTSikZZqVgybUxOEg6YQ==}
+
+  '@types/node@22.13.17':
+    resolution: {integrity: sha512-nAJuQXoyPj04uLgu+obZcSmsfOenUg6DxPKogeUy6yNCFwWaj5sBF8/G/pNo8EtBJjAfSVgfIlugR/BCOleO+g==}
 
   '@types/node@22.13.5':
     resolution: {integrity: sha512-+lTU0PxZXn0Dr1NBtC7Y8cR21AJr87dLLU953CWA6pMxxv/UDc7jYAY90upcrie1nRcD6XNG5HOYEDtgW5TxAg==}
@@ -4606,6 +4609,11 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   ufo@1.5.4:
     resolution: {integrity: sha512-UsUk3byDzKd04EyoZ7U4DOlxQaD14JUKQl6/P7wiX4FNvUfm3XL246n9W5AmqwW5RSFJ27NAuM0iLscAOYUiGQ==}
 
@@ -6994,6 +7002,10 @@ snapshots:
   '@types/mysql@2.15.26':
     dependencies:
       '@types/node': 22.13.5
+
+  '@types/node@22.13.17':
+    dependencies:
+      undici-types: 6.20.0
 
   '@types/node@22.13.5':
     dependencies:
@@ -10182,6 +10194,8 @@ snapshots:
   typescript@4.9.5: {}
 
   typescript@5.7.3: {}
+
+  typescript@5.9.3: {}
 
   ufo@1.5.4: {}
 

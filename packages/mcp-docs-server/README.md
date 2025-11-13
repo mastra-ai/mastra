@@ -98,15 +98,16 @@ const mcp = new MCPClient({
 
 // Create an agent with access to all documentation tools
 const agent = new Agent({
+  id: 'doc-assistant',
   name: 'Documentation Assistant',
   instructions: 'You help users find and understand Mastra.ai documentation.',
   model: openai('gpt-4'),
-  tools: await mcp.getTools(),
+  tools: await mcp.listTools(),
 });
 
 // Or use toolsets dynamically in generate/stream
 const response = await agent.stream('Show me the quick start example', {
-  toolsets: await mcp.getToolsets(),
+  toolsets: await mcp.listToolsets(),
 });
 ```
 
@@ -135,3 +136,11 @@ const response = await agent.stream('Show me the quick start example', {
 - Access package changelogs
 - List all available package changelogs
 - Get detailed changelog content for specific packages
+
+### Migration Tool (`mastraMigration`)
+
+- Get migration guidance for Mastra version upgrades and breaking changes
+- Explore all available migration guides (e.g., upgrade-to-v1/, agentnetwork)
+- List section headers to see what breaking changes are covered
+- Fetch specific sections or entire migration guides
+- Search across all migration guides by keywords

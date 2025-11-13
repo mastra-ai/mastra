@@ -1,4 +1,4 @@
-import type { AISpanType } from '@mastra/core/ai-tracing';
+import type { SpanType } from '@mastra/core/observability';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
 
@@ -34,10 +34,10 @@ describe('Observability Methods', () => {
   });
 
   describe('getTrace()', () => {
-    it('should fetch a specific AI trace by ID', async () => {
+    it('should fetch a specific trace by ID', async () => {
       mockSuccessfulResponse();
 
-      await client.getAITrace('trace-123');
+      await client.getTrace('trace-123');
 
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/trace-123`,
@@ -51,7 +51,7 @@ describe('Observability Methods', () => {
       const errorResponse = new Response('Not Found', { status: 404, statusText: 'Not Found' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
-      await expect(client.getAITrace('invalid-trace')).rejects.toThrow();
+      await expect(client.getTrace('invalid-trace')).rejects.toThrow();
     });
   });
 
@@ -59,7 +59,7 @@ describe('Observability Methods', () => {
     it('should fetch traces without any parameters', async () => {
       mockSuccessfulResponse();
 
-      await client.getAITraces({});
+      await client.getTraces({});
 
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces`,
@@ -72,7 +72,7 @@ describe('Observability Methods', () => {
     it('should fetch traces with pagination parameters', async () => {
       mockSuccessfulResponse();
 
-      await client.getAITraces({
+      await client.getTraces({
         pagination: {
           page: 2,
           perPage: 10,
@@ -90,7 +90,7 @@ describe('Observability Methods', () => {
     it('should fetch traces with name filter', async () => {
       mockSuccessfulResponse();
 
-      await client.getAITraces({
+      await client.getTraces({
         filters: {
           name: 'test-trace',
         },
@@ -107,9 +107,9 @@ describe('Observability Methods', () => {
     it('should fetch traces with spanType filter', async () => {
       mockSuccessfulResponse();
 
-      await client.getAITraces({
+      await client.getTraces({
         filters: {
-          spanType: 'agent_run' as AISpanType,
+          spanType: 'agent_run' as SpanType,
         },
       });
 
@@ -124,7 +124,7 @@ describe('Observability Methods', () => {
     it('should fetch traces with entity filters', async () => {
       mockSuccessfulResponse();
 
-      await client.getAITraces({
+      await client.getTraces({
         filters: {
           entityId: 'entity-123',
           entityType: 'agent',
@@ -145,7 +145,7 @@ describe('Observability Methods', () => {
       const startDate = new Date('2024-01-01T00:00:00Z');
       const endDate = new Date('2024-01-31T23:59:59Z');
 
-      await client.getAITraces({
+      await client.getTraces({
         pagination: {
           dateRange: {
             start: startDate,
@@ -173,7 +173,7 @@ describe('Observability Methods', () => {
       const startDate = new Date('2024-01-01T00:00:00Z');
       const endDate = new Date('2024-01-31T23:59:59Z');
 
-      await client.getAITraces({
+      await client.getTraces({
         pagination: {
           dateRange: {
             start: startDate,
@@ -201,7 +201,7 @@ describe('Observability Methods', () => {
       const startDate = new Date('2024-01-01T00:00:00Z');
       const endDate = new Date('2024-01-31T23:59:59Z');
 
-      await client.getAITraces({
+      await client.getTraces({
         pagination: {
           page: 1,
           perPage: 5,
@@ -212,7 +212,7 @@ describe('Observability Methods', () => {
         },
         filters: {
           name: 'test-trace',
-          spanType: 'agent_run' as AISpanType,
+          spanType: 'agent_run' as SpanType,
           entityId: 'entity-123',
           entityType: 'agent',
         },
@@ -235,15 +235,15 @@ describe('Observability Methods', () => {
       const errorResponse = new Response('Bad Request', { status: 400, statusText: 'Bad Request' });
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
-      await expect(client.getAITraces({})).rejects.toThrow();
+      await expect(client.getTraces({})).rejects.toThrow();
     });
   });
 
-  describe('getScoresBySpan()', () => {
+  describe('listScoresBySpan()', () => {
     it('should fetch scores by trace ID and span ID without pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresBySpan({
+      await client.listScoresBySpan({
         traceId: 'trace-123',
         spanId: 'span-456',
       });
@@ -259,7 +259,7 @@ describe('Observability Methods', () => {
     it('should fetch scores by trace ID and span ID with pagination', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresBySpan({
+      await client.listScoresBySpan({
         traceId: 'trace-123',
         spanId: 'span-456',
         page: 2,
@@ -277,7 +277,7 @@ describe('Observability Methods', () => {
     it('should properly encode trace ID and span ID in URL', async () => {
       mockSuccessfulResponse();
 
-      await client.getScoresBySpan({
+      await client.listScoresBySpan({
         traceId: 'trace with spaces',
         spanId: 'span/with/slashes',
       });
@@ -295,7 +295,7 @@ describe('Observability Methods', () => {
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
       await expect(
-        client.getScoresBySpan({
+        client.listScoresBySpan({
           traceId: 'invalid-trace',
           spanId: 'invalid-span',
         }),

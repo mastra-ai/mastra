@@ -1,7 +1,7 @@
 import { AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import type { ToolAction } from '../types';
 import { CoreToolBuilder } from './builder';
 
@@ -16,8 +16,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'test-tool',
       description: 'A test tool with string constraints',
       inputSchema,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema> }) => {
-        const { message } = context;
+      execute: async (input: z.infer<typeof inputSchema>) => {
+        const { message } = input;
         return { result: `Received: ${message}` };
       },
     };
@@ -36,7 +36,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'test-tool',
         model: modelConfig as any,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       },
     });
 
@@ -95,8 +95,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'number-tool',
       description: 'A test tool with number constraints',
       inputSchema: inputSchema2,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema2> }) => {
-        const { age } = context;
+      execute: async (input: z.infer<typeof inputSchema2>) => {
+        const { age } = input;
         return { result: `Age: ${age}` };
       },
     };
@@ -113,7 +113,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'number-tool',
         model: modelConfig as any,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       },
     });
 
@@ -148,8 +148,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'bug-demo-tool',
       description: 'Demonstrates the validation bug',
       inputSchema: inputSchema4,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema4> }) => {
-        const { text } = context;
+      execute: async (input: z.infer<typeof inputSchema4>) => {
+        const { text } = input;
         return { success: true, text };
       },
     };
@@ -166,7 +166,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'bug-demo-tool',
         model: modelConfig as any,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       },
     });
 
@@ -216,8 +216,8 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       id: 'updateWorkingMemory',
       description: 'Update working memory',
       inputSchema: inputSchema5,
-      execute: async ({ context }: { context: z.infer<typeof inputSchema5> }) => {
-        const { newMemory, searchString, updateReason } = context;
+      execute: async (input: z.infer<typeof inputSchema5>) => {
+        const { newMemory, searchString, updateReason } = input;
         return { success: true, newMemory, searchString, updateReason };
       },
     };
@@ -234,7 +234,7 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
       options: {
         name: 'updateWorkingMemory',
         model: modelConfig as any,
-        runtimeContext: new RuntimeContext(),
+        requestContext: new RequestContext(),
       },
     });
 

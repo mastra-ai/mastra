@@ -32,6 +32,7 @@ describe('ModelRouter - Custom Provider Support', () => {
   describe('Mock verification', () => {
     it('should call createOpenAICompatible with correct parameters', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -64,6 +65,7 @@ describe('ModelRouter - Custom Provider Support', () => {
       // This should NOT throw an error during agent creation or execution
       // even though "ollama" is not in the provider registry
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -81,6 +83,7 @@ describe('ModelRouter - Custom Provider Support', () => {
     it('should allow unknown provider with id format when URL is provided', async () => {
       // This should also work with the id: "provider/model" format
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -100,6 +103,7 @@ describe('ModelRouter - Custom Provider Support', () => {
 
       for (const providerId of customProviders) {
         const agent = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant.',
           model: {
@@ -117,6 +121,7 @@ describe('ModelRouter - Custom Provider Support', () => {
     it('should work with LMStudio provider', async () => {
       // LMStudio is in the registry but this tests the custom URL path
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -132,6 +137,7 @@ describe('ModelRouter - Custom Provider Support', () => {
 
     it('should handle custom headers with unknown provider', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -153,6 +159,7 @@ describe('ModelRouter - Custom Provider Support', () => {
       // against the registry, and should NOT call gateway.getApiKey()
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -173,6 +180,7 @@ describe('ModelRouter - Custom Provider Support', () => {
     it('should throw helpful error for unknown provider without URL during stream', async () => {
       // This SHOULD throw an error when trying to stream because there's no URL and the provider is unknown
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -190,6 +198,7 @@ describe('ModelRouter - Custom Provider Support', () => {
 
     it('should throw helpful error for unknown provider in id format without URL during stream', async () => {
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: 'unknown-provider/unknown-model',

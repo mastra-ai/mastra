@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
 export const pdfSummarizationAgent = new Agent({
+  id: 'pdf-summarization-agent',
   name: 'pdfSummarizationAgent',
   description: 'An agent that summarizes extracted PDF text using a large context window model',
   instructions: `

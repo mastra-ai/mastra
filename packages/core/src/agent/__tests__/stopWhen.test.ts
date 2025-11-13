@@ -41,7 +41,8 @@ describe('agent.stopWhen', () => {
   });
 
   const agent = new Agent({
-    name: 'test-step-boundaries',
+    id: 'test-step-boundaries',
+    name: 'Test Step Boundaries',
     instructions:
       'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool',
     model: openai('gpt-4o-mini'),
@@ -172,7 +173,8 @@ describe('agent.stopWhen', () => {
 
   it('should contain the correct content in the step results for both stopWhen and stream.steps with text and tool calls in the same step', async () => {
     const agent = new Agent({
-      name: 'test-step-boundaries',
+      id: 'test-step-boundaries',
+      name: 'Test Step Boundaries',
       instructions:
         'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
       model: openai('gpt-4o-mini'),

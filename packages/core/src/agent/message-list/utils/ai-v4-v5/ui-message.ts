@@ -1,8 +1,7 @@
-import type { AIV4Type, AIV5Type } from '../../types';
+import type { UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
+import type { AIV5Type } from '../../types';
 
-export function hasAIV5UIMessageCharacteristics(
-  msg: AIV5Type.UIMessage | AIV4Type.UIMessage,
-): msg is AIV5Type.UIMessage {
+export function hasAIV5UIMessageCharacteristics(msg: AIV5Type.UIMessage | UIMessageV4): msg is AIV5Type.UIMessage {
   // ai v4 has these separated arrays of parts that don't record overall order
   // so we can check for their presence as a faster/early check
   if (

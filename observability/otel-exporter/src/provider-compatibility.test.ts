@@ -3,12 +3,12 @@
  */
 
 import type {
-  ExportedAISpan,
+  ExportedSpan,
   AgentRunAttributes,
   ModelGenerationAttributes,
   ToolCallAttributes,
-} from '@mastra/core/ai-tracing';
-import { AISpanType } from '@mastra/core/ai-tracing';
+} from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -51,11 +51,11 @@ describe('Provider Compatibility', () => {
 
   describe('New Relic Requirements', () => {
     it('should include service name in resource attributes', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -72,11 +72,11 @@ describe('Provider Compatibility', () => {
     });
 
     it('should preserve parent-child relationships', () => {
-      const rootSpan: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const rootSpan: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'root-span',
         traceId: 'trace-1',
         name: 'agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -85,11 +85,11 @@ describe('Provider Compatibility', () => {
         attributes: { agentId: 'test' } as AgentRunAttributes,
       };
 
-      const childSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const childSpan: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'child-span',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -108,11 +108,11 @@ describe('Provider Compatibility', () => {
 
   describe('Laminar Requirements', () => {
     it('should include both generic and specific input/output attributes', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -137,11 +137,11 @@ describe('Provider Compatibility', () => {
     });
 
     it('should handle tool input/output', () => {
-      const span: ExportedAISpan<AISpanType.TOOL_CALL> = {
+      const span: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'tool-1',
         traceId: 'trace-1',
         name: 'tool',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -167,12 +167,12 @@ describe('Provider Compatibility', () => {
   describe('Traceloop/SigNoz Requirements', () => {
     it('should maintain trace context across all spans', () => {
       const traceId = 'consistent-trace-id';
-      const spans: ExportedAISpan<any>[] = [
+      const spans: ExportedSpan<any>[] = [
         {
           id: 'span-1',
           traceId,
           name: 'root',
-          type: AISpanType.AGENT_RUN,
+          type: SpanType.AGENT_RUN,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
@@ -184,7 +184,7 @@ describe('Provider Compatibility', () => {
           id: 'span-2',
           traceId,
           name: 'child1',
-          type: AISpanType.MODEL_GENERATION,
+          type: SpanType.MODEL_GENERATION,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
@@ -196,7 +196,7 @@ describe('Provider Compatibility', () => {
           id: 'span-3',
           traceId,
           name: 'child2',
-          type: AISpanType.TOOL_CALL,
+          type: SpanType.TOOL_CALL,
           startTime: new Date(),
           endTime: new Date(),
           isEvent: false,
@@ -220,11 +220,11 @@ describe('Provider Compatibility', () => {
     });
 
     it('should use OTEL-compliant span names', () => {
-      const llmSpan: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const llmSpan: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'llm-1',
         traceId: 'trace-1',
         name: 'original-name',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -236,11 +236,11 @@ describe('Provider Compatibility', () => {
         } as ModelGenerationAttributes,
       };
 
-      const toolSpan: ExportedAISpan<AISpanType.TOOL_CALL> = {
+      const toolSpan: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'tool-1',
         traceId: 'trace-1',
         name: 'original-tool',
-        type: AISpanType.TOOL_CALL,
+        type: SpanType.TOOL_CALL,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -262,11 +262,11 @@ describe('Provider Compatibility', () => {
 
   describe('Common Requirements', () => {
     it('should include all OTEL semantic conventions', () => {
-      const span: ExportedAISpan<AISpanType.MODEL_GENERATION> = {
+      const span: ExportedSpan<SpanType.MODEL_GENERATION> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'llm',
-        type: AISpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_GENERATION,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,
@@ -301,11 +301,11 @@ describe('Provider Compatibility', () => {
     });
 
     it('should include debugging attributes', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'unique-span-id',
         traceId: 'unique-trace-id',
         name: 'agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date('2024-01-01T12:00:00Z'),
         endTime: new Date('2024-01-01T12:00:05Z'),
         isEvent: false,
@@ -317,7 +317,7 @@ describe('Provider Compatibility', () => {
       const result = converter.convertSpan(span);
 
       // Check debugging attributes
-      expect(result.attributes['mastra.span.type']).toBe(AISpanType.AGENT_RUN);
+      expect(result.attributes['mastra.span.type']).toBe(SpanType.AGENT_RUN);
       expect(result.attributes['mastra.trace_id']).toBe('unique-trace-id');
       expect(result.attributes['mastra.span_id']).toBe('unique-span-id');
       expect(result.attributes['mastra.start_time']).toBeDefined();
@@ -326,11 +326,11 @@ describe('Provider Compatibility', () => {
     });
 
     it('should handle metadata properly', () => {
-      const span: ExportedAISpan<AISpanType.AGENT_RUN> = {
+      const span: ExportedSpan<SpanType.AGENT_RUN> = {
         id: 'span-1',
         traceId: 'trace-1',
         name: 'agent',
-        type: AISpanType.AGENT_RUN,
+        type: SpanType.AGENT_RUN,
         startTime: new Date(),
         endTime: new Date(),
         isEvent: false,

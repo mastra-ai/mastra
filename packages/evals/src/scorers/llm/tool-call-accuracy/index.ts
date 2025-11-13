@@ -1,6 +1,6 @@
-import type { Tool } from '@mastra/core';
+import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { createScorer } from '@mastra/core/scores';
+import type { Tool } from '@mastra/core/tools';
 import { z } from 'zod';
 import {
   extractToolCalls,
@@ -30,6 +30,7 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
   const toolDefinitions = availableTools.map(tool => `${tool.id}: ${tool.description}`).join('\n');
 
   return createScorer({
+    id: 'llm-tool-call-accuracy-scorer',
     name: 'Tool Call Accuracy (LLM)',
     description: 'Evaluates whether an agent selected appropriate tools for the given task using LLM analysis',
     judge: {

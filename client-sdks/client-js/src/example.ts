@@ -59,7 +59,7 @@ import { MastraClient } from './client';
 //     const workflowId = 'weatherWorkflow';
 //     const workflow = client.getWorkflow(workflowId);
 
-//     const run = await workflow.createRunAsync();
+//     const run = await workflow.createRun();
 
 //     const stream = await run.stream({
 //       inputData: {

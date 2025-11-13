@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../di';
+import { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { DefaultExecutionEngine } from './default';
 import type { Emitter, StepResult } from './types';
@@ -9,7 +9,7 @@ import type { Emitter, StepResult } from './types';
 describe('DefaultExecutionEngine.executeConditional error handling', () => {
   let engine: DefaultExecutionEngine;
   let emitter: Emitter;
-  let runtimeContext: RuntimeContext;
+  let requestContext: RequestContext;
   let abortController: AbortController;
 
   beforeEach(() => {
@@ -20,7 +20,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       off: (_event: string, _callback: (data: any) => void) => {},
       once: (_event: string, _callback: (data: any) => void) => {},
     };
-    runtimeContext = new RuntimeContext();
+    requestContext = new RequestContext();
     abortController = new AbortController();
   });
 
@@ -63,7 +63,6 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       runId,
       entry,
       prevOutput: null,
-      prevStep: null as any,
       serializedStepGraph: [],
       stepResults: {} as Record<string, StepResult<any, any, any, any>>,
       executionContext: {
@@ -75,10 +74,13 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
           attempts: 3,
           delay: 1000,
         },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
       },
       emitter,
       abortController,
-      runtimeContext,
+      requestContext,
       tracingContext: {},
     });
   }

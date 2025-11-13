@@ -57,8 +57,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ uri, dbName, options }: { uri: string; dbName: string; options?: MongoClientOptions }) {
-    super();
+  constructor({ id, uri, dbName, options }: { id: string; uri: string; dbName: string; options?: MongoClientOptions }) {
+    super({ id });
     const client = new MongoClient(uri, {
       ...options,
       driverInfo: {

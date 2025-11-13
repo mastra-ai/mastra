@@ -48,7 +48,7 @@ ${pc.bold(pc.cyan('Mastra'))} is a typescript framework for building AI applicat
 program
   .command('create [project-name]')
   .description('Create a new Mastra project')
-  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
+  .option('--default', 'Quick start with defaults (src, OpenAI, examples)')
   .option(
     '-c, --components <components>',
     `Comma-separated list of components (${COMPONENTS.join(', ')})`,
@@ -74,7 +74,7 @@ program
 program
   .command('init')
   .description('Initialize Mastra in your project')
-  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
+  .option('--default', 'Quick start with defaults (src, OpenAI, examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option(
     '-c, --components <components>',
