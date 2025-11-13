@@ -937,6 +937,11 @@ export class MessageList {
   }
 
   private addOne(message: MessageInput, messageSource: MessageSource) {
+    // Migrate deprecated fields from database messages to parts array
+    if (messageSource === 'memory' && MessageList.isMastraDBMessage(message)) {
+      message = this.migrateDeprecatedFields(message);
+    }
+
     if (
       (!(`content` in message) ||
         (!message.content &&
@@ -1085,6 +1090,65 @@ export class MessageList {
     this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
     return this;
+  }
+
+  /**
+   * Migrates deprecated fields from old database messages to the new parts-based format.
+   * This provides backward compatibility for messages stored before the migration.
+   *
+   * @param message - The message to migrate
+   * @returns The migrated message with deprecated fields converted to parts
+   */
+  private migrateDeprecatedFields(message: MastraDBMessage): MastraDBMessage {
+    const content = message.content as any; // Cast to any to access potentially deprecated fields
+
+    // If there are no deprecated fields, return as-is
+    if (!content.content && !content.toolInvocations) {
+      return message;
+    }
+
+    // Clone the message to avoid mutating the original
+    const migratedMessage = { ...message };
+    const parts = [...(content.parts || [])];
+
+    // Migrate deprecated content.content string to text part
+    if (content.content && typeof content.content === 'string') {
+      // Only add if there isn't already a text part with this content
+      const hasMatchingTextPart = parts.some(
+        p => p.type === 'text' && p.text === content.content
+      );
+      if (!hasMatchingTextPart) {
+        parts.unshift({ type: 'text', text: content.content });
+      }
+    }
+
+    // Migrate deprecated toolInvocations array to tool-invocation parts
+    if (content.toolInvocations && Array.isArray(content.toolInvocations)) {
+      for (const invocation of content.toolInvocations) {
+        // Only add if not already in parts
+        const hasMatchingInvocation = parts.some(
+          p => p.type === 'tool-invocation' &&
+               p.toolInvocation?.toolCallId === invocation.toolCallId
+        );
+        if (!hasMatchingInvocation) {
+          parts.push({
+            type: 'tool-invocation',
+            toolInvocation: invocation,
+          });
+        }
+      }
+    }
+
+    // Update the message with migrated parts
+    migratedMessage.content = {
+      ...content,
+      parts,
+      // Remove deprecated fields from the migrated version
+      content: undefined,
+      toolInvocations: undefined,
+    };
+
+    return migratedMessage;
   }
 
   private pushMessageToSource(messageV2: MastraDBMessage, messageSource: MessageSource) {
