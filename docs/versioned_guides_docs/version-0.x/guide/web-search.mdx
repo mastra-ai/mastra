@@ -17,9 +17,9 @@ When building a web search agent, you have two main strategies to consider:
 
 ## Prerequisites
 
-- Node.js `v22.13.0` or later installed
-- An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- Node.js `v20.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Using native search tools
 
@@ -57,7 +57,6 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -72,7 +71,6 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -98,7 +96,6 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -117,7 +114,6 @@ Setup the tool:
     import { Agent } from "@mastra/core/agent";
 
     export const searchAgent = new Agent({
-        id: "search-agent",
         name: "Search Agent",
         instructions:
             "You are a search agent that can search the web for information.",
@@ -151,7 +147,7 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent with [Studio](/docs/v1/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash copy
 mastra dev
@@ -187,7 +183,6 @@ Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
-  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
@@ -222,8 +217,8 @@ export const webSearch = createTool({
       publishedDate: z.string().optional(),
     }),
   ),
-  execute: async (inputData) => {
-    const { results } = await exa.searchAndContents(inputData.query, {
+  execute: async ({ context }) => {
+    const { results } = await exa.searchAndContents(context.query, {
       livecrawl: "always",
       numResults: 2,
     });
@@ -248,7 +243,6 @@ Add to your Agent
 import { webSearch } from "./tools/searchTool";
 
 export const searchAgent = new Agent({
-  id: "search-agent",
   name: "Search Agent",
   instructions:
     "You are a search agent that can search the web for information.",
@@ -278,7 +272,7 @@ export const mastra = new Mastra({
 
 <StepItem title="Test your agent">
 
-You can test your agent with [Studio](/docs/v1/getting-started/studio) using the `mastra dev` command:
+You can test your agent with [Studio](/docs/getting-started/studio) using the `mastra dev` command:
 
 ```bash copy
 mastra dev

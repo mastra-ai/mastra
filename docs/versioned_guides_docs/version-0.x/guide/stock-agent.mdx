@@ -15,9 +15,9 @@ In this guide, you're going to create a simple agent that fetches the last day's
 
 ## Prerequisites
 
-- Node.js `v22.13.0` or later installed
-- An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- Node.js `v20.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
 
 ## Creating the Agent
 
@@ -34,7 +34,6 @@ import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const stockAgent = new Agent({
-  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -88,11 +87,11 @@ export const stockPrices = createTool({
     symbol: z.string(),
   }),
   description: `Fetches the last day's closing stock price for a given symbol`,
-  execute: async (inputData) => {
-    console.log("Using tool to fetch stock price for", inputData.symbol);
+  execute: async ({ context: { symbol } }) => {
+    console.log("Using tool to fetch stock price for", symbol);
     return {
-      symbol: inputData.symbol,
-      currentPrice: await getStockPrice(inputData.symbol),
+      symbol,
+      currentPrice: await getStockPrice(symbol),
     };
   },
 });
@@ -110,7 +109,6 @@ import { Agent } from "@mastra/core/agent";
 import { stockPrices } from "../tools/stockPrices";
 
 export const stockAgent = new Agent({
-  id: "stock-agent",
   name: "Stock Agent",
   instructions:
     "You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.",
@@ -139,7 +137,7 @@ You can run your agent as a service using the `mastra dev` command:
 mastra dev
 ```
 
-This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/v1/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
+This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your `stockAgent` and `stockPrices` tool through a UI.
 
 </StepItem>
 
