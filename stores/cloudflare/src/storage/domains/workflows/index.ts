@@ -228,14 +228,15 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
         const keyResourceId = parts.length > idx + 3 ? parts[idx + 3] : undefined;
         // Filter by namespace, workflowId, resourceId if provided
         if (workflowId && wfName !== workflowId) continue;
-        // If resourceId filter is provided, the key must have that resourceId
-        if (resourceId && keyResourceId !== resourceId) continue;
         // Load the snapshot
         const data = await this.operations.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
         if (!data) continue;
         try {
-          // Additional check: if resourceId filter is provided but key doesn't have resourceId, skip
-          if (resourceId && !keyResourceId) continue;
+          // Filter by resourceId if provided - check both key and data
+          if (resourceId) {
+            const dataResourceId = data.resourceId;
+            if (keyResourceId !== resourceId && dataResourceId !== resourceId) continue;
+          }
           const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
           if (status && snapshotData.status !== status) continue;
           // Filter by fromDate/toDate
