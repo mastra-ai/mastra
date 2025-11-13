@@ -49,7 +49,7 @@ await vectorStore.createIndex({
 await vectorStore.upsert({
   indexName: 'my-index',
   vectors: [
-    [...], // 512-dimensional vector
+    [0.1, 0.2, 0.3 /* ... 512 values */],
   ],
   metadata: [
     {
@@ -63,7 +63,7 @@ await vectorStore.upsert({
 // Query similar vectors
 const results = await vectorStore.query({
   indexName: 'my-index',
-  queryVector: [...], // 512-dimensional query vector
+  queryVector: [0.1, 0.2, 0.3 /* ... 512 values */],
   topK: 10,
   filter: {
     metadata: {
@@ -305,12 +305,12 @@ await vectorStore.importFromParquet('my-index', {
 
 ### Connection Pooling
 
-The provider automatically manages a connection pool for optimal performance:
+The provider manages a connection pool:
 
 ```typescript
 const vectorStore = new DuckDBVector({
   poolSize: 10, // Number of connections in pool
-  // Connections are automatically managed
+  // Connections are managed by the pool
 });
 
 // Manual cleanup when done
@@ -359,7 +359,7 @@ const rag = mastra.rag({
 
 ### Deposium MCP Integration
 
-Perfect for Deposium's multi-space document management:
+Example configuration for Deposium's multi-space document management:
 
 ```typescript
 // Configure for Deposium
