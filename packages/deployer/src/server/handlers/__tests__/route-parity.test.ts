@@ -354,26 +354,43 @@ describe('Deployer Routes → Server Adapter Parity', () => {
     });
   });
 
-  describe('Route Coverage: HTTP Method Mismatches (Same Path)', () => {
-    it('should not have routes with same path but different HTTP methods', () => {
-      const failures: Array<{ deployer: string; serverAdapter: string; path: string }> = [];
+  describe('Route Coverage: HTTP Method Consistency (Same Handler)', () => {
+    it('should use consistent HTTP methods for routes with the same handler', () => {
+      const failures: Array<{ handler: string; deployerRoutes: string[]; serverRoutes: string[] }> = [];
 
-      uniqueDeployerRoutes.forEach(deployerRoute => {
-        const pathMatches = serverRoutes.filter(sr => sr.path === deployerRoute.path);
+      // Find handlers that exist in both systems
+      const commonHandlers = Array.from(deployerHandlerMap.keys()).filter(handler => serverHandlerMap.has(handler));
 
-        pathMatches.forEach(serverRoute => {
-          if (serverRoute.method !== deployerRoute.method) {
+      commonHandlers.forEach(handlerName => {
+        const deployerRoutesForHandler = deployerHandlerMap.get(handlerName)!;
+        const serverRoutesForHandler = serverHandlerMap.get(handlerName)!;
+
+        // Find routes where the path exists in both but with different methods
+        const deployerPaths = new Set(deployerRoutesForHandler.map(r => r.path));
+        const serverPaths = new Set(serverRoutesForHandler.map(r => r.path));
+        const commonPaths = Array.from(deployerPaths).filter(p => serverPaths.has(p));
+
+        commonPaths.forEach(path => {
+          const deployerMethodsForPath = deployerRoutesForHandler.filter(r => r.path === path).map(r => r.method);
+          const serverMethodsForPath = serverRoutesForHandler.filter(r => r.path === path).map(r => r.method);
+
+          // Check if methods match for this path
+          const methodMismatch =
+            deployerMethodsForPath.length !== serverMethodsForPath.length ||
+            !deployerMethodsForPath.every(m => serverMethodsForPath.includes(m));
+
+          if (methodMismatch) {
             failures.push({
-              deployer: `${deployerRoute.method} ${deployerRoute.path}`,
-              serverAdapter: `${serverRoute.method} ${serverRoute.path}`,
-              path: deployerRoute.path,
+              handler: handlerName,
+              deployerRoutes: deployerRoutesForHandler.filter(r => r.path === path).map(r => `${r.method} ${r.path}`),
+              serverRoutes: serverRoutesForHandler.filter(r => r.path === path).map(r => `${r.method} ${r.path}`),
             });
           }
         });
       });
 
       if (failures.length > 0) {
-        const errorMessage = `\nFound ${failures.length} routes with HTTP method mismatches:\n${failures.map(f => `  Path: ${f.path}\n    Deployer:       ${f.deployer}\n    Server-Adapter: ${f.serverAdapter}`).join('\n\n')}\n\nHTTP methods must match between deployer and server-adapter.`;
+        const errorMessage = `\nFound ${failures.length} handlers with HTTP method mismatches for the same path:\n${failures.map(f => `  Handler: ${f.handler}\n    Deployer:       ${f.deployerRoutes.join(', ')}\n    Server-Adapter: ${f.serverRoutes.join(', ')}`).join('\n\n')}\n\nRoutes using the same handler should use consistent HTTP methods for the same paths.`;
         throw new Error(errorMessage);
       }
     });

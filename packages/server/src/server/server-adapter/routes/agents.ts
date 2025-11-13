@@ -201,7 +201,7 @@ export const AGENTS_ROUTES: ServerRoute[] = [
     tags: ['Agents'],
   }),
   createRoute({
-    method: 'PUT',
+    method: 'POST',
     responseType: 'json',
     handler: updateAgentModelHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/model',
@@ -224,7 +224,7 @@ export const AGENTS_ROUTES: ServerRoute[] = [
     tags: ['Agents', 'Models'],
   }),
   createRoute({
-    method: 'PUT',
+    method: 'POST',
     responseType: 'json',
     handler: reorderAgentModelListHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/models/reorder',
@@ -236,7 +236,7 @@ export const AGENTS_ROUTES: ServerRoute[] = [
     tags: ['Agents', 'Models'],
   }),
   createRoute({
-    method: 'PUT',
+    method: 'POST',
     responseType: 'json',
     handler: updateAgentModelInModelListHandler as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/models/:modelConfigId',

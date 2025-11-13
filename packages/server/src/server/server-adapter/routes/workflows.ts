@@ -166,7 +166,7 @@ export const WORKFLOWS_ROUTES: ServerRoute[] = [
     tags: ['Workflows'],
   }),
   createRoute({
-    method: 'GET',
+    method: 'POST',
     responseType: 'stream',
     handler: observeStreamWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/observe',
@@ -177,7 +177,7 @@ export const WORKFLOWS_ROUTES: ServerRoute[] = [
     tags: ['Workflows'],
   }),
   createRoute({
-    method: 'GET',
+    method: 'POST',
     responseType: 'stream',
     handler: observeStreamVNextWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/observe-streamVNext',

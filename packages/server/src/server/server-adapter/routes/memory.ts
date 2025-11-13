@@ -146,7 +146,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     tags: ['Memory'],
   }),
   createRoute({
-    method: 'PUT',
+    method: 'PATCH',
     responseType: 'json',
     handler: updateThreadHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId',
@@ -171,7 +171,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     tags: ['Memory'],
   }),
   createRoute({
-    method: 'PUT',
+    method: 'POST',
     responseType: 'json',
     handler: updateWorkingMemoryHandler as unknown as ServerRouteHandler,
     path: '/api/memory/threads/:threadId/working-memory',
@@ -184,7 +184,7 @@ export const MEMORY_ROUTES: ServerRoute[] = [
     tags: ['Memory'],
   }),
   createRoute({
-    method: 'DELETE',
+    method: 'POST',
     responseType: 'json',
     handler: deleteMessagesHandler as unknown as ServerRouteHandler,
     path: '/api/memory/messages/delete',

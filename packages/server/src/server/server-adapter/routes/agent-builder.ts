@@ -155,7 +155,7 @@ export const AGENT_BUILDER_ROUTES: ServerRoute[] = [
     tags: ['Agent Builder'],
   }),
   createRoute({
-    method: 'GET',
+    method: 'POST',
     responseType: 'stream',
     handler: observeStreamAgentBuilderActionHandler as unknown as ServerRouteHandler,
     path: '/api/agent-builder/:actionId/observe',
@@ -166,7 +166,7 @@ export const AGENT_BUILDER_ROUTES: ServerRoute[] = [
     tags: ['Agent Builder'],
   }),
   createRoute({
-    method: 'GET',
+    method: 'POST',
     responseType: 'stream',
     handler: observeStreamVNextAgentBuilderActionHandler as unknown as ServerRouteHandler,
     path: '/api/agent-builder/:actionId/observe-streamVNext',
