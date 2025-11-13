@@ -461,11 +461,11 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
           // Deep merge metadata if it exists on both
           ...(existingMessage.content?.metadata && updatableFields.content.metadata
             ? {
-              metadata: {
-                ...existingMessage.content.metadata,
-                ...updatableFields.content.metadata,
-              },
-            }
+                metadata: {
+                  ...existingMessage.content.metadata,
+                  ...updatableFields.content.metadata,
+                },
+              }
             : {}),
         };
         setClauses.push(`${parseSqlIdentifier('content', 'column name')} = ?`);

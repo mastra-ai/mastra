@@ -1,9 +1,9 @@
+import type { MastraScorer } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
 import type { TracesPaginatedArg, StoragePagination } from '@mastra/core/storage';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
-import type { MastraScorer } from '@mastra/core/evals';
 
 interface ObservabilityContext extends Context {
   traceId?: string;

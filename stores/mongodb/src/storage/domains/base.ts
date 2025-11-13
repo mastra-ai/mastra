@@ -6,13 +6,13 @@ import { MongoDBOperations } from './operations';
  * Configuration for MongoDB domain classes supporting both shared and standalone usage
  */
 export type MongoDBDomainConfig =
-    | {
-        operations: MongoDBOperations;
-        config?: never;
+  | {
+      operations: MongoDBOperations;
+      config?: never;
     }
-    | {
-        operations?: never;
-        config: MongoDBConfig;
+  | {
+      operations?: never;
+      config: MongoDBConfig;
     };
 
 /**
@@ -21,48 +21,47 @@ export type MongoDBDomainConfig =
  * 2. Standalone usage (creates own connector)
  */
 export class MongoDBDomainBase {
-    db: MongoDBOperations;
-    private ownedConnector?: MongoDBConnector;
+  db: MongoDBOperations;
+  private ownedConnector?: MongoDBConnector;
 
-    constructor(opts: MongoDBDomainConfig) {
-        if (opts.operations) {
-            // Shared connector usage (via MongoDBStore)
-            this.db = opts.operations;
-        } else {
-            // Standalone usage - create our own connector
-            const connector = this.loadConnector(opts.config);
-            this.ownedConnector = connector;
-            this.db = new MongoDBOperations({ connector });
-        }
+  constructor(opts: MongoDBDomainConfig) {
+    if (opts.operations) {
+      // Shared connector usage (via MongoDBStore)
+      this.db = opts.operations;
+    } else {
+      // Standalone usage - create our own connector
+      const connector = this.loadConnector(opts.config);
+      this.ownedConnector = connector;
+      this.db = new MongoDBOperations({ connector });
     }
+  }
 
-    private loadConnector(config: MongoDBConfig): MongoDBConnector {
-        if ('connectorHandler' in config) {
-            return MongoDBConnector.fromConnectionHandler(config.connectorHandler);
-        }
-        return MongoDBConnector.fromDatabaseConfig({
-            id: config.id,
-            options: config.options,
-            url: config.url,
-            dbName: config.dbName,
-        });
+  private loadConnector(config: MongoDBConfig): MongoDBConnector {
+    if ('connectorHandler' in config) {
+      return MongoDBConnector.fromConnectionHandler(config.connectorHandler);
     }
+    return MongoDBConnector.fromDatabaseConfig({
+      id: config.id,
+      options: config.options,
+      url: config.url,
+      dbName: config.dbName,
+    });
+  }
 
-    /**
-     * Clean up owned resources.
-     * Only closes the connector if this domain instance created it (standalone mode).
-     */
-    async close(): Promise<void> {
-        if (this.ownedConnector) {
-            await this.ownedConnector.close();
-        }
+  /**
+   * Clean up owned resources.
+   * Only closes the connector if this domain instance created it (standalone mode).
+   */
+  async close(): Promise<void> {
+    if (this.ownedConnector) {
+      await this.ownedConnector.close();
     }
+  }
 
-    /**
-     * Returns true if this domain owns its connector (standalone mode)
-     */
-    protected get isStandalone(): boolean {
-        return !!this.ownedConnector;
-    }
+  /**
+   * Returns true if this domain owns its connector (standalone mode)
+   */
+  protected get isStandalone(): boolean {
+    return !!this.ownedConnector;
+  }
 }
-

@@ -40,7 +40,7 @@ export class StoreOperationsDynamoDB extends MastraBase {
     return true;
   }
 
-  async dropTable(): Promise<void> { }
+  async dropTable(): Promise<void> {}
 
   // Helper methods for entity/table mapping
   private getEntityNameForTable(tableName: TABLE_NAMES): string | null {
@@ -256,7 +256,7 @@ export class StoreOperationsDynamoDB extends MastraBase {
 
       // ElectroDB batch delete expects the key components for each item
       const keysToDelete = result.data.map((item: any) => {
-        const key: { entity: string;[key: string]: any } = { entity: entityName };
+        const key: { entity: string; [key: string]: any } = { entity: entityName };
 
         // Construct the key based on the specific entity's primary key structure
         switch (entityName) {

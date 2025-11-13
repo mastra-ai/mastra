@@ -415,24 +415,25 @@ export function cloneWorkflow<
 }
 
 export class Workflow<
-  TEngineType = any,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
-    string,
-    any,
-    any,
-    any,
-    any,
-    any,
-    TEngineType
-  >[],
-  TWorkflowId extends string = string,
-  TState extends z.ZodObject<any> = z.ZodObject<any>,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TPrevSchema extends z.ZodType<any> = TInput,
->
+    TEngineType = any,
+    TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+      string,
+      any,
+      any,
+      any,
+      any,
+      any,
+      TEngineType
+    >[],
+    TWorkflowId extends string = string,
+    TState extends z.ZodObject<any> = z.ZodObject<any>,
+    TInput extends z.ZodType<any> = z.ZodType<any>,
+    TOutput extends z.ZodType<any> = z.ZodType<any>,
+    TPrevSchema extends z.ZodType<any> = TInput,
+  >
   extends MastraBase
-  implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType> {
+  implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType>
+{
   public id: TWorkflowId;
   public description?: string | undefined;
   public inputSchema: TInput;
@@ -639,24 +640,24 @@ export class Workflow<
   map(
     mappingConfig:
       | {
-        [k: string]:
-        | {
-          step:
-          | Step<string, any, any, any, any, any, TEngineType>
-          | Step<string, any, any, any, any, any, TEngineType>[];
-          path: string;
+          [k: string]:
+            | {
+                step:
+                  | Step<string, any, any, any, any, any, TEngineType>
+                  | Step<string, any, any, any, any, any, TEngineType>[];
+                path: string;
+              }
+            | { value: any; schema: z.ZodType<any> }
+            | {
+                initData: Workflow<TEngineType, any, any, any, any, any, any>;
+                path: string;
+              }
+            | {
+                requestContextPath: string;
+                schema: z.ZodType<any>;
+              }
+            | DynamicMapping<TPrevSchema, z.ZodType<any>>;
         }
-        | { value: any; schema: z.ZodType<any> }
-        | {
-          initData: Workflow<TEngineType, any, any, any, any, any, any>;
-          path: string;
-        }
-        | {
-          requestContextPath: string;
-          schema: z.ZodType<any>;
-        }
-        | DynamicMapping<TPrevSchema, z.ZodType<any>>;
-      }
       | ExecuteFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any> {
@@ -779,8 +780,8 @@ export class Workflow<
         infer E,
         TEngineType
       >
-      ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, R, E, TEngineType>
-      : `Error: Expected Step with state schema that is a subset of workflow state`;
+        ? Step<string, SubsetOf<S, TState>, TPrevSchema, O, R, E, TEngineType>
+        : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
     this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
@@ -1219,21 +1220,21 @@ export class Workflow<
       ? await run.restart({ requestContext, tracingContext, writableStream: writer })
       : isResume
         ? await run.resume({
-          resumeData,
-          step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
-          requestContext,
-          tracingContext,
-          outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume.label,
-        })
+            resumeData,
+            step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
+            requestContext,
+            tracingContext,
+            outputOptions: { includeState: true, includeResumeLabels: true },
+            label: resume.label,
+          })
         : await run.start({
-          inputData,
-          requestContext,
-          tracingContext,
-          writableStream: writer,
-          initialState: state,
-          outputOptions: { includeState: true, includeResumeLabels: true },
-        });
+            inputData,
+            requestContext,
+            tracingContext,
+            writableStream: writer,
+            initialState: state,
+            outputOptions: { includeState: true, includeResumeLabels: true },
+          });
     unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -1775,7 +1776,7 @@ export class Run<
         if (onChunk) {
           await onChunk(e as any);
         }
-      } catch { }
+      } catch {}
     });
 
     this.closeStreamAction = async () => {
@@ -1808,7 +1809,7 @@ export class Run<
       tracingOptions,
     }).then(result => {
       if (result.status !== 'suspended') {
-        this.closeStreamAction?.().catch(() => { });
+        this.closeStreamAction?.().catch(() => {});
       }
 
       return result;
@@ -1860,7 +1861,7 @@ export class Run<
         };
         // watch events are data stream events, so we need to cast them to the correct type
         await writer.write(e as any);
-      } catch { }
+      } catch {}
     });
 
     this.#observerHandlers.push(async () => {
@@ -1942,7 +1943,7 @@ export class Run<
       return this.streamOutput;
     }
 
-    this.closeStreamAction = async () => { };
+    this.closeStreamAction = async () => {};
 
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
@@ -1991,9 +1992,9 @@ export class Run<
           if (closeOnSuspend) {
             // always close stream, even if the workflow is suspended
             // this will trigger a finish event with workflow status set to suspended
-            self.closeStreamAction?.().catch(() => { });
+            self.closeStreamAction?.().catch(() => {});
           } else if (executionResults.status !== 'suspended') {
-            self.closeStreamAction?.().catch(() => { });
+            self.closeStreamAction?.().catch(() => {});
           }
           if (self.streamOutput) {
             self.streamOutput.updateResults(
@@ -2002,7 +2003,7 @@ export class Run<
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => { });
+          self.closeStreamAction?.().catch(() => {});
         }
       },
     });
@@ -2031,10 +2032,10 @@ export class Run<
   }: {
     resumeData?: z.input<TInput>;
     step?:
-    | Step<string, any, any, any, any, any, TEngineType>
-    | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
-    | string
-    | string[];
+      | Step<string, any, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | string
+      | string[];
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2069,10 +2070,10 @@ export class Run<
   }: {
     resumeData?: z.input<TInput>;
     step?:
-    | Step<string, any, any, any, any, any, TEngineType>
-    | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
-    | string
-    | string[];
+      | Step<string, any, any, any, any, any, TEngineType>
+      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | string
+      | string[];
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
@@ -2082,7 +2083,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
   } = {}) {
-    this.closeStreamAction = async () => { };
+    this.closeStreamAction = async () => {};
 
     const self = this;
     const stream = new ReadableStream<WorkflowStreamEvent>({
@@ -2131,14 +2132,14 @@ export class Run<
         let executionResults;
         try {
           executionResults = await executionResultsPromise;
-          self.closeStreamAction?.().catch(() => { });
+          self.closeStreamAction?.().catch(() => {});
 
           if (self.streamOutput) {
             self.streamOutput.updateResults(executionResults);
           }
         } catch (err) {
           self.streamOutput?.rejectResults(err as unknown as Error);
-          self.closeStreamAction?.().catch(() => { });
+          self.closeStreamAction?.().catch(() => {});
         }
       },
     });
@@ -2188,13 +2189,13 @@ export class Run<
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.input<TResumeSchema>;
     step?:
-    | Step<string, any, any, any, TResumeSchema, any, TEngineType>
-    | [
-      ...Step<string, any, any, any, any, any, TEngineType>[],
-      Step<string, any, any, any, TResumeSchema, any, TEngineType>,
-    ]
-    | string
-    | string[];
+      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
+        ]
+      | string
+      | string[];
     label?: string;
     requestContext?: RequestContext;
     retryCount?: number;
@@ -2228,13 +2229,13 @@ export class Run<
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.input<TResumeSchema>;
     step?:
-    | Step<string, any, any, TResumeSchema, any, any, TEngineType>
-    | [
-      ...Step<string, any, any, any, any, any, TEngineType>[],
-      Step<string, any, any, TResumeSchema, any, any, TEngineType>,
-    ]
-    | string
-    | string[];
+      | Step<string, any, any, TResumeSchema, any, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, TResumeSchema, any, any, TEngineType>,
+        ]
+      | string
+      | string[];
     label?: string;
     requestContext?: RequestContext;
     retryCount?: number;
@@ -2252,10 +2253,10 @@ export class Run<
     const storage = this.#mastra?.getStorage('workflows');
     let snapshot: WorkflowRunState | null = null;
     if (storage) {
-      snapshot = await storage.getWorkflowSnapshot({
+      snapshot = (await storage.getWorkflowSnapshot({
         workflowId: this.workflowId,
         runId: this.runId,
-      }) as WorkflowRunState;
+      })) as WorkflowRunState;
     }
 
     if (!snapshot) {
@@ -2312,7 +2313,7 @@ export class Run<
         const pathStrings = suspendedStepPaths.map(path => `[${path.join(', ')}]`);
         throw new Error(
           `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
-          'Please specify which step to resume using the "step" parameter.',
+            'Please specify which step to resume using the "step" parameter.',
         );
       }
     }
@@ -2412,7 +2413,7 @@ export class Run<
       })
       .then(result => {
         if (!params.isVNext && result.status !== 'suspended') {
-          this.closeStreamAction?.().catch(() => { });
+          this.closeStreamAction?.().catch(() => {});
         }
         result.traceId = traceId;
         return result;

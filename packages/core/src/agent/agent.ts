@@ -1717,11 +1717,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   tracingContext: context?.tracingContext,
                   ...(resourceId && threadId
                     ? {
-                      memory: {
-                        resource: subAgentResourceId,
-                        thread: subAgentThreadId,
-                      },
-                    }
+                        memory: {
+                          resource: subAgentResourceId,
+                          thread: subAgentThreadId,
+                        },
+                      }
                     : {}),
                 });
 
@@ -2130,8 +2130,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
-    | MastraScorers
-    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
     tracingContext: TracingContext;
@@ -2936,10 +2936,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-        ? z.infer<OUTPUT>
-        : EXPERIMENTAL_OUTPUT extends ZodSchema
-        ? z.infer<EXPERIMENTAL_OUTPUT>
-        : unknown
+          ? z.infer<OUTPUT>
+          : EXPERIMENTAL_OUTPUT extends ZodSchema
+            ? z.infer<EXPERIMENTAL_OUTPUT>
+            : unknown
       >['experimental_partialOutputStream'];
     }
   >;

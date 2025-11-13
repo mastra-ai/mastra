@@ -420,9 +420,9 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-          'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
-          'then pass: observability: new Observability({ default: { enabled: true } }). ' +
-          'Observability has been disabled.',
+            'Import and instantiate: import { Observability } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ default: { enabled: true } }). ' +
+            'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
       }

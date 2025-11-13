@@ -77,7 +77,7 @@ describe('MongoDB Specific Tests', () => {
   afterAll(async () => {
     try {
       await dbOps.close();
-    } catch { }
+    } catch {}
   });
 
   describe('MongoDB Connection Options', () => {
@@ -129,7 +129,7 @@ describe('MongoDB Specific Tests', () => {
       try {
         await dbOps.db.deleteCollection({ tableName: 'mastra_threads' as any });
         await dbOps.db.deleteCollection({ tableName: 'mastra_messages' as any });
-      } catch { }
+      } catch {}
     });
 
     it('should handle flexible document schemas without predefined structure', async () => {
@@ -200,7 +200,7 @@ describe('MongoDB Specific Tests', () => {
     beforeEach(async () => {
       try {
         await dbOps.db.deleteCollection({ tableName: 'mastra_traces' as any });
-      } catch { }
+      } catch {}
     });
 
     it('should handle MongoDB-style array and object queries', async () => {
@@ -255,7 +255,7 @@ describe('MongoDB Specific Tests', () => {
     beforeEach(async () => {
       try {
         await dbOps.db.deleteCollection({ tableName: 'mastra_messages' as any });
-      } catch { }
+      } catch {}
     });
 
     it('should handle complex JSON structures without conversion issues', async () => {
@@ -362,7 +362,7 @@ describe('MongoDB Specific Tests', () => {
     afterEach(async () => {
       try {
         await dbOps.db.dropTable({ tableName: testCollectionName });
-      } catch { }
+      } catch {}
     });
 
     it('should create collections on-demand (schemaless nature)', async () => {
@@ -397,7 +397,7 @@ describe('MongoDB Specific Tests', () => {
     beforeEach(async () => {
       try {
         await dbOps.db.deleteCollection({ tableName: 'mastra_threads' as any });
-      } catch { }
+      } catch {}
     });
 
     it('should handle large batch insertions efficiently', async () => {
@@ -439,7 +439,7 @@ describe('MongoDB Specific Tests', () => {
     beforeEach(async () => {
       try {
         await dbOps.db.deleteCollection({ tableName: 'mastra_ai_spans' as any });
-      } catch { }
+      } catch {}
     });
 
     it('should handle Span creation with MongoDB-specific features', async () => {
@@ -582,7 +582,9 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should actually handle these field names fine
-      await expect(dbOps.db.insert({ tableName: 'test_collection' as any, record: invalidData })).resolves.not.toThrow();
+      await expect(
+        dbOps.db.insert({ tableName: 'test_collection' as any, record: invalidData }),
+      ).resolves.not.toThrow();
     });
 
     it('should handle connection issues gracefully', async () => {

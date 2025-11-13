@@ -61,7 +61,10 @@ export class WorkflowsStorageLibSQL extends WorkflowsStorageBase {
   }
 
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.operations.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
     await this.operations.alterTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
@@ -327,13 +330,7 @@ export class WorkflowsStorageLibSQL extends WorkflowsStorageBase {
     return d ? d.snapshot : null;
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowId,
-  }: {
-    runId: string;
-    workflowId?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     const conditions: string[] = [];
     const args: (string | number)[] = [];
 

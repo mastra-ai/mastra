@@ -223,7 +223,6 @@ describe('DynamoDBStore', () => {
     }
   }, 60000); // Increase timeout for beforeAll to accommodate Docker startup and table creation
 
-
   const mastra = new Mastra({
     storage: new DynamoDBStore({
       name: 'DynamoDBStoreTest',
@@ -237,7 +236,5 @@ describe('DynamoDBStore', () => {
     }),
   });
 
-  createTestSuite(
-    mastra.getStorage()!
-  );
-})
+  createTestSuite(mastra.getStorage()!);
+});

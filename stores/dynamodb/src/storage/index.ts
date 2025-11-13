@@ -77,19 +77,19 @@ export class DynamoDBStore extends MastraStorage {
       const workflows = new WorkflowStorageDynamoDB({
         dynamoClient: this.client,
         tableName: this.tableName,
-        getSharedInit
+        getSharedInit,
       });
 
       const memory = new MemoryStorageDynamoDB({
         dynamoClient: this.client,
         tableName: this.tableName,
-        getSharedInit
+        getSharedInit,
       });
 
       const evals = new EvalsStorageDynamoDB({
         dynamoClient: this.client,
         tableName: this.tableName,
-        getSharedInit
+        getSharedInit,
       });
 
       this.stores = {

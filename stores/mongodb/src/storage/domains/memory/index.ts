@@ -426,11 +426,11 @@ export class MemoryStorageMongoDB extends MemoryStorageBase {
           // Deep merge metadata if it exists on both
           ...(existingMessage.content?.metadata && updatableFields.content.metadata
             ? {
-              metadata: {
-                ...existingMessage.content.metadata,
-                ...updatableFields.content.metadata,
-              },
-            }
+                metadata: {
+                  ...existingMessage.content.metadata,
+                  ...updatableFields.content.metadata,
+                },
+              }
             : {}),
         };
         updateDoc.content = JSON.stringify(newContent);

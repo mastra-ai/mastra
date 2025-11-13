@@ -1,7 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type {
-  StorageDomains,
-} from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { EvalsStorageMongoDB } from './domains/evals';
@@ -48,9 +46,7 @@ const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
   }
 };
 
-export {
-  MemoryStorageMongoDB as MemoryStorage,
-} from './domains/memory';
+export { MemoryStorageMongoDB as MemoryStorage } from './domains/memory';
 export { ObservabilityMongoDB as ObservabilityStorage } from './domains/observability';
 export { EvalsStorageMongoDB as EvalsStorage } from './domains/evals';
 export { WorkflowsStorageMongoDB as WorkflowsStorage } from './domains/workflows';

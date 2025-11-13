@@ -334,7 +334,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should throw when threadId is empty or whitespace', async () => {
-      await expect(memoryStore.listMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+      await expect(memoryStore.listMessages({ threadId: '' })).rejects.toThrowError(
+        'threadId must be a non-empty string',
+      );
 
       await expect(memoryStore.listMessages({ threadId: '   ' })).rejects.toThrowError(
         'threadId must be a non-empty string',
