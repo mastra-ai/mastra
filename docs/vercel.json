@@ -1356,12 +1356,12 @@
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/mcp/mcp-overview",
+      "source": "/:path(ja)?/docs/tools-mcp/mcp-overview",
       "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/mcp/advanced-usage",
+      "source": "/:path(ja)?/docs/tools-mcp/advanced-usage",
       "destination": "/:path/docs/mcp/overview",
       "permanent": true
     },
