@@ -1,6 +1,3 @@
-// @ts-check
-// `@type` JSDoc annotations allow editor autocompletion and type checking
-// (when paired with `@ts-check`).
 // There are various equivalent ways to declare your Docusaurus config.
 // See: https://docusaurus.io/docs/api/docusaurus-config
 
@@ -9,7 +6,7 @@ import prismMastraLight from "./src/theme/prism-mastra-light.js";
 import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
-const config = {
+const config: import("@docusaurus/types").Config = {
   title: "Mastra Docs",
   tagline: "TypeScript agent framework",
   favicon: "/img/favicon.ico",
@@ -19,16 +16,12 @@ const config = {
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: "/",
-
   onBrokenLinks: "throw",
-
-  // Markdown configuration
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: "warn",
     },
   },
-
   // Internationalization
   // By default, Docusuarus will look for translations in:
   //
@@ -51,15 +44,12 @@ const config = {
       experimental_faster: true,
     },
   }),
-
-  // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {
     algoliaAppId: process.env.ALGOLIA_APP_ID,
     algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
     mastraWebsite: process.env.MASTRA_WEBSITE,
-    // Analytics
     gaId: process.env.GA_ID,
     posthogApiKey: process.env.POSTHOG_API_KEY,
     posthogHost: process.env.POSTHOG_HOST,
@@ -67,7 +57,6 @@ const config = {
   },
 
   headTags: [
-    // Block Google Fonts using Content Security Policy
     {
       tagName: "meta",
       attributes: {
@@ -78,7 +67,6 @@ const config = {
   ],
 
   plugins: [
-    // Custom webpack/rspack configuration plugin to handle process.env polyfill
     function customWebpackPlugin(context, options) {
       return {
         name: "custom-webpack-config",
@@ -127,6 +115,14 @@ const config = {
         routeBasePath: "models",
         sidebarPath: "./src/content/en/models/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+        lastVersion: "current",
+        versions: {
+          current: {
+            label: "Latest",
+            path: "",
+            banner: "none",
+          },
+        },
       },
     ],
     [
@@ -137,6 +133,14 @@ const config = {
         routeBasePath: "guides",
         sidebarPath: "./src/content/en/guides/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+        lastVersion: "current",
+        versions: {
+          current: {
+            label: "Latest",
+            path: "",
+            banner: "none",
+          },
+        },
       },
     ],
     [
@@ -147,6 +151,14 @@ const config = {
         routeBasePath: "examples",
         sidebarPath: "./src/content/en/examples/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+        lastVersion: "current",
+        versions: {
+          current: {
+            label: "Latest",
+            path: "",
+            banner: "none",
+          },
+        },
       },
     ],
     [
@@ -157,6 +169,14 @@ const config = {
         routeBasePath: "reference",
         sidebarPath: "./src/content/en/reference/sidebars.js",
         editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
+        lastVersion: "current",
+        versions: {
+          current: {
+            label: "Latest",
+            path: "",
+            banner: "none",
+          },
+        },
       },
     ],
   ],
@@ -170,10 +190,7 @@ const config = {
           path: "src/content/en/docs",
           routeBasePath: "docs",
           sidebarPath: "./src/content/en/docs/sidebars.js",
-          // Please change this to your repo.
-          // Remove this to remove the "edit this page" links.
           editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
-          // Make the current version the latest version
           lastVersion: "current",
           versions: {
             current: {
