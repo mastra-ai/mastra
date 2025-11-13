@@ -5871,6 +5871,9 @@ describe('Workflow', () => {
       // Verify stored snapshot serialized error object does not include stack trace
       const expectSerializedError = (serializedErrorObject: any) => {
         expect(serializedErrorObject).toBeDefined();
+        expect(serializedErrorObject instanceof Error).toBe(false);
+        expect(typeof serializedErrorObject).toEqual('object');
+
         expect(serializedErrorObject?.stack).toBeUndefined();
         expect(serializedErrorObject).toMatchObject({
           message: errorMessage,
