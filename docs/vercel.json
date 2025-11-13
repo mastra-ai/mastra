@@ -1329,6 +1329,16 @@
       "source": "/:path(ja)?/docs/server-db/production-server",
       "destination": "/:path/docs/server-db/mastra-server",
       "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/agents/listTools",
+      "destination": "/:path/reference/agents/getTools",
+      "permanent": true
+    },
+    {
+      "source": "/:path(ja)?/reference/core/listAgents",
+      "destination": "/:path/reference/core/getAgents",
+      "permanent": true
     }
   ]
 }
