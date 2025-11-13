@@ -1,18 +1,47 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, WorkflowsStorageBase } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { ClickhouseDomainBase } from '../base';
+import type { ClickhouseDomainConfig } from '../base';
 import type { StoreOperationsClickhouse } from '../operations';
 import { TABLE_ENGINES } from '../utils';
 
-export class WorkflowsStorageClickhouse extends WorkflowsStorage {
-  protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+export class WorkflowsStorageClickhouse extends WorkflowsStorageBase {
+  private domainBase: ClickhouseDomainBase;
+
+  constructor(opts: ClickhouseDomainConfig) {
     super();
-    this.operations = operations;
-    this.client = client;
+    this.domainBase = new ClickhouseDomainBase(opts);
+  }
+
+  private get client(): ClickHouseClient {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsClickhouse {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+    await this.operations.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -57,11 +86,15 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
       const currentSnapshot = await this.operations.load({
@@ -75,15 +108,15 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
             ...currentSnapshot,
             resourceId,
             snapshot: JSON.stringify(snapshot),
-            updatedAt: now.toISOString(),
+            updatedAt: updatedAt?.toISOString() || now.toISOString(),
           }
         : {
             workflow_name: workflowId,
             run_id: runId,
             resourceId,
             snapshot: JSON.stringify(snapshot),
-            createdAt: now.toISOString(),
-            updatedAt: now.toISOString(),
+            createdAt: createdAt?.toISOString() || now.toISOString(),
+            updatedAt: updatedAt?.toISOString() || now.toISOString(),
           };
 
       await this.client.insert({
@@ -178,9 +211,9 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       const conditions: string[] = [];
       const values: Record<string, any> = {};
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push(`workflow_name = {var_workflow_name:String}`);
-        values.var_workflow_name = workflowName;
+        values.var_workflow_name = workflowId;
       }
 
       if (status) {
@@ -261,20 +294,14 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
           id: 'CLICKHOUSE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
+          details: { workflowId: workflowId ?? '', resourceId: resourceId ?? '' },
         },
         error,
       );
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowId,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const conditions: string[] = [];
       const values: Record<string, any> = {};
@@ -284,9 +311,9 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
         values.var_runId = runId;
       }
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push(`workflow_name = {var_workflow_name:String}`);
-        values.var_workflow_name = workflowName;
+        values.var_workflow_name = workflowId;
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -320,7 +347,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
           id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { runId: runId ?? '', workflowName: workflowName ?? '' },
+          details: { runId: runId ?? '', workflowId: workflowId ?? '' },
         },
         error,
       );

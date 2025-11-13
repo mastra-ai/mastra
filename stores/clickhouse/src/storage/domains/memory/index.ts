@@ -11,13 +11,16 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
+import { ClickhouseDomainBase } from '../base';
+import type { ClickhouseDomainConfig } from '../base';
 import type { StoreOperationsClickhouse } from '../operations';
 import { transformRow, transformRows } from '../utils';
 
@@ -51,13 +54,38 @@ function parseMetadata(metadata: unknown): Record<string, unknown> {
   }
 }
 
-export class MemoryStorageClickhouse extends MemoryStorage {
-  protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+export class MemoryStorageClickhouse extends MemoryStorageBase {
+  private domainBase: ClickhouseDomainBase;
+
+  constructor(opts: ClickhouseDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = new ClickhouseDomainBase(opts);
+  }
+
+  private get client(): ClickHouseClient {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsClickhouse {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearTable({ tableName: TABLE_THREADS }),
+      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
+      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {

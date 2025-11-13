@@ -3,22 +3,44 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
-  ScoresStorage,
+  EvalsStorageBase,
   TABLE_SCORERS,
+  TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import { ClickhouseDomainBase } from '../base';
+import type { ClickhouseDomainConfig } from '../base';
 import type { StoreOperationsClickhouse } from '../operations';
 
-export class ScoresStorageClickhouse extends ScoresStorage {
-  protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+export class ScoresStorageClickhouse extends EvalsStorageBase {
+  private domainBase: ClickhouseDomainBase;
+
+  constructor(opts: ClickhouseDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = new ClickhouseDomainBase(opts);
+  }
+
+  private get client(): ClickHouseClient {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsClickhouse {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_SCORERS });
   }
 
   private transformScoreRow(row: any): ScoreRowData {

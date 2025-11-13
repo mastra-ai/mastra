@@ -1,15 +1,19 @@
 import type { ClickHouseClient } from '@clickhouse/client';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, getDefaultValue, getSqlType } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from '../utils';
 import { COLUMN_TYPES, TABLE_ENGINES, transformRow } from '../utils';
 
-export class StoreOperationsClickhouse extends StoreOperations {
+export class StoreOperationsClickhouse extends MastraBase {
   protected ttl: ClickhouseConfig['ttl'];
   protected client: ClickHouseClient;
   constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
-    super();
+    super({
+      component: 'STORAGE',
+      name: 'OPERATIONS',
+    });
     this.ttl = ttl;
     this.client = client;
   }
@@ -35,7 +39,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
       case 'jsonb':
         return 'String';
       default:
-        return super.getSqlType(type); // fallback to base implementation
+        return getSqlType(type); // fallback to base implementation
     }
   }
 
@@ -133,7 +137,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
           if (columnDef.nullable !== false) {
             sqlType = `Nullable(${sqlType})`;
           }
-          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          const defaultValue = columnDef.nullable === false ? getDefaultValue(columnDef.type) : '';
           // Use backticks or double quotes as needed for identifiers
           const alterSql =
             `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
