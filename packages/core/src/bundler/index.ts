@@ -6,6 +6,7 @@ import { MastraBase } from '../base';
 export interface IBundler {
   loadEnvVars(): Promise<Map<string, string>>;
   getEnvFiles(): Promise<string[]>;
+  getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[]): (string | string[])[];
   bundle(
     entryFile: string,
     outputDirectory: string,
@@ -36,6 +37,7 @@ export abstract class MastraBundler extends MastraBase implements IBundler {
     return envVars;
   }
 
+  abstract getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[]): (string | string[])[];
   abstract prepare(outputDirectory: string): Promise<void>;
   abstract writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
   abstract writeInstrumentationFile(outputDirectory: string): Promise<void>;

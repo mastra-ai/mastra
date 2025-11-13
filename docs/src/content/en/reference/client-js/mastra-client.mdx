@@ -74,7 +74,7 @@ export const mastraClient = new MastraClient({
 <PropertiesTable
   content={[
     {
-      name: "listAgents()",
+      name: "getAgents()",
       type: "Promise<Record<string, GetAgentResponse>>",
       description: "Returns all available agent instances.",
     },
@@ -110,7 +110,7 @@ export const mastraClient = new MastraClient({
       description: "Returns the current status of the memory system.",
     },
     {
-      name: "listTools()",
+      name: "getTools()",
       type: "Record<string, Tool>",
       description: "Returns all available tools.",
     },
@@ -120,7 +120,7 @@ export const mastraClient = new MastraClient({
       description: "Retrieves a specific tool instance by ID.",
     },
     {
-      name: "listWorkflows()",
+      name: "getWorkflows()",
       type: "Record<string, Workflow>",
       description: "Returns all available workflow instances.",
     },

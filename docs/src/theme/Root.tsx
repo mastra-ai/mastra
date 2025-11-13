@@ -6,6 +6,7 @@ import { Toaster } from "@site/src/components/ui/sonner";
 import loadTranslations from "@site/src/loadTranslations";
 import { GTProvider } from "gt-react";
 import React from "react";
+import { ChatbotSidebarProvider } from "./DocRoot/Layout/ChatbotSidebar/context";
 
 export default function Root({ children }: { children: React.ReactNode }) {
   // We use Docusaurus as the source of truth for i18n locales
@@ -28,7 +29,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
         >
           <Toaster />
           <CookieConsent />
-          {children}
+          <ChatbotSidebarProvider defaultHidden={true}>
+            {children}
+          </ChatbotSidebarProvider>
         </GTProvider>
       </KapaProvider>
     </PostHogWrapper>
