@@ -1062,23 +1062,6 @@ export class MessageList {
       if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
         latestMessage.createdAt = messageV2.createdAt;
       }
-      // Extract text content from parts for comparison and update
-      const latestTextContent = latestMessage.content.parts.find(p => p.type === 'text')?.text;
-      const messageV2TextContent = messageV2.content.parts.find(p => p.type === 'text')?.text;
-
-      if (!latestTextContent && messageV2TextContent) {
-        // Add text part if it doesn't exist
-        const textPartIndex = latestMessage.content.parts.findIndex(p => p.type === 'text');
-        if (textPartIndex === -1) {
-          latestMessage.content.parts.unshift({ type: 'text', text: messageV2TextContent });
-        }
-      } else if (latestTextContent && messageV2TextContent && latestTextContent !== messageV2TextContent) {
-        // Update existing text part with new content
-        const textPart = latestMessage.content.parts.find(p => p.type === 'text');
-        if (textPart && textPart.type === 'text') {
-          textPart.text = messageV2TextContent;
-        }
-      }
 
       // If latest message gets appended to, it should be added to the proper source
       this.pushMessageToSource(latestMessage, messageSource);
