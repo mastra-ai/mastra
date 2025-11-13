@@ -76,7 +76,6 @@ export const LEGACY_ROUTES: ServerRoute[] = [
     path: '/api/workflows/:workflowId/observe-stream-legacy',
     pathParamSchema: workflowIdPathParams,
     queryParamSchema: runIdSchema,
-    bodySchema: streamLegacyWorkflowBodySchema,
     summary: '[DEPRECATED] Observe workflow stream with legacy format',
     description:
       'Legacy endpoint for observing workflow stream. Use /api/workflows/:workflowId/runs/:runId/observe-stream instead.',
@@ -106,7 +105,6 @@ export const LEGACY_ROUTES: ServerRoute[] = [
     path: '/api/agent-builder/:actionId/observe-stream-legacy',
     pathParamSchema: actionIdPathParams,
     queryParamSchema: runIdSchema,
-    bodySchema: streamLegacyAgentBuilderBodySchema,
     summary: '[DEPRECATED] Observe agent-builder action stream with legacy format',
     description:
       'Legacy endpoint for observing agent-builder action stream. Use /api/agent-builder/actions/:actionId/runs/:runId/observe-stream instead.',

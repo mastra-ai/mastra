@@ -304,7 +304,14 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         required: true,
         content: {
           'application/json': {
-            schema: { type: 'object' },
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                metadata: { type: 'object' },
+                resourceId: { type: 'string' },
+              },
+            },
           },
         },
       },
@@ -958,6 +965,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 workingMemory: { type: 'string' },
                 resourceId: { type: 'string' },
+                memoryConfig: { type: 'object' },
               },
               required: ['workingMemory'],
             },
@@ -1038,7 +1046,14 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         required: true,
         content: {
           'application/json': {
-            schema: { type: 'object' },
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                metadata: { type: 'object' },
+                resourceId: { type: 'string' },
+              },
+            },
           },
         },
       },
