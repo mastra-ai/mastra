@@ -1,6 +1,5 @@
 import type { JwtPayload } from '@mastra/auth';
 import { verifyJwks } from '@mastra/auth';
-import { WorkOS } from '@workos-inc/node';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraAuthWorkos } from './index';
 
