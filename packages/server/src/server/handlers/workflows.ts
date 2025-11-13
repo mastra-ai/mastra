@@ -525,11 +525,13 @@ export async function resumeAsyncWorkflowHandler({
   mastra,
   workflowId,
   runId,
-  body,
+  step,
+  resumeData,
   requestContext,
   tracingOptions,
 }: WorkflowContext & {
-  body: { step: string | string[]; resumeData?: unknown };
+  step: string | string[];
+  resumeData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
@@ -556,8 +558,8 @@ export async function resumeAsyncWorkflowHandler({
 
     const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     const result = await _run.resume({
-      step: body.step,
-      resumeData: body.resumeData,
+      step,
+      resumeData,
       requestContext,
       tracingOptions,
     });
@@ -572,11 +574,13 @@ export async function resumeWorkflowHandler({
   mastra,
   workflowId,
   runId,
-  body,
+  step,
+  resumeData,
   requestContext,
   tracingOptions,
 }: WorkflowContext & {
-  body: { step: string | string[]; resumeData?: unknown };
+  step: string | string[];
+  resumeData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
@@ -604,8 +608,8 @@ export async function resumeWorkflowHandler({
     const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
     void _run.resume({
-      step: body.step,
-      resumeData: body.resumeData,
+      step,
+      resumeData,
       requestContext,
       tracingOptions,
     });
@@ -620,11 +624,13 @@ export async function resumeStreamWorkflowHandler({
   mastra,
   workflowId,
   runId,
-  body,
+  step,
+  resumeData,
   requestContext,
   tracingOptions,
 }: WorkflowContext & {
-  body: { step: string | string[]; resumeData?: unknown };
+  step: string | string[];
+  resumeData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
 }) {
@@ -654,8 +660,8 @@ export async function resumeStreamWorkflowHandler({
 
     const stream = _run
       .resumeStream({
-        step: body.step,
-        resumeData: body.resumeData,
+        step,
+        resumeData,
         requestContext,
         tracingOptions,
       })

@@ -415,10 +415,8 @@ describe('Agent Handlers', () => {
       const updateResult = await updateAgentModelHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          modelId: 'gpt-4o-mini',
-          provider: 'openai',
-        },
+        modelId: 'gpt-4o-mini',
+        provider: 'openai',
       });
 
       const agent = mockMastra.getAgentById('test-agent');
@@ -465,9 +463,7 @@ describe('Agent Handlers', () => {
       await reorderAgentModelListHandler({
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
-        body: {
-          reorderedModelIds: reversedModelListIds,
-        },
+        reorderedModelIds: reversedModelListIds,
       });
 
       const reorderedModelList = await agent.getModelList();
@@ -488,13 +484,11 @@ describe('Agent Handlers', () => {
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
         modelConfigId: model1Id,
-        body: {
-          model: {
-            modelId: 'gpt-5',
-            provider: 'openai',
-          },
-          maxRetries: 4,
+        model: {
+          modelId: 'gpt-5',
+          provider: 'openai',
         },
+        maxRetries: 4,
       });
       const updatedModelList = await agent.getModelList();
       expect(updatedModelList?.[0].model.modelId).toBe('gpt-4o-mini');

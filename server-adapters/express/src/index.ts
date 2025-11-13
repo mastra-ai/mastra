@@ -222,7 +222,6 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         const handlerParams = {
           ...params.urlParams,
           ...params.queryParams,
-          body: params.body,
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: res.locals.requestContext,
           mastra: this.mastra,

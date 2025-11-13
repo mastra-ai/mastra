@@ -47,13 +47,12 @@ export async function getSpeakersHandler({ mastra, agentId, requestContext }: Vo
 export async function generateSpeechHandler({
   mastra,
   agentId,
-  body,
+  text,
+  speakerId,
   requestContext,
 }: VoiceContext & {
-  body?: {
-    text?: string;
-    speakerId?: string;
-  };
+  text?: string;
+  speakerId?: string;
 }) {
   try {
     if (!agentId) {
@@ -61,7 +60,7 @@ export async function generateSpeechHandler({
     }
 
     validateBody({
-      text: body?.text,
+      text,
     });
 
     const agent = mastra.getAgentById(agentId);
@@ -77,7 +76,7 @@ export async function generateSpeechHandler({
     }
 
     const audioStream = await Promise.resolve()
-      .then(() => voice.speak(body!.text!, { speaker: body!.speakerId! }))
+      .then(() => voice.speak(text!, { speaker: speakerId! }))
       .catch(err => {
         if (err instanceof MastraError) {
           throw new HTTPException(400, { message: err.message });
@@ -102,20 +101,19 @@ export async function generateSpeechHandler({
 export async function transcribeSpeechHandler({
   mastra,
   agentId,
-  body,
+  audioData,
+  options,
   requestContext,
 }: VoiceContext & {
-  body?: {
-    audioData?: Buffer;
-    options?: Parameters<NonNullable<Agent['voice']>['listen']>[1];
-  };
+  audioData?: Buffer;
+  options?: Parameters<NonNullable<Agent['voice']>['listen']>[1];
 }) {
   try {
     if (!agentId) {
       throw new HTTPException(400, { message: 'Agent ID is required' });
     }
 
-    if (!body?.audioData) {
+    if (!audioData) {
       throw new HTTPException(400, { message: 'Audio data is required' });
     }
 
@@ -132,10 +130,10 @@ export async function transcribeSpeechHandler({
     }
 
     const audioStream = new Readable();
-    audioStream.push(body.audioData);
+    audioStream.push(audioData);
     audioStream.push(null);
 
-    const text = await voice.listen(audioStream, body.options);
+    const text = await voice.listen(audioStream, options);
     return { text };
   } catch (error) {
     return handleError(error, 'Error transcribing speech');

@@ -45,7 +45,8 @@ export async function generateSpeechHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body: { text: input, speakerId: options?.speakerId },
+      text: input,
+      speakerId: options?.speakerId,
     });
 
     c.header('Content-Type', `audio/${options?.filetype ?? 'mp3'}`);
@@ -106,10 +107,8 @@ export async function transcribeSpeechHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body: {
-        audioData: Buffer.from(audioData),
-        options: parsedOptions,
-      },
+      audioData: Buffer.from(audioData),
+      options: parsedOptions,
     });
 
     return c.json({ text: transcription?.text });

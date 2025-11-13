@@ -11,14 +11,12 @@ interface ObservabilityContext extends Context {
 }
 
 interface ScoreTracesContext extends Context {
-  body?: {
-    // scorer.id
-    scorerName: string;
-    targets: Array<{
-      traceId: string;
-      spanId?: string;
-    }>;
-  };
+  // scorer.id
+  scorerName?: string;
+  targets?: Array<{
+    traceId: string;
+    spanId?: string;
+  }>;
 }
 
 /**
@@ -92,14 +90,8 @@ export async function getTracesPaginatedHandler({ mastra, pagination, filters }:
  * Score traces using a specified scorer
  * Fire-and-forget approach - returns immediately while scoring runs in background
  */
-export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
+export async function scoreTracesHandler({ mastra, scorerName, targets }: ScoreTracesContext) {
   try {
-    if (!body) {
-      throw new HTTPException(400, { message: 'Request body is required' });
-    }
-
-    const { scorerName, targets } = body;
-
     if (!scorerName) {
       throw new HTTPException(400, { message: 'Scorer ID is required' });
     }

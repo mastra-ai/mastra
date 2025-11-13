@@ -321,7 +321,7 @@ describe('Memory Handlers', () => {
         saveMessagesHandler({
           mastra,
           agentId: 'test-agent',
-          body: { messages: [] },
+          messages: [] as MastraDBMessage[],
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
@@ -337,7 +337,7 @@ describe('Memory Handlers', () => {
         saveMessagesHandler({
           mastra,
           agentId: 'test-agent',
-          body: {} as { messages: MastraDBMessage[] },
+          messages: undefined as unknown as MastraDBMessage[],
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages are required' }));
     });
@@ -353,7 +353,7 @@ describe('Memory Handlers', () => {
         saveMessagesHandler({
           mastra,
           agentId: 'test-agent',
-          body: { messages: 'not-an-array' as unknown as MastraDBMessage[] },
+          messages: 'not-an-array' as unknown as MastraDBMessage[],
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages should be an array' }));
     });
@@ -385,7 +385,7 @@ describe('Memory Handlers', () => {
       const result = await saveMessagesHandler({
         mastra,
         agentId: 'test-agent',
-        body: { messages: mockMessages },
+        messages: mockMessages,
       });
       expect(result).toBeDefined();
       expect(spy).toHaveBeenCalled();
@@ -440,7 +440,7 @@ describe('Memory Handlers', () => {
       const saveResponse = await saveMessagesHandler({
         mastra,
         agentId: 'test-agent',
-        body: { messages: [v1Message, v2Message] },
+        messages: [v1Message, v2Message] as MastraDBMessage[],
       });
 
       expect(saveResponse).toBeDefined();
@@ -562,7 +562,7 @@ describe('Memory Handlers', () => {
       const saveResponse = await saveMessagesHandler({
         mastra,
         agentId: 'test-agent',
-        body: { messages },
+        messages: messages as MastraDBMessage[],
       });
 
       expect(saveResponse).toBeDefined();
@@ -594,7 +594,7 @@ describe('Memory Handlers', () => {
       await expect(
         createThreadHandler({
           mastra,
-          body: { resourceId: 'test-resource' },
+          resourceId: 'test-resource',
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
@@ -626,10 +626,8 @@ describe('Memory Handlers', () => {
       const result = await createThreadHandler({
         mastra,
         agentId: 'test-agent',
-        body: {
-          resourceId: 'test-resource',
-          title: 'Test Thread',
-        },
+        resourceId: 'test-resource',
+        title: 'Test Thread',
       });
       expect(result).toBeDefined();
       expect(result.resourceId).toBe('test-resource');

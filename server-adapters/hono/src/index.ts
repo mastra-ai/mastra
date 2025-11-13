@@ -249,7 +249,6 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
         const handlerParams = {
           ...params.urlParams,
           ...params.queryParams,
-          body: params.body,
           ...(typeof params.body === 'object' ? params.body : {}),
           requestContext: c.get('requestContext'),
           mastra: this.mastra,

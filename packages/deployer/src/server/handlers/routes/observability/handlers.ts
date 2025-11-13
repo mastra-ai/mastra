@@ -89,7 +89,8 @@ export async function scoreTracesHandler(c: Context) {
 
     const result = await getOriginalScoreTracesHandler({
       mastra,
-      body: { scorerName, targets },
+      scorerName,
+      targets,
     });
 
     return c.json(result);

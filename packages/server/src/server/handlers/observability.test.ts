@@ -390,7 +390,7 @@ describe('Observability Handlers', () => {
 
       const result = await scoreTracesHandler({
         mastra: mockMastra,
-        body: requestBody,
+        ...requestBody,
       });
 
       expect(result).toEqual({
@@ -405,24 +405,6 @@ describe('Observability Handlers', () => {
         targets: requestBody.targets,
         mastra: mockMastra,
       });
-    });
-
-    it('should throw 400 when request body is missing', async () => {
-      await expect(
-        scoreTracesHandler({
-          mastra: mockMastra,
-        }),
-      ).rejects.toThrow(HTTPException);
-
-      try {
-        await scoreTracesHandler({
-          mastra: mockMastra,
-        });
-      } catch (error) {
-        expect(error).toBeInstanceOf(HTTPException);
-        expect(error.status).toBe(400);
-        expect(error.message).toBe('Request body is required');
-      }
     });
 
     it('should throw 400 when scorerId is missing', async () => {
@@ -455,20 +437,16 @@ describe('Observability Handlers', () => {
       await expect(
         scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [],
-          },
+          scorerName: 'test-scorer',
+          targets: [],
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [],
-          },
+          scorerName: 'test-scorer',
+          targets: [],
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -483,20 +461,16 @@ describe('Observability Handlers', () => {
       await expect(
         scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'non-existent-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'non-existent-scorer',
+          targets: [{ traceId: 'trace-123' }],
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await scoreTracesHandler({
           mastra: mockMastra,
-          body: {
-            scorerName: 'non-existent-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'non-existent-scorer',
+          targets: [{ traceId: 'trace-123' }],
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -511,20 +485,16 @@ describe('Observability Handlers', () => {
       await expect(
         scoreTracesHandler({
           mastra: mastraWithoutStorage,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'test-scorer',
+          targets: [{ traceId: 'trace-123' }],
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
         await scoreTracesHandler({
           mastra: mastraWithoutStorage,
-          body: {
-            scorerName: 'test-scorer',
-            targets: [{ traceId: 'trace-123' }],
-          },
+          scorerName: 'test-scorer',
+          targets: [{ traceId: 'trace-123' }],
         });
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
@@ -547,10 +517,8 @@ describe('Observability Handlers', () => {
       // Should still return success response since processing is fire-and-forget
       const result = await scoreTracesHandler({
         mastra: mockMastra,
-        body: {
-          scorerName: 'test-scorer',
-          targets: [{ traceId: 'trace-123' }],
-        },
+        scorerName: 'test-scorer',
+        targets: [{ traceId: 'trace-123' }],
       });
 
       expect(result).toEqual({

@@ -822,18 +822,15 @@ export async function streamUIMessageHandler(
 export async function updateAgentModelHandler({
   mastra,
   agentId,
-  body,
+  modelId,
+  provider,
 }: Context & {
   agentId: string;
-  body: {
-    modelId: string;
-    provider: string;
-  };
+  modelId: string;
+  provider: string;
 }): Promise<{ message: string }> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
-
-    const { modelId, provider } = body;
 
     // Use the universal Mastra router format: provider/model
     const newModel = `${provider}/${modelId}`;
@@ -866,12 +863,10 @@ export async function resetAgentModelHandler({
 export async function reorderAgentModelListHandler({
   mastra,
   agentId,
-  body,
+  reorderedModelIds,
 }: Context & {
   agentId: string;
-  body: {
-    reorderedModelIds: Array<string>;
-  };
+  reorderedModelIds: Array<string>;
 }): Promise<{ message: string }> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
@@ -881,7 +876,7 @@ export async function reorderAgentModelListHandler({
       throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
     }
 
-    agent.reorderModels(body.reorderedModelIds);
+    agent.reorderModels(reorderedModelIds);
 
     return { message: 'Model list reordered' };
   } catch (error) {
@@ -893,23 +888,21 @@ export async function updateAgentModelInModelListHandler({
   mastra,
   agentId,
   modelConfigId,
-  body,
+  model: bodyModel,
+  maxRetries,
+  enabled,
 }: Context & {
   agentId: string;
   modelConfigId: string;
-  body: {
-    model?: {
-      modelId: string;
-      provider: string;
-    };
-    maxRetries?: number;
-    enabled?: boolean;
+  model?: {
+    modelId: string;
+    provider: string;
   };
+  maxRetries?: number;
+  enabled?: boolean;
 }): Promise<{ message: string }> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
-
-    const { model: bodyModel, maxRetries, enabled } = body;
 
     if (!modelConfigId) {
       throw new HTTPException(400, { message: 'Model id is required' });

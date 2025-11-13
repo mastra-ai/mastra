@@ -173,12 +173,10 @@ export async function getThreadByIdHandler({
 export async function saveMessagesHandler({
   mastra,
   agentId,
-  body,
+  messages,
   requestContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> & {
-  body: {
-    messages: Parameters<MastraMemory['saveMessages']>[0]['messages'];
-  };
+  messages: Parameters<MastraMemory['saveMessages']>[0]['messages'];
 }) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
@@ -187,23 +185,23 @@ export async function saveMessagesHandler({
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    if (!body?.messages) {
+    if (!messages) {
       throw new HTTPException(400, { message: 'Messages are required' });
     }
 
-    if (!Array.isArray(body.messages)) {
+    if (!Array.isArray(messages)) {
       throw new HTTPException(400, { message: 'Messages should be an array' });
     }
 
     // Validate that all messages have threadId and resourceId
-    const invalidMessages = body.messages.filter(message => !message.threadId || !message.resourceId);
+    const invalidMessages = messages.filter(message => !message.threadId || !message.resourceId);
     if (invalidMessages.length > 0) {
       throw new HTTPException(400, {
         message: `All messages must have threadId and resourceId fields. Found ${invalidMessages.length} invalid message(s).`,
       });
     }
 
-    const processedMessages = body.messages.map(message => ({
+    const processedMessages = messages.map(message => ({
       ...message,
       id: message.id || memory.generateId(),
       createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
@@ -219,11 +217,13 @@ export async function saveMessagesHandler({
 export async function createThreadHandler({
   mastra,
   agentId,
-  body,
+  resourceId,
+  title,
+  metadata,
+  threadId,
   requestContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> & {
-  body?: Omit<Parameters<MastraMemory['createThread']>[0], 'resourceId'> & { resourceId?: string };
-}) {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'requestContext'> &
+  Omit<Parameters<MastraMemory['createThread']>[0], 'resourceId'> & { resourceId?: string }) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
@@ -231,13 +231,13 @@ export async function createThreadHandler({
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }
 
-    validateBody({ resourceId: body?.resourceId });
+    validateBody({ resourceId });
 
     const result = await memory.createThread({
-      resourceId: body?.resourceId!,
-      title: body?.title,
-      metadata: body?.metadata,
-      threadId: body?.threadId,
+      resourceId: resourceId!,
+      title,
+      metadata,
+      threadId,
     });
     return result;
   } catch (error) {
@@ -249,19 +249,18 @@ export async function updateThreadHandler({
   mastra,
   agentId,
   threadId,
-  body,
+  title,
+  metadata,
+  resourceId,
   requestContext,
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
-  body?: Parameters<MastraMemory['saveThread']>[0]['thread'];
+  title?: string;
+  metadata?: Record<string, any>;
+  resourceId?: string;
 }) {
   try {
     const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
-    if (!body) {
-      throw new HTTPException(400, { message: 'Body is required' });
-    }
-
-    const { title, metadata, resourceId } = body;
     const updatedAt = new Date();
 
     validateBody({ threadId });
@@ -410,13 +409,13 @@ export async function updateWorkingMemoryHandler({
   mastra,
   agentId,
   threadId,
-  body,
+  resourceId,
+  memoryConfig,
+  workingMemory,
   requestContext,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> & {
-  body: Omit<Parameters<MastraMemory['updateWorkingMemory']>[0], 'threadId'>;
-}) {
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId' | 'requestContext'> &
+  Omit<Parameters<MastraMemory['updateWorkingMemory']>[0], 'threadId'>) {
   try {
-    const { resourceId, memoryConfig, workingMemory } = body;
     validateBody({ threadId, workingMemory });
     const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     if (!memory) {

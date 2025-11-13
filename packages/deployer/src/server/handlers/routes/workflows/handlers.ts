@@ -330,7 +330,8 @@ export async function resumeStreamWorkflowHandler(c: Context) {
             mastra,
             workflowId,
             runId,
-            body: { step, resumeData },
+            step,
+            resumeData,
             requestContext,
             tracingOptions,
           });
@@ -375,7 +376,8 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
       requestContext,
       workflowId,
       runId,
-      body: { step, resumeData },
+      step,
+      resumeData,
       tracingOptions,
     });
 
@@ -402,7 +404,8 @@ export async function resumeWorkflowHandler(c: Context) {
       requestContext,
       workflowId,
       runId,
-      body: { step, resumeData },
+      step,
+      resumeData,
       tracingOptions,
     });
 

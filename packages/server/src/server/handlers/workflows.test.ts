@@ -422,7 +422,8 @@ describe('vNext Workflow Handlers', () => {
         resumeAsyncWorkflowHandler({
           mastra: mockMastra,
           runId: 'test-run',
-          body: { step: 'test-step', resumeData: {} },
+          step: 'test-step',
+          resumeData: {},
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -432,7 +433,8 @@ describe('vNext Workflow Handlers', () => {
         resumeAsyncWorkflowHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
-          body: { step: 'test-step', resumeData: {} },
+          step: 'test-step',
+          resumeData: {},
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
     });
@@ -443,7 +445,8 @@ describe('vNext Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           runId: 'non-existent',
-          body: { step: 'test-step', resumeData: {} },
+          step: 'test-step',
+          resumeData: {},
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
@@ -467,7 +470,8 @@ describe('vNext Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: reusableWorkflow.name,
         runId: 'test-run-async-resume',
-        body: { step: 'test-step', resumeData: { test: 'data' } },
+        step: 'test-step',
+        resumeData: { test: 'data' },
       });
 
       // The workflow should have resumed
@@ -488,7 +492,8 @@ describe('vNext Workflow Handlers', () => {
         resumeWorkflowHandler({
           mastra: mockMastra,
           runId: 'test-run',
-          body: { step: 'test-step', resumeData: {} },
+          step: 'test-step',
+          resumeData: {},
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
     });
@@ -498,7 +503,8 @@ describe('vNext Workflow Handlers', () => {
         resumeWorkflowHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
-          body: { step: 'test-step', resumeData: {} },
+          step: 'test-step',
+          resumeData: {},
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'runId required to resume workflow' }));
     });
@@ -509,7 +515,8 @@ describe('vNext Workflow Handlers', () => {
           mastra: mockMastra,
           workflowId: 'test-workflow',
           runId: 'non-existent',
-          body: { step: 'test-step', resumeData: {} },
+          step: 'test-step',
+          resumeData: {},
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
@@ -527,7 +534,8 @@ describe('vNext Workflow Handlers', () => {
         mastra: mockMastra,
         workflowId: reusableWorkflow.name,
         runId: 'test-run',
-        body: { step: 'test-step', resumeData: { test: 'data' } },
+        step: 'test-step',
+        resumeData: { test: 'data' },
         tracingOptions,
       });
 
@@ -559,7 +567,8 @@ describe('vNext Workflow Handlers', () => {
         mastra: freshMastra,
         workflowId: 'reusable-workflow',
         runId: 'test-run-with-resource',
-        body: { step: 'test-step', resumeData: { test: 'data' } },
+        step: 'test-step',
+        resumeData: { test: 'data' },
       });
 
       // Wait for async operations to complete
@@ -597,7 +606,8 @@ describe('vNext Workflow Handlers', () => {
         mastra: freshMastra,
         workflowId: 'reusable-workflow',
         runId: 'test-run-stream-resume',
-        body: { step: 'test-step', resumeData: { test: 'data' } },
+        step: 'test-step',
+        resumeData: { test: 'data' },
       });
 
       expect(stream).toBeDefined();
