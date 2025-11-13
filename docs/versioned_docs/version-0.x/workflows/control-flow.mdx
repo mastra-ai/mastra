@@ -1,0 +1,314 @@
+---
+title: "Control Flow | Workflows"
+description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
+---
+
+# Control Flow
+
+Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially, in parallel, or follow different paths based on conditions.
+
+Each step connects to the next in the workflow through defined schemas that keep data controlled and consistent.
+
+## Core principles
+
+- The first step’s `inputSchema` must match the workflow’s `inputSchema`.
+- The final step’s `outputSchema` must match the workflow’s `outputSchema`.
+- Each step’s `outputSchema` must match the next step’s `inputSchema`.
+  - If it doesn’t, use [Input data mapping](#input-data-mapping) to transform the data into the required shape.
+
+## Chaining steps with `.then()`
+
+Use `.then()` to run steps in order, allowing each step to access the result of the step before it.
+
+![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
+
+```typescript {30-31} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  //...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    formatted: z.string()
+  })
+});
+
+const step2 = createStep({
+  // ...
+  inputSchema: z.object({
+    formatted: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    emphasized: z.string()
+  })
+})
+  .then(step1)
+  .then(step2)
+  .commit();
+```
+
+## Simultaneous steps with `.parallel()`
+
+Use `.parallel()` to run steps at the same time. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
+
+![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
+
+```typescript {42} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  id: "step-1",
+  // ...
+});
+
+const step2 = createStep({
+  id: "step-2",
+  // ...
+});
+
+const step3 = createStep({
+  id: "step-3",
+  inputSchema: z.object({
+    "step-1": z.object({
+      formatted: z.string()
+    }),
+    "step-2": z.object({
+      emphasized: z.string()
+    })
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { formatted } = inputData["step-1"];
+    const { emphasized } = inputData["step-2"];
+    return {
+      combined: `${formatted} | ${emphasized}`
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    message: z.string()
+  }),
+  outputSchema: z.object({
+    combined: z.string()
+  })
+})
+  .parallel([step1, step2])
+  .then(step3)
+  .commit();
+```
+
+> 📹 Watch: How to run steps in parallel and optimize your Mastra workflow → [YouTube (3 minutes)](https://youtu.be/GQJxve5Hki4)
+
+## Conditional logic with `.branch()`
+
+Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
+
+![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
+
+```typescript {33-36} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
+
+const stepA = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
+
+const stepB = createStep({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.object({
+    value: z.number()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  })
+})
+  .then(step1)
+  .branch([
+    [async ({ inputData: { value } }) => value > 10, stepA],
+    [async ({ inputData: { value } }) => value <= 10, stepB]
+  ])
+  .commit();
+```
+
+## Input data mapping
+
+When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
+
+![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
+
+```typescript {9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
+  .map(async ({ inputData }) => {
+    const { foo } = inputData;
+    return {
+      bar: `new ${foo}`,
+    };
+  })
+  .then(step2)
+  .commit();
+```
+
+The `.map()` method provides additional helper functions for more complex mapping scenarios.
+
+**Available helper functions:**
+
+- [`getStepResult()`](/reference/workflows/workflow-methods/map#using-getstepresult): Access a specific step's full output
+- [`getInitData()`](/reference/workflows/workflow-methods/map#using-getinitdata): Access the workflow's initial input data
+- [`mapVariable()`](/reference/workflows/workflow-methods/map#using-mapvariable): Use declarative object syntax to extract and rename fields
+
+## Looping steps
+
+Workflows support different looping methods that let you repeat steps until or while a condition is met, or iterate over arrays. Loops can be combined with other control methods like `.then()`.
+
+### Looping with `.dountil()`
+
+Use `.dountil()` to run a step repeatedly until a condition becomes true.
+
+![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dountil(step2, async ({ inputData: { number } }) => number > 10)
+  .commit();
+```
+
+### Looping with `.dowhile()`
+
+Use `.dowhile()` to run a step repeatedly while a condition remains true.
+
+![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+const step2 = createStep({
+  // ...
+  execute: async ({ inputData }) => {
+    const { number } = inputData;
+    return {
+      number: number + 1
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .then(step1)
+  .dowhile(step2, async ({ inputData: { number } }) => number < 10)
+  .commit();
+```
+
+### Looping with `.foreach()`
+
+Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step’s logic to each one.
+
+![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
+
+```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({
+  // ...
+  inputSchema: z.string(),
+  outputSchema: z.string(),
+  execute: async ({ inputData }) => {
+    return inputData.toUpperCase();
+  }
+});
+
+const step2 = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  // ...
+  inputSchema: z.array(z.string()),
+  outputSchema: z.array(z.string())
+})
+  .foreach(step1)
+  .then(step2)
+  .commit();
+```
+
+#### Concurrency limits
+
+Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...})
+
+export const testWorkflow = createWorkflow({...})
+  .foreach(step1, { concurrency: 4 })
+  .commit();
+```
+
+## Loop management
+
+Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
+
+### Aborting loops
+
+Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
+
+```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+
+export const testWorkflow = createWorkflow({...})
+  .dountil(step1, async ({ inputData: { userResponse, iterationCount } }) => {
+    if (iterationCount >= 10) {
+      throw new Error("Maximum iterations reached");
+    }
+    return userResponse === "yes";
+  })
+  .commit();
+```
+
+
+## Related
+
+- [Suspend & Resume](/docs/workflows/suspend-and-resume)
+- [Human-in-the-loop](/docs/workflows/human-in-the-loop)
