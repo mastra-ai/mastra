@@ -1,6 +1,11 @@
 {
   "guidesSidebar": [
-    "index",
+    {
+      "type": "doc",
+      "id": "index",
+      "key": "guides.overview",
+      "label": "Overview"
+    },
     {
       "type": "category",
       "label": "Quickstarts",

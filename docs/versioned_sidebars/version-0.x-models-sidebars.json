@@ -1,6 +1,11 @@
 {
   "modelsSidebar": [
-    "index",
+    {
+      "type": "doc",
+      "id": "index",
+      "key": "models.overview",
+      "label": "Overview"
+    },
     "embeddings",
     {
       "type": "category",

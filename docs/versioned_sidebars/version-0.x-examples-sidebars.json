@@ -3,6 +3,7 @@
     {
       "type": "doc",
       "id": "index",
+      "key": "examples.overview",
       "label": "Overview"
     },
     {
@@ -343,16 +344,8 @@
           "id": "evals/answer-relevancy",
           "label": "Answer Relevancy"
         },
-        {
-          "type": "doc",
-          "id": "evals/bias",
-          "label": "Bias"
-        },
-        {
-          "type": "doc",
-          "id": "evals/completeness",
-          "label": "Completeness"
-        },
+        { "type": "doc", "id": "evals/bias", "label": "Bias" },
+        { "type": "doc", "id": "evals/completeness", "label": "Completeness" },
         {
           "type": "doc",
           "id": "evals/content-similarity",
@@ -378,11 +371,7 @@
           "id": "evals/contextual-recall",
           "label": "Contextual Recall"
         },
-        {
-          "type": "doc",
-          "id": "evals/faithfulness",
-          "label": "Faithfulness"
-        },
+        { "type": "doc", "id": "evals/faithfulness", "label": "Faithfulness" },
         {
           "type": "doc",
           "id": "evals/hallucination",
@@ -413,11 +402,7 @@
           "id": "evals/tone-consistency",
           "label": "Tone Consistency"
         },
-        {
-          "type": "doc",
-          "id": "evals/toxicity",
-          "label": "Toxicity"
-        },
+        { "type": "doc", "id": "evals/toxicity", "label": "Toxicity" },
         {
           "type": "doc",
           "id": "evals/custom-llm-judge-eval",
@@ -445,11 +430,7 @@
           "id": "voice/speech-to-text",
           "label": "Speech to Text"
         },
-        {
-          "type": "doc",
-          "id": "voice/turn-taking",
-          "label": "Turn Taking"
-        },
+        { "type": "doc", "id": "voice/turn-taking", "label": "Turn Taking" },
         {
           "type": "doc",
           "id": "voice/speech-to-speech",
