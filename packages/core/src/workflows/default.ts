@@ -20,12 +20,14 @@ import { getStepResult } from './step';
 import type {
   DefaultEngineType,
   Emitter,
+  RestartExecutionParams,
   SerializedStepFlowEntry,
   StepFailure,
   StepFlowEntry,
   StepResult,
   StepSuccess,
   StepSuspended,
+  TimeTravelExecutionParams,
 } from './types';
 import {
   getResumeLabelsByStepId,
@@ -56,23 +58,6 @@ export type ExecutionContext = {
   };
   format?: 'legacy' | 'vnext' | undefined;
   state: Record<string, any>;
-};
-
-export type RestartExecutionParams = {
-  activePaths: number[];
-  activeStepsPath: Record<string, number[]>;
-  stepResults: Record<string, StepResult<any, any, any, any>>;
-  state?: Record<string, any>;
-};
-
-export type TimeTravelExecutionParams = {
-  executionPath: number[];
-  inputData?: any;
-  stepResults: Record<string, StepResult<any, any, any, any>>;
-  nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
-  steps: string[];
-  state?: Record<string, any>;
-  resumeData?: any;
 };
 
 /**
@@ -852,7 +837,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           timeTravel:
             timeTravelSteps.length > 0
               ? {
-                  inputData: timeTravel?.inputData ?? inputData,
+                  inputData: timeTravel?.inputData,
                   steps: timeTravelSteps,
                   nestedStepResults: timeTravel?.nestedStepResults,
                   resumeData: timeTravel?.resumeData,

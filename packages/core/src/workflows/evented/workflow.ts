@@ -6,7 +6,7 @@ import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
-import { Workflow, Run } from '../../workflows';
+import { Workflow, Run, createTimeTravelExecutionParams } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { ExecuteFunction, Step } from '../../workflows/step';
 import type {
@@ -16,6 +16,7 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
+  TimeTravelContext,
 } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -360,6 +361,7 @@ export class EventedWorkflow<
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
+        validateInputs: this.options?.validateInputs,
         workflowEngineType: this.engineType,
       });
 
@@ -522,9 +524,14 @@ export class EventedRun<
       | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-      typeof step === 'string' ? step : step?.id,
-    );
+    let steps: string[] = [];
+    if (typeof params.step === 'string') {
+      steps = params.step.split('.');
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    }
 
     if (steps.length === 0) {
       throw new Error('No steps provided to resume');
@@ -579,6 +586,131 @@ export class EventedRun<
           resumePayload: resumeDataToUse,
           resumePath,
         },
+        emitter: {
+          emit: (event: string, data: any) => {
+            this.emitter.emit(event, data);
+            return Promise.resolve();
+          },
+          on: (event: string, callback: (data: any) => void) => {
+            this.emitter.on(event, callback);
+          },
+          off: (event: string, callback: (data: any) => void) => {
+            this.emitter.off(event, callback);
+          },
+          once: (event: string, callback: (data: any) => void) => {
+            this.emitter.once(event, callback);
+          },
+        },
+        requestContext,
+        abortController: this.abortController,
+      })
+      .then(result => {
+        if (result.status !== 'suspended') {
+          this.closeStreamAction?.().catch(() => {});
+        }
+
+        return result;
+      });
+
+    this.executionResults = executionResultPromise;
+
+    return executionResultPromise;
+  }
+
+  async timeTravel<TInputSchema extends z.ZodType<any>>(params: {
+    inputData?: z.input<TInputSchema>;
+    resumeData?: any;
+    step:
+      | Step<string, any, TInputSchema, any, any, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, TInputSchema, any, any, any, TEngineType>,
+        ]
+      | string
+      | string[];
+    context?: TimeTravelContext<any, any, any, any>;
+    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+    requestContext?: RequestContext;
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    if (!params.step || (Array.isArray(params.step) && params.step?.length === 0)) {
+      throw new Error('Step is required and must be a valid step or array of steps');
+    }
+
+    let steps: string[] = [];
+    if (typeof params.step === 'string') {
+      steps = params.step.split('.');
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    }
+
+    if (steps.length === 0) {
+      throw new Error('No steps provided to timeTravel');
+    }
+
+    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+    });
+
+    if (!snapshot) {
+      throw new Error(`Snapshot not found for run ${this.runId}`);
+    }
+
+    if (snapshot.status === 'running') {
+      throw new Error('This workflow run is still running, cannot time travel');
+    }
+
+    if (steps.length > 1 && !params.inputData && !params.nestedStepsContext && !params.resumeData) {
+      throw new Error(
+        'No inputData, resumeData, nor nestedStepsContext provided to time travel to this nested workflow step',
+      );
+    }
+
+    if (!params.inputData && !params.resumeData && !params.context) {
+      throw new Error('No inputData, resumeData, nor context provided to time travel');
+    }
+
+    let inputDataToUse = params.inputData;
+
+    if (inputDataToUse && steps.length === 1) {
+      inputDataToUse = await this._validateTimetravelInputData(params.inputData, this.workflowSteps[steps[0]!]!);
+    }
+
+    const timeTravelData = createTimeTravelExecutionParams({
+      steps,
+      inputData: inputDataToUse,
+      resumeData: params.resumeData,
+      context: params.context,
+      nestedStepsContext: params.nestedStepsContext,
+      snapshot,
+      graph: this.executionGraph,
+    });
+
+    // Start with the snapshot's request context (old values)
+    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContext = new RequestContext();
+
+    // First, set values from the snapshot
+    for (const [key, value] of Object.entries(requestContextObj)) {
+      requestContext.set(key, value);
+    }
+
+    // Then, override with any values from the passed request context (new values take precedence)
+    if (params.requestContext) {
+      for (const [key, value] of params.requestContext.entries()) {
+        requestContext.set(key, value);
+      }
+    }
+
+    const executionResultPromise = this.executionEngine
+      .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        timeTravel: timeTravelData,
         emitter: {
           emit: (event: string, data: any) => {
             this.emitter.emit(event, data);

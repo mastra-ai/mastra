@@ -20,10 +20,8 @@ import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import { removeUndefinedValues } from '../utils';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
-import type { RestartExecutionParams, TimeTravelExecutionParams } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step, SuspendOptions } from './step';
 import type {
@@ -31,6 +29,7 @@ import type {
   DynamicMapping,
   ExtractSchemaFromStep,
   ExtractSchemaType,
+  RestartExecutionParams,
   PathsToStringProps,
   SerializedStep,
   SerializedStepFlowEntry,
@@ -50,7 +49,7 @@ import type {
   WorkflowState,
   WorkflowStreamEvent,
 } from './types';
-import { getStepIds, getZodErrors } from './utils';
+import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -1155,7 +1154,7 @@ export class Workflow<
     suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
     restart?: boolean;
     timeTravel?: {
-      inputData: z.infer<TInput>;
+      inputData?: z.infer<TInput>;
       steps: string[];
       nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
       resumeData?: any;
@@ -1652,6 +1651,29 @@ export class Run<
     }
 
     return resumeDataToUse;
+  }
+
+  protected async _validateTimetravelInputData<TInputSchema extends z.ZodType<any>>(
+    inputData: z.input<TInputSchema>,
+    step: Step<string, any, TInputSchema, any, any, any, TEngineType>,
+  ) {
+    let inputDataToUse = inputData;
+
+    if (step && step.inputSchema && this.validateInputs) {
+      const inputSchema = step.inputSchema;
+
+      const validatedInputData = await inputSchema.safeParseAsync(inputData);
+
+      if (!validatedInputData.success) {
+        const errors = getZodErrors(validatedInputData.error);
+        const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+        throw new Error('Invalid inputData: \n' + errorMessages);
+      }
+
+      inputDataToUse = validatedInputData.data;
+    }
+
+    return inputDataToUse;
   }
 
   protected async _start({
@@ -2367,7 +2389,7 @@ export class Run<
 
     const stepResults = { ...(snapshot?.context ?? {}), input: requestContextInput ?? snapshot?.context?.input } as any;
 
-    let requestContextToUse = params.requestContext ?? new RequestContext();
+    const requestContextToUse = params.requestContext ?? new RequestContext();
 
     Object.entries(snapshot?.requestContext ?? {}).forEach(([key, value]) => {
       if (!requestContextToUse.has(key)) {
@@ -2643,129 +2665,39 @@ export class Run<
       typeof step === 'string' ? step : step?.id,
     );
 
-    const firstStepId = steps[0]!;
-
-    let executionPath: number[] = [];
-    const stepResults: Record<string, StepResult<any, any, any, any>> = {};
-    const snapshotContext = snapshot.context as Record<string, any>;
-
-    for (const [index, entry] of this.executionGraph.steps.entries()) {
-      const currentExecPathLength = executionPath.length;
-      //if there is resumeData, steps down the graph until the suspended step will have stepResult info to use
-      if (currentExecPathLength > 0 && !resumeData) {
-        break;
-      }
-      let stepFound = false;
-      let stepInParallel = false;
-      const stepIds = getStepIds(entry);
-      if (stepIds.includes(firstStepId)) {
-        const innerExecutionPath = stepIds?.length > 1 ? [stepIds?.findIndex(s => s === firstStepId)] : [];
-        //parallel and loop steps will have more than one step id,
-        // and if the step is one of those, we need the index for the execution path
-        executionPath = [index, ...innerExecutionPath];
-        stepFound = true;
-        stepInParallel = stepIds?.length > 1;
-      }
-
-      const prevStep = this.executionGraph.steps[index - 1]!;
-      let stepPayload = {};
-      if (prevStep) {
-        const prevStepIds = getStepIds(prevStep);
-        if (prevStepIds.length > 0) {
-          if (prevStepIds.length === 1) {
-            stepPayload = (stepResults?.[prevStepIds[0]!] as any)?.output ?? {};
-          } else {
-            stepPayload = prevStepIds.reduce(
-              (acc, stepId) => {
-                acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
-                return acc;
-              },
-              {} as Record<string, any>,
-            );
-          }
-        }
-      }
-
-      //the stepResult input is basically the payload of the first step
-      if (index === 0 && stepIds.includes(firstStepId)) {
-        stepResults.input = (context?.[firstStepId]?.payload ?? inputData ?? snapshotContext?.input) as any;
-      } else if (index === 0) {
-        stepResults.input =
-          stepIds?.reduce((acc, stepId) => {
-            if (acc) return acc;
-            return context?.[stepId]?.payload ?? snapshotContext?.[stepId]?.payload;
-          }, null) ??
-          snapshotContext?.input ??
-          {};
-      }
-
-      if (stepFound && !resumeData && !stepInParallel) {
-        //we need to construct stepResult for steps in parallel if timeTravelling to one of the parallel steps
-        break;
-      }
-
-      let stepOutput = undefined;
-      const nextStep = this.executionGraph.steps[index + 1]!;
-      if (nextStep) {
-        const nextStepIds = getStepIds(nextStep);
-        if (
-          nextStepIds.length > 0 &&
-          inputData &&
-          nextStepIds.includes(firstStepId) &&
-          steps.length === 1 //steps being greater than 1 means it's travelling to step in a nested workflow
-          //if it's a nested wokrflow step, the step being resumed in the nested workflow might not be the first step in it,
-          // making the inputData the output here wrong
-        ) {
-          stepOutput = inputData;
-        }
-      }
-
-      stepIds.forEach(stepId => {
-        let result;
-        const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-        const defaultStepStatus = steps?.includes(stepId) ? 'running' : 'success';
-        const status = stepContext?.status ?? defaultStepStatus;
-        const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
-        result = {
-          status,
-          payload: stepContext?.payload ?? stepPayload,
-          output: isCompleteStatus
-            ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
-            : undefined,
-          resumePayload: stepContext?.resumePayload,
-          suspendPayload: stepContext?.suspendPayload,
-          suspendOutput: stepContext?.suspendOutput,
-          startedAt: stepContext?.startedAt ?? Date.now(),
-          endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
-          suspendedAt: stepContext?.suspendedAt,
-          resumedAt: stepContext?.resumedAt,
-        };
-        if (
-          currentExecPathLength > 0 &&
-          (!snapshotContext[stepId] || (snapshotContext[stepId] && snapshotContext[stepId].status !== 'suspended'))
-        ) {
-          // if the step is after the timeTravelled step in the graph
-          // and it doesn't exist in the snapshot,
-          // OR it exists in snapshot and is not suspended,
-          // we don't need to set stepResult for it
-          result = undefined;
-        }
-        if (result) {
-          const formattedResult = removeUndefinedValues(result);
-          stepResults[stepId] = formattedResult as any;
-        }
-      });
+    if (steps.length > 1 && !inputData && !nestedStepsContext && !resumeData) {
+      throw new Error(
+        'No inputData, resumeData, nor nestedStepsContext provided to time travel to this nested workflow step',
+      );
     }
 
-    const timeTravelData: TimeTravelExecutionParams = {
-      inputData,
-      executionPath,
+    if (!inputData && !resumeData && !context) {
+      throw new Error('No inputData, resumeData, nor context provided to time travel');
+    }
+
+    let inputDataToUse = inputData;
+
+    if (inputDataToUse && steps.length === 1) {
+      inputDataToUse = await this._validateTimetravelInputData(inputData, this.workflowSteps[steps[0]!]!);
+    }
+
+    const timeTravelData = createTimeTravelExecutionParams({
       steps,
-      stepResults,
-      nestedStepResults: nestedStepsContext as any,
-      state: initialState ?? {},
+      inputData: inputDataToUse,
       resumeData,
-    };
+      context,
+      nestedStepsContext,
+      snapshot,
+      initialState,
+      graph: this.executionGraph,
+    });
+
+    const requestContextToUse = requestContext ?? new RequestContext();
+    for (const [key, value] of Object.entries(snapshot.requestContext ?? {})) {
+      if (!requestContextToUse.has(key)) {
+        requestContextToUse.set(key, value);
+      }
+    }
 
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -2781,7 +2713,7 @@ export class Run<
       tracingPolicy: this.tracingPolicy,
       tracingOptions,
       tracingContext,
-      requestContext,
+      requestContext: requestContextToUse,
       mastra: this.#mastra,
     });
 
@@ -2814,7 +2746,7 @@ export class Run<
         },
       },
       retryConfig: this.retryConfig,
-      requestContext: requestContext ?? new RequestContext(),
+      requestContext: requestContextToUse,
       abortController: this.abortController,
       writableStream,
       workflowSpan,

@@ -11,6 +11,23 @@ export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type WorkflowEngineType = string;
 
+export type RestartExecutionParams = {
+  activePaths: number[];
+  activeStepsPath: Record<string, number[]>;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  state?: Record<string, any>;
+};
+
+export type TimeTravelExecutionParams = {
+  executionPath: number[];
+  inputData?: any;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  nestedStepResults?: Record<string, Record<string, StepResult<any, any, any, any>>>;
+  steps: string[];
+  state?: Record<string, any>;
+  resumeData?: any;
+};
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;

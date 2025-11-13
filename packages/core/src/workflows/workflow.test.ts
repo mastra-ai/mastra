@@ -11482,6 +11482,153 @@ describe('Workflow', () => {
       );
     });
 
+    it('should throw error if validateInputs is true and trying to timetravel a workflow execution with invalid inputData', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+        steps: [step1, step2, step3],
+        options: {
+          validateInputs: true,
+        },
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const run = await workflow.createRun();
+
+      await expect(run.timeTravel({ step: 'step2', inputData: { invalidPayload: 2 } })).rejects.toThrow(
+        'Invalid inputData: \n- step1Result: Required',
+      );
+    });
+
+    it('should throw error if trying to timetravel a workflow execution without input data', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            step3Result: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ step3Result: z.number() }),
+      });
+
+      const step4 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step4Result: inputData.step3Result + 1,
+          };
+        },
+        inputSchema: z.object({ step3Result: z.number() }),
+        outputSchema: z.object({ step4Result: z.number() }),
+      });
+
+      const step5 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step4Result + 1,
+          };
+        },
+        inputSchema: z.object({ step4Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nestedWorkflow',
+        inputSchema: z.object({ step3Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      })
+        .then(step4)
+        .then(step5)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+      });
+
+      workflow.then(step1).then(step2).then(step3).then(nestedWorkflow).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+      });
+
+      const run = await workflow.createRun();
+
+      await expect(run.timeTravel({ step: 'step2' })).rejects.toThrow(
+        'No inputData, resumeData, nor context provided to time travel',
+      );
+
+      await expect(run.timeTravel({ step: 'nestedWorkflow.step3' })).rejects.toThrow(
+        'No inputData, resumeData, nor nestedStepsContext provided to time travel',
+      );
+    });
+
     it('should timeTravel a workflow execution', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
@@ -11887,17 +12034,11 @@ describe('Workflow', () => {
         .then(step4)
         .commit();
 
-      const mastra = new Mastra({
+      new Mastra({
         logger: false,
         storage: testStorage,
         workflows: { testWorkflow: workflow },
       });
-
-      const storage = mastra.getStorage();
-
-      if (!storage) {
-        expect.fail('Storage is not initialized');
-      }
 
       const run = await workflow.createRun();
       const result = await run.timeTravel({
@@ -11972,7 +12113,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
-      const nestedWorkflowSnapshot = await storage.loadWorkflowSnapshot({
+      const nestedWorkflowSnapshot = await testStorage.loadWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: run.runId,
       });
@@ -12043,7 +12184,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
-      const nestedWorkflowSnapshot2 = await storage.loadWorkflowSnapshot({
+      const nestedWorkflowSnapshot2 = await testStorage.loadWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: run2.runId,
       });
@@ -12114,7 +12255,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(1);
 
-      const nestedWorkflowSnapshot3 = await storage.loadWorkflowSnapshot({
+      const nestedWorkflowSnapshot3 = await testStorage.loadWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: run3.runId,
       });
