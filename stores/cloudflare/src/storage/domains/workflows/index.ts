@@ -1,20 +1,38 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage, normalizePerPage } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorageBase, normalizePerPage } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { CloudflareDomainBase } from '../base';
+import type { CloudflareDomainConfig } from '../base';
 import type { StoreOperationsCloudflare } from '../operations';
 
-export class WorkflowsStorageCloudflare extends WorkflowsStorage {
-  private operations: StoreOperationsCloudflare;
+export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
+  private domainBase: CloudflareDomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsCloudflare }) {
+  constructor(opts: CloudflareDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new CloudflareDomainBase(opts);
+  }
+
+  private get operations(): StoreOperationsCloudflare {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    // Cloudflare KV doesn't require table creation
+  }
+
+  async close(): Promise<void> {
+    // Cloudflare KV doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private validateWorkflowParams(params: { workflowId: string; runId: string }): void {
     const { workflowId, runId } = params;
-    if (!workflowName || !runId) {
+    if (!workflowId || !runId) {
       throw new Error('Invalid workflow snapshot parameters');
     }
   }
@@ -61,20 +79,25 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
       const { workflowId, runId, resourceId, snapshot } = params;
 
       await this.operations.putKV({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        key: this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowId, run_id: runId }),
+        key: this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, {
+          workflow_name: workflowId,
+          run_id: runId,
+        }),
         value: {
           workflow_name: workflowId,
           run_id: runId,
           resourceId,
           snapshot: JSON.stringify(snapshot),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: params.createdAt ?? new Date(),
+          updatedAt: params.updatedAt ?? new Date(),
         },
       });
     } catch (error) {
@@ -83,9 +106,9 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
           id: 'CLOUDFLARE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error persisting workflow snapshot for workflow ${params.workflowName}, run ${params.runId}`,
+          text: `Error persisting workflow snapshot for workflow ${params.workflowId}, run ${params.runId}`,
           details: {
-            workflowName: params.workflowId,
+            workflowId: params.workflowId,
             runId: params.runId,
           },
         },
@@ -112,9 +135,9 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
           id: 'CLOUDFLARE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error loading workflow snapshot for workflow ${params.workflowName}, run ${params.runId}`,
+          text: `Error loading workflow snapshot for workflow ${params.workflowId}, run ${params.runId}`,
           details: {
-            workflowName: params.workflowId,
+            workflowId: params.workflowId,
             runId: params.runId,
           },
         },
@@ -153,14 +176,14 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     resourceId,
   }: {
     namespace?: string;
-    workflowName?: string;
+    workflowId?: string;
     runId?: string;
     resourceId?: string;
   }): string {
     // Add namespace prefix if configured
     const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
     let key = `${prefix}${TABLE_WORKFLOW_SNAPSHOT}`;
-    if (workflowName) key += `:${workflowName}`;
+    if (workflowId) key += `:${workflowId}`;
     if (runId) key += `:${runId}`;
     if (resourceId) key += `:${resourceId}`;
     return key;
@@ -191,7 +214,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       const normalizedPerPage = normalizePerPage(perPage, 20);
       const offset = page * normalizedPerPage;
       // List all keys in the workflow snapshot table
-      const prefix = this.buildWorkflowSnapshotPrefix({ workflowName });
+      const prefix = this.buildWorkflowSnapshotPrefix({ workflowId });
       const keyObjs = await this.operations.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
       const runs: WorkflowRun[] = [];
       for (const { name: key } of keyObjs) {
@@ -204,7 +227,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         // If resourceId is present in the key, it's at idx+3
         const keyResourceId = parts.length > idx + 3 ? parts[idx + 3] : undefined;
         // Filter by namespace, workflowId, resourceId if provided
-        if (workflowName && wfName !== workflowName) continue;
+        if (workflowId && wfName !== workflowId) continue;
         // If resourceId filter is provided, the key must have that resourceId
         if (resourceId && keyResourceId !== resourceId) continue;
         // Load the snapshot
@@ -261,7 +284,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
 
   async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId: string }): Promise<WorkflowRun | null> {
     try {
-      if (!runId || !workflowName) {
+      if (!runId || !workflowId) {
         throw new Error('runId, workflowId, are required');
       }
       // Try to find the data by listing keys with the prefix and finding the exact match
@@ -276,7 +299,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         if (idx === -1 || parts.length < idx + 3) return false;
         const wfName = parts[idx + 1];
         const rId = parts[idx + 2];
-        return wfName === workflowName && rId === runId;
+        return wfName === workflowId && rId === runId;
       });
 
       if (!exactKey) return null;

@@ -11,7 +11,7 @@ import type {
 } from '@mastra/core/storage';
 import {
   ensureDate,
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   serializeDate,
@@ -19,13 +19,36 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
+import { CloudflareDomainBase } from '../base';
+import type { CloudflareDomainConfig } from '../base';
 import type { StoreOperationsCloudflare } from '../operations';
 
-export class MemoryStorageCloudflare extends MemoryStorage {
-  operations: StoreOperationsCloudflare;
-  constructor({ operations }: { operations: StoreOperationsCloudflare }) {
+export class MemoryStorageCloudflare extends MemoryStorageBase {
+  private domainBase: CloudflareDomainBase;
+
+  constructor(opts: CloudflareDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new CloudflareDomainBase(opts);
+  }
+
+  private get operations(): StoreOperationsCloudflare {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    // Cloudflare KV doesn't require table creation
+  }
+
+  async close(): Promise<void> {
+    // Cloudflare KV doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearTable({ tableName: TABLE_THREADS }),
+      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
+      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   private ensureMetadata(metadata: Record<string, unknown> | string | undefined): Record<string, unknown> | undefined {

@@ -2,13 +2,15 @@ import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
-  ScoresStorage,
+  EvalsStorageBase,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
+import { CloudflareDomainBase } from '../base';
+import type { CloudflareDomainConfig } from '../base';
 import type { StoreOperationsCloudflare } from '../operations';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
@@ -27,12 +29,28 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return deserialized as ScoreRowData;
 }
 
-export class ScoresStorageCloudflare extends ScoresStorage {
-  private operations: StoreOperationsCloudflare;
+export class EvalsStorageCloudflare extends EvalsStorageBase {
+  private domainBase: CloudflareDomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsCloudflare }) {
+  constructor(opts: CloudflareDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new CloudflareDomainBase(opts);
+  }
+
+  private get operations(): StoreOperationsCloudflare {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    // Cloudflare KV doesn't require table creation
+  }
+
+  async close(): Promise<void> {
+    // Cloudflare KV doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
