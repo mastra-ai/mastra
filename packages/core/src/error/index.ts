@@ -1,6 +1,9 @@
 import { getErrorFromUnknown } from './utils.js';
 import type { SerializableError } from './utils.js';
 
+export { getErrorFromUnknown };
+export type { SerializableError };
+
 export enum ErrorDomain {
   TOOL = 'TOOL',
   AGENT = 'AGENT',
@@ -136,5 +139,3 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
 }
 
 export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {}
-
-export { getErrorFromUnknown };
