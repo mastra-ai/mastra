@@ -18,7 +18,7 @@ import type {
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { initLogger, _exportsForTestingOnly } from 'braintrust';
 import type { Logger } from 'braintrust';
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './tracing';
 import type { BraintrustExporterConfig } from './tracing';
 
@@ -979,7 +979,6 @@ describe('BraintrustExporter', () => {
 describe('BraintrustExporter with braintrustLogger parameter', () => {
   let mockLogger: any;
   let mockExternalSpan: any;
-  let mockCurrentSpan: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
