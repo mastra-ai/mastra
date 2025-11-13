@@ -1193,7 +1193,12 @@ describe('Working Memory Tests', () => {
         });
 
         // Verify it's in the resource table
-        const resource = await storage.getStore('memory')?.getResourceById({ resourceId });
+        const memoryStore = await storage.getStore('memory');
+        expect(memoryStore).toBeDefined();
+        if (!memoryStore) {
+          throw new Error('Memory storage is not defined');
+        }
+        const resource = await memoryStore.getResourceById({ resourceId });
         expect(resource?.workingMemory).toBe(workingMemoryData);
 
         // The working memory should come from resource, not thread metadata
