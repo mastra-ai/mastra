@@ -1,15 +1,41 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { ScoresStorage, calculatePagination, normalizePerPage } from '@mastra/core/storage';
+import { EvalsStorageBase, calculatePagination, normalizePerPage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import { DynamoDBDomainBase } from '../base';
+import type { DynamoDBDomainConfig } from '../base';
 
-export class ScoresStorageDynamoDB extends ScoresStorage {
-  private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+export class EvalsStorageDynamoDB extends EvalsStorageBase {
+  protected domainBase: DynamoDBDomainBase;
+
+  constructor(opts: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    this.domainBase = new DynamoDBDomainBase(opts);
+  }
+
+  protected get service(): Service<Record<string, any>> {
+    return this.domainBase['service'];
+  }
+
+  /**
+   * Initialize the domain
+   */
+  async init(): Promise<void> {
+    await this.domainBase.init();
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    // Clear all score entities
+    await this.domainBase['clearEntityData']('score');
   }
 
   // Helper function to parse score data (handle JSON fields)

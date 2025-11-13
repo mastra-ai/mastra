@@ -1,8 +1,8 @@
 import { DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  StoreOperations,
   TABLE_SPANS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -14,7 +14,7 @@ import {
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
-export class StoreOperationsDynamoDB extends StoreOperations {
+export class StoreOperationsDynamoDB extends MastraBase {
   client: DynamoDBDocumentClient;
   tableName: string;
   service: Service<Record<string, any>>;
@@ -27,7 +27,10 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     tableName: string;
     client: DynamoDBDocumentClient;
   }) {
-    super();
+    super({
+      component: 'STORAGE',
+      name: 'DYNAMODB_OPERATIONS',
+    });
     this.service = service;
     this.client = client;
     this.tableName = tableName;
@@ -37,7 +40,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
     return true;
   }
 
-  async dropTable(): Promise<void> {}
+  async dropTable(): Promise<void> { }
 
   // Helper methods for entity/table mapping
   private getEntityNameForTable(tableName: TABLE_NAMES): string | null {
@@ -253,7 +256,7 @@ export class StoreOperationsDynamoDB extends StoreOperations {
 
       // ElectroDB batch delete expects the key components for each item
       const keysToDelete = result.data.map((item: any) => {
-        const key: { entity: string; [key: string]: any } = { entity: entityName };
+        const key: { entity: string;[key: string]: any } = { entity: entityName };
 
         // Construct the key based on the specific entity's primary key structure
         switch (entityName) {

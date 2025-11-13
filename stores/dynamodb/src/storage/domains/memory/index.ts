@@ -2,7 +2,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { MemoryStorage, normalizePerPage, calculatePagination } from '@mastra/core/storage';
+import { MemoryStorageBase, normalizePerPage, calculatePagination } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -11,12 +11,42 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import { DynamoDBDomainBase } from '../base';
+import type { DynamoDBDomainConfig } from '../base';
 
-export class MemoryStorageDynamoDB extends MemoryStorage {
-  private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+export class MemoryStorageDynamoDB extends MemoryStorageBase {
+  protected domainBase: DynamoDBDomainBase;
+
+  constructor(opts: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    this.domainBase = new DynamoDBDomainBase(opts);
+  }
+
+  protected get service(): Service<Record<string, any>> {
+    return this.domainBase['service'];
+  }
+
+  /**
+   * Initialize the domain
+   */
+  async init(): Promise<void> {
+    await this.domainBase.init();
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    // Clear all memory-related entities
+    await Promise.all([
+      this.domainBase['clearEntityData']('thread'),
+      this.domainBase['clearEntityData']('message'),
+      this.domainBase['clearEntityData']('resource'),
+    ]);
   }
 
   // Helper function to parse message data (handle JSON fields)
@@ -690,10 +720,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   async updateMessages(args: {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
+    {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    }[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });

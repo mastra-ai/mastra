@@ -330,6 +330,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     const { runs } = await workflowStore.listWorkflowRuns({ workflowId: workflowName });
+
     expect(runs.length).toBeGreaterThan(0);
     const run = runs.find(r => r.runId === runId);
     expect(run).toBeTruthy();

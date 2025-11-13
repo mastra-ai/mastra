@@ -2,17 +2,12 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   WorkflowRun,
   WorkflowRuns,
-  TABLE_NAMES,
-  PaginationInfo,
-  StorageColumn,
-  StoragePagination,
   StorageDomains,
   StorageResourceType,
   StorageListWorkflowRunsInput,
@@ -21,8 +16,7 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 import { MemoryStorageDynamoDB } from './domains/memory';
-import { StoreOperationsDynamoDB } from './domains/operations';
-import { ScoresStorageDynamoDB } from './domains/score';
+import { EvalsStorageDynamoDB } from './domains/score';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
 export interface DynamoDBStoreConfig {
@@ -73,23 +67,31 @@ export class DynamoDBStore extends MastraStorage {
       this.client = DynamoDBDocumentClient.from(dynamoClient);
       this.service = getElectroDbService(this.client, this.tableName) as MastraService;
 
-      const operations = new StoreOperationsDynamoDB({
-        service: this.service,
+      // Domains will get shared init getter
+      const getSharedInit = () => this.hasInitialized;
+
+      const workflows = new WorkflowStorageDynamoDB({
+        dynamoClient: this.client,
         tableName: this.tableName,
-        client: this.client,
+        getSharedInit
       });
 
-      const workflows = new WorkflowStorageDynamoDB({ service: this.service });
+      const memory = new MemoryStorageDynamoDB({
+        dynamoClient: this.client,
+        tableName: this.tableName,
+        getSharedInit
+      });
 
-      const memory = new MemoryStorageDynamoDB({ service: this.service });
-
-      const scores = new ScoresStorageDynamoDB({ service: this.service });
+      const evals = new EvalsStorageDynamoDB({
+        dynamoClient: this.client,
+        tableName: this.tableName,
+        getSharedInit
+      });
 
       this.stores = {
-        operations,
         workflows,
         memory,
-        scores,
+        evals,
       };
     } catch (error) {
       throw new MastraError(
@@ -207,38 +209,6 @@ export class DynamoDBStore extends MastraStorage {
         // Re-throw the error so it can be caught by the awaiter in init()
         throw err;
       });
-  }
-
-  async createTable({ tableName, schema }: { tableName: TABLE_NAMES; schema: Record<string, any> }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable(_args);
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   // Thread operations
@@ -389,69 +359,5 @@ export class DynamoDBStore extends MastraStorage {
         error,
       );
     }
-  }
-  /**
-   * SCORERS - Not implemented
-   */
-  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id: _id });
-  }
-
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
-  }
-
-  async listScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({
-      entityId: _entityId,
-      entityType: _entityType,
-      pagination: _pagination,
-    });
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    source,
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    scorerId: string;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, source, entityId, entityType, pagination });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 }

@@ -1,8 +1,10 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, WorkflowsStorageBase } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
+import { DynamoDBDomainBase } from '../base';
+import type { DynamoDBDomainConfig } from '../base';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
 interface WorkflowSnapshotDBItem {
@@ -26,12 +28,35 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
   };
 }
 
-export class WorkflowStorageDynamoDB extends WorkflowsStorage {
-  private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
-    super();
+export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
+  protected domainBase: DynamoDBDomainBase;
 
-    this.service = service;
+  constructor(opts: DynamoDBDomainConfig) {
+    super();
+    this.domainBase = new DynamoDBDomainBase(opts);
+  }
+
+  protected get service(): Service<Record<string, any>> {
+    return this.domainBase['service'];
+  }
+
+  /**
+   * Initialize the domain
+   */
+  async init(): Promise<void> {
+    await this.domainBase.init();
+  }
+
+  /**
+   * Clean up owned resources (only if standalone)
+   */
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    // Clear all workflow snapshot entities
+    await this.domainBase['clearEntityData']('workflow_snapshot');
   }
 
   updateWorkflowResults(
@@ -77,11 +102,15 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     this.logger.debug('Persisting workflow snapshot', { workflowId, runId });
 
@@ -93,8 +122,8 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         workflow_name: workflowId,
         run_id: runId,
         snapshot: JSON.stringify(snapshot),
-        createdAt: now,
-        updatedAt: now,
+        createdAt: createdAt?.toISOString() || now,
+        updatedAt: updatedAt?.toISOString() || now,
         resourceId,
       };
       // Use upsert instead of create to handle both create and update cases
@@ -176,8 +205,8 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
       let query;
 
-      if (args?.workflowName) {
-        // Query by workflow name using the primary index
+      if (args?.workflowId) {
+        // Query by workflow id using the primary index
         // Provide *all* composite key components for the PK ('entity', 'workflow_name')
         query = this.service.entities.workflow_snapshot.query.primary({
           entity: 'workflow_snapshot', // Add entity type
@@ -256,21 +285,21 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           id: 'STORAGE_DYNAMODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { workflowName: args?.workflowName || '', resourceId: args?.resourceId || '' },
+          details: { workflowId: args?.workflowId || '', resourceId: args?.resourceId || '' },
         },
         error,
       );
     }
   }
 
-  async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    const { runId, workflowName } = args;
-    this.logger.debug('Getting workflow run by ID', { runId, workflowName });
+  async getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
+    const { runId, workflowId } = args;
+    this.logger.debug('Getting workflow run by ID', { runId, workflowId });
 
     try {
       // If we have a workflowId, we can do a direct get using the primary key
-      if (workflowName) {
-        this.logger.debug('WorkflowName provided, using direct GET operation.');
+      if (workflowId) {
+        this.logger.debug('workflowId provided, using direct GET operation.');
         const result = await this.service.entities.workflow_snapshot
           .get({
             entity: 'workflow_snapshot', // Entity type for PK
@@ -335,7 +364,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           id: 'STORAGE_DYNAMODB_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { runId, workflowName: args?.workflowName || '' },
+          details: { runId, workflowId: args?.workflowId || '' },
         },
         error,
       );
