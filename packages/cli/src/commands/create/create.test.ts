@@ -60,6 +60,14 @@ vi.mock('../init/utils', () => ({
     return models[provider];
   }),
   LLMProvider: ['openai', 'anthropic', 'groq', 'google', 'cerebras', 'mistral'],
+  LLM_PROVIDERS: [
+    { value: 'openai', label: 'OpenAI', hint: 'recommended' },
+    { value: 'anthropic', label: 'Anthropic' },
+    { value: 'groq', label: 'Groq' },
+    { value: 'google', label: 'Google' },
+    { value: 'cerebras', label: 'Cerebras' },
+    { value: 'mistral', label: 'Mistral' },
+  ],
   COMPONENTS: ['agents', 'workflows', 'tools', 'scorers'],
 }));
 
