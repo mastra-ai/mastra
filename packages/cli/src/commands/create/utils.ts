@@ -85,6 +85,7 @@ export const createMastraProject = async ({
   llmProvider,
   llmApiKey,
   needsInteractive,
+  gitInit,
 }: {
   projectName?: string;
   createVersionTag?: string;
@@ -92,6 +93,7 @@ export const createMastraProject = async ({
   llmProvider?: LLMProvider;
   llmApiKey?: string;
   needsInteractive?: boolean;
+  gitInit?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -225,6 +227,35 @@ export const createMastraProject = async ({
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
     s.stop('.gitignore added');
+
+    // Handle git initialization
+    let shouldInitGit = gitInit;
+    if (shouldInitGit === undefined && needsInteractive) {
+      const gitConfirmResult = await p.confirm({
+        message: 'Would you like to initialize a git repository?',
+        initialValue: true,
+      });
+
+      if (p.isCancel(gitConfirmResult)) {
+        shouldInitGit = false;
+      } else {
+        shouldInitGit = gitConfirmResult;
+      }
+    }
+
+    if (shouldInitGit) {
+      s.start('Initializing git repository');
+      try {
+        await exec('git init');
+        await exec('git add -A');
+        await exec('git commit -m "Initial commit"');
+        s.stop('Git repository initialized');
+      } catch (error) {
+        s.stop();
+        p.log.warn(`Failed to initialize git repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        p.log.info('You can initialize git manually by running: git init && git add -A && git commit -m "Initial commit"');
+      }
+    }
 
     p.outro('Project created successfully');
     console.info('');

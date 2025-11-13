@@ -1,6 +1,10 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { PosthogAnalytics } from '../../analytics/index';
+
+const execAsync = promisify(exec);
 
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
@@ -24,6 +28,7 @@ export const create = async (args: {
   directory?: string;
   mcpServer?: Editor;
   template?: string | boolean;
+  gitInit?: boolean;
   analytics?: PosthogAnalytics;
 }) => {
   if (args.template !== undefined) {
@@ -44,6 +49,7 @@ export const create = async (args: {
     llmProvider: args?.llmProvider,
     llmApiKey: args?.llmApiKey,
     needsInteractive,
+    gitInit: args?.gitInit,
   });
   const directory = args.directory || 'src/';
 
@@ -216,6 +222,7 @@ async function createFromTemplate(args: {
   projectName?: string;
   template?: string | boolean;
   timeout?: number;
+  gitInit?: boolean;
   injectedAnalytics?: PosthogAnalytics;
 }) {
   let selectedTemplate: Template | undefined;
@@ -300,6 +307,40 @@ async function createFromTemplate(args: {
 
     // Install dependencies
     await installDependencies(projectPath);
+
+    // Handle git initialization for templates
+    let shouldInitGit = args.gitInit;
+    if (shouldInitGit === undefined) {
+      const gitConfirmResult = await p.confirm({
+        message: 'Would you like to initialize a git repository?',
+        initialValue: true,
+      });
+
+      if (p.isCancel(gitConfirmResult)) {
+        shouldInitGit = false;
+      } else {
+        shouldInitGit = gitConfirmResult;
+      }
+    }
+
+    if (shouldInitGit) {
+      const s = p.spinner();
+      s.start('Initializing git repository');
+      try {
+        // Change to project directory and initialize git
+        const originalCwd = process.cwd();
+        process.chdir(projectPath);
+        await execAsync('git init');
+        await execAsync('git add -A');
+        await execAsync('git commit -m "Initial commit"');
+        process.chdir(originalCwd);
+        s.stop('Git repository initialized');
+      } catch (error) {
+        s.stop();
+        p.log.warn(`Failed to initialize git repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        p.log.info('You can initialize git manually by running: git init && git add -A && git commit -m "Initial commit"');
+      }
+    }
 
     p.note(`
       ${color.green('Mastra template installed!')}
