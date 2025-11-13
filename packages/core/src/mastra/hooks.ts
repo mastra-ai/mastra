@@ -116,7 +116,8 @@ export function createOnScorerHook(mastra: Mastra) {
 
 export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
   const payloadToSave = saveScorePayloadSchema.parse(payload);
-  await storage?.getStore('evals')?.saveScore(payloadToSave);
+  const evalsStore = await storage?.getStore('evals');
+  await evalsStore?.saveScore(payloadToSave);
 }
 
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {

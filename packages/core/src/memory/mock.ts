@@ -18,7 +18,7 @@ export class MockMemory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_GET_THREAD_BY_ID_NOT_SUPPORTED',
@@ -31,7 +31,7 @@ export class MockMemory extends MastraMemory {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_SAVE_THREAD_NOT_SUPPORTED',
@@ -56,7 +56,7 @@ export class MockMemory extends MastraMemory {
       .add(messages, 'memory')
       .get.all.db();
 
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_SAVE_MESSAGES_NOT_SUPPORTED',
@@ -71,7 +71,7 @@ export class MockMemory extends MastraMemory {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_LIST_THREADS_NOT_SUPPORTED',
@@ -87,7 +87,7 @@ export class MockMemory extends MastraMemory {
     messages: MastraDBMessage[];
   }> {
     // Get raw messages from storage
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_LIST_MESSAGES_NOT_SUPPORTED',
@@ -109,7 +109,7 @@ export class MockMemory extends MastraMemory {
     return result;
   }
   async deleteThread(threadId: string) {
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_DELETE_THREAD_NOT_SUPPORTED',
@@ -125,7 +125,7 @@ export class MockMemory extends MastraMemory {
     const ids = Array.isArray(messageIds)
       ? messageIds?.map(item => (typeof item === 'string' ? item : item.id))
       : [messageIds];
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_DELETE_MESSAGES_NOT_SUPPORTED',
@@ -195,7 +195,7 @@ export class MockMemory extends MastraMemory {
   }
 
   async updateMessages({ messages }: { messages: MastraDBMessage[] }): Promise<MastraDBMessage[]> {
-    const memoryStore = this.storage.getStore('memory');
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_UPDATE_MESSAGES_NOT_SUPPORTED',

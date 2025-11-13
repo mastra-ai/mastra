@@ -87,7 +87,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
-    const currentState = await this.mastra.getStorage('workflows')?.updateWorkflowState({
+    const storage = await this.mastra.getStore('workflows');
+    const currentState = await storage?.updateWorkflowState({
       workflowId,
       runId,
       opts: {
@@ -122,7 +123,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
   }: ProcessorArgs) {
-    const storage = this.mastra?.getStorage('workflows');
+    const storage = await this.mastra?.getStore('workflows');
 
     if (storage) {
       await storage.createWorkflowSnapshot({
@@ -168,7 +169,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   protected async endWorkflow(args: ProcessorArgs) {
     const { workflowId, runId, prevResult } = args;
-    await this.mastra.getStorage('workflows')?.updateWorkflowState({
+    const storage = await this.mastra.getStore('workflows');
+    await storage?.updateWorkflowState({
       workflowId,
       runId,
       opts: {
@@ -273,7 +275,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     const { workflowId, runId, resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, requestContext } =
       args;
 
-    await this.mastra.getStorage('workflows')?.updateWorkflowState({
+    const storage = await this.mastra.getStore('workflows');
+    await storage?.updateWorkflowState({
       workflowId,
       runId,
       opts: {
@@ -535,7 +538,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           );
         }
 
-        const storage = this.mastra?.getStorage('workflows');
+        const storage = await this.mastra?.getStore('workflows');
 
         let snapshot: WorkflowRunState | null = null;
 
@@ -765,6 +768,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentContext,
     requestContext,
   }: ProcessorArgs) {
+    const storage = await this.mastra?.getStore('workflows');
+
     let step = workflow.stepGraph[executionPath[0]!];
 
     if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
@@ -793,7 +798,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (step.type === 'foreach') {
-      const storage = this.mastra?.getStorage('workflows');
       let snapshot: WorkflowRunState | null = null;
       if (storage) {
         snapshot = await storage.getWorkflowSnapshot({
@@ -814,7 +818,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           newResult = { ...prevResult, output: [(prevResult as any).output] } as any;
         }
       }
-      const newStepResults = await this.mastra.getStorage('workflows')?.updateWorkflowResults({
+
+      const newStepResults = await storage?.updateWorkflowResults({
         workflowId: workflow.id,
         runId,
         stepId: step.step.id,
@@ -839,7 +844,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
 
-      const newStepResults = await this.mastra.getStorage('workflows')?.updateWorkflowResults({
+      const newStepResults = await storage?.updateWorkflowResults({
         workflowId: workflow.id,
         runId,
         stepId: step.step.id,
@@ -879,7 +884,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths[suspendedStep.id] = executionPath;
       }
 
-      await this.mastra.getStorage('workflows')?.updateWorkflowState({
+      const storage = await this.mastra.getStore('workflows');
+      await storage?.updateWorkflowState({
         workflowId,
         runId,
         opts: {
@@ -1045,7 +1051,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null | undefined> {
-    const storage = this.mastra?.getStorage('workflows');
+    const storage = await this.mastra?.getStore('workflows');
     let snapshot: WorkflowRunState | null = null;
     if (storage) {
       snapshot = await storage.getWorkflowSnapshot({

@@ -56,8 +56,8 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
   }
 
-  private getMemoryStore() {
-    const memoryStore = this.storage.getStore('memory');
+  private async getMemoryStore() {
+    const memoryStore = await this.storage.getStore('memory');
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_GET_MEMORY_STORE_NOT_SUPPORTED',
@@ -74,7 +74,7 @@ export class Memory extends MastraMemory {
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
 
     const thread = await memoryStore?.getThreadById({ threadId });
 
@@ -202,7 +202,7 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     const paginatedResult = await memoryStore.listMessages({
       threadId,
       resourceId,
@@ -238,7 +238,7 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_GET_THREAD_BY_ID_NOT_SUPPORTED',
@@ -257,7 +257,7 @@ export class Memory extends MastraMemory {
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     return memoryStore.listThreadsByResourceId(args);
   }
 
@@ -273,7 +273,7 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (config.workingMemory?.enabled) {
-      const memoryStore = this.getMemoryStore();
+      const memoryStore = await this.getMemoryStore();
       if (!memoryStore) {
         throw new MastraError({
           id: 'MASTRA_STORAGE_UPDATE_RESOURCE_NOT_SUPPORTED',
@@ -305,7 +305,7 @@ export class Memory extends MastraMemory {
     thread: StorageThreadType;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_SAVE_THREAD_NOT_SUPPORTED',
@@ -339,7 +339,7 @@ export class Memory extends MastraMemory {
     metadata: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     const updatedThread = await memoryStore.updateThread({
       id,
       title,
@@ -359,7 +359,7 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     await memoryStore.deleteThread({ threadId });
   }
 
@@ -380,7 +380,7 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     if (!memoryStore) {
       throw new MastraError({
         id: 'MASTRA_STORAGE_UPDATE_RESOURCE_NOT_SUPPORTED',
@@ -449,7 +449,7 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
 
     if (!memoryStore) {
       throw new MastraError({
@@ -661,7 +661,7 @@ ${workingMemory}`;
       .add(updatedMessages, 'memory')
       .get.all.db();
 
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     const result = await memoryStore.saveMessages({
       messages: dbMessages,
     });
@@ -811,7 +811,7 @@ ${workingMemory}`;
       return null;
     }
 
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
 
     if (!memoryStore) {
       throw new MastraError({
@@ -1074,7 +1074,7 @@ ${
 
     // TODO: Possibly handle updating the vector db here when a message is updated.
 
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     return memoryStore.updateMessages({ messages });
   }
 
@@ -1114,7 +1114,7 @@ ${
     }
 
     // Delete from storage
-    const memoryStore = this.getMemoryStore();
+    const memoryStore = await this.getMemoryStore();
     await memoryStore.deleteMessages(messageIds);
 
     // TODO: Delete from vector store if semantic recall is enabled

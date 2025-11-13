@@ -179,7 +179,7 @@ export class MastraStorage extends MastraBase {
   /**
    * Get access to the underlying storage domains for advanced operations
    */
-  public getStore<K extends keyof StorageDomains>(id: K): StorageDomains[K] | undefined {
+  public async getStore<K extends keyof StorageDomains>(id: K): Promise<StorageDomains[K] | undefined> {
     return this.stores?.[id];
   }
 

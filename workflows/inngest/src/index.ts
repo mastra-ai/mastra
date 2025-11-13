@@ -158,7 +158,7 @@ export class InngestRun<
 
   async getRunOutput(eventId: string) {
     let runs = await this.getRuns(eventId);
-    const storage = this.#mastra?.getStorage('workflows');
+    const storage = await this.#mastra?.getStore('workflows');
 
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -186,7 +186,7 @@ export class InngestRun<
   }
 
   async cancel() {
-    const storage = this.#mastra?.getStorage('workflows');
+    const storage = await this.#mastra?.getStore('workflows');
 
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
@@ -243,7 +243,8 @@ export class InngestRun<
     };
     format?: 'legacy' | 'vnext' | undefined;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    await this.#mastra.getStorage('workflows')?.createWorkflowSnapshot({
+    const storage = await this.#mastra?.getStore('workflows');
+    await storage?.createWorkflowSnapshot({
       workflowId: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -324,7 +325,7 @@ export class InngestRun<
       | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const storage = this.#mastra?.getStorage('workflows');
+    const storage = await this.#mastra?.getStore('workflows');
 
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
@@ -606,7 +607,7 @@ export class InngestWorkflow<
     page?: number;
     resourceId?: string;
   }) {
-    const storage = this.#mastra?.getStorage('workflows');
+    const storage = await this.#mastra?.getStore('workflows');
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return { runs: [], total: 0 };
@@ -616,7 +617,7 @@ export class InngestWorkflow<
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
-    const storage = this.#mastra?.getStorage('workflows');
+    const storage = await this.#mastra?.getStore('workflows');
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       //returning in memory run if no storage is initialized
@@ -659,6 +660,8 @@ export class InngestWorkflow<
     runId?: string;
     resourceId?: string;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+    const storage = await this.#mastra?.getStore('workflows');
+
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -691,7 +694,7 @@ export class InngestWorkflow<
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage('workflows')?.createWorkflowSnapshot({
+      await storage?.createWorkflowSnapshot({
         workflowId: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -1465,6 +1468,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     writableStream?: WritableStream<ChunkType>;
     disableScorers?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
+    const storage = await this.mastra?.getStore('workflows');
+
     const stepSpan = tracingContext?.currentSpan?.createChildSpan({
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
@@ -1509,7 +1514,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           // @ts-ignore
           runId = stepResults[resume?.steps?.[0]]?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
 
-          const snapshot: any = await this.mastra?.getStorage('workflows')?.getWorkflowSnapshot({
+          const snapshot: any = await storage?.getWorkflowSnapshot({
             workflowId: step.id,
             runId: runId,
           });
@@ -1909,6 +1914,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     error?: string | Error;
     requestContext: RequestContext;
   }) {
+    const storage = await this.mastra?.getStore('workflows');
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
       async () => {
@@ -1918,7 +1924,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           return;
         }
 
-        await this.mastra?.getStorage('workflows')?.createWorkflowSnapshot({
+        await storage?.createWorkflowSnapshot({
           workflowId,
           runId,
           resourceId,

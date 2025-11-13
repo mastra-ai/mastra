@@ -1854,7 +1854,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContextObj[key] = value;
     });
 
-    const storage = this.mastra?.getStorage('workflows');
+    const storage = await this.mastra?.getStore('workflows');
 
     if (storage) {
       await storage?.createWorkflowSnapshot({

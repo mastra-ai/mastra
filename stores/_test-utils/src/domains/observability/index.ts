@@ -2,14 +2,19 @@ import { SpanType } from '@mastra/core/observability';
 import { MastraStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type { SpanRecord } from '@mastra/core/storage';
 import type { ObservabilityStorageBase } from '@mastra/core/storage';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, beforeAll } from 'vitest';
 import { createRootSpan, createChildSpan } from './data';
 
 export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
-  const observabilityStore = storage.getStore('observability');
-  if (!observabilityStore) {
-    throw new Error('Observability store not found');
-  }
+  let observabilityStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'observability'>>>>;
+
+  beforeAll(async () => {
+    const store = await storage.getStore('observability');
+    if (!store) {
+      throw new Error('Observability store not found');
+    }
+    observabilityStore = store;
+  });
 
   describe('Span Operations', () => {
     beforeEach(async () => {

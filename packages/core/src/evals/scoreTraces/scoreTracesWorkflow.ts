@@ -107,7 +107,8 @@ export async function runScorerOnTarget({
   tracingContext: TracingContext;
 }) {
   // TODO: add storage api to get a single span
-  const observabilityStore = storage.getStore('observability');
+  const observabilityStore = await storage.getStore('observability');
+
   if (!observabilityStore) {
     throw new Error('Mastra Storage: Observability store is not configured.');
   }
@@ -159,7 +160,7 @@ export async function runScorerOnTarget({
 }
 
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
-  const evalsStore = storage.getStore('evals');
+  const evalsStore = await storage.getStore('evals');
   if (!evalsStore) {
     throw new Error('Mastra Storage: Scores store is not configured.');
   }
@@ -211,7 +212,8 @@ async function attachScoreToSpan({
     score: scoreRecord.score,
     createdAt: scoreRecord.createdAt,
   };
-  const observabilityStore = storage.getStore('observability');
+  const observabilityStore = await storage.getStore('observability');
+
   if (!observabilityStore) {
     throw new Error('Mastra Storage: Observability store is not configured.');
   }

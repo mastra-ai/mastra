@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest';
 import { createSampleMessageV2 } from './data';
 import { resetRole, createSampleThread } from './data';
 import { MastraStorage } from '@mastra/core/storage';
@@ -6,10 +6,15 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createListMessagesTest({ storage }: { storage: MastraStorage }) {
-  const memoryStore = storage.getStore('memory');
-  if (!memoryStore) {
-    throw new Error('Memory store not found');
-  }
+  let memoryStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'memory'>>>>;
+
+  beforeAll(async () => {
+    const store = await storage.getStore('memory');
+    if (!store) {
+      throw new Error('Memory store not found');
+    }
+    memoryStore = store;
+  });
   describe('listMessages', () => {
     it('should return paginated messages with total count', async () => {
       const thread = createSampleThread();

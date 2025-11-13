@@ -2775,7 +2775,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    const workflowStore = this.#mastra?.getStorage('workflows');
+    const workflowStore = await this.#mastra?.getStore('workflows');
 
     let existingSnapshot: WorkflowRunState | null = null;
 

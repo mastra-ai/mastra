@@ -1,16 +1,20 @@
 import { MastraStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 
 export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
   console.log(storage, 'storage');
-  const workflowStore = storage.getStore('workflows');
+  let workflowStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'workflows'>>>>;
 
-  if (!workflowStore) {
-    throw new Error('Workflow store not found');
-  }
+  beforeAll(async () => {
+    const store = await storage.getStore('workflows');
+    if (!store) {
+      throw new Error('Workflow store not found');
+    }
+    workflowStore = store;
+  });
 
   describe('listWorkflowRuns', () => {
     beforeEach(async () => {
@@ -29,13 +33,9 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
 
-      await storage
-        .getStore('workflows')
-        ?.createWorkflowSnapshot({ workflowId: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowStore.createWorkflowSnapshot({ workflowId: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage
-        .getStore('workflows')
-        ?.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowStore.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
 
       const { runs, total } = await workflowStore.listWorkflowRuns();
 
@@ -60,13 +60,9 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
       const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
-      await storage
-        .getStore('workflows')
-        ?.createWorkflowSnapshot({ workflowId: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowStore.createWorkflowSnapshot({ workflowId: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage
-        .getStore('workflows')
-        ?.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowStore.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
 
       const { runs, total } = await workflowStore.listWorkflowRuns({ workflowId: workflowName1 });
       expect(runs).toHaveLength(1);
@@ -83,13 +79,9 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
       const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
-      await storage
-        .getStore('workflows')
-        ?.createWorkflowSnapshot({ workflowId: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowStore.createWorkflowSnapshot({ workflowId: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage
-        .getStore('workflows')
-        ?.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowStore.createWorkflowSnapshot({ workflowId: workflowName2, runId: runId2, snapshot: workflow2 });
 
       const { runs, total } = await workflowStore.listWorkflowRuns({ status: 'success' });
       expect(runs).toHaveLength(1);

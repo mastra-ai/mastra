@@ -1,13 +1,18 @@
 import type { MastraStorage } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll } from 'vitest';
 import { createSampleResource } from './data';
 import { randomUUID } from 'crypto';
 
 export function createResourcesTest({ storage }: { storage: MastraStorage }) {
-  const memoryStore = storage.getStore('memory');
-  if (!memoryStore) {
-    throw new Error('Memory store not found');
-  }
+  let memoryStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'memory'>>>>;
+
+  beforeAll(async () => {
+    const store = await storage.getStore('memory');
+    if (!store) {
+      throw new Error('Memory store not found');
+    }
+    memoryStore = store;
+  });
 
   describe('Resources', () => {
     it('should create and retrieve a resource', async () => {

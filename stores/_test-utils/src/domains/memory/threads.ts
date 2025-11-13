@@ -1,15 +1,19 @@
 import { TABLE_THREADS, type MastraStorage } from '@mastra/core/storage';
 import { createSampleMessageV1, createSampleMessageV2, createSampleThread, createSampleThreadWithParams } from './data';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, beforeAll } from 'vitest';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'crypto';
 
 export function createThreadsTest({ storage }: { storage: MastraStorage }) {
-  const memoryStore = storage.getStore('memory');
+  let memoryStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'memory'>>>>;
 
-  if (!memoryStore) {
-    throw new Error('Memory store not found');
-  }
+  beforeAll(async () => {
+    const store = await storage.getStore('memory');
+    if (!store) {
+      throw new Error('Memory store not found');
+    }
+    memoryStore = store;
+  });
 
   describe('Threads', () => {
     it('should create and retrieve a thread', async () => {

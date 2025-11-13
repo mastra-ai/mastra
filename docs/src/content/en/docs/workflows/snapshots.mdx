@@ -113,9 +113,9 @@ When a workflow is resumed, Mastra retrieves the persisted snapshot with these s
 5. The suspended step is resumed, and execution continues
 
 ```typescript
-const storage = mastra.getStorage('workflows');
+const storage = await mastra.getStore('workflows');
 
-const snapshot = await storage!.getWorkflowSnapshot({
+const snapshot = await storage.getWorkflowSnapshot({
   runId: "<run-id>",
   workflowId: "<workflow-id>",
 });

@@ -1702,10 +1702,6 @@ export class Mastra<
    * // Get the entire storage instance
    * const storage = mastra.getStorage();
    *
-   * // Or get a specific domain directly
-   * const memoryStore = mastra.getStorage('memory');
-   * await memoryStore?.saveThread({ thread });
-   *
    * // Use in agent memory
    * const agent = new Agent({
    *   id: 'assistant',
@@ -1716,13 +1712,25 @@ export class Mastra<
    * });
    * ```
    */
-  public getStorage<K extends keyof StorageDomains>(domain: K): StorageDomains[K] | undefined;
-  public getStorage(): MastraStorage | undefined;
-  public getStorage<K extends keyof StorageDomains>(domain?: K): MastraStorage | StorageDomains[K] | undefined {
-    if (domain) {
-      return this.#storage?.getStore(domain);
-    }
+  public getStorage(): MastraStorage | undefined {
     return this.#storage;
+  }
+
+  /**
+   * Gets a specific storage domain.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./data.db' })
+   * });
+   *
+   * const memoryStore = await mastra.getStore('memory');
+   * await memoryStore?.saveThread({ thread });
+   * ```
+   */
+  public async getStore<K extends keyof StorageDomains>(domain: K): Promise<StorageDomains[K] | undefined> {
+    return await this.#storage?.getStore(domain);
   }
 
   get observability(): ObservabilityEntrypoint {

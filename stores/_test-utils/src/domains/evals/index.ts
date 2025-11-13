@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { createSampleScore } from './data';
 import type { ScoreRowData } from '@mastra/core/evals';
 import type { MastraStorage } from '@mastra/core/storage';
@@ -33,10 +33,15 @@ async function createScores(
 }
 
 export function createScoresTest({ storage }: { storage: MastraStorage }) {
-  const scoresStore = storage.getStore('evals');
-  if (!scoresStore) {
-    throw new Error('Scores store not found');
-  }
+  let scoresStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'evals'>>>>;
+
+  beforeAll(async () => {
+    const store = await storage.getStore('evals');
+    if (!store) {
+      throw new Error('Scores store not found');
+    }
+    scoresStore = store;
+  });
 
   describe('Score Operations', () => {
     beforeEach(async () => {

@@ -374,7 +374,7 @@ export class EventedWorkflow<
     const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      const storage = this.mastra?.getStorage('workflows');
+      const storage = await this.mastra?.getStore('workflows');
       if (storage) {
         await storage.createWorkflowSnapshot({
           workflowId: this.id,
@@ -451,7 +451,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const storage = this.mastra?.getStorage('workflows');
+    const storage = await this.mastra?.getStore('workflows');
     if (storage) {
       await storage.createWorkflowSnapshot({
         workflowId: this.workflowId,
@@ -537,7 +537,7 @@ export class EventedRun<
       throw new Error('No steps provided to resume');
     }
 
-    const storage = this.mastra?.getStorage('workflows');
+    const storage = await this.mastra?.getStore('workflows');
     let snapshot: WorkflowRunState | null = null;
 
     if (storage) {

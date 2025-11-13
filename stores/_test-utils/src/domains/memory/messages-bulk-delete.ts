@@ -1,13 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import type { MastraStorage } from '@mastra/core/storage';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { createSampleThread, createSampleMessageV2 } from './data';
 
 export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStorage }) {
-  const memoryStore = storage.getStore('memory');
-  if (!memoryStore) {
-    throw new Error('Memory store not found');
-  }
+  let memoryStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'memory'>>>>;
+
+  beforeAll(async () => {
+    const store = await storage.getStore('memory');
+    if (!store) {
+      throw new Error('Memory store not found');
+    }
+    memoryStore = store;
+  });
   describe('Messages Bulk Delete', () => {
     // Skip tests if the storage adapter doesn't support deleteMessages
     if (!storage.supports.deleteMessages) {

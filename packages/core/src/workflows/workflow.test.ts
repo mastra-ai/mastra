@@ -10360,7 +10360,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage('workflows');
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -10520,7 +10520,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage('workflows');
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -10843,7 +10843,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage('workflows');
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -11082,7 +11082,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage('workflows');
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({
@@ -11270,7 +11270,7 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
-      const storage = mastra.getStorage('workflows');
+      const storage = await mastra.getStore('workflows');
 
       //mimic a workflow run that was previously active
       await storage?.createWorkflowSnapshot({

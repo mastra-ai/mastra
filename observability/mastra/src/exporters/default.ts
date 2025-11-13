@@ -54,12 +54,12 @@ interface UpdateRecord {
 /**
  * Resolves the final tracing storage strategy based on config and storage hints
  */
-function resolveTracingStorageStrategy(
+async function resolveTracingStorageStrategy(
   config: DefaultExporterConfig,
   storage: MastraStorage,
   logger: IMastraLogger,
-): TracingStorageStrategy {
-  const observabilityStore = storage.getStore('observability');
+): Promise<TracingStorageStrategy> {
+  const observabilityStore = await storage.getStore('observability');
   if (config.strategy && config.strategy !== 'auto') {
     const hints = observabilityStore?.tracingStrategy;
     if (hints?.supported?.includes(config.strategy)) {
@@ -123,6 +123,7 @@ export class DefaultExporter extends BaseExporter {
   }
 
   #strategyInitialized = false;
+  #strategyInitPromise: Promise<void> | null = null;
 
   /**
    * Initialize the exporter (called after all dependencies are ready)
@@ -134,25 +135,39 @@ export class DefaultExporter extends BaseExporter {
       return;
     }
 
-    this.initializeStrategy(this.#storage);
+    // Initialize strategy asynchronously (fire and forget since init is sync)
+    this.initializeStrategy(this.#storage).catch(err => {
+      this.logger.warn('Failed to initialize tracing strategy', { error: err });
+    });
   }
 
   /**
    * Initialize the resolved strategy once storage is available
    */
-  private initializeStrategy(storage: MastraStorage): void {
+  private async initializeStrategy(storage: MastraStorage): Promise<void> {
     if (this.#strategyInitialized) return;
 
-    this.#resolvedStrategy = resolveTracingStorageStrategy(this.#config, storage, this.logger);
-    this.#strategyInitialized = true;
+    // If initialization is already in progress, wait for it
+    if (this.#strategyInitPromise) {
+      await this.#strategyInitPromise;
+      return;
+    }
 
-    this.logger.debug('tracing storage exporter initialized', {
-      strategy: this.#resolvedStrategy,
-      source: this.#config.strategy !== 'auto' ? 'user' : 'auto',
-      storageAdapter: storage.constructor.name,
-      maxBatchSize: this.#config.maxBatchSize,
-      maxBatchWaitMs: this.#config.maxBatchWaitMs,
-    });
+    // Start initialization and store the promise
+    this.#strategyInitPromise = (async () => {
+      this.#resolvedStrategy = await resolveTracingStorageStrategy(this.#config, storage, this.logger);
+      this.#strategyInitialized = true;
+
+      this.logger.debug('tracing storage exporter initialized', {
+        strategy: this.#resolvedStrategy,
+        source: this.#config.strategy !== 'auto' ? 'user' : 'auto',
+        storageAdapter: storage.constructor.name,
+        maxBatchSize: this.#config.maxBatchSize,
+        maxBatchWaitMs: this.#config.maxBatchWaitMs,
+      });
+    })();
+
+    await this.#strategyInitPromise;
   }
 
   /**
@@ -403,7 +418,7 @@ export class DefaultExporter extends BaseExporter {
    * Handles realtime strategy - processes each event immediately
    */
   private async handleRealtimeEvent(event: TracingEvent, storage: MastraStorage): Promise<void> {
-    const observabilityStore = storage.getStore('observability');
+    const observabilityStore = await storage.getStore('observability');
     if (!observabilityStore) {
       this.logger.warn('Observability store not configured, skipping span storage');
       return;
@@ -559,7 +574,7 @@ export class DefaultExporter extends BaseExporter {
    * Attempts to flush with exponential backoff retry logic
    */
   private async flushWithRetries(storage: MastraStorage, buffer: BatchBuffer, attempt: number): Promise<void> {
-    const observabilityStore = storage.getStore('observability');
+    const observabilityStore = await storage.getStore('observability');
     if (!observabilityStore) {
       this.logger.warn('Observability store not configured, skipping batch flush');
       return;
@@ -631,7 +646,7 @@ export class DefaultExporter extends BaseExporter {
 
     // Initialize strategy if not already done (fallback for edge cases)
     if (!this.#strategyInitialized) {
-      this.initializeStrategy(this.#storage);
+      await this.initializeStrategy(this.#storage);
     }
 
     // Clear strategy routing - explicit and readable

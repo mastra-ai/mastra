@@ -21,14 +21,15 @@ export function createTestSuite(storage: MastraStorage) {
     });
 
     afterAll(async () => {
-      console.log(storage.getStore('workflows'), 'workflows');
+      const workflowsStore = await storage.getStore('workflows');
+      console.log(workflowsStore, 'workflows');
 
       // Clear tables after tests
       await Promise.all([
-        storage.getStore('workflows')?.dropData(),
-        storage.getStore('evals')?.dropData(),
-        storage.getStore('memory')?.dropData(),
-        storage.supports.observabilityInstance && storage.getStore('observability')?.dropData(),
+        workflowsStore?.dropData(),
+        (await storage.getStore('evals'))?.dropData(),
+        (await storage.getStore('memory'))?.dropData(),
+        storage.supports.observabilityInstance && (await storage.getStore('observability'))?.dropData(),
       ]);
     });
 

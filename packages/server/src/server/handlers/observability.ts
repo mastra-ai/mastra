@@ -31,7 +31,7 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
       throw new HTTPException(400, { message: 'Trace ID is required' });
     }
 
-    const observabilityStore = mastra.getStorage('observability');
+    const observabilityStore = await mastra.getStore('observability');
 
     if (!observabilityStore) {
       throw new HTTPException(500, { message: 'Mastra Storage: Observability store is not configured.' });
@@ -54,7 +54,7 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
  */
 export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityContext) {
   try {
-    const storage = mastra.getStorage('observability');
+    const storage = await mastra.getStore('observability');
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
@@ -114,7 +114,7 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
       throw new HTTPException(400, { message: 'At least one target is required' });
     }
 
-    const storage = mastra.getStorage('evals');
+    const storage = await mastra.getStore('evals');
 
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
@@ -162,7 +162,7 @@ export async function listScoresBySpan({
   pagination,
 }: Context & { traceId: string; spanId: string; pagination: StoragePagination }) {
   try {
-    const storage = mastra.getStorage('evals');
+    const storage = await mastra.getStore('evals');
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }

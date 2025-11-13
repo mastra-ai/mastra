@@ -477,7 +477,8 @@ Messages are stored in the `MastraDBMessage` format, which provides a consistent
 
 ```typescript copy
 // Get messages for a thread with pagination
-const memoryStore = mastra.getStorage('memory');
+const memoryStore = await mastra.getStore('memory');
+
 const result = await memoryStore?.listMessages({
   threadId: "your-thread-id",
   page: 0,
@@ -497,7 +498,7 @@ All message queries return `MastraDBMessage[]` format. If you need to convert me
 ```typescript copy
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
-const memoryStore = mastra.getStorage('memory');
+const memoryStore = await mastra.getStore('memory');
 const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
 
 // Convert to AI SDK v5 UIMessage format for UI rendering

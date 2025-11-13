@@ -29,7 +29,9 @@ export function augmentWithInit(storage: MastraStorage): MastraStorage {
       }
 
       const value = target[prop as keyof typeof target];
-      if (typeof value === 'function' && !['init', 'getStore'].includes(prop as string)) {
+
+      // Wrap all other functions (except init) to ensure init
+      if (typeof value === 'function' && prop !== 'init') {
         return async (...args: unknown[]) => {
           await ensureInit();
 
