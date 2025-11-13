@@ -93,7 +93,7 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
  */
 const workflowExecutionBodySchema = z.object({
   inputData: z.unknown().optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
+  workflowRequestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
 });
 
@@ -118,7 +118,7 @@ export const streamWorkflowBodySchema = workflowExecutionBodySchema.extend({
 export const resumeBodySchema = z.object({
   step: z.union([z.string(), z.array(z.string())]).optional(), // Optional - workflow can auto-resume all suspended steps
   resumeData: z.unknown().optional(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
+  workflowRequestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
 });
 

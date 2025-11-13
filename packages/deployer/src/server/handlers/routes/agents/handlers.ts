@@ -58,6 +58,10 @@ export const sharedBodyOptions: any = {
     },
     description: 'Model settings for generation',
   },
+  agentRequestContext: {
+    type: 'object',
+    description: 'Agent-specific Request Context (merged with server context)',
+  },
 };
 
 // @TODO: TYPED OPTIONS

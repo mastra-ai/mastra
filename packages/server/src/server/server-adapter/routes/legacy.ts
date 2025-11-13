@@ -16,10 +16,7 @@ import {
   streamResponseSchema,
 } from '../../schemas/agents';
 import { workflowIdPathParams, streamLegacyWorkflowBodySchema } from '../../schemas/workflows';
-import {
-  actionIdPathParams,
-  streamLegacyWorkflowBodySchema as streamLegacyAgentBuilderBodySchema,
-} from '../../schemas/agent-builder';
+import { actionIdPathParams, streamLegacyAgentBuilderBodySchema } from '../../schemas/agent-builder';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
 import { runIdSchema } from '../../schemas/common';
