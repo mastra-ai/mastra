@@ -9,6 +9,7 @@ import { Button } from "@site/src/components/ui/button";
 import {
   Conversation,
   ConversationContent,
+  ConversationScrollButton,
 } from "@site/src/components/ui/conversation";
 import { Textarea } from "@site/src/components/ui/textarea";
 import { cn } from "@site/src/lib/utils";
@@ -200,6 +201,7 @@ export default function ChatbotSidebar({
               </div>
             )}
           </ConversationContent>
+          <ConversationScrollButton className="backdrop-blur-md bg-white/50 dark:bg-black/50 border-none ring-1 ring-(--border-subtle)" />
         </Conversation>
       )}
       {/* Footer */}
