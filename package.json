@@ -4,7 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "changesets-changelog-github-local": "^1.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
@@ -87,7 +87,7 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3"

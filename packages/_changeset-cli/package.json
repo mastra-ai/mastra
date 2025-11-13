@@ -35,10 +35,10 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "@types/semver": "^7.7.1",
     "eslint": "^9.37.0",
-    "tsx": "^4.19.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

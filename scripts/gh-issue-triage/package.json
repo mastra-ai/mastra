@@ -16,6 +16,6 @@
     "octokit": "^5.0.3"
   },
   "devDependencies": {
-    "dotenv": "^17.0.0"
+    "dotenv": "^17.2.3"
   }
 }

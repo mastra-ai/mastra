@@ -12,14 +12,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.1",
     "execa": "^9.6.0",
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
     "playwright": "^1.56.0",
-    "tsx": "^4.20.3",
+    "tsx": "^4.20.6",
     "verdaccio": "^6.2.0",
     "verdaccio-auth-memory": "^10.3.1",
     "vitest": "^3.2.4"

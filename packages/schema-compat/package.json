@@ -61,7 +61,7 @@
     "@internal/types-builder": "workspace:*",
     "@internal/ai-sdk-v4": "workspace:*",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

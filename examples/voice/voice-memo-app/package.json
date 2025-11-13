@@ -23,7 +23,7 @@
     }
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "@types/react": "^19.1.9",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",

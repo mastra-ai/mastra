@@ -35,7 +35,7 @@
   "devDependencies": {
     "@libsql/client": "^0.15.4",
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "@types/react-syntax-highlighter": "^15.5.13",

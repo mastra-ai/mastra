@@ -34,7 +34,7 @@
     }
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "eslint": "^9.37.0",

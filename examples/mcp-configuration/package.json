@@ -27,7 +27,7 @@
     "jest": "^29.7.0",
     "mastra": "latest",
     "ts-jest": "^29.2.6",
-    "tsx": "^4.19.3"
+    "tsx": "^4.20.6"
   },
   "pnpm": {
     "overrides": {

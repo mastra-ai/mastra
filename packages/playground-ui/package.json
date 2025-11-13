@@ -132,7 +132,7 @@
     "@storybook/addon-docs": "^9.1.16",
     "@storybook/react-vite": "^9.1.16",
     "@tanstack/react-query": "^5.90.6",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.4",

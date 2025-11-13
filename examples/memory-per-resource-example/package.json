@@ -17,7 +17,7 @@
     "tsx": "^4.19.2"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "typescript": "^5.8.3"
   },
   "pnpm": {

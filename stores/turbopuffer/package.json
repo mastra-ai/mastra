@@ -35,9 +35,9 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "22.13.17",
-    "dotenv": "^17.0.0",
+    "@microsoft/api-extractor": "^7.54.0",
+    "@types/node": "22.19.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

@@ -30,11 +30,11 @@
     "@mastra/memory": "latest"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "mastra": "latest",
-    "tsx": "^4.20.3",
+    "tsx": "^4.20.6",
     "typescript": "^5.8.3",
-    "dotenv": "^17.0.1",
+    "dotenv": "^17.2.3",
     "vitest": "^3.2.4",
     "zod": "^3.25.76"
   }

@@ -54,7 +54,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "zod": "^3.25.76",
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@^5",

@@ -26,9 +26,9 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "mastra": "latest",
-    "dotenv": "^17.2.1",
+    "dotenv": "^17.2.3",
     "typescript": "^5.8.3"
   }
 }

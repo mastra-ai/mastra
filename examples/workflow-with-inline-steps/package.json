@@ -11,9 +11,9 @@
   "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "mastra": "latest",
-    "tsx": "^4.19.3",
+    "tsx": "^4.20.6",
     "typescript": "^5.8.3",
     "zod": "^3.25.76"
   },

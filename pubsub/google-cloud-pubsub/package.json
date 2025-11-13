@@ -42,11 +42,11 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "typescript": "^5.8.3",
     "eslint": "^9.37.0",
     "vitest": "^3.2.4",
-    "tsup": "^8.4.0"
+    "tsup": "^8.5.0"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

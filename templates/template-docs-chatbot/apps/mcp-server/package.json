@@ -28,8 +28,8 @@
     "dotenv": "^17.0.1"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
-    "tsx": "^4.20.3",
+    "@types/node": "22.19.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

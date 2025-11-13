@@ -30,8 +30,8 @@ importers:
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
     devDependencies:
       dotenv:
-        specifier: ^17.0.0
-        version: 17.0.1
+        specifier: ^17.2.3
+        version: 17.2.3
 
 packages:
 
@@ -95,8 +95,8 @@ packages:
   diff-match-patch@1.0.5:
     resolution: {integrity: sha512-IayShXAgj/QMXgB0IWmKx+rOPuGMhqm5w6jvFxmVenXKIzRqTAAsbBPT3kWQeGANj3jGgvcvv4yK6SxqYmikgw==}
 
-  dotenv@17.0.1:
-    resolution: {integrity: sha512-GLjkduuAL7IMJg/ZnOPm9AnWKJ82mSE2tzXLaJ/6hD6DhwGfZaXG77oB8qbReyiczNxnbxQKyh0OE5mXq0bAHA==}
+  dotenv@17.2.3:
+    resolution: {integrity: sha512-JVUnt+DUIzu87TABbhPmNfVdBDt18BLOWjMUFJMSi/Qqg7NTYtabbvSNJGOJ7afbRuv9D/lngizHtP7QyLQ+9w==}
     engines: {node: '>=12'}
 
   json-schema@0.4.0:
@@ -199,7 +199,7 @@ snapshots:
 
   diff-match-patch@1.0.5: {}
 
-  dotenv@17.0.1: {}
+  dotenv@17.2.3: {}
 
   json-schema@0.4.0: {}
 

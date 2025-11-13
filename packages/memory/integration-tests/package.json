@@ -46,7 +46,7 @@
     "@mastra/core": "*",
     "@testing-library/react": "^16.3.0",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "ai": "^4.2.2",
     "jsdom": "^26.1.0",
     "mastra": "*",

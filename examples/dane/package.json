@@ -23,10 +23,10 @@
   "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.0",
     "@types/pdf-parse": "^1.1.4",
     "mastra": "workspace:*",
-    "tsx": "^4.19.3"
+    "tsx": "^4.20.6"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
