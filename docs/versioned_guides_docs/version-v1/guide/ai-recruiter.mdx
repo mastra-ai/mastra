@@ -1,0 +1,264 @@
+---
+title: "Guide: Building an AI Recruiter | Mastra Workflows | Guides"
+description: Guide on building a recruiter workflow in Mastra to gather and process candidate information using LLMs.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building an AI Recruiter
+
+In this guide, you'll learn how Mastra helps you build workflows with LLMs.
+
+You'll create a workflow that gathers information from a candidate's resume, then branches to either a technical or behavioral question based on the candidate's profile. Along the way, you'll see how to structure workflow steps, handle branching, and integrate LLM calls.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models/v1)
+- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+
+## Building the Workflow
+
+Set up the Workflow, define steps to extract and classify candidate data, and then ask suitable follow-up questions.
+
+<Steps>
+
+<StepItem>
+
+Create a new file `src/mastra/workflows/candidate-workflow.ts` and define your workflow:
+
+```ts copy title="src/mastra/workflows/candidate-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const candidateWorkflow = createWorkflow({
+  id: "candidate-workflow",
+  inputSchema: z.object({
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    askAboutSpecialty: z.object({
+      question: z.string(),
+    }),
+    askAboutRole: z.object({
+      question: z.string(),
+    }),
+  }),
+}).commit();
+```
+
+</StepItem>
+
+<StepItem>
+
+You want to extract candidate details from the resume text and classify the person as "technical" or "non-technical". This step calls an LLM to parse the resume and returns structured JSON, including the name, technical status, specialty, and the original resume text. Defined through the `inputSchema` you get access to the `resumeText` inside `execute()`. Use it to prompt an LLM and return the organized fields.
+
+To the existing `src/mastra/workflows/candidate-workflow.ts` file add the following:
+
+```ts copy title="src/mastra/workflows/candidate-workflow.ts"
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const recruiter = new Agent({
+  id: "recruiter-agent",
+  name: "Recruiter Agent",
+  instructions: `You are a recruiter.`,
+  model: openai("gpt-4o-mini"),
+});
+
+const gatherCandidateInfo = createStep({
+  id: "gatherCandidateInfo",
+  inputSchema: z.object({
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const resumeText = inputData?.resumeText;
+
+    const prompt = `Extract details from the resume text:
+"${resumeText}"`;
+
+    const res = await recruiter.generate(prompt, {
+      structuredOutput: {
+        schema: z.object({
+          candidateName: z.string(),
+          isTechnical: z.boolean(),
+          specialty: z.string(),
+          resumeText: z.string(),
+        }),
+      },
+    });
+
+    return res.object;
+  },
+});
+```
+
+Since you're using a Recruiter agent inside `execute()` you need to define it above the step and add the necessary imports.
+
+</StepItem>
+
+<StepItem>
+
+This step prompts a candidate who is identified as "technical" for more information about how they got into their specialty. It uses the entire resume text so the LLM can craft a relevant follow-up question.
+
+To the existing `src/mastra/workflows/candidate-workflow.ts` file add the following:
+
+```ts copy title="src/mastra/workflows/candidate-workflow.ts"
+const askAboutSpecialty = createStep({
+  id: "askAboutSpecialty",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    question: z.string(),
+  }),
+  execute: async ({ inputData: candidateInfo }) => {
+    const prompt = `You are a recruiter. Given the resume below, craft a short question
+for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
+Resume: ${candidateInfo?.resumeText}`;
+    const res = await recruiter.generate(prompt);
+
+    return { question: res?.text?.trim() || "" };
+  },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+If the candidate is "non-technical", you want a different follow-up question. This step asks what interests them most about the role, again referencing their complete resume text. The `execute()` function solicits a role-focused query from the LLM.
+
+To the existing `src/mastra/workflows/candidate-workflow.ts` file add the following:
+
+```ts title="src/mastra/workflows/candidate-workflow.ts" copy
+const askAboutRole = createStep({
+  id: "askAboutRole",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    question: z.string(),
+  }),
+  execute: async ({ inputData: candidateInfo }) => {
+    const prompt = `You are a recruiter. Given the resume below, craft a short question
+for ${candidateInfo?.candidateName} asking what interests them most about this role.
+Resume: ${candidateInfo?.resumeText}`;
+    const res = await recruiter.generate(prompt);
+    return { question: res?.text?.trim() || "" };
+  },
+});
+```
+
+</StepItem>
+
+<StepItem>
+
+You now combine the steps to implement branching logic based on the candidate's technical status. The workflow first gathers candidate data, then either asks about their specialty or about their role, depending on `isTechnical`. This is done by chaining `gatherCandidateInfo` with `askAboutSpecialty` and `askAboutRole`.
+
+To the existing `src/mastra/workflows/candidate-workflow.ts` file change the `candidateWorkflow` like so:
+
+```ts title="src/mastra/workflows/candidate-workflow.ts" copy {10-14}
+export const candidateWorkflow = createWorkflow({
+  id: "candidate-workflow",
+  inputSchema: z.object({
+    resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    askAboutSpecialty: z.object({
+      question: z.string(),
+    }),
+    askAboutRole: z.object({
+      question: z.string(),
+    }),
+  }),
+})
+  .then(gatherCandidateInfo)
+  .branch([
+    [async ({ inputData: { isTechnical } }) => isTechnical, askAboutSpecialty],
+    [async ({ inputData: { isTechnical } }) => !isTechnical, askAboutRole],
+  ])
+  .commit();
+```
+
+</StepItem>
+
+<StepItem>
+
+In your `src/mastra/index.ts` file, register the workflow:
+
+```ts copy title="src/mastra/index.ts" {2, 5}
+import { Mastra } from "@mastra/core";
+import { candidateWorkflow } from "./workflows/candidate-workflow";
+
+export const mastra = new Mastra({
+  workflows: { candidateWorkflow },
+});
+```
+
+</StepItem>
+
+</Steps>
+
+## Testing the Workflow
+
+You can test your workflow inside [Studio](/docs/v1/getting-started/studio) by starting the development server:
+
+```bash copy
+mastra dev
+```
+
+In the sidebar, navigate to **Workflows** and select **candidate-workflow**. In the middle you'll see a graph view of your workflow and on the right sidebar the **Run** tab is selected by default. Inside this tab you can enter a resume text, for example:
+
+```text copy
+Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.
+```
+
+After entering the resume text, press the **Run** button. You should now see two status boxes (`GatherCandidateInfo` and `AskAboutSpecialty`) which contain the output of the workflow steps.
+
+You can also test the workflow programmatically by calling [`.createRun()`](/reference/v1/workflows/workflow-methods/create-run) and [`.start()`](/reference/v1/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
+
+```ts copy title="src/test-workflow.ts"
+import { mastra } from "./mastra";
+
+const run = await mastra.getWorkflow("candidateWorkflow").createRun();
+
+const res = await run.start({
+  inputData: {
+    resumeText:
+      "Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.",
+  },
+});
+
+// Dump the complete workflow result (includes status, steps and result)
+console.log(JSON.stringify(res, null, 2));
+
+// Get the workflow output value
+if (res.status === "success") {
+  const question =
+    res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question;
+
+  console.log(`Output value: ${question}`);
+}
+```
+
+Now, run the workflow and get output in your terminal:
+
+```bash copy
+npx tsx src/test-workflow.ts
+```
+
+You've just built a workflow to parse a resume and decide which question to ask based on the candidate's technical abilities. Congrats and happy hacking!
