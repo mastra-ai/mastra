@@ -6293,7 +6293,6 @@ describe('Workflow', () => {
       // Collect stream events
       const streamEvents: WorkflowStreamEvent[] = [];
       for await (const event of output.fullStream) {
-        console.log('event', event);
         streamEvents.push(event);
       }
 
@@ -7787,12 +7786,11 @@ describe('Workflow', () => {
       });
 
       expect(result.status).toBe('failed');
-      if (result.status === 'failed') {
-        expect(result.error?.message).toContain('Step input validation failed: \n- start: Required');
-        expect(result.error).toBeInstanceOf(MastraError);
-      } else {
+      if (result.status !== 'failed') {
         throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
       }
+      expect(result.error?.message).toContain('Step input validation failed: \n- start: Required');
+      expect(result.error).toBeInstanceOf(MastraError);
 
       expect(result.steps?.input).toEqual({ start: '2' });
       const step1Result = result.steps?.step1;
