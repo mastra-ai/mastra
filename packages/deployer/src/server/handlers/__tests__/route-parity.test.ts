@@ -534,6 +534,9 @@ describe('Deployer Routes → Server Adapter Parity', () => {
         const serverRoute = serverRoutesMap.get(`${route.method} ${route.path}`);
         if (!serverRoute) return;
 
+        // Skip deprecated routes
+        if (serverRoute.deprecated) return;
+
         const openAPIPath = honoPathToOpenAPI(route.path);
         const deployerPathSpec = deployerOpenAPISpec.paths?.[openAPIPath]?.[route.method.toLowerCase()];
 
@@ -611,6 +614,9 @@ describe('Deployer Routes → Server Adapter Parity', () => {
         const serverRoute = serverRoutesMap.get(`${route.method} ${route.path}`);
         if (!serverRoute) return;
 
+        // Skip deprecated routes
+        if (serverRoute.deprecated) return;
+
         const openAPIPath = honoPathToOpenAPI(route.path);
         const deployerPathSpec = deployerOpenAPISpec.paths?.[openAPIPath]?.[route.method.toLowerCase()];
 
@@ -686,6 +692,9 @@ describe('Deployer Routes → Server Adapter Parity', () => {
       uniqueDeployerRoutes.forEach(route => {
         const serverRoute = serverRoutesMap.get(`${route.method} ${route.path}`);
         if (!serverRoute) return;
+
+        // Skip deprecated routes
+        if (serverRoute.deprecated) return;
 
         const openAPIPath = honoPathToOpenAPI(route.path);
         const deployerPathSpec = deployerOpenAPISpec.paths?.[openAPIPath]?.[route.method.toLowerCase()];

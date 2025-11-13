@@ -242,6 +242,7 @@ export const agentExecutionBodySchema = z
     tracingOptions: tracingOptionsSchema.optional(),
 
     // Structured Output
+    output: z.unknown().optional(), // Zod schema, JSON schema, or structured output object
     structuredOutput: z
       .object({
         schema: z.unknown(),
