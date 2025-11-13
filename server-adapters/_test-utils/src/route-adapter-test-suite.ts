@@ -118,7 +118,6 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
 
     // Test deprecated routes separately - just verify they're marked correctly
     const deprecatedRoutes = routes.filter(r => r.deprecated);
-    console.log(deprecatedRoutes);
     deprecatedRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
       describe(testName, () => {

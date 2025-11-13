@@ -252,9 +252,9 @@ export const updateWorkingMemoryBodySchema = z.object({
 });
 
 /**
- * Query schema for DELETE /api/memory/messages
+ * Body schema for POST /api/memory/messages/delete
  */
-export const deleteMessagesQuerySchema = z.object({
+export const deleteMessagesBodySchema = z.object({
   messageIds: z.union([z.string(), z.array(z.string())]),
 });
 
