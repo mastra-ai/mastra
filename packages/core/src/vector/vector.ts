@@ -1,5 +1,5 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4/embed';
+import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { VectorFilter } from './filter';
@@ -17,8 +17,19 @@ import type {
 
 export type MastraEmbeddingModel<T> = EmbeddingModelV1<T> | EmbeddingModelV2<T>;
 export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
-  constructor() {
+  id: string;
+
+  constructor({ id }: { id: string }) {
+    if (!id || typeof id !== 'string' || id.trim() === '') {
+      throw new MastraError({
+        id: 'VECTOR_INVALID_ID',
+        text: 'Vector id must be provided and cannot be empty',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+      });
+    }
     super({ name: 'MastraVector', component: 'VECTOR' });
+    this.id = id;
   }
 
   get indexSeparator(): string {

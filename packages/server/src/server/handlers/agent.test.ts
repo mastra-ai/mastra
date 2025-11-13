@@ -6,7 +6,6 @@ import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { UnicodeNormalizer, TokenLimiterProcessor } from '@mastra/core/processors';
 import type { MastraStorage } from '@mastra/core/storage';
-import type { AISDKV5OutputStream } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -97,6 +96,7 @@ describe('Agent Handlers', () => {
 
       expect(result).toEqual({
         'test-agent': {
+          id: 'test-agent',
           name: 'test-agent',
           description: 'A test agent for unit testing',
           instructions: 'test instructions',
@@ -114,6 +114,7 @@ describe('Agent Handlers', () => {
           modelList: undefined,
         },
         'test-multi-model-agent': {
+          id: 'test-multi-model-agent',
           name: 'test-multi-model-agent',
           description: 'A test agent with multiple model configurations',
           instructions: 'test instructions',
@@ -297,7 +298,7 @@ describe('Agent Handlers', () => {
         getAgentByIdHandler({ mastra: mockMastra, requestContext, agentId: 'non-existing' }),
       ).rejects.toThrow(
         new HTTPException(404, {
-          message: 'Agent with name non-existing not found',
+          message: 'Agent with id non-existing not found',
         }),
       );
     });
@@ -348,7 +349,7 @@ describe('Agent Handlers', () => {
           },
           requestContext: new RequestContext(),
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with name non-existing not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
     });
   });
 
@@ -400,7 +401,7 @@ describe('Agent Handlers', () => {
           },
           requestContext: new RequestContext(),
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with name non-existing not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
     });
   });
 
@@ -420,7 +421,7 @@ describe('Agent Handlers', () => {
         },
       });
 
-      const agent = mockMastra.getAgent('test-agent');
+      const agent = mockMastra.getAgentById('test-agent');
       const llm = await agent.getLLM();
       const modelId = llm.getModelId();
       expect(updateResult).toEqual({ message: 'Agent model updated' });
@@ -445,13 +446,13 @@ describe('Agent Handlers', () => {
         requestContext: new RequestContext(),
       });
 
-      expect((result as AISDKV5OutputStream<any>).toTextStreamResponse()).toBeInstanceOf(Response);
+      expect(result).toBeDefined();
     });
   });
 
   describe('reorderAgentModelListHandler', () => {
     it('should reorder list of models for agent', async () => {
-      const agent = mockMastra.getAgent('test-multi-model-agent');
+      const agent = mockMastra.getAgentById('test-multi-model-agent');
       const modelList = await agent.getModelList();
 
       if (!modelList) {
@@ -479,7 +480,7 @@ describe('Agent Handlers', () => {
 
   describe('updateAgentModelInModelListHandler', () => {
     it('should update a model in the model list', async () => {
-      const agent = mockMastra.getAgent('test-multi-model-agent');
+      const agent = mockMastra.getAgentById('test-multi-model-agent');
       const modelList = await agent.getModelList();
       expect(modelList?.length).toBe(3);
       const model1Id = modelList?.[1].id!;

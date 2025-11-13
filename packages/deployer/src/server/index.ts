@@ -18,6 +18,19 @@ import { describeRoute } from 'hono-openapi';
 import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
+import { healthHandler } from './handlers/health';
+import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
+import { rootHandler } from './handlers/root';
+import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
+import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
+import { logsRouter } from './handlers/routes/logs/router';
+import { mcpRouter } from './handlers/routes/mcp/router';
+import { memoryRoutes } from './handlers/routes/memory/router';
+import { observabilityRouter } from './handlers/routes/observability/router';
+import { scoresRouter } from './handlers/routes/scores/router';
+import { toolsRouter } from './handlers/routes/tools/router';
+import { vectorRouter } from './handlers/routes/vector/router';
+import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
@@ -120,6 +133,21 @@ export async function createHonoServer(
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
+  // Health check endpoint (before auth middleware so it's publicly accessible)
+  app.get(
+    '/health',
+    describeRoute({
+      description: 'Health check endpoint',
+      tags: ['system'],
+      responses: {
+        200: {
+          description: 'Service is healthy',
+        },
+      },
+    }),
+    healthHandler,
+  );
+
   // Run AUTH middlewares after CORS middleware
   app.use('*', authenticationMiddleware);
   app.use('*', authorizationMiddleware);
@@ -186,6 +214,16 @@ export async function createHonoServer(
         hide: true,
       }),
       swaggerUI({ url: '/openapi.json' }),
+    );
+  }
+
+  if (options?.isDev) {
+    app.post(
+      '/__restart-active-workflow-runs',
+      describeRoute({
+        hide: true,
+      }),
+      restartAllActiveWorkflowRunsHandler,
     );
   }
 

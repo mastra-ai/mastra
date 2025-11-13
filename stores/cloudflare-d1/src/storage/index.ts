@@ -13,6 +13,7 @@ import type {
   StoragePagination,
   WorkflowRuns,
   StorageDomains,
+  StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
@@ -25,6 +26,8 @@ import { WorkflowsStorageD1 } from './domains/workflows';
  * Configuration for D1 using the REST API
  */
 export interface D1Config {
+  /** Storage instance ID */
+  id: string;
   /** Cloudflare account ID */
   accountId: string;
   /** Cloudflare API token with D1 access */
@@ -36,6 +39,8 @@ export interface D1Config {
 }
 
 export interface D1ClientConfig {
+  /** Storage instance ID */
+  id: string;
   /** Optional prefix for table names */
   tablePrefix?: string;
   /** D1 Client */
@@ -46,6 +51,8 @@ export interface D1ClientConfig {
  * Configuration for D1 using the Workers Binding API
  */
 export interface D1WorkersConfig {
+  /** Storage instance ID */
+  id: string;
   /** D1 database binding from Workers environment */
   binding: D1Database; // D1Database binding from Workers
   /** Optional prefix for table names */
@@ -75,7 +82,7 @@ export class D1Store extends MastraStorage {
    */
   constructor(config: D1StoreConfig) {
     try {
-      super({ name: 'D1' });
+      super({ id: config.id, name: 'D1' });
 
       if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
         throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
@@ -292,22 +299,8 @@ export class D1Store extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
-  async listWorkflowRuns({
-    workflowName,
-    fromDate,
-    toDate,
-    perPage,
-    page,
-    resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    perPage?: number;
-    page?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, perPage, page, resourceId });
+  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async getWorkflowRunById({

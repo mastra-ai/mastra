@@ -52,11 +52,11 @@ To migrate, update processor message type imports and usage.
 
 ### Deprecated input processor exports
 
-Deprecated input-processor exports have been removed from `@mastra/core`. This change consolidates processor types under the unified `Processor` interface.
+Deprecated input-processor exports which include the built-in processors have been removed from `@mastra/core/agent/input-processors/processors`. Use `@mastra/core/processors` instead. This change consolidates processor types under the unified `Processor` interface.
 
-To migrate, use the new `Processor` interface.
+If you have used `InputProcessor`, replace it with `Processor` which implements a `processInput` function.
 
 ```diff
-- import { InputProcessor } from '@mastra/core/processors'; // old exports
-+ import type { Processor, InputProcessor } from '@mastra/core/processors';
+- import { InputProcessor, ModerationProcessor } from '@mastra/core/agent/input-processors/processors';
++ import { Processor, ModerationProcessor } from '@mastra/core/processors';
 ```

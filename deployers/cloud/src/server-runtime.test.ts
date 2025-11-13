@@ -108,6 +108,7 @@ describe('CloudDeployer Server Runtime', () => {
 
       // Check LibSQL setup
       expect(entry).toContain('const storage = new LibSQLStore({');
+      expect(entry).toContain('id: "mastra-cloud-storage-libsql"');
       expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN');
 

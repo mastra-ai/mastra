@@ -10,6 +10,7 @@ import { generateReportWorkflow } from './workflows/generateReportWorkflow';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: 'file:../mastra.db',
   }),
   agents: {

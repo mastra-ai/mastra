@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "0.14.0",
+  "version": "1.0.0-beta.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -47,12 +47,12 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.5",
+    "@hono/node-server": "^1.19.6",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "ai": "^5.0.60",
     "eslint": "^9.37.0",
     "hono-mcp-server-sse-transport": "0.0.7",

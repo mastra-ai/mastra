@@ -6,6 +6,7 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'csv-summarization-agent-storage',
     url: process.env.MASTRA_DB_URL || 'file:../mastra.db',
   }),
 });

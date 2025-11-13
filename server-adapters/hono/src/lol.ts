@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { HonoServerAdapter } from '.';
 
 const storage = new LibSQLStore({
+  id: 'hono-storage',
   url: 'file:./mastra.db',
 });
 

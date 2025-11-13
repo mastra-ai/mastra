@@ -22,6 +22,7 @@ import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
 
 export interface UpstashConfig {
+  id: string;
   url: string;
   token: string;
 }
@@ -31,7 +32,7 @@ export class UpstashStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: UpstashConfig) {
-    super({ name: 'Upstash' });
+    super({ id: config.id, name: 'Upstash' });
     this.redis = new Redis({
       url: config.url,
       token: config.token,
@@ -188,15 +189,8 @@ export class UpstashStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot(params);
   }
 
-  async listWorkflowRuns({
-    workflowName,
-    fromDate,
-    toDate,
-    perPage,
-    page,
-    resourceId,
-  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, perPage, page, resourceId });
+  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async getWorkflowRunById({

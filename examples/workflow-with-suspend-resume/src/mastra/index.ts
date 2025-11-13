@@ -8,6 +8,7 @@ export const mastra = new Mastra({
     myWorkflow,
   },
   storage: new LibSQLStore({
+    id: 'workflow-snapshots-storage',
     url: 'file:./workflow-snapshots.db',
   }),
 });

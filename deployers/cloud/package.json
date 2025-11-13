@@ -1,12 +1,11 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "0.22.2",
+  "version": "1.0.0-beta.2",
   "description": "",
   "type": "module",
   "files": [
     "dist",
     "CHANGELOG.md",
-    "templates",
     "versions.json"
   ],
   "main": "dist/index.js",
@@ -47,7 +46,7 @@
     "@mastra/core": "workspace:*",
     "@manypkg/get-packages": "^3.1.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

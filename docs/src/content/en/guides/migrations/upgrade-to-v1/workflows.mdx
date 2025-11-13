@@ -20,6 +20,16 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 + const workflows = mastra.listWorkflows();
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your imports automatically:
+
+```shell
+npx @mastra/codemod@beta v1/mastra-plural-apis .
+```
+
+:::
+
 ### `RuntimeContext` to `RequestContext` in step context
 
 The parameter name `runtimeContext` has been changed to `requestContext` in workflow step execution context. This change aligns with the global rename for clarity.
@@ -42,7 +52,7 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
 You can use Mastra's codemod CLI to update your imports automatically:
 
 ```shell
-npx @mastra/codemod v1/runtime-context .
+npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::
@@ -57,6 +67,16 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 - await workflow.createRunAsync({ input: { ... } });
 + await workflow.createRun({ input: { ... } });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-create-run-async .
+```
+
+:::
 
 ### `runCount` to `retryCount` (deprecated)
 
@@ -73,6 +93,16 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-run-count .
+```
+
+:::
+
 ### `getWorkflowRuns` to `listWorkflowRuns`
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
@@ -83,6 +113,16 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 - const runs = await workflow.getWorkflowRuns({ fromDate, toDate });
 + const runs = await workflow.listWorkflowRuns({ fromDate, toDate });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-list-runs .
+```
+
+:::
 
 ## Removed
 

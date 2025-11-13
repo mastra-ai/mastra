@@ -10,6 +10,7 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'flash-card-creator-agent-storage',
     url: 'file:../mastra.db',
   }),
 });

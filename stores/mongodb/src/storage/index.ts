@@ -47,6 +47,7 @@ const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
 
   try {
     return MongoDBConnector.fromDatabaseConfig({
+      id: config.id,
       options: config.options,
       url: config.url,
       dbName: config.dbName,
@@ -88,7 +89,7 @@ export class MongoDBStore extends MastraStorage {
   }
 
   constructor(config: MongoDBConfig) {
-    super({ name: 'MongoDBStore' });
+    super({ id: config.id, name: 'MongoDBStore' });
 
     this.stores = {} as StorageDomains;
 

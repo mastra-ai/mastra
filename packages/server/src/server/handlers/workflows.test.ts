@@ -282,6 +282,7 @@ describe('vNext Workflow Handlers', () => {
       });
 
       expect(result).toEqual({
+        activeStepsPath: {},
         error: undefined,
         status: 'success',
         result: { result: 'success' },
@@ -295,6 +296,7 @@ describe('vNext Workflow Handlers', () => {
             payload: {},
           },
         },
+        serializedStepGraph: mockWorkflow.serializedStepGraph,
       });
     });
   });

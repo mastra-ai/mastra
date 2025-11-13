@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { ExpressServerAdapter } from '.';
 
 const storage = new LibSQLStore({
+  id: 'express-storage',
   url: 'file:./mastra.db',
 });
 

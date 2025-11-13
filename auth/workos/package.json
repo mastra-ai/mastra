@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-workos",
-  "version": "0.10.7",
+  "version": "1.0.0-beta.0",
   "description": "Mastra WorkOS Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

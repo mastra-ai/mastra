@@ -10,6 +10,7 @@ import { sqlGenerationTool } from '../tools/sql-generation-tool';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'sql-agent-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });
