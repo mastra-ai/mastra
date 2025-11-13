@@ -33,7 +33,7 @@ export type StepSuccess<P, R, S, T> = {
 
 export type StepFailure<P, R, S> = {
   status: 'failed';
-  error: Error;
+  error: Error; // TODO: when retrieving snapshots from storage, this would be a serialized object representation of the Error
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
