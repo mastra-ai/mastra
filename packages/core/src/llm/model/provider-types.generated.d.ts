@@ -746,6 +746,23 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
   ];
+  readonly ovhcloud: readonly [
+    'deepseek-r1-distill-llama-70b',
+    'gpt-oss-120b',
+    'gpt-oss-20b',
+    'llama-3.1-8b-instruct',
+    'llava-next-mistral-7b',
+    'meta-llama-3_1-70b-instruct',
+    'meta-llama-3_3-70b-instruct',
+    'mistral-7b-instruct-v0.3',
+    'mistral-nemo-instruct-2407',
+    'mistral-small-3.2-24b-instruct-2506',
+    'mixtral-8x7b-instruct-v0.1',
+    'qwen2.5-coder-32b-instruct',
+    'qwen2.5-vl-72b-instruct',
+    'qwen3-32b',
+    'qwen3-coder-30b-a3b-instruct',
+  ];
   readonly iflowcn: readonly [
     'deepseek-r1',
     'deepseek-v3',
