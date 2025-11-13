@@ -36,6 +36,7 @@ const mf = new Miniflare({
 });
 
 const TEST_CONFIG: CloudflareWorkersConfig = {
+  id: 'cloudflare-binding-test',
   bindings: {} as Env, // Will be populated in beforeAll
   keyPrefix: 'mastra-test', // Fixed prefix for test isolation
 };

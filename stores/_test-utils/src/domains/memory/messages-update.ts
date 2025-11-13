@@ -23,7 +23,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       expect(updatedMessages).toHaveLength(1);
       expect(updatedMessages[0]!.role).toBe('assistant');
 
-      const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id });
       expect(fromDb[0]!.role).toBe('assistant');
     });
 
@@ -39,7 +39,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         messages: [{ id: originalMessage.id, content: { metadata: newMetadata } as any }],
       });
 
-      const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id });
       expect(fromDb).toHaveLength(1);
       expect(fromDb[0]!.content.metadata).toEqual(newMetadata);
       // Content is now stored in parts only
@@ -95,7 +95,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         ],
       });
 
-      const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id });
       const updatedMsg1 = fromDb.find(m => m.id === msg1.id);
       const updatedMsg2 = fromDb.find(m => m.id === msg2.id);
 
@@ -144,8 +144,8 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
       );
 
       // Verify the message was moved
-      const { messages: thread1Messages } = await storage.getMessages({ threadId: thread.id });
-      const { messages: thread2Messages } = await storage.getMessages({ threadId: thread2.id });
+      const { messages: thread1Messages } = await storage.listMessages({ threadId: thread.id });
+      const { messages: thread2Messages } = await storage.listMessages({ threadId: thread2.id });
       expect(thread1Messages).toHaveLength(0);
       expect(thread2Messages).toHaveLength(1);
       expect(thread2Messages[0]!.id).toBe(message.id);
@@ -163,7 +163,7 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
         }),
       ).resolves.not.toThrow();
 
-      const { messages: fromDb } = await storage.getMessages({ threadId: thread.id });
+      const { messages: fromDb } = await storage.listMessages({ threadId: thread.id });
       expect(fromDb[0]!.role).toBe(originalMessage.role);
     });
   });

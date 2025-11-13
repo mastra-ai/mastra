@@ -22,7 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TraceTimeline } from './trace-timeline';
 import { TraceSpanUsage } from './trace-span-usage';
 import { useLinkComponent } from '@/lib/framework';
-import { AISpanRecord } from '@mastra/core/storage';
+import { SpanRecord } from '@mastra/core/storage';
 import { getSpanInfo, useTraceInfo } from './helpers';
 import { SpanDialog } from './span-dialog';
 import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
@@ -34,9 +34,9 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 
 type TraceDialogProps = {
-  traceSpans?: AISpanRecord[];
+  traceSpans?: SpanRecord[];
   traceId?: string;
-  traceDetails?: AISpanRecord;
+  traceDetails?: SpanRecord;
   isOpen: boolean;
   onClose?: () => void;
   onNext?: () => void;

@@ -36,7 +36,6 @@ jobs:
       - name: Re-checkout with app token
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.base_ref }}
           token: ${{ steps.app-auth.outputs.token }}
           persist-credentials: true
 

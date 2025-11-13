@@ -35,7 +35,10 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
 // @ts-ignore - JSDOM types don't match exactly but this works for testing
 global.window = dom.window;
 global.document = dom.window.document;
-global.navigator = dom.window.navigator;
+Object.defineProperty(global, 'navigator', {
+  value: dom.window.navigator,
+  writable: false,
+});
 global.fetch = global.fetch || fetch;
 
 describe('Memory Streaming Tests', () => {
@@ -120,7 +123,7 @@ describe('Memory Streaming Tests', () => {
     });
 
     const agentMemory = (await agent.getMemory())!;
-    const { messages } = await agentMemory.query({ threadId });
+    const { messages } = await agentMemory.recall({ threadId });
 
     console.log('Custom IDs: ', customIds);
     console.log('Messages: ', messages);
@@ -254,7 +257,7 @@ describe('Memory Streaming Tests', () => {
 
       const agentMemory = (await weatherAgent.getMemory())!;
       // Get initial messages from memory and convert to AI SDK v4 format
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const initialMessages = messages.map(m => MessageList.mastraDBMessageToAIV4UIMessage(m)) as Message[];
       const state = { clipboard: '' };
       const { result } = renderHook(() => {

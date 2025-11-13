@@ -1,3 +1,4 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
@@ -6,6 +7,7 @@ import { meetingSchedulerAgent } from './agents/meeting-scheduler';
 export const mastra = new Mastra({
   agents: { meetingSchedulerAgent },
   storage: new LibSQLStore({
+    id: 'meeting-scheduler-storage',
     url: 'file:../../mastra.db',
   }),
   logger: new PinoLogger({
@@ -32,9 +34,9 @@ export const mastra = new Mastra({
       },
     ],
   },
-  observability: {
+  observability: new Observability({
     default: {
       enabled: true,
     },
-  },
+  }),
 });

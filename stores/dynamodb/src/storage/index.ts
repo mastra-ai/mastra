@@ -7,7 +7,6 @@ import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  StorageGetMessagesArg,
   WorkflowRun,
   WorkflowRuns,
   TABLE_NAMES,
@@ -27,6 +26,7 @@ import { ScoresStorageDynamoDB } from './domains/score';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
 export interface DynamoDBStoreConfig {
+  id: string;
   region?: string;
   tableName: string;
   endpoint?: string;
@@ -49,7 +49,7 @@ export class DynamoDBStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor({ name, config }: { name: string; config: DynamoDBStoreConfig }) {
-    super({ name });
+    super({ id: config.id, name });
 
     // Validate required config
     try {
@@ -266,11 +266,6 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
-  // Message operations
-  public async getMessages(args: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages(args);
-  }
-
   async listMessagesById(args: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.listMessagesById(args);
   }
@@ -282,7 +277,7 @@ export class DynamoDBStore extends MastraStorage {
   async updateMessages(_args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['parts'] };
+      content?: { metadata?: MastraMessageContentV2['metadata']; parts?: MastraMessageContentV2['parts'] };
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(_args);

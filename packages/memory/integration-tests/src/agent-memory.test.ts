@@ -35,18 +35,20 @@ describe('Agent Memory Tests', () => {
         agent,
       },
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
     });
     const agentMemory = (await mastra.getAgent('agent').getMemory())!;
-    await expect(agentMemory.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory.recall({ threadId: '1' })).resolves.not.toThrow();
     const agentMemory2 = (await agent.getMemory())!;
-    await expect(agentMemory2.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agentMemory2.recall({ threadId: '1' })).resolves.not.toThrow();
   });
 
   it('should inherit storage from Mastra instance when workingMemory is enabled', async () => {
     const mastra = new Mastra({
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       agents: {
@@ -98,6 +100,7 @@ describe('Agent Memory Tests', () => {
   it('should work with resource-scoped working memory when storage supports it', async () => {
     const mastra = new Mastra({
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       agents: {
@@ -146,10 +149,12 @@ describe('Agent Memory Tests', () => {
 
   it('should call getMemoryMessages for first message in new thread when using resource-scoped semantic recall', async () => {
     const storage = new LibSQLStore({
+      id: 'inline-storage',
       url: dbFile,
     });
     const vector = new LibSQLVector({
       connectionUrl: dbFile,
+      id: 'test-vector',
     });
 
     const mastra = new Mastra({
@@ -192,7 +197,7 @@ describe('Agent Memory Tests', () => {
     });
 
     // Verify first thread has messages
-    const thread1Messages = await memory.query({ threadId: thread1Id, resourceId });
+    const thread1Messages = await memory.recall({ threadId: thread1Id, resourceId });
     expect(thread1Messages.messages.length).toBeGreaterThan(0);
 
     // Now create a second thread - this should be able to access memory from thread1
@@ -245,10 +250,12 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
       },
       storage: new LibSQLStore({
+        id: 'test-storage',
         url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile,
+        id: 'test-vector',
       }),
       embedder: fastembed,
     });
@@ -279,7 +286,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const userMessages = messages
         .filter((m: any) => m.role === 'user')
         .map((m: any) => {
@@ -311,7 +318,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
       const userMessages = messages
         .filter((m: any) => m.role === 'user')
         .map((m: any) => m.content.parts?.find((p: any) => p.type === 'text')?.text || '');
@@ -344,7 +351,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter((m: any) => {
@@ -398,7 +405,7 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const agentMemory = (await agent.getMemory())!;
-      const { messages } = await agentMemory.query({ threadId });
+      const { messages } = await agentMemory.recall({ threadId });
 
       // Check that all user messages were saved
       const savedUserMessages = messages.filter((m: any) => m.role === 'user');
@@ -460,8 +467,8 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile }),
+      storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentWithTitle = new Agent({
@@ -489,8 +496,8 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: dbFile }),
-      vector: new LibSQLVector({ connectionUrl: dbFile }),
+      storage: new LibSQLStore({ id: 'mastra-storage', url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile, id: 'test-vector' }),
       embedder: fastembed,
     });
     const agentNoTitle = new Agent({
@@ -591,7 +598,7 @@ describe('Agent with message processors', () => {
 
     // Check that tool calls were saved to memory
     const agentMemory = (await memoryProcessorAgent.getMemory())!;
-    const { messages: messagesFromMemory } = await agentMemory.query({ threadId });
+    const { messages: messagesFromMemory } = await agentMemory.recall({ threadId });
     const toolMessages = messagesFromMemory.filter(
       m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
     );

@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils';
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
-import { AISpanRecord } from '@mastra/core/storage';
+import { SpanRecord } from '@mastra/core/storage';
 
 type TraceTimelineLegendProps = {
-  spans?: AISpanRecord[];
+  spans?: SpanRecord[];
 };
 
 export function TraceTimelineLegend({ spans = [] }: TraceTimelineLegendProps) {

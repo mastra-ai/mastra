@@ -1,3 +1,4 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
@@ -22,15 +23,16 @@ export const mastra = new Mastra({
     webContentAgent,
   },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: 'file:../mastra.db',
   }),
   logger: new PinoLogger({
     name: 'Mastra Ad Copy Template',
     level: 'info',
   }),
-  observability: {
+  observability: new Observability({
     default: {
       enabled: true,
     },
-  },
+  }),
 });

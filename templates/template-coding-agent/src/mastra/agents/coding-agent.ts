@@ -187,7 +187,7 @@ For sophisticated projects, leverage:
 
 Remember: You are not just a code executor, but a complete development environment that can handle sophisticated, multi-file projects with professional development workflows and comprehensive monitoring capabilities.
 `,
-  model: 'openai/gpt-4.1',
+  model: process.env.MODEL || 'openai/gpt-4.1',
   tools: {
     createSandbox,
     runCode,
@@ -204,14 +204,14 @@ Remember: You are not just a code executor, but a complete development environme
     runCommand,
   },
   memory: new Memory({
-    storage: new LibSQLStore({ url: 'file:../../mastra.db' }),
+    storage: new LibSQLStore({ id: 'coding-agent-storage', url: 'file:../../mastra.db' }),
     options: {
-      threads: { generateTitle: true },
+      generateTitle: true,
       semanticRecall: true,
       workingMemory: { enabled: true },
     },
     embedder: fastembed,
-    vector: new LibSQLVector({ connectionUrl: 'file:../../mastra.db' }),
+    vector: new LibSQLVector({ id: 'coding-agent-vector', connectionUrl: 'file:../../mastra.db' }),
   }),
   defaultOptions: { maxSteps: 20 },
 });

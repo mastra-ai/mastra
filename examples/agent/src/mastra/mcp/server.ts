@@ -90,6 +90,7 @@ const weatherResources: MCPServerResources = {
 };
 
 export const myMcpServer = new MCPServer({
+  id: 'my-calculation-and-data-mcp-server',
   name: 'My Calculation & Data MCP Server',
   version: '1.0.0',
   tools: {
@@ -102,7 +103,7 @@ export const myMcpServer = new MCPServer({
         operation: z.enum(['add', 'subtract']).describe('The operation to perform.'),
       }),
       execute: async input => {
-        const { num1, num2, operation } = inputData;
+        const { num1, num2, operation } = input;
         if (operation === 'add') {
           return num1 + num2;
         }
@@ -119,7 +120,7 @@ export const myMcpServer = new MCPServer({
         city: z.string().describe('The city to get weather for, e.g., London, Paris.'),
       }),
       execute: async input => {
-        const { city } = inputData;
+        const { city } = input;
         const temperatures = {
           london: '15°C',
           paris: '18°C',

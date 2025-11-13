@@ -117,7 +117,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread).toBeNull();
 
       // Verify messages were also deleted
-      const { messages: retrievedMessages } = await storage.getMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await storage.listMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
 
@@ -181,7 +181,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       await storage.saveMessages({ messages: [message] });
 
       // Retrieve the message - this is where double-nesting could occur
-      const { messages: retrievedMessages } = await storage.getMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await storage.listMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(1);
 
       const retrievedMessage = retrievedMessages[0] as MastraDBMessage;

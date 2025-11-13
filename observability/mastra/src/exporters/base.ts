@@ -1,7 +1,7 @@
 /**
- * Base Exporter for AI Tracing
+ * Base Exporter for Observability
  *
- * Provides common functionality shared by all AI tracing exporters:
+ * Provides common functionality shared by all observability exporters:
  * - Logger initialization with proper Mastra logger support
  * - Disabled state management
  * - Graceful shutdown lifecycle
@@ -9,7 +9,7 @@
 
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { AITracingEvent, AITracingExporter, InitExporterOptions } from '@mastra/core/observability';
+import type { TracingEvent, ObservabilityExporter, InitExporterOptions } from '@mastra/core/observability';
 
 /**
  * Base configuration that all exporters should support
@@ -22,7 +22,7 @@ export interface BaseExporterConfig {
 }
 
 /**
- * Abstract base class for AI tracing exporters
+ * Abstract base class for observability exporters
  *
  * Handles common concerns:
  * - Logger setup with proper Mastra logger
@@ -45,13 +45,13 @@ export interface BaseExporterConfig {
  *     // Initialize exporter-specific logic
  *   }
  *
- *   async _exportEvent(event: AITracingEvent): Promise<void> {
+ *   async _exportEvent(event: TracingEvent): Promise<void> {
  *     // Export logic
  *   }
  * }
  * ```
  */
-export abstract class BaseExporter implements AITracingExporter {
+export abstract class BaseExporter implements ObservabilityExporter {
   /** Exporter name - must be implemented by subclasses */
   abstract name: string;
 
@@ -72,7 +72,7 @@ export abstract class BaseExporter implements AITracingExporter {
   }
 
   /**
-   * Set the logger for the exporter (called by Mastra/AITracing during initialization)
+   * Set the logger for the exporter (called by Mastra/ObservabilityInstance during initialization)
    */
   __setLogger(logger: IMastraLogger): void {
     this.logger = logger;
@@ -120,19 +120,19 @@ export abstract class BaseExporter implements AITracingExporter {
    * This method checks if the exporter is disabled before calling _exportEvent.
    * Subclasses should implement _exportEvent instead of overriding this method.
    */
-  async exportEvent(event: AITracingEvent): Promise<void> {
+  async exportTracingEvent(event: TracingEvent): Promise<void> {
     if (this.isDisabled) {
       return;
     }
-    await this._exportEvent(event);
+    await this._exportTracingEvent(event);
   }
 
   /**
    * Export a tracing event - must be implemented by subclasses
    *
-   * This method is called by exportEvent after checking if the exporter is disabled.
+   * This method is called by exportTracingEvent after checking if the exporter is disabled.
    */
-  protected abstract _exportEvent(event: AITracingEvent): Promise<void>;
+  protected abstract _exportTracingEvent(event: TracingEvent): Promise<void>;
 
   /**
    * Optional initialization hook called after Mastra is fully configured

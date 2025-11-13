@@ -42,8 +42,16 @@ export class CouchbaseVector extends MastraVector {
   private scope: Scope;
   private vector_dimension: number;
 
-  constructor({ connectionString, username, password, bucketName, scopeName, collectionName }: CouchbaseVectorParams) {
-    super();
+  constructor({
+    id,
+    connectionString,
+    username,
+    password,
+    bucketName,
+    scopeName,
+    collectionName,
+  }: CouchbaseVectorParams & { id: string }) {
+    super({ id });
 
     try {
       this.clusterPromise = connect(connectionString, {

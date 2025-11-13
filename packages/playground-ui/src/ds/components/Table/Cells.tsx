@@ -29,21 +29,6 @@ export const TxtCell = ({ className, children }: CellProps) => {
   );
 };
 
-export const UnitCell = ({ className, children, unit }: CellProps & { unit: string }) => {
-  return (
-    <Cell className={className}>
-      <div className="flex min-w-0 items-center">
-        <Txt as="span" variant="ui-md" className="shrink-0">
-          {children}
-        </Txt>
-        <Txt as="span" variant="ui-sm" className="text-icon3 w-full truncate">
-          {unit}
-        </Txt>
-      </div>
-    </Cell>
-  );
-};
-
 export interface DateTimeCellProps extends Omit<CellProps, 'children'> {
   dateTime: Date;
 }

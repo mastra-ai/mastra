@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "0.22.2",
+  "version": "1.0.0-beta.2",
   "description": "",
   "type": "module",
   "files": [
@@ -74,7 +74,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "eslint": "^9.37.0",
     "superjson": "^2.2.2",
     "tsup": "^8.5.0",
@@ -91,5 +91,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

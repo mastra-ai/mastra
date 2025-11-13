@@ -1,5 +1,5 @@
 ---
-'@mastra/voice-google-gemini-live': major
+'@mastra/voice-google-gemini-live': minor
 '@mastra/mcp-docs-server': major
 '@mastra/agent-builder': major
 '@mastra/playground-ui': major

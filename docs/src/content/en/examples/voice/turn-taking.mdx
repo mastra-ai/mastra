@@ -1,5 +1,5 @@
 ---
-title: "Example: AI Debate with Turn Taking | Voice | Mastra Docs"
+title: "Example: AI Debate with Turn Taking | Voice"
 description: Example of using Mastra to create a multi-agent debate with turn-taking conversation flow.
 ---
 
@@ -390,7 +390,7 @@ export default function DebateInterface() {
 
   return (
     <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">AI Debate with Turn Taking</h1>
+      <h1 className="text-2xl font-semibold mb-4">AI Debate with Turn Taking</h1>
 
       <div className="mb-6">
         <label className="block mb-2">Debate Topic:</label>
@@ -438,7 +438,7 @@ export default function DebateInterface() {
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <div className="font-bold">{response.agent}:</div>
+                  <div className="font-semibold">{response.agent}:</div>
                   <button
                     onClick={() => playAudio(response.text, response.agent)}
                     disabled={isPlaying}
