@@ -122,6 +122,11 @@ const config: import("@docusaurus/types").Config = {
             path: "",
             banner: "none",
           },
+          "0.x": {
+            label: "0.x",
+            path: "0.x",
+            banner: "none",
+          },
         },
       },
     ],
@@ -138,6 +143,11 @@ const config: import("@docusaurus/types").Config = {
           current: {
             label: "Latest",
             path: "",
+            banner: "none",
+          },
+          "0.x": {
+            label: "0.x",
+            path: "0.x",
             banner: "none",
           },
         },
@@ -158,6 +168,11 @@ const config: import("@docusaurus/types").Config = {
             path: "",
             banner: "none",
           },
+          "0.x": {
+            label: "0.x",
+            path: "0.x",
+            banner: "none",
+          },
         },
       },
     ],
@@ -174,6 +189,11 @@ const config: import("@docusaurus/types").Config = {
           current: {
             label: "Latest",
             path: "",
+            banner: "none",
+          },
+          "0.x": {
+            label: "0.x",
+            path: "0.x",
             banner: "none",
           },
         },
@@ -196,6 +216,11 @@ const config: import("@docusaurus/types").Config = {
             current: {
               label: "Latest",
               path: "",
+              banner: "none",
+            },
+            "0.x": {
+              label: "0.x",
+              path: "0.x",
               banner: "none",
             },
           },
