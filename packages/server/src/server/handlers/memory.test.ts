@@ -681,7 +681,7 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      const memoryStore = await storage.getStore('memory')!;
+      const memoryStore = await storage.getStore('memory');
 
       expect(memoryStore).toBeDefined();
 
@@ -722,7 +722,7 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      const memoryStore = await storage.getStore('memory')!;
+      const memoryStore = await storage.getStore('memory');
       expect(memoryStore).toBeDefined();
 
       if (!memoryStore) {

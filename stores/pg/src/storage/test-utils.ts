@@ -318,7 +318,12 @@ export function pgTests() {
           await expect(async () => {
             await restrictedDB.init();
             const thread = createSampleThread();
-            await restrictedDB.saveThread({ thread });
+            const memoryStore = await restrictedDB.getStore('memory');
+            expect(memoryStore).toBeDefined();
+            if (!memoryStore) {
+              throw new Error('Memory store is not defined');
+            }
+            await memoryStore.saveThread({ thread });
           }).rejects.toThrow(
             `Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`,
           );
@@ -688,7 +693,7 @@ export function pgTests() {
 
       // Save a message through the normal API with a different timestamp
       const messageCreatedAt = new Date('2024-01-01T12:00:00Z');
-      await store.saveMessages({
+      await memoryStore?.saveMessages({
         messages: [
           {
             id: testMessageId,
@@ -697,7 +702,7 @@ export function pgTests() {
             role: 'user',
             content: { format: 2, parts: [{ type: 'text', text: 'Test' }], content: 'Test' },
             createdAt: messageCreatedAt,
-          },
+          } as any,
         ],
       });
 
@@ -752,7 +757,7 @@ export function pgTests() {
       );
 
       // Test listMessages with include
-      const messagesResult = await store.listMessages({
+      const messagesResult = await memoryStore?.listMessages({
         threadId: testThreadId,
         include: [
           {
@@ -763,20 +768,20 @@ export function pgTests() {
         ],
       });
 
-      expect(messagesResult.messages.length).toBe(3);
+      expect(messagesResult?.messages.length).toBe(3);
 
       // Find each message and verify correct timestamps
-      const message1 = messagesResult.messages.find(m => m.id === msg1Id);
+      const message1 = messagesResult?.messages.find(m => m.id === msg1Id);
       expect(message1).toBeDefined();
       expect(message1?.createdAt).toBeInstanceOf(Date);
       expect(message1?.createdAt.getTime()).toBe(date1.getTime());
 
-      const message2 = messagesResult.messages.find(m => m.id === msg2Id);
+      const message2 = messagesResult?.messages.find(m => m.id === msg2Id);
       expect(message2).toBeDefined();
       expect(message2?.createdAt).toBeInstanceOf(Date);
       expect(message2?.createdAt.getTime()).toBe(date2.getTime());
 
-      const message3 = messagesResult.messages.find(m => m.id === msg3Id);
+      const message3 = messagesResult?.messages.find(m => m.id === msg3Id);
       expect(message3).toBeDefined();
       expect(message3?.createdAt).toBeInstanceOf(Date);
       // Should use createdAtZ (date2Z), not createdAt (date3)

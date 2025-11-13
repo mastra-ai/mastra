@@ -239,14 +239,6 @@ export class Memory extends MastraMemory {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     const memoryStore = await this.getMemoryStore();
-    if (!memoryStore) {
-      throw new MastraError({
-        id: 'MASTRA_STORAGE_GET_THREAD_BY_ID_NOT_SUPPORTED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Memory store not found',
-      });
-    }
     const thread = await memoryStore.getThreadById({ threadId });
     if (!thread) {
       return null;
@@ -274,14 +266,6 @@ export class Memory extends MastraMemory {
 
     if (config.workingMemory?.enabled) {
       const memoryStore = await this.getMemoryStore();
-      if (!memoryStore) {
-        throw new MastraError({
-          id: 'MASTRA_STORAGE_UPDATE_RESOURCE_NOT_SUPPORTED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: 'Memory store not found',
-        });
-      }
 
       this.checkStorageFeatureSupport(config);
 
@@ -306,14 +290,6 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
-    if (!memoryStore) {
-      throw new MastraError({
-        id: 'MASTRA_STORAGE_SAVE_THREAD_NOT_SUPPORTED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Memory store not found',
-      });
-    }
     const savedThread = await memoryStore.saveThread({ thread });
 
     // Check if metadata contains workingMemory and working memory is enabled
@@ -381,14 +357,6 @@ export class Memory extends MastraMemory {
     }
 
     const memoryStore = await this.getMemoryStore();
-    if (!memoryStore) {
-      throw new MastraError({
-        id: 'MASTRA_STORAGE_UPDATE_RESOURCE_NOT_SUPPORTED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Memory store not found',
-      });
-    }
 
     this.checkStorageFeatureSupport(config);
 
@@ -450,15 +418,6 @@ export class Memory extends MastraMemory {
     }
 
     const memoryStore = await this.getMemoryStore();
-
-    if (!memoryStore) {
-      throw new MastraError({
-        id: 'MASTRA_STORAGE_UPDATE_RESOURCE_NOT_SUPPORTED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Memory store not found',
-      });
-    }
 
     this.checkStorageFeatureSupport(config);
 
@@ -812,15 +771,6 @@ ${workingMemory}`;
     }
 
     const memoryStore = await this.getMemoryStore();
-
-    if (!memoryStore) {
-      throw new MastraError({
-        id: 'MASTRA_STORAGE_GET_THREAD_BY_ID_NOT_SUPPORTED',
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Memory store not found',
-      });
-    }
 
     this.checkStorageFeatureSupport(config);
 

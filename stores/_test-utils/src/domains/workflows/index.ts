@@ -5,7 +5,6 @@ import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 
 export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
-  console.log(storage, 'storage');
   let workflowStore!: NonNullable<Awaited<ReturnType<typeof storage.getStore<'workflows'>>>>;
 
   beforeAll(async () => {
@@ -131,8 +130,6 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         fromDate: yesterday,
         toDate: now,
       });
-
-      console.log(runs, 'runs');
 
       expect(runs).toHaveLength(2);
       const wfName3Run = runs.find(r => r.workflowName === workflowName3);

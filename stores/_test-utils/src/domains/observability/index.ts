@@ -261,7 +261,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         expect(beforeTrace1?.spans).toHaveLength(1);
         expect(beforeTrace2?.spans).toHaveLength(1);
 
-        await storage.batchDeleteTraces({ traceIds: [spans[0]!.traceId, spans[1]!.traceId] });
+        await observabilityStore.batchDeleteTraces({ traceIds: [spans[0]!.traceId, spans[1]!.traceId] });
 
         const afterTrace1 = await observabilityStore.getTrace(spans[0]!.traceId);
         const afterTrace2 = await observabilityStore.getTrace(spans[1]!.traceId);
@@ -289,7 +289,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const beforeTrace = await observabilityStore.getTrace(rootSpan.traceId);
         expect(beforeTrace?.spans).toHaveLength(3);
 
-        await storage.batchDeleteTraces({ traceIds: [rootSpan.traceId] });
+        await observabilityStore.batchDeleteTraces({ traceIds: [rootSpan.traceId] });
 
         const afterTrace = await observabilityStore.getTrace(rootSpan.traceId);
         expect(afterTrace).toBeNull();

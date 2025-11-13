@@ -370,12 +370,18 @@ export class PostgresPerformanceTest {
   async runPerformanceTests(scenario: 'without_indexes' | 'with_indexes'): Promise<PerformanceResult[]> {
     const results: PerformanceResult[] = [];
 
+    const memoryStore = await this.store.getStore('memory');
+
+    if (!memoryStore) {
+      throw new Error('Memory store is not defined');
+    }
+
     const resourceId = 'resource_0';
     // Test listThreadsByResourceId
     results.push(
       await this.measureOperation(
         'listThreadsByResourceId',
-        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
+        () => memoryStore.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
         scenario,
       ),
     );
@@ -386,7 +392,7 @@ export class PostgresPerformanceTest {
       await this.measureOperation(
         'listMessages',
         () =>
-          this.store.listMessages({
+          memoryStore.listMessages({
             threadId,
             perPage: 20,
             page: 0,
