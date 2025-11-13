@@ -23,6 +23,7 @@ interface RouteInfo {
   method: string;
   path: string;
   handlerName?: string;
+  deprecated?: boolean;
 }
 
 // Helper to convert Hono path format (:param) to OpenAPI format ({param})
@@ -159,7 +160,7 @@ describe('Deployer Routes → Server Adapter Parity', () => {
 
     serverRoutes = SERVER_ROUTES.map(r => {
       const handlerName = r.handler.name;
-      const routeInfo: RouteInfo = { method: r.method, path: r.path, handlerName };
+      const routeInfo: RouteInfo = { method: r.method, path: r.path, handlerName, deprecated: r.deprecated };
 
       // Build handler map
       if (handlerName) {
@@ -212,8 +213,10 @@ describe('Deployer Routes → Server Adapter Parity', () => {
           const serverRoute = serverRoutes.find(sr => `${sr.method} ${sr.path}` === routeKey);
 
           if (
-            !serverRoute?.handlerName ||
-            !handlersAreEquivalent(routeKey, serverRoute.handlerName, route.handlerName)
+            !(
+              serverRoute?.handlerName && handlersAreEquivalent(routeKey, serverRoute.handlerName, route.handlerName)
+            ) &&
+            !serverRoute?.deprecated
           ) {
             // This handler is completely unique to deployer
             failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);
@@ -245,8 +248,11 @@ describe('Deployer Routes → Server Adapter Parity', () => {
           const deployerRoute = uniqueDeployerRoutes.find(sr => `${sr.method} ${sr.path}` === routeKey);
 
           if (
-            !deployerRoute?.handlerName ||
-            !handlersAreEquivalent(routeKey, route.handlerName, deployerRoute.handlerName)
+            !(
+              deployerRoute?.handlerName &&
+              handlersAreEquivalent(routeKey, route.handlerName, deployerRoute.handlerName)
+            ) &&
+            !route?.deprecated
           ) {
             // This handler is completely unique to server-adapter
             failures.push(`${route.method} ${route.path} (handler: ${route.handlerName})`);

@@ -328,7 +328,9 @@ export const AGENTS_ROUTES: ServerRoute[] = [
   createRoute({
     method: 'POST',
     responseType: 'stream',
-    handler: streamGenerateHandler as unknown as ServerRouteHandler,
+    handler: (() => {
+      throw new Error('This endpoint is deprecated. Please use /stream instead.');
+    }) as unknown as ServerRouteHandler,
     path: '/api/agents/:agentId/streamVNext',
     pathParamSchema: agentIdPathParams,
     bodySchema: agentExecutionBodySchema,
