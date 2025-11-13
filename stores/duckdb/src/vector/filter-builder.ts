@@ -142,6 +142,10 @@ export class DuckDBFilterBuilder {
       return this.buildOperatorCondition(jsonPath, value);
     } else if (Array.isArray(value)) {
       // Handle array values (IN clause)
+      if (value.length === 0) {
+        // Empty array in IN clause returns no matches
+        return '1 = 0';
+      }
       const placeholders = value.map(() => '?').join(',');
       this.params.push(...value.map(String));
       return `${jsonPath} IN (${placeholders})`;
@@ -172,9 +176,14 @@ export class DuckDBFilterBuilder {
         }
       } else if (Array.isArray(value)) {
         // Handle array values (IN clause)
-        const placeholders = value.map(() => '?').join(',');
-        conditions.push(`metadata->>'${safeKey}' IN (${placeholders})`);
-        this.params.push(...value.map(String));
+        if (value.length === 0) {
+          // Empty array in IN clause returns no matches
+          conditions.push('1 = 0');
+        } else {
+          const placeholders = value.map(() => '?').join(',');
+          conditions.push(`metadata->>'${safeKey}' IN (${placeholders})`);
+          this.params.push(...value.map(String));
+        }
       } else {
         // Simple equality
         conditions.push(`metadata->>'${safeKey}' = ?`);
@@ -236,17 +245,27 @@ export class DuckDBFilterBuilder {
 
         case '$in':
           if (Array.isArray(value)) {
-            const placeholders = value.map(() => '?').join(',');
-            conditions.push(`${jsonPath} IN (${placeholders})`);
-            this.params.push(...value.map(String));
+            if (value.length === 0) {
+              // Empty array in IN clause returns no matches
+              conditions.push('1 = 0');
+            } else {
+              const placeholders = value.map(() => '?').join(',');
+              conditions.push(`${jsonPath} IN (${placeholders})`);
+              this.params.push(...value.map(String));
+            }
           }
           break;
 
         case '$nin':
           if (Array.isArray(value)) {
-            const placeholders = value.map(() => '?').join(',');
-            conditions.push(`${jsonPath} NOT IN (${placeholders})`);
-            this.params.push(...value.map(String));
+            if (value.length === 0) {
+              // Empty array in NOT IN clause matches everything
+              conditions.push('1 = 1');
+            } else {
+              const placeholders = value.map(() => '?').join(',');
+              conditions.push(`${jsonPath} NOT IN (${placeholders})`);
+              this.params.push(...value.map(String));
+            }
           }
           break;
 
@@ -289,19 +308,29 @@ export class DuckDBFilterBuilder {
 
         case '$containsAny':
           if (Array.isArray(value)) {
-            // fieldName is already validated above
-            const orConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
-            conditions.push(`(${orConditions.join(' OR ')})`);
-            this.params.push(...value.map(v => JSON.stringify(v)));
+            if (value.length === 0) {
+              // Empty array in containsAny returns no matches
+              conditions.push('1 = 0');
+            } else {
+              // fieldName is already validated above
+              const orConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
+              conditions.push(`(${orConditions.join(' OR ')})`);
+              this.params.push(...value.map(v => JSON.stringify(v)));
+            }
           }
           break;
 
         case '$containsAll':
           if (Array.isArray(value)) {
-            // fieldName is already validated above
-            const andConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
-            conditions.push(`(${andConditions.join(' AND ')})`);
-            this.params.push(...value.map(v => JSON.stringify(v)));
+            if (value.length === 0) {
+              // Empty array in containsAll matches everything (trivially true)
+              conditions.push('1 = 1');
+            } else {
+              // fieldName is already validated above
+              const andConditions = value.map(() => `json_array_contains(metadata->'${fieldName}', ?)`);
+              conditions.push(`(${andConditions.join(' AND ')})`);
+              this.params.push(...value.map(v => JSON.stringify(v)));
+            }
           }
           break;
       }

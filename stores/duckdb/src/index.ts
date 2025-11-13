@@ -37,7 +37,7 @@ export type {
  *
  * // Create an index
  * await vectorStore.createIndex({
- *   name: 'my-index',
+ *   indexName: 'my-index',
  *   dimension: 512,
  *   metric: 'cosine',
  * });
@@ -45,13 +45,9 @@ export type {
  * // Upsert vectors
  * await vectorStore.upsert({
  *   indexName: 'my-index',
- *   vectors: [
- *     {
- *       id: 'doc1',
- *       values: [...], // 512-dimensional vector
- *       metadata: { content: 'Hello world' },
- *     },
- *   ],
+ *   vectors: [[0.1, 0.2, 0.3, ...]], // Array of 512-dimensional vectors
+ *   ids: ['doc1'],
+ *   metadata: [{ content: 'Hello world' }],
  * });
  *
  * // Query similar vectors

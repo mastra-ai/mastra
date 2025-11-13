@@ -85,8 +85,8 @@ describe('DuckDBVector', () => {
 
     it('should list all indexes', async () => {
       await vectorStore.createIndex({ indexName: 'index1', dimension: 512 });
-      await vectorStore.createIndex({ indexName: 'index2', dimension: 256 });
-      await vectorStore.createIndex({ indexName: 'index3', dimension: 1024 });
+      await vectorStore.createIndex({ indexName: 'index2', dimension: 512 });
+      await vectorStore.createIndex({ indexName: 'index3', dimension: 512 });
 
       const indexes = await vectorStore.listIndexes();
       expect(indexes).toHaveLength(3);

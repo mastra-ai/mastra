@@ -260,6 +260,24 @@ export class DuckDBVector extends MastraVector {
         throw new Error(`Index "${indexName}" already exists`);
       }
 
+      // Validate dimension and metric consistency across all indexes
+      const allIndexes = await this.execute(conn, 'SELECT dimension, metric FROM vector_indexes LIMIT 1');
+      if (allIndexes.length > 0) {
+        const firstIndex = allIndexes[0] as { dimension: number; metric: string };
+        if (firstIndex.dimension !== dimension) {
+          throw new Error(
+            `Dimension mismatch: existing indexes use dimension ${firstIndex.dimension}, but ${dimension} was provided. ` +
+              `All indexes in a DuckDBVector instance must use the same dimension.`,
+          );
+        }
+        if (firstIndex.metric !== metric) {
+          throw new Error(
+            `Metric mismatch: existing indexes use metric '${firstIndex.metric}', but '${metric}' was provided. ` +
+              `All indexes in a DuckDBVector instance must use the same metric.`,
+          );
+        }
+      }
+
       // Create index metadata
       await this.execute(
         conn,
@@ -684,7 +702,7 @@ export class DuckDBVector extends MastraVector {
 
       const tableName = this.getTableName(indexName);
       const escapedTableName = this.escapeIdentifier(tableName);
-      const { source, mapping = {}, filter, batchSize = 10000 } = options;
+      const { source, mapping = {}, batchSize = 10000 } = options;
 
       // Validate source path to prevent SQL injection and directory traversal
       this.validateParquetSource(source);
@@ -698,15 +716,9 @@ export class DuckDBVector extends MastraVector {
       const contentCol = this.escapeIdentifier(mapping.content || 'content');
       const metadataCol = this.escapeIdentifier(mapping.metadata || 'metadata');
 
-      // NOTE: Filter parameter has been removed for security reasons
+      // NOTE: Parquet filtering is not supported in the API
       // If you need to filter Parquet data, please pre-filter your Parquet files
-      // or use DuckDB's COPY command with WHERE clause directly
-      if (filter) {
-        throw new Error(
-          'Filter parameter is not supported for Parquet import due to SQL injection risks. ' +
-            'Please pre-filter your Parquet files or use a staging table approach.',
-        );
-      }
+      // or import to a staging table and filter using query methods
 
       // Import from Parquet
       const sql = `

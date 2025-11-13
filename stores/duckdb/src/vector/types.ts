@@ -243,11 +243,6 @@ export interface ParquetImportOptions {
   };
 
   /**
-   * Filter expression for selective import
-   */
-  filter?: string;
-
-  /**
    * Batch size for import
    * @default 10000
    */

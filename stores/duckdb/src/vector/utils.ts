@@ -134,6 +134,11 @@ export function similarityToDistance(similarity: number, metric: 'cosine' | 'euc
  * Chunk array into batches
  */
 export function chunkArray<T>(array: T[], batchSize: number): T[][] {
+  // Validate batchSize to prevent infinite loop
+  if (!Number.isInteger(batchSize) || batchSize <= 0) {
+    throw new Error('batchSize must be a positive integer');
+  }
+
   const chunks: T[][] = [];
   for (let i = 0; i < array.length; i += batchSize) {
     chunks.push(array.slice(i, i + batchSize));
