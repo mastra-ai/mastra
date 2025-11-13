@@ -12,7 +12,7 @@ import { MastraError } from '../error';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
+import type { ChunkType, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
