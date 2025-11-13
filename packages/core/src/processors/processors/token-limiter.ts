@@ -86,18 +86,18 @@ export class TokenLimiterProcessor implements Processor {
     const nonSystemMessages = messages.filter(msg => msg.role !== 'system');
 
     // Calculate token count for system messages (always included)
-    let systemTokens = TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
+    let systemTokens = 0;
     for (const msg of systemMessages) {
       systemTokens += this.countInputMessageTokens(msg);
     }
 
-    // If system messages alone exceed the limit, return only system messages
-    if (systemTokens >= limit) {
+    // If system messages alone exceed the limit (accounting for conversation overhead), return only system messages
+    if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
       return systemMessages;
     }
 
-    // Calculate remaining budget for non-system messages
-    const remainingBudget = limit - systemTokens;
+    // Calculate remaining budget for non-system messages (accounting for conversation overhead)
+    const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
     // Process non-system messages in reverse order (newest first)
     const result: MastraDBMessage[] = [];

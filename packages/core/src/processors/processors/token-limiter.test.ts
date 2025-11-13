@@ -530,7 +530,7 @@ describe('TokenLimiterProcessor', () => {
   describe('processInput', () => {
     it('should limit input messages to the specified token count', async () => {
       const processor = new TokenLimiterProcessor({
-        limit: 35, // Lower limit to actually trigger filtering (will allow ~32 tokens after overhead)
+        limit: 50, // Lower limit to actually trigger filtering (will allow ~26 tokens after overhead)
       });
 
       // Create messages with content that will exceed the limit
@@ -592,13 +592,6 @@ describe('TokenLimiterProcessor', () => {
         abort: mockAbort,
         runtimeContext: new RequestContext(),
       });
-
-      console.log('Input messages:', messages.length);
-      console.log('Output messages:', result.length);
-      console.log(
-        'Output message IDs:',
-        result.map(m => m.id),
-      );
 
       // Should prioritize newest messages (higher ids) and exclude oldest
       expect(result.length).toBeLessThan(messages.length);
