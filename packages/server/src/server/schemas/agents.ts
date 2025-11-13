@@ -261,9 +261,17 @@ export const agentExecutionBodySchema = z
  * Simple schema - tool validates its own input data
  * Note: Using z.custom() instead of z.unknown()/z.any() because those are treated as optional by Zod
  */
-export const executeToolBodySchema = z.object({
+
+const executeToolDataBodySchema = z.object({
   data: z.custom<unknown>(x => x !== undefined, { message: 'data is required' }),
+});
+
+export const executeToolBodySchema = executeToolDataBodySchema.extend({
   agentRequestContext: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const executeToolContextBodySchema = executeToolDataBodySchema.extend({
+  toolRequestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**

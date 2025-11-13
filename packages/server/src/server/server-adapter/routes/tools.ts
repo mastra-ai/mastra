@@ -7,7 +7,7 @@ import {
   listToolsResponseSchema,
   serializedToolSchema,
   toolIdPathParams,
-  executeToolBodySchema,
+  executeToolContextBodySchema,
   executeToolResponseSchema,
 } from '../../schemas/agents';
 import { optionalRunIdSchema } from '../../schemas/common';
@@ -52,7 +52,7 @@ export const TOOLS_ROUTES: ServerRoute[] = [
     path: '/api/tools/:toolId/execute',
     pathParamSchema: toolIdPathParams,
     queryParamSchema: optionalRunIdSchema,
-    bodySchema: executeToolBodySchema,
+    bodySchema: executeToolContextBodySchema,
     responseSchema: executeToolResponseSchema,
     summary: 'Execute tool',
     description: 'Executes a specific tool with the provided input data',
