@@ -3,6 +3,7 @@ import type { TracesPaginatedArg, StoragePagination } from '@mastra/core/storage
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
+import type { MastraScorer } from '@mastra/core/evals';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
@@ -118,19 +119,29 @@ export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
     }
 
     const storage = mastra.getStorage('evals');
+
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
-    const scorer = mastra.getScorerById(scorerName);
-    if (!scorer) {
+    let scorer: MastraScorer;
+
+    try {
+      scorer = mastra.getScorerById(scorerName);
+    } catch {
       throw new HTTPException(404, { message: `Scorer '${scorerName}' not found` });
     }
 
     const logger = mastra.getLogger();
 
+    const scorerId = scorer.config.id || scorer.config.name;
+
+    if (!scorerId) {
+      return handleError(new Error('Scorer ID is required'), 'Error getting scorer ID');
+    }
+
     scoreTraces({
-      scorerId: scorer.config.id || scorer.config.name,
+      scorerId,
       targets,
       mastra,
     }).catch(error => {

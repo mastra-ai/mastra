@@ -2,7 +2,7 @@ import { createSampleScore } from '@internal/storage-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { EvalsStorageBase, StoragePagination } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -20,11 +20,14 @@ function createPagination(args: Partial<StoragePagination>): StoragePagination {
 
 describe('Scores Handlers', () => {
   let mockStorage: InMemoryStore;
+  let evalsStorage: EvalsStorageBase;
   let mastra: Mastra;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockStorage = new InMemoryStore();
+
+    evalsStorage = mockStorage.getStore('evals') as EvalsStorageBase;
 
     mastra = new Mastra({
       logger: false,
@@ -62,7 +65,7 @@ describe('Scores Handlers', () => {
     it('should get scores by run ID successfully', async () => {
       const mockScores = [createSampleScore({ scorerId: 'test-1-scorer' })];
 
-      await mockStorage.saveScore(mockScores[0]);
+      await evalsStorage.saveScore(mockScores[0]);
 
       const pagination = createPagination({ page: 0, perPage: 10 });
 
@@ -111,7 +114,7 @@ describe('Scores Handlers', () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(error);
+      evalsStorage.listScoresByRunId = vi.fn().mockRejectedValue(error);
 
       await expect(
         listScoresByRunIdHandler({
@@ -129,7 +132,7 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(apiError);
+      evalsStorage.listScoresByRunId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
         listScoresByRunIdHandler({
@@ -146,7 +149,7 @@ describe('Scores Handlers', () => {
       const mockScores = [createSampleScore({ entityType: 'AGENT', entityId: 'test-agent', scorerId: 'foo-scorer' })];
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      await mockStorage.saveScore(mockScores[0]);
+      await evalsStorage.saveScore(mockScores[0]);
 
       const result = await listScoresByEntityIdHandler({
         mastra,
@@ -195,7 +198,7 @@ describe('Scores Handlers', () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(error);
+      evalsStorage.listScoresByEntityId = vi.fn().mockRejectedValue(error);
 
       await expect(
         listScoresByEntityIdHandler({
@@ -214,7 +217,7 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(apiError);
+      evalsStorage.listScoresByEntityId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
         listScoresByEntityIdHandler({
@@ -232,7 +235,7 @@ describe('Scores Handlers', () => {
       ];
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      await mockStorage.saveScore(mockScores[0]);
+      await evalsStorage.saveScore(mockScores[0]);
 
       const result = await listScoresByEntityIdHandler({
         mastra,
@@ -284,7 +287,7 @@ describe('Scores Handlers', () => {
       const score = createSampleScore({ scorerId: 'new-score-1' });
       const error = new Error('Storage error');
 
-      mockStorage.saveScore = vi.fn().mockRejectedValue(error);
+      evalsStorage.saveScore = vi.fn().mockRejectedValue(error);
 
       await expect(
         saveScoreHandler({
@@ -301,7 +304,7 @@ describe('Scores Handlers', () => {
         status: 400,
       };
 
-      mockStorage.saveScore = vi.fn().mockRejectedValue(apiError);
+      evalsStorage.saveScore = vi.fn().mockRejectedValue(apiError);
 
       await expect(
         saveScoreHandler({

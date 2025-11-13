@@ -1,16 +1,20 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingStorageStrategy } from '../observability';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
-import type { ObservabilityStorageBase, WorkflowsStorageBase, EvalsStorageBase, MemoryStorageBase, IndexManagementBase } from './domains';
+import type {
+  ObservabilityStorageBase,
+  WorkflowsStorageBase,
+  EvalsStorageBase,
+  MemoryStorageBase,
+  IndexManagementBase,
+} from './domains';
 import type {
   PaginationInfo,
   StorageColumn,
-  StoragePagination,
   WorkflowRun,
   WorkflowRuns,
   SpanRecord,

@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
-import { MockStore } from '@mastra/core/storage';
+import { InMemoryStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';

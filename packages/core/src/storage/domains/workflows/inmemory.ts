@@ -5,7 +5,7 @@ import { WorkflowsStorageBase } from './base';
 
 export type WorkflowsStorageData = Map<string, StorageWorkflowRun>;
 
-export class WorkflowsStorage extends WorkflowsStorageBase {
+export class WorkflowsStorageInMemory extends WorkflowsStorageBase {
   collection: WorkflowsStorageData;
 
   constructor() {

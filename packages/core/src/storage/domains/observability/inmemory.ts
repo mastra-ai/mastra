@@ -11,7 +11,7 @@ import type {
 import { ObservabilityStorageBase } from './base';
 
 export type InMemoryObservabilityData = Map<string, SpanRecord>;
-export class ObservabilityStorage extends ObservabilityStorageBase {
+export class ObservabilityStorageInMemory extends ObservabilityStorageBase {
   collection: InMemoryObservabilityData;
 
   constructor() {

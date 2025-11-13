@@ -5,7 +5,7 @@ import { EvalsStorageBase } from './base';
 
 export type ScoresStorageData = Map<string, ScoreRowData>;
 
-export class EvalsStorage extends EvalsStorageBase {
+export class EvalsStorageInMemory extends EvalsStorageBase {
   collection: ScoresStorageData;
 
   constructor() {

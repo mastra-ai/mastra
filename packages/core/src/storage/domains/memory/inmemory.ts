@@ -18,7 +18,7 @@ export type InMemoryThreads = Map<string, StorageThreadType>;
 export type InMemoryResources = Map<string, StorageResourceType>;
 export type InMemoryMessages = Map<string, StorageMessageType>;
 
-export class MemoryStorage extends MemoryStorageBase {
+export class MemoryStorageInMemory extends MemoryStorageBase {
   private collection: {
     threads: InMemoryThreads;
     resources: InMemoryResources;
