@@ -21,20 +21,12 @@ import {
   ThumbsUp,
 } from "lucide-react";
 import React, { type ReactNode, useCallback, useEffect, useState } from "react";
+import { useChatbotSidebar } from "./context";
 import styles from "./styles.module.css";
 
-interface ChatbotSidebarProps {
-  hiddenChatbotSidebar: boolean;
-  setHiddenChatbotSidebar: (
-    value: boolean | ((prev: boolean) => boolean),
-  ) => void;
-}
-
-export default function ChatbotSidebar({
-  hiddenChatbotSidebar,
-  setHiddenChatbotSidebar,
-}: ChatbotSidebarProps): ReactNode {
+export default function ChatbotSidebar(): ReactNode {
   const gt = useGT();
+  const { isHidden: hiddenChatbotSidebar, toggle } = useChatbotSidebar();
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
 
   const toggleSidebar = useCallback(() => {
@@ -46,8 +38,8 @@ export default function ChatbotSidebar({
     if (!hiddenSidebar && prefersReducedMotion()) {
       setHiddenSidebar(true);
     }
-    setHiddenChatbotSidebar((value) => !value);
-  }, [setHiddenChatbotSidebar, hiddenSidebar]);
+    toggle();
+  }, [toggle, hiddenSidebar]);
 
   const {
     conversation,
