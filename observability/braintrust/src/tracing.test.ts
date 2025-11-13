@@ -979,6 +979,7 @@ describe('BraintrustExporter', () => {
 describe('BraintrustExporter with braintrustLogger parameter', () => {
   let mockLogger: any;
   let mockExternalSpan: any;
+  let mockCurrentSpan: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
