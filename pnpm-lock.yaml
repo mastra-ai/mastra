@@ -2911,7 +2911,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251008.0
+        specifier: ^4.20251014.0
         version: 4.20251014.0
       '@internal/lint':
         specifier: workspace:*
@@ -2938,8 +2938,8 @@ importers:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251008.0
-        version: 4.20251011.0
+        specifier: ^4.20251011.1
+        version: 4.20251011.2
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -2957,7 +2957,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251008.0
+        specifier: ^4.20251014.0
         version: 4.20251014.0
       '@internal/lint':
         specifier: workspace:*
@@ -2984,8 +2984,8 @@ importers:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251008.0
-        version: 4.20251011.0
+        specifier: ^4.20251011.1
+        version: 4.20251011.2
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -3612,7 +3612,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251008.0
+        specifier: ^4.20251014.0
         version: 4.20251014.0
       '@internal/lint':
         specifier: workspace:*
@@ -13196,8 +13196,8 @@ packages:
     resolution: {integrity: sha512-I9jwMn07Sy/IwOj3zVkVik2JTvgpaykDZEigL6Rx6N9LbMywwUSMtxET+7lVoDLLd3O3IXwJwvuuns8UB/HeAg==}
     engines: {node: '>=4'}
 
-  miniflare@4.20251011.0:
-    resolution: {integrity: sha512-DlZ7vR5q/RE9eLsxsrXzfSZIF2f6O5k0YsFrSKhWUtdefyGtJt4sSpR6V+Af/waaZ6+zIFy9lsknHBCm49sEYA==}
+  miniflare@4.20251011.2:
+    resolution: {integrity: sha512-5oAaz6lqZus4QFwzEJiNtgpjZR2TBVwBeIhOW33V4gu+l23EukpKja831tFIX2o6sOD/hqZmKZHplOrWl3YGtQ==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -27291,7 +27291,7 @@ snapshots:
 
   min-indent@1.0.1: {}
 
-  miniflare@4.20251011.0:
+  miniflare@4.20251011.2:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       acorn: 8.14.0
