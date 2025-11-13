@@ -21,6 +21,7 @@ import type {
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
@@ -75,6 +76,11 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
+
+  /**
+   * Optional logger instance for structured logging
+   */
+  logger?: IMastraLogger;
 } & FallbackFields<OUTPUT>;
 
 export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<

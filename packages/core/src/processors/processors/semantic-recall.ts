@@ -1,5 +1,6 @@
 import type { SystemModelMessage } from 'ai-v5';
 import type { MessageList } from '../../agent/message-list';
+import type { IMastraLogger } from '../../logger';
 import { parseMemoryRuntimeContext } from '../../memory/types';
 import type { MastraDBMessage } from '../../memory/types';
 import type { TracingContext } from '../../observability';
@@ -59,6 +60,11 @@ export interface SemanticRecallOptions {
    * If not provided, will be auto-generated based on embedder model
    */
   indexName?: string;
+
+  /**
+   * Optional logger instance for structured logging
+   */
+  logger?: IMastraLogger;
 }
 
 /**
@@ -99,6 +105,7 @@ export class SemanticRecall implements Processor {
   private scope: 'thread' | 'resource';
   private threshold?: number;
   private indexName?: string;
+  private logger?: IMastraLogger;
 
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
@@ -108,6 +115,7 @@ export class SemanticRecall implements Processor {
     this.scope = options.scope ?? 'thread';
     this.threshold = options.threshold;
     this.indexName = options.indexName;
+    this.logger = options.logger;
 
     // Normalize messageRange to object format
     if (typeof options.messageRange === 'number') {
@@ -203,7 +211,7 @@ export class SemanticRecall implements Processor {
       return messageList;
     } catch (error) {
       // Log error but don't fail the request
-      console.error('[SemanticRecall] Error during semantic search:', error);
+      this.logger?.error('[SemanticRecall] Error during semantic search:', { error });
       return messageList;
     }
   }
@@ -394,7 +402,7 @@ ${formattedSections.join('\n')}
         });
       }
     } catch (error) {
-      console.error('[SemanticRecall] Error ensuring vector index:', error);
+      this.logger?.error('[SemanticRecall] Error ensuring vector index:', { error });
       throw error;
     }
   }
@@ -476,7 +484,7 @@ ${formattedSections.join('\n')}
           vectorDimension = dimension;
         } catch (error) {
           // Log error but don't fail the entire operation
-          console.error(`[SemanticRecall] Error creating embedding for message ${message.id}:`, error);
+          this.logger?.error(`[SemanticRecall] Error creating embedding for message ${message.id}:`, { error });
         }
       }
 
@@ -492,7 +500,7 @@ ${formattedSections.join('\n')}
       }
     } catch (error) {
       // Log error but don't fail the entire operation
-      console.error('[SemanticRecall] Error in processOutputResult:', error);
+      this.logger?.error('[SemanticRecall] Error in processOutputResult:', { error });
     }
 
     return messages;

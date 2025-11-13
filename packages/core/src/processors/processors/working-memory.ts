@@ -1,3 +1,4 @@
+import type { IMastraLogger } from '../../logger';
 import { parseMemoryRuntimeContext } from '../../memory/types';
 import type { MastraDBMessage } from '../../memory/types';
 import type { RequestContext } from '../../request-context';
@@ -19,6 +20,10 @@ export interface WorkingMemoryConfig {
    */
   scope?: 'thread' | 'resource';
   useVNext?: boolean;
+  /**
+   * Optional logger instance for structured logging
+   */
+  logger?: IMastraLogger;
 }
 
 /**
@@ -57,6 +62,8 @@ export class WorkingMemory implements InputProcessor {
 - **Projects**: 
 `;
 
+  private logger?: IMastraLogger;
+
   constructor(
     private options: {
       storage: MemoryStorage;
@@ -64,8 +71,11 @@ export class WorkingMemory implements InputProcessor {
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
       templateProvider?: WorkingMemoryTemplateProvider;
+      logger?: IMastraLogger;
     },
-  ) {}
+  ) {
+    this.logger = options.logger;
+  }
 
   async processInput(args: {
     messages: MastraDBMessage[];
@@ -141,7 +151,7 @@ export class WorkingMemory implements InputProcessor {
       return [workingMemoryMessage, ...messages];
     } catch (error) {
       // On error, return original messages
-      console.error('WorkingMemory processor error:', error);
+      this.logger?.error('WorkingMemory processor error:', { error });
       return messages;
     }
   }
