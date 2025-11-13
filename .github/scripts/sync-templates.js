@@ -14,6 +14,15 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const USERNAME = process.env.USERNAME;
 const EMAIL = process.env.EMAIL;
 
+// Validate required environment variables
+const requiredEnvVars = { ORGANIZATION, GITHUB_TOKEN, USERNAME, EMAIL };
+for (const [name, value] of Object.entries(requiredEnvVars)) {
+  if (!value) {
+    console.error(`Error: Required environment variable ${name} is not set`);
+    process.exit(1);
+  }
+}
+
 // Initialize Octokit
 const octokit = new Octokit({
   auth: GITHUB_TOKEN,
