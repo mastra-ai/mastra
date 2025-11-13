@@ -1,3 +1,4 @@
+import type { SystemModelMessage } from 'ai-v5';
 import type { MessageList } from '../../agent/message-list';
 import { parseMemoryRuntimeContext } from '../../memory/types';
 import type { MastraDBMessage } from '../../memory/types';
@@ -180,12 +181,11 @@ export class SemanticRecall implements Processor {
       // If scope is 'resource', check for cross-thread messages and format them specially
       if (this.scope === 'resource') {
         const crossThreadMessages = newMessages.filter(m => m.threadId && m.threadId !== threadId);
-
         if (crossThreadMessages.length > 0) {
-          // Format cross-thread messages as a system message
+          // Format cross-thread messages as a system message for context
           const formattedSystemMessage = this.formatCrossThreadMessages(crossThreadMessages);
 
-          // Add cross-thread messages as a system message (no source tagging needed)
+          // Add cross-thread messages as a context message
           messageList.add([formattedSystemMessage], 'context');
 
           // Add same-thread messages with 'memory' source
@@ -211,7 +211,7 @@ export class SemanticRecall implements Processor {
   /**
    * Format cross-thread messages as a system message with timestamps and labels
    */
-  private formatCrossThreadMessages(messages: MastraDBMessage[]): MastraDBMessage {
+  private formatCrossThreadMessages(messages: MastraDBMessage[]): SystemModelMessage {
     // Group messages by date
     const messagesByDate = new Map<string, MastraDBMessage[]>();
 
@@ -247,14 +247,8 @@ ${formattedSections.join('\n')}
 </remembered_from_other_conversation>`;
 
     return {
-      id: `cross-thread-context-${Date.now()}`,
       role: 'system',
-      content: {
-        format: 2,
-        content: formattedContent,
-        parts: [],
-      },
-      createdAt: new Date(),
+      content: formattedContent,
     };
   }
 
@@ -416,7 +410,7 @@ ${formattedSections.join('\n')}
     tracingContext?: TracingContext;
     runtimeContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList, runtimeContext } = args;
+    const { messages, runtimeContext } = args;
 
     if (!this.vector || !this.embedder || !this.storage) {
       return messages;
@@ -501,7 +495,7 @@ ${formattedSections.join('\n')}
       console.error('[SemanticRecall] Error in processOutputResult:', error);
     }
 
-    return messageList;
+    return messages;
   }
 
   /**
