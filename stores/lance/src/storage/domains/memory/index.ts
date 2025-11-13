@@ -4,12 +4,13 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -18,16 +19,52 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
+import { LanceDomainBase } from '../base';
+import type { LanceDomainConfig } from '../base';
 import type { StoreOperationsLance } from '../operations';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
-export class StoreMemoryLance extends MemoryStorage {
-  private client: Connection;
-  private operations: StoreOperationsLance;
-  constructor({ client, operations }: { client: Connection; operations: StoreOperationsLance }) {
+export class MemoryStorageLance extends MemoryStorageBase {
+  private domainBase: LanceDomainBase;
+
+  private constructor(domainBase: LanceDomainBase) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = domainBase;
+  }
+
+  /**
+   * Static factory method to create a StoreMemoryLance instance
+   * Required because LanceDB connection is async
+   */
+  static async create(opts: LanceDomainConfig): Promise<MemoryStorageLance> {
+    const domainBase = await LanceDomainBase.create(opts);
+    return new MemoryStorageLance(domainBase);
+  }
+
+  private get client(): Connection {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsLance {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearTable({ tableName: TABLE_THREADS }),
+      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
+      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   // Utility to escape single quotes in SQL strings

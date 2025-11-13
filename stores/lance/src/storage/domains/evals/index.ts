@@ -2,15 +2,49 @@ import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { ScoresStorage, TABLE_SCORERS, calculatePagination, normalizePerPage } from '@mastra/core/storage';
+import {
+  EvalsStorageBase,
+  TABLE_SCORERS,
+  TABLE_SCHEMAS,
+  calculatePagination,
+  normalizePerPage,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import { LanceDomainBase } from '../base';
+import type { LanceDomainConfig } from '../base';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
-export class StoreScoresLance extends ScoresStorage {
-  private client: Connection;
-  constructor({ client }: { client: Connection }) {
+export class EvalsStorageLance extends EvalsStorageBase {
+  private domainBase: LanceDomainBase;
+
+  private constructor(domainBase: LanceDomainBase) {
     super();
-    this.client = client;
+    this.domainBase = domainBase;
+  }
+
+  /**
+   * Static factory method to create a StoreScoresLance instance
+   * Required because LanceDB connection is async
+   */
+  static async create(opts: LanceDomainConfig): Promise<EvalsStorageLance> {
+    const domainBase = await LanceDomainBase.create(opts);
+    return new EvalsStorageLance(domainBase);
+  }
+
+  private get client(): Connection {
+    return this.domainBase['client'];
+  }
+
+  async init(): Promise<void> {
+    await this.domainBase['operations'].createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.domainBase['operations'].clearTable({ tableName: TABLE_SCORERS });
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
