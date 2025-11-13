@@ -334,7 +334,8 @@ async function createFromTemplate(args: {
     }
 
     const isBeta = version?.includes('beta') ?? false;
-    const branch = isBeta ? 'beta' : undefined;
+    const isMastraTemplate = selectedTemplate.githubUrl.includes('github.com/mastra-ai/');
+    const branch = isBeta && isMastraTemplate ? 'beta' : undefined;
 
     // Clone the template
     const projectPath = await cloneTemplate({

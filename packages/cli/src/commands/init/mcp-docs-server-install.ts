@@ -118,7 +118,7 @@ export async function installMastraDocsMCPServer({
     await writeMergedConfig(path.join(directory, '.vscode', 'mcp.json'), 'vscode', versionTag);
   }
   if (editor === `cursor-global`) {
-    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor);
+    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor, versionTag);
     if (alreadyInstalled) {
       return;
     }
@@ -126,7 +126,7 @@ export async function installMastraDocsMCPServer({
   }
 
   if (editor === `windsurf`) {
-    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor);
+    const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor, versionTag);
     if (alreadyInstalled) {
       return;
     }
@@ -134,7 +134,7 @@ export async function installMastraDocsMCPServer({
   }
 }
 
-export async function globalMCPIsAlreadyInstalled(editor: Editor) {
+export async function globalMCPIsAlreadyInstalled(editor: Editor, versionTag?: string) {
   let configPath: string = ``;
 
   if (editor === 'windsurf') {
@@ -154,17 +154,20 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor) {
 
     if (!configContents) return false;
 
+    // Construct the expected package string based on versionTag
+    const expectedPackage = versionTag ? `@mastra/mcp-docs-server@${versionTag}` : '@mastra/mcp-docs-server';
+
     if (editor === 'vscode') {
       if (!configContents.servers) return false;
       const hasMastraMCP = Object.values(configContents.servers).some((server?: any) =>
-        server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
+        server?.args?.find((arg?: string) => arg === expectedPackage),
       );
       return hasMastraMCP;
     }
 
     if (!configContents?.mcpServers) return false;
     const hasMastraMCP = Object.values(configContents.mcpServers).some((server?: any) =>
-      server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
+      server?.args?.find((arg?: string) => arg === expectedPackage),
     );
 
     return hasMastraMCP;
