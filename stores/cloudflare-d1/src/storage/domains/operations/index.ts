@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import { MastraBase } from '@mastra/core/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { getDefaultValue, getSqlType, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '../../sql-builder';
@@ -19,13 +20,17 @@ export interface StoreOperationsD1Config {
   tablePrefix?: string;
 }
 
-export class StoreOperationsD1 extends StoreOperations {
+export class StoreOperationsD1 extends MastraBase {
   private client?: D1Client;
   private binding?: D1Database;
   private tablePrefix: string;
 
   constructor(config: StoreOperationsD1Config) {
-    super();
+    super({
+      component: 'STORAGE',
+      name: 'OPERATIONS',
+    });
+
     this.client = config.client;
     this.binding = config.binding;
     this.tablePrefix = config.tablePrefix || '';
@@ -182,7 +187,7 @@ export class StoreOperationsD1 extends StoreOperations {
       case 'jsonb':
         return 'TEXT'; // Store JSON as TEXT in SQLite
       default:
-        return super.getSqlType(type);
+        return getSqlType(type);
     }
   }
 
@@ -279,7 +284,7 @@ export class StoreOperationsD1 extends StoreOperations {
       for (const [columnName, column] of Object.entries(args.schema)) {
         if (!existingColumnNames.has(columnName) && args.ifNotExists.includes(columnName)) {
           const sqlType = this.getSqlType(column.type);
-          const defaultValue = this.getDefaultValue(column.type);
+          const defaultValue = getDefaultValue(column.type);
           const sql = `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${defaultValue}`;
           await this.executeQuery({ sql });
           this.logger.debug(`Added column ${columnName} to table ${fullTableName}`);

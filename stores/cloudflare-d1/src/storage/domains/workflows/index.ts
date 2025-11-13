@@ -1,18 +1,39 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
-import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
+import { D1DomainBase } from '../base';
+import type { D1DomainConfig } from '../base';
 import type { StoreOperationsD1 } from '../operations';
 import { isArrayOfRecords } from '../utils';
 
-export class WorkflowsStorageD1 extends WorkflowsStorage {
-  private operations: StoreOperationsD1;
+export class WorkflowsStorageD1 extends WorkflowsStorageBase {
+  private domainBase: D1DomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsD1 }) {
+  constructor(opts: D1DomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new D1DomainBase(opts);
+  }
+
+  private get operations(): StoreOperationsD1 {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+  }
+
+  async close(): Promise<void> {
+    // D1 doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -57,14 +78,19 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
-    const now = new Date().toISOString();
+    const now = createdAt ?? new Date();
+    const updatedAtValue = updatedAt ?? new Date();
 
     const currentSnapshot = await this.operations.load({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -76,7 +102,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           ...currentSnapshot,
           resourceId,
           snapshot: JSON.stringify(snapshot),
-          updatedAt: now,
+          updatedAt: updatedAtValue,
         }
       : {
           workflow_name: workflowId,
@@ -84,7 +110,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           resourceId,
           snapshot: snapshot as Record<string, any>,
           createdAt: now,
-          updatedAt: now,
+          updatedAt: updatedAtValue,
         };
 
     // Process record for SQL insertion
@@ -186,7 +212,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       const builder = createSqlBuilder().select().from(fullTableName);
       const countBuilder = createSqlBuilder().count().from(fullTableName);
 
-      if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
+      if (workflowId) builder.whereAnd('workflow_name = ?', workflowId);
       if (status) {
         builder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
         countBuilder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
@@ -241,7 +267,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow runs: ${error instanceof Error ? error.message : String(error)}`,
           details: {
-            workflowName: workflowName ?? '',
+            workflowId: workflowId ?? '',
             resourceId: resourceId ?? '',
           },
         },
@@ -250,13 +276,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowId,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
       const conditions: string[] = [];
@@ -265,9 +285,9 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
         conditions.push('run_id = ?');
         params.push(runId);
       }
-      if (workflowName) {
+      if (workflowId) {
         conditions.push('workflow_name = ?');
-        params.push(workflowName);
+        params.push(workflowId);
       }
       const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
       const sql = `SELECT * FROM ${fullTableName} ${whereClause} ORDER BY createdAt DESC LIMIT 1`;
@@ -281,7 +301,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow run by ID: ${error instanceof Error ? error.message : String(error)}`,
-          details: { runId, workflowName: workflowName ?? '' },
+          details: { runId, workflowId: workflowId ?? '' },
         },
         error,
       );

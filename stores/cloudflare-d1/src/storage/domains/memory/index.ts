@@ -4,13 +4,14 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   ensureDate,
-  MemoryStorage,
+  MemoryStorageBase,
   serializeDate,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_RESOURCES,
   normalizePerPage,
   calculatePagination,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -20,14 +21,39 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import { createSqlBuilder } from '../../sql-builder';
+import { D1DomainBase } from '../base';
+import type { D1DomainConfig } from '../base';
 import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 
-export class MemoryStorageD1 extends MemoryStorage {
-  private operations: StoreOperationsD1;
-  constructor({ operations }: { operations: StoreOperationsD1 }) {
+export class MemoryStorageD1 extends MemoryStorageBase {
+  private domainBase: D1DomainBase;
+
+  constructor(opts: D1DomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new D1DomainBase(opts);
+  }
+
+  private get operations(): StoreOperationsD1 {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+  }
+
+  async close(): Promise<void> {
+    // D1 doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearTable({ tableName: TABLE_THREADS }),
+      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
+      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

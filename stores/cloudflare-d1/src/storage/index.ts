@@ -1,26 +1,15 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
-import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
-import type {
-  PaginationInfo,
-  StorageColumn,
-  StorageResourceType,
-  TABLE_NAMES,
-  WorkflowRun,
-  StoragePagination,
-  WorkflowRuns,
-  StorageDomains,
-  StorageListWorkflowRunsInput,
-} from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
+import { EvalsStorageD1 } from './domains/evals';
 import { MemoryStorageD1 } from './domains/memory';
-import { StoreOperationsD1 } from './domains/operations';
-import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
+
+export { EvalsStorageD1 } from './domains/evals';
+export { MemoryStorageD1 } from './domains/memory';
+export { WorkflowsStorageD1 } from './domains/workflows';
 
 /**
  * Configuration for D1 using the REST API
@@ -134,27 +123,26 @@ export class D1Store extends MastraStorage {
       );
     }
 
-    const operations = new StoreOperationsD1({
+    const scores = new EvalsStorageD1({
       client: this.client,
       binding: this.binding,
       tablePrefix: this.tablePrefix,
     });
 
-    const scores = new ScoresStorageD1({
-      operations,
-    });
-
     const workflows = new WorkflowsStorageD1({
-      operations,
+      client: this.client,
+      binding: this.binding,
+      tablePrefix: this.tablePrefix,
     });
 
     const memory = new MemoryStorageD1({
-      operations,
+      client: this.client,
+      binding: this.binding,
+      tablePrefix: this.tablePrefix,
     });
 
     this.stores = {
-      operations,
-      scores,
+      evals: scores,
       workflows,
       memory,
     };
@@ -169,259 +157,5 @@ export class D1Store extends MastraStorage {
       deleteMessages: false,
       listScoresBySpan: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async hasColumn(table: string, column: string): Promise<boolean> {
-    return this.stores.operations.hasColumn(table, column);
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.stores.memory.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    return this.stores.memory.updateThread({ id, title, metadata });
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    return this.stores.memory.deleteThread({ threadId });
-  }
-
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.saveMessages(args);
-  }
-
-  async updateWorkflowResults({
-    workflowId,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
-    workflowId: string;
-    runId: string;
-    stepId: string;
-    result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowId, runId, stepId, result, requestContext });
-  }
-
-  async updateWorkflowState({
-    workflowId,
-    runId,
-    opts,
-  }: {
-    workflowId: string;
-    runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
-  }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowId, runId, opts });
-  }
-
-  async createWorkflowSnapshot({
-    workflowId,
-    runId,
-    resourceId,
-    snapshot,
-  }: {
-    workflowId: string;
-    runId: string;
-    resourceId?: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    return this.stores.workflows.createWorkflowSnapshot({ workflowId, runId, resourceId, snapshot });
-  }
-
-  async getWorkflowSnapshot(params: { workflowId: string; runId: string }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.getWorkflowSnapshot(params);
-  }
-
-  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns(args);
-  }
-
-  async getWorkflowRunById({
-    runId,
-    workflowId,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowId });
-  }
-
-  /**
-   * Insert multiple records in a batch operation
-   * @param tableName The table to insert into
-   * @param records The records to insert
-   */
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async updateMessages(_args: {
-    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
-      id: string;
-      content?: {
-        metadata?: MastraMessageContentV2['metadata'];
-        content?: MastraMessageContentV2['content'];
-      };
-    })[];
-  }): Promise<MastraDBMessage[]> {
-    return this.stores.memory.updateMessages(_args);
-  }
-
-  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    return this.stores.memory.getResourceById({ resourceId });
-  }
-
-  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    return this.stores.memory.saveResource({ resource });
-  }
-
-  async updateResource({
-    resourceId,
-    workingMemory,
-    metadata,
-  }: {
-    resourceId: string;
-    workingMemory?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType> {
-    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id: _id });
-  }
-
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
-  }
-
-  async listScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({
-      entityId: _entityId,
-      entityType: _entityType,
-      pagination: _pagination,
-    });
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-    source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
-  }
-
-  /**
-   * Close the database connection
-   * No explicit cleanup needed for D1 in either REST or Workers Binding mode
-   */
-  async close(): Promise<void> {
-    this.logger.debug('Closing D1 connection');
-    // No explicit cleanup needed for D1
   }
 }

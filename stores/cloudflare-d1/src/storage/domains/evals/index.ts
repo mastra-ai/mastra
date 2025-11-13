@@ -2,15 +2,18 @@ import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
-  ScoresStorage,
+  EvalsStorageBase,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '../../sql-builder';
+import { D1DomainBase } from '../base';
+import type { D1DomainConfig } from '../base';
 import type { StoreOperationsD1 } from '../operations';
 
 export type D1QueryResult = Awaited<ReturnType<Cloudflare['d1']['database']['query']>>['result'];
@@ -39,12 +42,28 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return deserialized as ScoreRowData;
 }
 
-export class ScoresStorageD1 extends ScoresStorage {
-  private operations: StoreOperationsD1;
+export class EvalsStorageD1 extends EvalsStorageBase {
+  private domainBase: D1DomainBase;
 
-  constructor({ operations }: { operations: StoreOperationsD1 }) {
+  constructor(opts: D1DomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new D1DomainBase(opts);
+  }
+
+  private get operations(): StoreOperationsD1 {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async close(): Promise<void> {
+    // D1 doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
