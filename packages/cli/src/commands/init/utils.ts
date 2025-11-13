@@ -643,7 +643,7 @@ export const writeCodeSample = async (
   }
 };
 
-const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
+export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
   { value: 'openai', label: 'OpenAI', hint: 'recommended' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'groq', label: 'Groq' },

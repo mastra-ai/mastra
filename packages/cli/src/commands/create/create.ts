@@ -10,6 +10,7 @@ import type { Template } from '../../utils/template-utils';
 import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import type { Component, LLMProvider } from '../init/utils';
+import { LLM_PROVIDERS } from '../init/utils';
 import { getPackageManager } from '../utils.js';
 
 import { createMastraProject } from './utils';
@@ -297,14 +298,7 @@ async function createFromTemplate(args: {
   if (!llmProvider) {
     const providerResponse = await p.select({
       message: 'Select a default provider:',
-      options: [
-        { value: 'openai', label: 'OpenAI', hint: 'recommended' },
-        { value: 'anthropic', label: 'Anthropic' },
-        { value: 'groq', label: 'Groq' },
-        { value: 'google', label: 'Google' },
-        { value: 'cerebras', label: 'Cerebras' },
-        { value: 'mistral', label: 'Mistral' },
-      ],
+      options: LLM_PROVIDERS,
     });
 
     if (p.isCancel(providerResponse)) {
