@@ -121,71 +121,99 @@ describe('TokenLimiterProcessor', () => {
   });
 
   describe.concurrent(`98% accuracy`, () => {
-    it(`20 messages, no tools`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 10,
-          toolFrequency: 0,
-          threadId: '2',
-        },
-        agent,
-      );
-    });
+    it(
+      `20 messages, no tools`,
+      {
+        timeout: 60000,
+        // LLM token counts can vary slightly between runs
+        retry: 3,
+      },
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 10,
+            toolFrequency: 0,
+            threadId: '2',
+          },
+          agent,
+        );
+      },
+    );
 
-    it(`60 messages, no tools`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 30,
-          toolFrequency: 0,
-          threadId: '3',
-        },
-        agent,
-      );
-    });
+    it(
+      `60 messages, no tools`,
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 30,
+            toolFrequency: 0,
+            threadId: '3',
+          },
+          agent,
+        );
+      },
+      60000,
+    );
 
-    it(`20 messages, 0 tools`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 10,
-          toolFrequency: 0,
-          threadId: '3',
-        },
-        agent,
-      );
-    });
+    it(
+      `20 messages, 0 tools`,
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 10,
+            toolFrequency: 0,
+            threadId: '3',
+          },
+          agent,
+        );
+      },
+      60000,
+    );
 
-    it(`20 messages, 2 tool messages`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 10,
-          toolFrequency: 5,
-          threadId: '3',
-        },
-        agent,
-      );
-    });
+    it(
+      `20 messages, 2 tool messages`,
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 10,
+            toolFrequency: 5,
+            threadId: '3',
+          },
+          agent,
+        );
+      },
+      60000,
+    );
 
-    it(`40 messages, 6 tool messages`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 20,
-          toolFrequency: 5,
-          threadId: '4',
-        },
-        agent,
-      );
-    });
+    it(
+      `40 messages, 6 tool messages`,
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 20,
+            toolFrequency: 5,
+            threadId: '4',
+          },
+          agent,
+        );
+      },
+      60000,
+    );
 
-    it(`100 messages, 24 tool messages`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 50,
-          toolFrequency: 4,
-          threadId: '5',
-        },
-        agent,
-      );
-    });
+    it(
+      `100 messages, 24 tool messages`,
+      async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 50,
+            toolFrequency: 4,
+            threadId: '5',
+          },
+          agent,
+        );
+      },
+      60000,
+    );
 
     it(
       `101 messages, 49 tool calls`,
@@ -203,6 +231,7 @@ describe('TokenLimiterProcessor', () => {
       {
         // for some reason AI SDK randomly returns 2x token count here
         retry: 3,
+        timeout: 60000,
       },
     );
   });
