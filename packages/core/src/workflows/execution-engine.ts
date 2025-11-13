@@ -1,4 +1,4 @@
-import type { WritableStream } from 'node:stream/web';
+import type { WritableStream } from 'stream/web';
 import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';

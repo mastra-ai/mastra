@@ -37,12 +37,17 @@ const downloadAndSummarizePdfStep = createStep({
     console.log('Executing Step: download-and-summarize-pdf');
     const { pdfUrl, speaker, speed } = inputData;
 
-    const result = await summarizePdfTool.execute({
-      context: { pdfUrl },
-      mastra,
-      requestContext: new RequestContext(),
-      tracingContext: {} as any,
-    });
+    const result = await summarizePdfTool.execute(
+      { pdfUrl },
+      {
+        mastra,
+        requestContext: new RequestContext(),
+      },
+    );
+
+    if ('error' in result) {
+      throw new Error('Failed to summarize PDF: ' + result.error);
+    }
 
     console.log(
       `Step download-and-summarize-pdf: Succeeded - Downloaded ${result.fileSize} bytes, extracted ${result.characterCount} characters from ${result.pagesCount} pages, generated ${result.summary.length} character summary`,
@@ -77,16 +82,25 @@ const generateAudioFromSummaryStep = createStep({
     }
 
     try {
-      const result = await textToSpeechTool.execute({
-        context: {
+      const result = await textToSpeechTool.execute(
+        {
           extractedText: summary, // Use summary as the text input
           speaker,
           speed,
         },
-        mastra,
-        requestContext: new RequestContext(),
-        tracingContext: {} as any,
-      });
+        {
+          mastra,
+          requestContext: new RequestContext(),
+        },
+      );
+
+      if ('error' in result) {
+        return {
+          audioGenerated: false,
+          speaker,
+          speed,
+        };
+      }
 
       console.log(`Step generate-audio-from-summary: Succeeded - Generated audio: ${result.audioGenerated}`);
       return result;

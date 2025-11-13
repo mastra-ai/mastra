@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { ReadableStream } from 'node:stream/web';
+import { ReadableStream, WritableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';

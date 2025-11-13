@@ -44,6 +44,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
           result: runExecutionResult?.result,
           error: runExecutionResult?.error,
           runId,
+          serializedStepGraph: runExecutionResult?.serializedStepGraph,
         } as WorkflowRunState)
       : undefined;
 

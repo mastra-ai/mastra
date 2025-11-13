@@ -296,6 +296,7 @@ describe('vNext Workflow Handlers', () => {
             payload: {},
           },
         },
+        serializedStepGraph: mockWorkflow.serializedStepGraph,
       });
     });
   });

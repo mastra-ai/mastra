@@ -476,6 +476,7 @@ export type ProviderModelsMap = {
   readonly baseten: readonly [
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'moonshotai/Kimi-K2-Instruct-0905',
+    'moonshotai/Kimi-K2-Thinking',
     'zai-org/GLM-4.6',
   ];
   readonly huggingface: readonly [
@@ -505,6 +506,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'gpt-5',
     'gpt-5-codex',
+    'gpt-5-nano',
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
@@ -745,6 +747,23 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
   ];
+  readonly ovhcloud: readonly [
+    'deepseek-r1-distill-llama-70b',
+    'gpt-oss-120b',
+    'gpt-oss-20b',
+    'llama-3.1-8b-instruct',
+    'llava-next-mistral-7b',
+    'meta-llama-3_1-70b-instruct',
+    'meta-llama-3_3-70b-instruct',
+    'mistral-7b-instruct-v0.3',
+    'mistral-nemo-instruct-2407',
+    'mistral-small-3.2-24b-instruct-2506',
+    'mixtral-8x7b-instruct-v0.1',
+    'qwen2.5-coder-32b-instruct',
+    'qwen2.5-vl-72b-instruct',
+    'qwen3-32b',
+    'qwen3-coder-30b-a3b-instruct',
+  ];
   readonly iflowcn: readonly [
     'deepseek-r1',
     'deepseek-v3',
@@ -753,6 +772,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'kimi-k2',
     'kimi-k2-0905',
+    'minimax-m2',
     'qwen3-235b',
     'qwen3-235b-a22b-instruct',
     'qwen3-235b-a22b-thinking-2507',
@@ -823,9 +843,11 @@ export type ProviderModelsMap = {
   ];
   readonly requesty: readonly [
     'anthropic/claude-3-7-sonnet',
-    'anthropic/claude-4-sonnet-20250522',
+    'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4',
-    'anthropic/claude-opus-4-1-20250805',
+    'anthropic/claude-opus-4-1',
+    'anthropic/claude-sonnet-4',
+    'anthropic/claude-sonnet-4-5',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-pro',
     'openai/gpt-4.1',
@@ -835,6 +857,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
     'openai/o4-mini',
+    'xai/grok-4',
+    'xai/grok-4-fast',
   ];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
