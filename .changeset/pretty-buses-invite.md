@@ -1,5 +1,5 @@
 ---
-'@mastra/deployer': minor
+'@mastra/deployer': patch
 ---
 
 Added /health endpoint for service monitoring
