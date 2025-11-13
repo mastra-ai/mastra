@@ -10,9 +10,9 @@ import "dotenv/config";
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: "Mastra Documentation",
+  title: "Mastra Docs",
   tagline: "TypeScript agent framework",
-  favicon: "/favicon.ico",
+  favicon: "/img/favicon.ico",
 
   // Set the production url of your site here
   url: "https://mastra.ai",
@@ -78,19 +78,39 @@ const config = {
   ],
 
   plugins: [
-    // PostHog analytics (only enabled if POSTHOG_API_KEY is set)
-    ...(process.env.POSTHOG_API_KEY
-      ? [
-          [
-            "posthog-docusaurus",
-            {
-              apiKey: process.env.POSTHOG_API_KEY,
-              appUrl: process.env.POSTHOG_HOST || "https://us.i.posthog.com",
-              enableInDevelopment: false,
+    // Custom webpack/rspack configuration plugin to handle process.env polyfill
+    function customWebpackPlugin(context, options) {
+      return {
+        name: "custom-webpack-config",
+        configureWebpack(config, isServer, { currentBundler }) {
+          // Use currentBundler.instance to work with both Webpack and Rspack
+          const { DefinePlugin, ProvidePlugin } = currentBundler.instance;
+
+          return {
+            resolve: {
+              fallback: {
+                // Polyfill process for browser to prevent "process is undefined" errors
+                // Use .js extension for ESM compatibility
+                process: require.resolve("process/browser.js"),
+              },
             },
-          ],
-        ]
-      : []),
+            plugins: [
+              // Provide process globally so gt-react can check process.env
+              // This works with both Webpack and Rspack
+              new ProvidePlugin({
+                process: "process/browser.js",
+              }),
+              // Define process.env.NEXT_RUNTIME to prevent "Cannot read properties of undefined" errors
+              new DefinePlugin({
+                "process.env.NEXT_RUNTIME": JSON.stringify(undefined),
+              }),
+            ],
+          };
+        },
+      };
+    },
+    // PostHog analytics is initialized manually in src/theme/Root.tsx
+    // to support PostHog React hooks for cookie consent and feature flags
     // Vercel Analytics (automatically enabled in production on Vercel)
     [
       "@docusaurus/plugin-vercel-analytics",

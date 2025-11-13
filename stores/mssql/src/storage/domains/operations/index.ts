@@ -496,6 +496,19 @@ export class StoreOperationsMSSQL extends StoreOperations {
 
     // If the column is JSONB, stringify the value
     if (columnSchema?.type === 'jsonb') {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+          try {
+            JSON.parse(trimmed);
+            return trimmed;
+          } catch {}
+        }
+        return JSON.stringify(value);
+      }
+      if (typeof value === 'bigint') {
+        return value.toString();
+      }
       return JSON.stringify(value);
     }
 
