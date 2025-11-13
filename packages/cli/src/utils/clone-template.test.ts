@@ -317,7 +317,7 @@ describe('clone-template', () => {
       const fs = await import('fs/promises');
       const envContent = await fs.readFile('/test-project/.env', 'utf-8');
 
-      expect(envContent).toContain('MODEL=anthropic/claude-sonnet-4-5-20250929');
+      expect(envContent).toContain('MODEL=anthropic/claude-sonnet-4-5');
       expect(envContent).not.toContain('MODEL=openai/gpt-4o-mini');
     });
 

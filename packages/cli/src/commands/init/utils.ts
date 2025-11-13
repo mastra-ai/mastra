@@ -3,6 +3,7 @@ import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
 import * as p from '@clack/prompts';
+import type { ModelRouterModelId } from '@mastra/core/llm/model';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
@@ -11,13 +12,8 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import {
-  cursorGlobalMCPConfigPath,
-  globalMCPIsAlreadyInstalled,
-  windsurfGlobalMCPConfigPath,
-} from './mcp-docs-server-install';
+import { cursorGlobalMCPConfigPath, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
-import type { ModelRouterModelId } from '@mastra/core/llm/model';
 
 const exec = util.promisify(child_process.exec);
 
@@ -92,7 +88,7 @@ export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelString},
+  model: '${modelString}',
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   ${
     addScorers
@@ -361,7 +357,7 @@ export const translationScorer = createScorer({
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
-    model: ${modelString},
+    model: '${modelString}',
     instructions:
       'You are an expert evaluator of translation quality for geographic locations. ' +
       'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
@@ -712,10 +708,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         return undefined;
       },
       configureEditorWithDocsMCP: async () => {
-        const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
-        const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
-        const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
-
         const editor = await p.select({
           message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
           options: [
@@ -723,35 +715,23 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             {
               value: 'cursor',
               label: 'Cursor (project only)',
-              hint: cursorIsAlreadyInstalled ? `Already installed globally` : undefined,
             },
             {
               value: 'cursor-global',
               label: 'Cursor (global, all projects)',
-              hint: cursorIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'windsurf',
               label: 'Windsurf',
-              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'vscode',
               label: 'VSCode',
-              hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
             },
           ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
         if (editor === `skip`) return undefined;
-        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
-          p.log.message(`\nWindsurf is already installed, skipping.`);
-          return undefined;
-        }
-        if (editor === `vscode` && vscodeIsAlreadyInstalled) {
-          p.log.message(`\nVSCode is already installed, skipping.`);
-          return undefined;
-        }
 
         if (editor === `cursor`) {
           p.log.message(
