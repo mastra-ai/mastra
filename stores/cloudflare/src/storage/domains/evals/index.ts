@@ -11,7 +11,6 @@ import {
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import { CloudflareDomainBase } from '../base';
 import type { CloudflareDomainConfig } from '../base';
-import type { StoreOperationsCloudflare } from '../operations';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   const deserialized: Record<string, any> = { ...row };
@@ -37,10 +36,6 @@ export class EvalsStorageCloudflare extends EvalsStorageBase {
     this.domainBase = new CloudflareDomainBase(opts);
   }
 
-  private get operations(): StoreOperationsCloudflare {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
     // Cloudflare KV doesn't require table creation
   }
@@ -50,12 +45,12 @@ export class EvalsStorageCloudflare extends EvalsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SCORERS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const score = await this.operations.getKV(TABLE_SCORERS, id);
+      const score = await this.domainBase.getOperations().getKV(TABLE_SCORERS, id);
       if (!score) {
         return null;
       }
@@ -113,7 +108,7 @@ export class EvalsStorageCloudflare extends EvalsStorageBase {
       serializedRecord.createdAt = new Date().toISOString();
       serializedRecord.updatedAt = new Date().toISOString();
 
-      await this.operations.putKV({
+      await this.domainBase.getOperations().putKV({
         tableName: TABLE_SCORERS,
         key: id,
         value: serializedRecord,
@@ -151,11 +146,11 @@ export class EvalsStorageCloudflare extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.domainBase.getOperations().listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.domainBase.getOperations().getKV(TABLE_SCORERS, key);
 
         if (entityId && score.entityId !== entityId) {
           continue;
@@ -220,11 +215,11 @@ export class EvalsStorageCloudflare extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.domainBase.getOperations().listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.domainBase.getOperations().getKV(TABLE_SCORERS, key);
         if (score && score.runId === runId) {
           scores.push(transformScoreRow(score));
         }
@@ -280,11 +275,11 @@ export class EvalsStorageCloudflare extends EvalsStorageBase {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.domainBase.getOperations().listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.domainBase.getOperations().getKV(TABLE_SCORERS, key);
         if (score && score.entityId === entityId && score.entityType === entityType) {
           scores.push(transformScoreRow(score));
         }
@@ -340,11 +335,11 @@ export class EvalsStorageCloudflare extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.domainBase.getOperations().listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.domainBase.getOperations().getKV(TABLE_SCORERS, key);
         if (score && score.traceId === traceId && score.spanId === spanId) {
           scores.push(transformScoreRow(score));
         }

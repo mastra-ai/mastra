@@ -157,7 +157,7 @@ export class DynamoDBDomainBase {
   /**
    * Clear all data for a specific entity type
    */
-  protected async clearEntityData(entityName: string): Promise<void> {
+  async clearEntityData(entityName: string): Promise<void> {
     if (!this.service.entities[entityName]) {
       throw new MastraError({
         id: 'STORAGE_DYNAMODB_CLEAR_ENTITY_INVALID',
@@ -208,5 +208,9 @@ export class DynamoDBDomainBase {
    */
   protected get isStandalone(): boolean {
     return this.ownedClient;
+  }
+
+  getService(): Service<Record<string, any>> {
+    return this.service;
   }
 }

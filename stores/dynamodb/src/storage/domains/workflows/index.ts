@@ -2,7 +2,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { normalizePerPage, WorkflowsStorageBase } from '@mastra/core/storage';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { Service } from 'electrodb';
 import { DynamoDBDomainBase } from '../base';
 import type { DynamoDBDomainConfig } from '../base';
 
@@ -36,10 +35,6 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
     this.domainBase = new DynamoDBDomainBase(opts);
   }
 
-  protected get service(): Service<Record<string, any>> {
-    return this.domainBase['service'];
-  }
-
   /**
    * Initialize the domain
    */
@@ -56,7 +51,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
 
   async dropData(): Promise<void> {
     // Clear all workflow snapshot entities
-    await this.domainBase['clearEntityData']('workflow_snapshot');
+    await this.domainBase.clearEntityData('workflow_snapshot');
   }
 
   updateWorkflowResults(
@@ -127,7 +122,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
         resourceId,
       };
       // Use upsert instead of create to handle both create and update cases
-      await this.service.entities.workflow_snapshot.upsert(data).go();
+      await this.domainBase.getService().entities.workflow_snapshot.upsert(data).go();
     } catch (error) {
       throw new MastraError(
         {
@@ -152,8 +147,9 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
 
     try {
       // Provide *all* composite key components for the primary index ('entity', 'workflow_name', 'run_id')
-      const result = await this.service.entities.workflow_snapshot
-        .get({
+      const result = await this.domainBase
+        .getService()
+        .entities.workflow_snapshot.get({
           entity: 'workflow_snapshot', // Add entity type
           workflow_name: workflowId,
           run_id: runId,
@@ -208,7 +204,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
       if (args?.workflowId) {
         // Query by workflow id using the primary index
         // Provide *all* composite key components for the PK ('entity', 'workflow_name')
-        query = this.service.entities.workflow_snapshot.query.primary({
+        query = this.domainBase.getService().entities.workflow_snapshot.query.primary({
           entity: 'workflow_snapshot', // Add entity type
           workflow_name: args.workflowId,
         });
@@ -216,7 +212,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
         // If no workflow name, we need to scan
         // This is not ideal for production with large datasets
         this.logger.warn('Performing a scan operation on workflow snapshots - consider using a more specific query');
-        query = this.service.entities.workflow_snapshot.scan; // Scan still uses the service entity
+        query = this.domainBase.getService().entities.workflow_snapshot.scan; // Scan still uses the service entity
       }
 
       const allMatchingSnapshots: WorkflowSnapshotDBItem[] = [];
@@ -300,8 +296,9 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
       // If we have a workflowId, we can do a direct get using the primary key
       if (workflowId) {
         this.logger.debug('workflowId provided, using direct GET operation.');
-        const result = await this.service.entities.workflow_snapshot
-          .get({
+        const result = await this.domainBase
+          .getService()
+          .entities.workflow_snapshot.get({
             entity: 'workflow_snapshot', // Entity type for PK
             workflow_name: workflowId,
             run_id: runId,
@@ -335,8 +332,9 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorageBase {
       // 2. Provisioned in the actual DynamoDB table (e.g., via CDK/CloudFormation).
       // The query key object includes 'entity' as it's good practice with ElectroDB and single-table design,
       // aligning with how other GSIs are queried in this file.
-      const result = await this.service.entities.workflow_snapshot.query
-        .gsi2({ entity: 'workflow_snapshot', run_id: runId }) // Replace 'byRunId' with your actual GSI name
+      const result = await this.domainBase
+        .getService()
+        .entities.workflow_snapshot.query.gsi2({ entity: 'workflow_snapshot', run_id: runId }) // Replace 'byRunId' with your actual GSI name
         .go();
 
       // If the GSI query returns multiple items (e.g., if run_id is not globally unique across all snapshots),

@@ -86,4 +86,16 @@ export class PGDomainBase {
   protected get isStandalone(): boolean {
     return this.ownedClient;
   }
+
+  getClient(): IDatabase<{}> {
+    return this.client;
+  }
+
+  getOperations(): StoreOperationsPG {
+    return this.operations;
+  }
+
+  getSchema(): string {
+    return this.schema;
+  }
 }

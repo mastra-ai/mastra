@@ -4,7 +4,6 @@ import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@m
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { CloudflareDomainBase } from '../base';
 import type { CloudflareDomainConfig } from '../base';
-import type { StoreOperationsCloudflare } from '../operations';
 
 export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
   private domainBase: CloudflareDomainBase;
@@ -12,10 +11,6 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
   constructor(opts: CloudflareDomainConfig) {
     super();
     this.domainBase = new CloudflareDomainBase(opts);
-  }
-
-  private get operations(): StoreOperationsCloudflare {
-    return this.domainBase['operations'];
   }
 
   async init(): Promise<void> {
@@ -27,7 +22,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private validateWorkflowParams(params: { workflowId: string; runId: string }): void {
@@ -85,9 +80,9 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
     try {
       const { workflowId, runId, resourceId, snapshot } = params;
 
-      await this.operations.putKV({
+      await this.domainBase.getOperations().putKV({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        key: this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, {
+        key: this.domainBase.getOperations().getKey(TABLE_WORKFLOW_SNAPSHOT, {
           workflow_name: workflowId,
           run_id: runId,
         }),
@@ -122,8 +117,10 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
       this.validateWorkflowParams(params);
       const { workflowId, runId } = params;
 
-      const key = this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowId, run_id: runId });
-      const data = await this.operations.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
+      const key = this.domainBase
+        .getOperations()
+        .getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowId, run_id: runId });
+      const data = await this.domainBase.getOperations().getKV(TABLE_WORKFLOW_SNAPSHOT, key);
       if (!data) return null;
 
       // Parse the snapshot from JSON string if needed
@@ -181,7 +178,9 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
     resourceId?: string;
   }): string {
     // Add namespace prefix if configured
-    const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
+    const prefix = this.domainBase.getOperations().namespacePrefix
+      ? `${this.domainBase.getOperations().namespacePrefix}:`
+      : '';
     let key = `${prefix}${TABLE_WORKFLOW_SNAPSHOT}`;
     if (workflowId) key += `:${workflowId}`;
     if (runId) key += `:${runId}`;
@@ -215,7 +214,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
       const offset = page * normalizedPerPage;
       // List all keys in the workflow snapshot table
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowId });
-      const keyObjs = await this.operations.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      const keyObjs = await this.domainBase.getOperations().listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
       const runs: WorkflowRun[] = [];
       for (const { name: key } of keyObjs) {
         // Extract workflow_name, run_id, resourceId from key
@@ -229,7 +228,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
         // Filter by namespace, workflowId, resourceId if provided
         if (workflowId && wfName !== workflowId) continue;
         // Load the snapshot
-        const data = await this.operations.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
+        const data = await this.domainBase.getOperations().getKV(TABLE_WORKFLOW_SNAPSHOT, key);
         if (!data) continue;
         try {
           // Filter by resourceId if provided - check both key and data
@@ -290,7 +289,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
       }
       // Try to find the data by listing keys with the prefix and finding the exact match
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowId, runId });
-      const keyObjs = await this.operations.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      const keyObjs = await this.domainBase.getOperations().listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
       if (!keyObjs.length) return null;
 
       // Find the exact key that matches our workflow and run
@@ -304,7 +303,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorageBase {
       });
 
       if (!exactKey) return null;
-      const data = await this.operations.getKV(TABLE_WORKFLOW_SNAPSHOT, exactKey.name);
+      const data = await this.domainBase.getOperations().getKV(TABLE_WORKFLOW_SNAPSHOT, exactKey.name);
       if (!data) return null;
       // Parse the snapshot from JSON string if needed
       const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;

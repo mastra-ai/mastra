@@ -18,11 +18,9 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
 import { IndexManagementPG } from '../operations';
-import type { StoreOperationsPG } from '../operations';
 import { getTableName, getSchemaName } from '../utils';
 
 // Database row type that includes timezone-aware columns
@@ -46,22 +44,14 @@ export class MemoryPG extends MemoryStorageBase {
     this.domainBase = new PGDomainBase(opts);
   }
 
-  private get client(): IDatabase<{}> {
-    return this.domainBase['client'];
-  }
-
-  private get schema(): string {
-    return this.domainBase['schema'];
-  }
-
-  private get operations(): StoreOperationsPG {
-    return this.domainBase['operations'];
-  }
-
   async createIndexes(): Promise<void> {
     // Create indexes for memory domain
-    const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
-    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    const indexManagement = new IndexManagementPG({
+      client: this.domainBase.getClient(),
+      schemaName: this.domainBase.getSchema(),
+    });
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
     this.indexManagement = indexManagement;
 
     // Create threads index
@@ -91,19 +81,29 @@ export class MemoryPG extends MemoryStorageBase {
 
   async dropIndexes(): Promise<void> {
     if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
     }
-    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_threads_resourceid_createdat_idx`);
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_messages_thread_id_createdat_idx`);
   }
 
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
-    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
-    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    await this.operations.alterTable?.({
+    await this.domainBase.getOperations().alterTable?.({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
@@ -118,9 +118,9 @@ export class MemoryPG extends MemoryStorageBase {
 
   async dropData(): Promise<void> {
     await Promise.all([
-      this.operations.clearTable({ tableName: TABLE_THREADS }),
-      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
-      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_THREADS }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_MESSAGES }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_RESOURCES }),
     ]);
   }
 
@@ -141,12 +141,16 @@ export class MemoryPG extends MemoryStorageBase {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_THREADS,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
 
-      const thread = await this.client.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        `SELECT * FROM ${tableName} WHERE id = $1`,
-        [threadId],
-      );
+      const thread = await this.domainBase
+        .getClient()
+        .oneOrNone<
+          StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }
+        >(`SELECT * FROM ${tableName} WHERE id = $1`, [threadId]);
 
       if (!thread) {
         return null;
@@ -198,12 +202,15 @@ export class MemoryPG extends MemoryStorageBase {
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     try {
-      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_THREADS,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
       const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
       const queryParams: any[] = [resourceId];
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
-      const countResult = await this.client.one(countQuery, queryParams);
+      const countResult = await this.domainBase.getClient().one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -218,7 +225,7 @@ export class MemoryPG extends MemoryStorageBase {
 
       const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+      const rows = await this.domainBase.getClient().manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
 
       const threads = (rows || []).map(thread => ({
         ...thread,
@@ -261,8 +268,11 @@ export class MemoryPG extends MemoryStorageBase {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
-      await this.client.none(
+      const tableName = getTableName({
+        indexName: TABLE_THREADS,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
+      await this.domainBase.getClient().none(
         `INSERT INTO ${tableName} (
           id,
           "resourceId",
@@ -318,7 +328,10 @@ export class MemoryPG extends MemoryStorageBase {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+    const threadTableName = getTableName({
+      indexName: TABLE_THREADS,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
     // First get the existing thread to merge metadata
     const existingThread = await this.getThreadById({ threadId: id });
     if (!existingThread) {
@@ -341,7 +354,7 @@ export class MemoryPG extends MemoryStorageBase {
     };
 
     try {
-      const thread = await this.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+      const thread = await this.domainBase.getClient().one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET 
                         title = $1,
@@ -380,9 +393,15 @@ export class MemoryPG extends MemoryStorageBase {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
-      await this.client.tx(async t => {
+      const tableName = getTableName({
+        indexName: TABLE_MESSAGES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
+      const threadTableName = getTableName({
+        indexName: TABLE_THREADS,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
+      await this.domainBase.getClient().tx(async t => {
         // First delete all messages associated with this thread
         await t.none(`DELETE FROM ${tableName} WHERE thread_id = $1`, [threadId]);
 
@@ -418,7 +437,10 @@ export class MemoryPG extends MemoryStorageBase {
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
-    const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+    const tableName = getTableName({
+      indexName: TABLE_MESSAGES,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
@@ -463,7 +485,7 @@ export class MemoryPG extends MemoryStorageBase {
       paramIdx += 4;
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-    const includedRows = await this.client.manyOrNone(finalQuery, params);
+    const includedRows = await this.domainBase.getClient().manyOrNone(finalQuery, params);
     const seen = new Set<string>();
     const dedupedRows = includedRows.filter(row => {
       if (seen.has(row.id)) return false;
@@ -497,13 +519,16 @@ export class MemoryPG extends MemoryStorageBase {
     const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
     try {
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_MESSAGES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
       const query = `
         ${selectStatement} FROM ${tableName} 
         WHERE id IN (${messageIds.map((_, i) => `$${i + 1}`).join(', ')})
         ORDER BY "createdAt" DESC
       `;
-      const resultRows = await this.client.manyOrNone(query, messageIds);
+      const resultRows = await this.domainBase.getClient().manyOrNone(query, messageIds);
 
       const list = new MessageList().add(
         resultRows.map(row => this.parseRow(row)) as (MastraMessageV1 | MastraDBMessage)[],
@@ -566,7 +591,10 @@ export class MemoryPG extends MemoryStorageBase {
       const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_MESSAGES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
 
       // Build WHERE conditions
       const conditions: string[] = [`thread_id = $1`];
@@ -592,13 +620,13 @@ export class MemoryPG extends MemoryStorageBase {
 
       // Get total count
       const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
-      const countResult = await this.client.one(countQuery, queryParams);
+      const countResult = await this.domainBase.getClient().one(countQuery, queryParams);
       const total = parseInt(countResult.count, 10);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      const rows = await this.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+      const rows = await this.domainBase.getClient().manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
       const messages: MessageRowFromDB[] = [...(rows || [])];
 
       // Only return early if there are no messages AND no includes to process
@@ -724,8 +752,11 @@ export class MemoryPG extends MemoryStorageBase {
     }
 
     try {
-      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      await this.client.tx(async t => {
+      const tableName = getTableName({
+        indexName: TABLE_MESSAGES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
+      await this.domainBase.getClient().tx(async t => {
         // Execute message inserts and thread update in parallel for better performance
         const messageInserts = messages.map(message => {
           if (!message.threadId) {
@@ -760,7 +791,10 @@ export class MemoryPG extends MemoryStorageBase {
           );
         });
 
-        const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+        const threadTableName = getTableName({
+          indexName: TABLE_THREADS,
+          schemaName: getSchemaName(this.domainBase.getSchema()),
+        });
         const threadUpdate = t.none(
           `UPDATE ${threadTableName} 
                         SET 
@@ -821,9 +855,9 @@ export class MemoryPG extends MemoryStorageBase {
 
     const messageIds = messages.map(m => m.id);
 
-    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} WHERE id IN ($1:list)`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE id IN ($1:list)`;
 
-    const existingMessagesDb = await this.client.manyOrNone(selectQuery, [messageIds]);
+    const existingMessagesDb = await this.domainBase.getClient().manyOrNone(selectQuery, [messageIds]);
 
     if (existingMessagesDb.length === 0) {
       return [];
@@ -843,7 +877,7 @@ export class MemoryPG extends MemoryStorageBase {
 
     const threadIdsToUpdate = new Set<string>();
 
-    await this.client.tx(async t => {
+    await this.domainBase.getClient().tx(async t => {
       const queries = [];
       const columnMapping: Record<string, string> = {
         threadId: 'thread_id',
@@ -897,7 +931,7 @@ export class MemoryPG extends MemoryStorageBase {
 
         if (setClauses.length > 0) {
           values.push(id);
-          const sql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) })} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
+          const sql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.domainBase.getSchema()) })} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
           queries.push(t.none(sql, values));
         }
       }
@@ -905,7 +939,7 @@ export class MemoryPG extends MemoryStorageBase {
       if (threadIdsToUpdate.size > 0) {
         queries.push(
           t.none(
-            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN ($1:list)`,
+            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.domainBase.getSchema()) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN ($1:list)`,
             [Array.from(threadIdsToUpdate)],
           ),
         );
@@ -917,7 +951,7 @@ export class MemoryPG extends MemoryStorageBase {
     });
 
     // Re-fetch to return the fully updated messages
-    const updatedMessages = await this.client.manyOrNone<MessageRowFromDB>(selectQuery, [messageIds]);
+    const updatedMessages = await this.domainBase.getClient().manyOrNone<MessageRowFromDB>(selectQuery, [messageIds]);
 
     return (updatedMessages || []).map((row: MessageRowFromDB) => {
       const message = this.normalizeMessageRow(row);
@@ -938,10 +972,16 @@ export class MemoryPG extends MemoryStorageBase {
     }
 
     try {
-      const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
-      const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const messageTableName = getTableName({
+        indexName: TABLE_MESSAGES,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
+      const threadTableName = getTableName({
+        indexName: TABLE_THREADS,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
 
-      await this.client.tx(async t => {
+      await this.domainBase.getClient().tx(async t => {
         // Get thread IDs for all messages
         const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
         const messages = await t.manyOrNone(
@@ -978,11 +1018,15 @@ export class MemoryPG extends MemoryStorageBase {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.schema) });
-    const result = await this.client.oneOrNone<StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }>(
-      `SELECT * FROM ${tableName} WHERE id = $1`,
-      [resourceId],
-    );
+    const tableName = getTableName({
+      indexName: TABLE_RESOURCES,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
+    const result = await this.domainBase
+      .getClient()
+      .oneOrNone<
+        StorageResourceType & { createdAtZ: Date; updatedAtZ: Date }
+      >(`SELECT * FROM ${tableName} WHERE id = $1`, [resourceId]);
 
     if (!result) {
       return null;
@@ -998,7 +1042,7 @@ export class MemoryPG extends MemoryStorageBase {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    await this.operations.insert({
+    await this.domainBase.getOperations().insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
@@ -1042,7 +1086,10 @@ export class MemoryPG extends MemoryStorageBase {
       updatedAt: new Date(),
     };
 
-    const tableName = getTableName({ indexName: TABLE_RESOURCES, schemaName: getSchemaName(this.schema) });
+    const tableName = getTableName({
+      indexName: TABLE_RESOURCES,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
 
     const updates: string[] = [];
     const values: any[] = [];
@@ -1069,7 +1116,9 @@ export class MemoryPG extends MemoryStorageBase {
 
     values.push(resourceId);
 
-    await this.client.none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
+    await this.domainBase
+      .getClient()
+      .none(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = $${paramIndex}`, values);
 
     return updatedResource;
   }

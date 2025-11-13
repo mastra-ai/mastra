@@ -1,4 +1,3 @@
-import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
@@ -31,12 +30,10 @@ export class EvalsStorageLance extends EvalsStorageBase {
     return new EvalsStorageLance(domainBase);
   }
 
-  private get client(): Connection {
-    return this.domainBase['client'];
-  }
-
   async init(): Promise<void> {
-    await this.domainBase['operations'].createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
   }
 
   async close(): Promise<void> {
@@ -44,7 +41,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.domainBase['operations'].clearTable({ tableName: TABLE_SCORERS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SCORERS });
   }
 
   async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
@@ -64,9 +61,9 @@ export class EvalsStorageLance extends EvalsStorageBase {
     }
     try {
       const id = crypto.randomUUID();
-      const table = await this.client.openTable(TABLE_SCORERS);
+      const table = await this.domainBase.getClient().openTable(TABLE_SCORERS);
       // Fetch schema fields for mastra_scorers
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.domainBase.getClient() });
       const allowedFields = new Set(schema.fields.map((f: any) => f.name));
       // Filter out fields not in schema
       const filteredScore: Record<string, any> = {};
@@ -105,14 +102,14 @@ export class EvalsStorageLance extends EvalsStorageBase {
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const table = await this.client.openTable(TABLE_SCORERS);
+      const table = await this.domainBase.getClient().openTable(TABLE_SCORERS);
 
       const query = table.query().where(`id = '${id}'`).limit(1);
 
       const records = await query.toArray();
 
       if (records.length === 0) return null;
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.domainBase.getClient() });
       return processResultWithTypeConversion(records[0], schema) as ScoreRowData;
     } catch (error: any) {
       throw new MastraError(
@@ -146,7 +143,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const table = await this.client.openTable(TABLE_SCORERS);
+      const table = await this.domainBase.getClient().openTable(TABLE_SCORERS);
 
       let query = table.query().where(`\`scorerId\` = '${scorerId}'`);
 
@@ -184,7 +181,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.domainBase.getClient() });
       const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
       return {
@@ -222,7 +219,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const table = await this.client.openTable(TABLE_SCORERS);
+      const table = await this.domainBase.getClient().openTable(TABLE_SCORERS);
 
       // Get total count for pagination
       const allRecords = await table.query().where(`\`runId\` = '${runId}'`).toArray();
@@ -240,7 +237,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.domainBase.getClient() });
       const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
       return {
@@ -280,7 +277,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const table = await this.client.openTable(TABLE_SCORERS);
+      const table = await this.domainBase.getClient().openTable(TABLE_SCORERS);
 
       // Get total count for pagination
       const allRecords = await table
@@ -301,7 +298,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.domainBase.getClient() });
       const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
       return {
@@ -341,7 +338,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const table = await this.client.openTable(TABLE_SCORERS);
+      const table = await this.domainBase.getClient().openTable(TABLE_SCORERS);
 
       // Get total count for pagination
       const allRecords = await table.query().where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'`).toArray();
@@ -359,7 +356,7 @@ export class EvalsStorageLance extends EvalsStorageBase {
       }
 
       const records = await query.toArray();
-      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
+      const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.domainBase.getClient() });
       const scores = processResultWithTypeConversion(records, schema) as ScoreRowData[];
 
       return {

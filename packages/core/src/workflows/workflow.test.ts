@@ -15,8 +15,6 @@ import { createTool } from '../tools';
 import type { ChunkType, StreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
-const testStorage = new InMemoryStore();
-
 vi.mock('crypto', () => {
   return {
     randomUUID: vi.fn(() => 'mock-uuid-1'),
@@ -24,7 +22,10 @@ vi.mock('crypto', () => {
 });
 
 describe('Workflow', () => {
+  let testStorage: InMemoryStore;
+
   beforeEach(() => {
+    testStorage = new InMemoryStore();
     vi.resetAllMocks();
 
     let counter = 0;
@@ -5862,7 +5863,8 @@ describe('Workflow', () => {
 
     it('should persist error message without stack trace in snapshot', async () => {
       const mockStorage = new InMemoryStore();
-      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+      const workflowStorage = mockStorage.getStore('workflows');
+      const persistSpy = vi.spyOn(workflowStorage, 'createWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,
@@ -5915,7 +5917,8 @@ describe('Workflow', () => {
 
     it('should persist MastraError message without stack trace in snapshot', async () => {
       const mockStorage = new InMemoryStore();
-      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+      const workflowStorage = mockStorage.getStore('workflows');
+      const persistSpy = vi.spyOn(workflowStorage, 'createWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,

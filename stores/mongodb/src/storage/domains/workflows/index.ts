@@ -4,7 +4,6 @@ import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@m
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBDomainBase } from '../base';
 import type { MongoDBDomainConfig } from '../base';
-import type { MongoDBOperations } from '../operations';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
   protected db: MongoDBDomainBase['db'];
@@ -13,7 +12,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
   constructor(opts: MongoDBDomainConfig) {
     super();
     this.domainBase = new MongoDBDomainBase(opts);
-    this.db = this.domainBase['db'];
+    this.db = this.domainBase.getOperations();
   }
 
   /**
@@ -29,10 +28,6 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
 
   async dropData(): Promise<void> {
     await this.db.deleteCollection({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-  }
-
-  private get operations(): MongoDBOperations {
-    return this.db;
   }
 
   updateWorkflowResults(
@@ -88,7 +83,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
     updatedAt?: Date;
   }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.updateOne(
         { workflow_name: workflowId, run_id: runId },
         {
@@ -124,7 +119,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<any[]>({
+      const result = await this.domainBase.getOperations().load<any[]>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowId,
@@ -174,7 +169,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
         query['resourceId'] = options.resourceId;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_WORKFLOW_SNAPSHOT);
       let total = 0;
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
@@ -237,7 +232,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorageBase {
         query['workflow_name'] = args.workflowName;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.domainBase.getOperations().getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const result = await collection.findOne(query);
       if (!result) {
         return null;

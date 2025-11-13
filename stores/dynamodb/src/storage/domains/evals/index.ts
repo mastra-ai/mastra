@@ -3,7 +3,6 @@ import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@ma
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import { EvalsStorageBase, calculatePagination, normalizePerPage } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { Service } from 'electrodb';
 import { DynamoDBDomainBase } from '../base';
 import type { DynamoDBDomainConfig } from '../base';
 
@@ -13,10 +12,6 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
   constructor(opts: DynamoDBDomainConfig) {
     super();
     this.domainBase = new DynamoDBDomainBase(opts);
-  }
-
-  protected get service(): Service<Record<string, any>> {
-    return this.domainBase['service'];
   }
 
   /**
@@ -35,7 +30,7 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
 
   async dropData(): Promise<void> {
     // Clear all score entities
-    await this.domainBase['clearEntityData']('score');
+    await this.domainBase.clearEntityData('score');
   }
 
   // Helper function to parse score data (handle JSON fields)
@@ -52,7 +47,7 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     this.logger.debug('Getting score by ID', { id });
     try {
-      const result = await this.service.entities.score.get({ entity: 'score', id }).go();
+      const result = await this.domainBase.getService().entities.score.get({ entity: 'score', id }).go();
 
       if (!result.data) {
         return null;
@@ -134,7 +129,7 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
     };
 
     try {
-      await this.service.entities.score.upsert(scoreData).go();
+      await this.domainBase.getService().entities.score.upsert(scoreData).go();
 
       const savedScore: ScoreRowData = {
         ...score,
@@ -172,7 +167,7 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       // Query scores by scorer ID using the GSI
-      const query = this.service.entities.score.query.byScorer({ entity: 'score', scorerId });
+      const query = this.domainBase.getService().entities.score.query.byScorer({ entity: 'score', scorerId });
 
       // Get all scores for this scorer ID (DynamoDB doesn't support OFFSET/LIMIT)
       const results = await query.go();
@@ -241,7 +236,7 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
 
     try {
       // Query scores by run ID using the GSI
-      const query = this.service.entities.score.query.byRun({ entity: 'score', runId });
+      const query = this.domainBase.getService().entities.score.query.byRun({ entity: 'score', runId });
 
       // Get all scores for this run ID
       const results = await query.go();
@@ -294,7 +289,7 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
 
     try {
       // Use the byEntityData index which uses entityId as the primary key
-      const query = this.service.entities.score.query.byEntityData({ entity: 'score', entityId });
+      const query = this.domainBase.getService().entities.score.query.byEntityData({ entity: 'score', entityId });
 
       // Get all scores for this entity ID
       const results = await query.go();
@@ -350,7 +345,7 @@ export class EvalsStorageDynamoDB extends EvalsStorageBase {
 
     try {
       // Query scores by trace ID and span ID using the GSI
-      const query = this.service.entities.score.query.bySpan({ entity: 'score', traceId, spanId });
+      const query = this.domainBase.getService().entities.score.query.bySpan({ entity: 'score', traceId, spanId });
 
       // Get all scores for this trace and span ID
       const results = await query.go();

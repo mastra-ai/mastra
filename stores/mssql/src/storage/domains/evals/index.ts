@@ -11,10 +11,8 @@ import {
   normalizePerPage,
   safelyParseJSON,
 } from '@mastra/core/storage';
-import type sql from 'mssql';
 import { MSSQLDomainBase } from '../base';
 import type { MSSQLDomainConfig } from '../base';
-import type { StoreOperationsMSSQL } from '../operations';
 import { IndexManagementMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
@@ -44,22 +42,14 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
     this.domainBase = new MSSQLDomainBase(opts);
   }
 
-  private get pool(): sql.ConnectionPool {
-    return this.domainBase['pool'];
-  }
-
-  private get schema(): string {
-    return this.domainBase['schema'];
-  }
-
-  private get operations(): StoreOperationsMSSQL {
-    return this.domainBase['operations'];
-  }
-
   async createIndexes(): Promise<void> {
     // Create indexes for evals domain
-    const indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
-    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    const indexManagement = new IndexManagementMSSQL({
+      pool: this.domainBase.getClient(),
+      schemaName: this.domainBase.getSchema(),
+    });
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
     this.indexManagement = indexManagement;
 
     // Create scores index
@@ -77,14 +67,20 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
 
   async dropIndexes(): Promise<void> {
     if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
+      this.indexManagement = new IndexManagementMSSQL({
+        pool: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
     }
-    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`);
   }
 
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
     await this.createIndexes();
   }
 
@@ -93,15 +89,15 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SCORERS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       request.input('p1', id);
       const result = await request.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE id = @p1`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE id = @p1`,
       );
 
       if (result.recordset.length === 0) {
@@ -154,7 +150,7 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
         ...rest
       } = validatedScore;
 
-      await this.operations.insert({
+      await this.domainBase.getOperations().insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,
@@ -225,10 +221,13 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
       }
 
       const whereClause = conditions.join(' AND ');
-      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_SCORERS,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
 
       // Count query
-      const countRequest = this.pool.request();
+      const countRequest = this.domainBase.getClient().request();
       Object.entries(params).forEach(([key, value]) => {
         countRequest.input(key, value);
       });
@@ -254,7 +253,7 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
       const end = perPageInput === false ? total : start + perPage;
 
       // Data query
-      const dataRequest = this.pool.request();
+      const dataRequest = this.domainBase.getClient().request();
       Object.entries(params).forEach(([key, value]) => {
         dataRequest.input(key, value);
       });
@@ -295,11 +294,11 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       request.input('p1', runId);
 
       const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1`,
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [runId] = @p1`,
       );
 
       const total = totalResult.recordset[0]?.count || 0;
@@ -322,13 +321,13 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const dataRequest = this.pool.request();
+      const dataRequest = this.domainBase.getClient().request();
       dataRequest.input('p1', runId);
       dataRequest.input('p2', limitValue);
       dataRequest.input('p3', start);
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [runId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
       );
 
       return {
@@ -363,12 +362,12 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       request.input('p1', entityId);
       request.input('p2', entityType);
 
       const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2`,
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [entityId] = @p1 AND [entityType] = @p2`,
       );
 
       const total = totalResult.recordset[0]?.count || 0;
@@ -390,14 +389,14 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const dataRequest = this.pool.request();
+      const dataRequest = this.domainBase.getClient().request();
       dataRequest.input('p1', entityId);
       dataRequest.input('p2', entityType);
       dataRequest.input('p3', limitValue);
       dataRequest.input('p4', start);
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [entityId] = @p1 AND [entityType] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
       );
 
       return {
@@ -432,12 +431,12 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       request.input('p1', traceId);
       request.input('p2', spanId);
 
       const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2`,
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [traceId] = @p1 AND [spanId] = @p2`,
       );
 
       const total = totalResult.recordset[0]?.count || 0;
@@ -460,14 +459,14 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const dataRequest = this.pool.request();
+      const dataRequest = this.domainBase.getClient().request();
       dataRequest.input('p1', traceId);
       dataRequest.input('p2', spanId);
       dataRequest.input('p3', limitValue);
       dataRequest.input('p4', start);
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.domainBase.getSchema()) })} WHERE [traceId] = @p1 AND [spanId] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
       );
 
       return {

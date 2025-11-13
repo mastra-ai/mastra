@@ -6,7 +6,6 @@ import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
 import { D1DomainBase } from '../base';
 import type { D1DomainConfig } from '../base';
-import type { StoreOperationsD1 } from '../operations';
 import { isArrayOfRecords } from '../utils';
 
 export class WorkflowsStorageD1 extends WorkflowsStorageBase {
@@ -17,12 +16,8 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
     this.domainBase = new D1DomainBase(opts);
   }
 
-  private get operations(): StoreOperationsD1 {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
-    await this.operations.createTable({
+    await this.domainBase.getOperations().createTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
     });
@@ -33,7 +28,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -88,11 +83,11 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
     createdAt?: Date;
     updatedAt?: Date;
   }): Promise<void> {
-    const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const fullTableName = this.domainBase.getOperations().getTableName(TABLE_WORKFLOW_SNAPSHOT);
     const now = createdAt ?? new Date();
     const updatedAtValue = updatedAt ?? new Date();
 
-    const currentSnapshot = await this.operations.load({
+    const currentSnapshot = await this.domainBase.getOperations().load({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowId, run_id: runId },
     });
@@ -114,7 +109,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
         };
 
     // Process record for SQL insertion
-    const processedRecord = await this.operations.processRecord(persisting);
+    const processedRecord = await this.domainBase.getOperations().processRecord(persisting);
 
     const columns = Object.keys(processedRecord);
     const values = Object.values(processedRecord);
@@ -133,7 +128,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.domainBase.getOperations().executeQuery({ sql, params });
     } catch (error) {
       throw new MastraError(
         {
@@ -154,7 +149,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
     this.logger.debug('Loading workflow snapshot', { workflowId, runId });
 
     try {
-      const d = await this.operations.load<{ snapshot: unknown }>({
+      const d = await this.domainBase.getOperations().load<{ snapshot: unknown }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowId,
@@ -207,7 +202,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
     resourceId,
     status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const fullTableName = this.domainBase.getOperations().getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
       const builder = createSqlBuilder().select().from(fullTableName);
       const countBuilder = createSqlBuilder().count().from(fullTableName);
@@ -218,7 +213,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
         countBuilder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
       }
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(fullTableName, 'resourceId');
+        const hasResourceId = await this.domainBase.getOperations().hasColumn(fullTableName, 'resourceId');
         if (hasResourceId) {
           builder.whereAnd('resourceId = ?', resourceId);
           countBuilder.whereAnd('resourceId = ?', resourceId);
@@ -248,7 +243,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
 
       if (perPage !== undefined && page !== undefined) {
         const { sql: countSql, params: countParams } = countBuilder.build();
-        const countResult = await this.operations.executeQuery({
+        const countResult = await this.domainBase.getOperations().executeQuery({
           sql: countSql,
           params: countParams,
           first: true,
@@ -256,7 +251,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
         total = Number((countResult as Record<string, any>)?.count ?? 0);
       }
 
-      const results = await this.operations.executeQuery({ sql, params });
+      const results = await this.domainBase.getOperations().executeQuery({ sql, params });
       const runs = (isArrayOfRecords(results) ? results : []).map((row: any) => this.parseWorkflowRun(row));
       return { runs, total: total || runs.length };
     } catch (error) {
@@ -277,7 +272,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
   }
 
   async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
-    const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const fullTableName = this.domainBase.getOperations().getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
       const conditions: string[] = [];
       const params: SqlParam[] = [];
@@ -291,7 +286,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorageBase {
       }
       const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
       const sql = `SELECT * FROM ${fullTableName} ${whereClause} ORDER BY createdAt DESC LIMIT 1`;
-      const result = await this.operations.executeQuery({ sql, params, first: true });
+      const result = await this.domainBase.getOperations().executeQuery({ sql, params, first: true });
       if (!result) return null;
       return this.parseWorkflowRun(result);
     } catch (error) {

@@ -1,4 +1,3 @@
-import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
 import {
@@ -50,16 +49,12 @@ export class WorkflowsStorageLance extends WorkflowsStorageBase {
     return new WorkflowsStorageLance(domainBase);
   }
 
-  private get client(): Connection {
-    return this.domainBase['client'];
-  }
-
   async init(): Promise<void> {
-    await this.domainBase['operations'].createTable({
+    await this.domainBase.getOperations().createTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
     });
-    await this.domainBase['operations'].alterTable({
+    await this.domainBase.getOperations().alterTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
       ifNotExists: ['resourceId'],
@@ -71,7 +66,7 @@ export class WorkflowsStorageLance extends WorkflowsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.domainBase['operations'].clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -127,7 +122,7 @@ export class WorkflowsStorageLance extends WorkflowsStorageBase {
     updatedAt?: Date;
   }): Promise<void> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       // Try to find the existing record
       const query = table.query().where(`workflow_name = '${workflowId}' AND run_id = '${runId}'`);
@@ -177,7 +172,7 @@ export class WorkflowsStorageLance extends WorkflowsStorageBase {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
       const query = table.query().where(`workflow_name = '${workflowId}' AND run_id = '${runId}'`);
       const records = await query.toArray();
       return records.length > 0 ? JSON.parse(records[0].snapshot) : null;
@@ -196,7 +191,7 @@ export class WorkflowsStorageLance extends WorkflowsStorageBase {
 
   async getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
       let whereClause = `run_id = '${args.runId}'`;
       if (args.workflowId) {
         whereClause += ` AND workflow_name = '${args.workflowId}'`;
@@ -221,7 +216,7 @@ export class WorkflowsStorageLance extends WorkflowsStorageBase {
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
-      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const table = await this.domainBase.getClient().openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       let query = table.query();
 

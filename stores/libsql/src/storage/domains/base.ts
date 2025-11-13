@@ -68,4 +68,12 @@ export class LibSQLDomainBase {
   protected get isStandalone(): boolean {
     return this.ownedClient;
   }
+
+  getClient(): Client {
+    return this.client;
+  }
+
+  getOperations(): StoreOperationsLibSQL {
+    return this.operations;
+  }
 }

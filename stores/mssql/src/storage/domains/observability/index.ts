@@ -9,10 +9,8 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type sql from 'mssql';
 import { MSSQLDomainBase } from '../base';
 import type { MSSQLDomainConfig } from '../base';
-import type { StoreOperationsMSSQL } from '../operations';
 import { IndexManagementMSSQL } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
@@ -25,22 +23,14 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
     this.domainBase = new MSSQLDomainBase(opts);
   }
 
-  private get pool(): sql.ConnectionPool {
-    return this.domainBase['pool'];
-  }
-
-  private get schema(): string {
-    return this.domainBase['schema'];
-  }
-
-  private get operations(): StoreOperationsMSSQL {
-    return this.domainBase['operations'];
-  }
-
   async createIndexes(): Promise<void> {
     // Create indexes for observability domain
-    const indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
-    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    const indexManagement = new IndexManagementMSSQL({
+      pool: this.domainBase.getClient(),
+      schemaName: this.domainBase.getSchema(),
+    });
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
     this.indexManagement = indexManagement;
 
     // Create traceId + startedAt index
@@ -94,9 +84,13 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
 
   async dropIndexes(): Promise<void> {
     if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
+      this.indexManagement = new IndexManagementMSSQL({
+        pool: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
     }
-    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`);
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`);
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_name_idx`);
@@ -104,7 +98,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
   }
 
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    await this.domainBase.getOperations().createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
     await this.createIndexes();
   }
 
@@ -113,7 +107,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SPANS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SPANS });
   }
 
   public get tracingStrategy(): {
@@ -138,7 +132,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
         // Note: createdAt/updatedAt will be set by default values
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.domainBase.getOperations().insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -161,10 +155,10 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.domainBase.getSchema()),
       });
 
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       request.input('traceId', traceId);
 
       const result = await request.query<SpanRecord>(
@@ -224,7 +218,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
       }
       // Note: updatedAt will be set automatically
 
-      await this.operations.update({
+      await this.domainBase.getOperations().update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -296,12 +290,12 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
+      schemaName: getSchemaName(this.domainBase.getSchema()),
     });
 
     try {
       // Get total count
-      const countRequest = this.pool.request();
+      const countRequest = this.domainBase.getClient().request();
       Object.entries(params).forEach(([key, value]) => {
         countRequest.input(key, value);
       });
@@ -325,7 +319,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
       }
 
       // Get paginated results
-      const dataRequest = this.pool.request();
+      const dataRequest = this.domainBase.getClient().request();
       Object.entries(params).forEach(([key, value]) => {
         dataRequest.input(key, value);
       });
@@ -370,7 +364,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
     }
 
     try {
-      await this.operations.batchInsert({
+      await this.domainBase.getOperations().batchInsert({
         tableName: TABLE_SPANS,
         records: args.records.map(span => ({
           ...span,
@@ -420,7 +414,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
         };
       });
 
-      await this.operations.batchUpdate({
+      await this.domainBase.getOperations().batchUpdate({
         tableName: TABLE_SPANS,
         updates,
       });
@@ -447,7 +441,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
     try {
       const keys = args.traceIds.map(traceId => ({ traceId }));
 
-      await this.operations.batchDelete({
+      await this.domainBase.getOperations().batchDelete({
         tableName: TABLE_SPANS,
         keys,
       });

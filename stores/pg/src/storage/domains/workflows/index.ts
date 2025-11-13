@@ -2,10 +2,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { IDatabase } from 'pg-promise';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
-import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -36,25 +34,13 @@ export class WorkflowsPG extends WorkflowsStorageBase {
     this.domainBase = new PGDomainBase(opts);
   }
 
-  public get client(): IDatabase<{}> {
-    return this.domainBase['client'];
-  }
-
-  private get schema(): string {
-    return this.domainBase['schema'];
-  }
-
-  private get operations(): StoreOperationsPG {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
-    await this.operations.createTable({
+    await this.domainBase.getOperations().createTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
     });
 
-    await this.operations.alterTable?.({
+    await this.domainBase.getOperations().alterTable?.({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
       ifNotExists: ['resourceId'],
@@ -66,7 +52,7 @@ export class WorkflowsPG extends WorkflowsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -123,8 +109,8 @@ export class WorkflowsPG extends WorkflowsStorageBase {
   }): Promise<void> {
     try {
       const now = new Date().toISOString();
-      await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+      await this.domainBase.getClient().none(
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.domainBase.getSchema() })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
@@ -157,7 +143,7 @@ export class WorkflowsPG extends WorkflowsStorageBase {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<{ snapshot: WorkflowRunState }>({
+      const result = await this.domainBase.getOperations().load<{ snapshot: WorkflowRunState }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: workflowId, run_id: runId },
       });
@@ -197,14 +183,14 @@ export class WorkflowsPG extends WorkflowsStorageBase {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.domainBase.getSchema() })}
           ${whereClause}
           ORDER BY "createdAt" DESC LIMIT 1
         `;
 
       const queryValues = values;
 
-      const result = await this.client.oneOrNone(query, queryValues);
+      const result = await this.domainBase.getClient().oneOrNone(query, queryValues);
 
       if (!result) {
         return null;
@@ -254,7 +240,7 @@ export class WorkflowsPG extends WorkflowsStorageBase {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.domainBase.getOperations().hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`"resourceId" = $${paramIndex}`);
           values.push(resourceId);
@@ -281,10 +267,12 @@ export class WorkflowsPG extends WorkflowsStorageBase {
       const usePagination = typeof perPage === 'number' && typeof page === 'number';
       // Only get total count when using pagination
       if (usePagination) {
-        const countResult = await this.client.one(
-          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
-          values,
-        );
+        const countResult = await this.domainBase
+          .getClient()
+          .one(
+            `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.domainBase.getSchema() })} ${whereClause}`,
+            values,
+          );
         total = Number(countResult.count);
       }
 
@@ -293,7 +281,7 @@ export class WorkflowsPG extends WorkflowsStorageBase {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.domainBase.getSchema() })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
@@ -301,7 +289,7 @@ export class WorkflowsPG extends WorkflowsStorageBase {
 
       const queryValues = usePagination ? [...values, normalizedPerPage, offset] : values;
 
-      const result = await this.client.manyOrNone(query, queryValues);
+      const result = await this.domainBase.getClient().manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
         return parseWorkflowRun(row);

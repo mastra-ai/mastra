@@ -69,4 +69,8 @@ export class D1DomainBase {
   protected get isStandalone(): boolean {
     return this.ownedOperations;
   }
+
+  getOperations(): StoreOperationsD1 {
+    return this.operations;
+  }
 }

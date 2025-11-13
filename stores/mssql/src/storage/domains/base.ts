@@ -53,4 +53,16 @@ export class MSSQLDomainBase {
   protected get isStandalone(): boolean {
     return this.ownedPool;
   }
+
+  getClient(): sql.ConnectionPool {
+    return this.pool;
+  }
+
+  getOperations(): StoreOperationsMSSQL {
+    return this.operations;
+  }
+
+  getSchema(): string {
+    return this.schema;
+  }
 }

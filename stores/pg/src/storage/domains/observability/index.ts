@@ -9,11 +9,9 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
 import { IndexManagementPG } from '../operations';
-import type { StoreOperationsPG } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorageBase {
@@ -25,23 +23,15 @@ export class ObservabilityPG extends ObservabilityStorageBase {
     this.domainBase = new PGDomainBase(opts);
   }
 
-  public get client(): IDatabase<{}> {
-    return this.domainBase['client'];
-  }
-
-  private get schema(): string | undefined {
-    return this.domainBase['schema'];
-  }
-
-  private get operations(): StoreOperationsPG {
-    return this.domainBase['operations'];
-  }
-
   async createIndexes(): Promise<void> {
     // Create indexes for observability domain
-    const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    const indexManagement = new IndexManagementPG({
+      client: this.domainBase.getClient(),
+      schemaName: this.domainBase.getSchema(),
+    });
     this.indexManagement = indexManagement;
-    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
 
     // Create traceId + startedAt index
     try {
@@ -94,9 +84,13 @@ export class ObservabilityPG extends ObservabilityStorageBase {
 
   async dropIndexes(): Promise<void> {
     if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
     }
-    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`);
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`);
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_name_idx`);
@@ -104,7 +98,7 @@ export class ObservabilityPG extends ObservabilityStorageBase {
   }
 
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    await this.domainBase.getOperations().createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
     await this.createIndexes();
   }
 
@@ -113,7 +107,7 @@ export class ObservabilityPG extends ObservabilityStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SPANS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SPANS });
   }
 
   public override get tracingStrategy(): {
@@ -140,7 +134,7 @@ export class ObservabilityPG extends ObservabilityStorageBase {
         // Note: createdAt/updatedAt will be set by database triggers
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.domainBase.getOperations().insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -163,10 +157,10 @@ export class ObservabilityPG extends ObservabilityStorageBase {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.domainBase.getSchema()),
       });
 
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.domainBase.getClient().manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -225,7 +219,7 @@ export class ObservabilityPG extends ObservabilityStorageBase {
       }
       // Note: updatedAt will be set by database trigger automatically
 
-      await this.operations.update({
+      await this.domainBase.getOperations().update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -298,15 +292,14 @@ export class ObservabilityPG extends ObservabilityStorageBase {
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
+      schemaName: getSchemaName(this.domainBase.getSchema()),
     });
 
     try {
       // Get total count
-      const countResult = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`,
-        whereClause.args,
-      );
+      const countResult = await this.domainBase
+        .getClient()
+        .oneOrNone<{ count: string }>(`SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`, whereClause.args);
       const count = Number(countResult?.count ?? 0);
 
       if (count === 0) {
@@ -322,7 +315,7 @@ export class ObservabilityPG extends ObservabilityStorageBase {
       }
 
       // Get paginated spans
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.domainBase.getClient().manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -376,7 +369,7 @@ export class ObservabilityPG extends ObservabilityStorageBase {
         };
       });
 
-      return this.operations.batchInsert({
+      return this.domainBase.getOperations().batchInsert({
         tableName: TABLE_SPANS,
         records,
       });
@@ -400,7 +393,7 @@ export class ObservabilityPG extends ObservabilityStorageBase {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
+      return this.domainBase.getOperations().batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateSpanRecord> & {
@@ -443,11 +436,13 @@ export class ObservabilityPG extends ObservabilityStorageBase {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.domainBase.getSchema()),
       });
 
       const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-      await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
+      await this.domainBase
+        .getClient()
+        .none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
     } catch (error) {
       throw new MastraError(
         {

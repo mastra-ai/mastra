@@ -1,4 +1,3 @@
-import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
@@ -13,7 +12,6 @@ import {
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { ClickhouseDomainBase } from '../base';
 import type { ClickhouseDomainConfig } from '../base';
-import type { StoreOperationsClickhouse } from '../operations';
 
 export class ScoresStorageClickhouse extends EvalsStorageBase {
   private domainBase: ClickhouseDomainBase;
@@ -23,16 +21,10 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
     this.domainBase = new ClickhouseDomainBase(opts);
   }
 
-  private get client(): ClickHouseClient {
-    return this.domainBase['client'];
-  }
-
-  private get operations(): StoreOperationsClickhouse {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
   }
 
   async close(): Promise<void> {
@@ -40,7 +32,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SCORERS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SCORERS });
   }
 
   private transformScoreRow(row: any): ScoreRowData {
@@ -72,7 +64,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const result = await this.client.query({
+      const result = await this.domainBase.getClient().query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE id = {var_id:String}`,
         query_params: { var_id: id },
         format: 'JSONEachRow',
@@ -125,7 +117,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
       const record = {
         ...parsedScore,
       };
-      await this.client.insert({
+      await this.domainBase.getClient().insert({
         table: TABLE_SCORERS,
         values: [record],
         format: 'JSONEachRow',
@@ -158,7 +150,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       // Get total count
-      const countResult = await this.client.query({
+      const countResult = await this.domainBase.getClient().query({
         query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = {var_runId:String}`,
         query_params: { var_runId: runId },
         format: 'JSONEachRow',
@@ -190,7 +182,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
       const end = perPageInput === false ? total : start + perPage;
 
       // Get paginated results
-      const result = await this.client.query({
+      const result = await this.domainBase.getClient().query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = {var_runId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_runId: runId,
@@ -255,7 +247,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
 
     try {
       // Get total count
-      const countResult = await this.client.query({
+      const countResult = await this.domainBase.getClient().query({
         query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE ${whereClause}`,
         query_params: {
           var_scorerId: scorerId,
@@ -292,7 +284,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
       const end = perPageInput === false ? total : start + perPage;
 
       // Get paginated results
-      const result = await this.client.query({
+      const result = await this.domainBase.getClient().query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE ${whereClause} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_scorerId: scorerId,
@@ -345,7 +337,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       // Get total count
-      const countResult = await this.client.query({
+      const countResult = await this.domainBase.getClient().query({
         query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = {var_entityId:String} AND entityType = {var_entityType:String}`,
         query_params: { var_entityId: entityId, var_entityType: entityType },
         format: 'JSONEachRow',
@@ -377,7 +369,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
       const end = perPageInput === false ? total : start + perPage;
 
       // Get paginated results
-      const result = await this.client.query({
+      const result = await this.domainBase.getClient().query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = {var_entityId:String} AND entityType = {var_entityType:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_entityId: entityId,
@@ -427,7 +419,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const countResult = await this.client.query({
+      const countResult = await this.domainBase.getClient().query({
         query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String}`,
         query_params: {
           var_traceId: traceId,
@@ -461,7 +453,7 @@ export class ScoresStorageClickhouse extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.query({
+      const result = await this.domainBase.getClient().query({
         query: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = {var_traceId:String} AND spanId = {var_spanId:String} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
         query_params: {
           var_traceId: traceId,

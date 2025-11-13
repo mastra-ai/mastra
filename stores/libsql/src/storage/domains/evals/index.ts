@@ -1,4 +1,4 @@
-import type { Client, InValue } from '@libsql/client';
+import type { InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
@@ -13,7 +13,6 @@ import {
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import { LibSQLDomainBase } from '../base';
 import type { LibSQLDomainConfig } from '../base';
-import type { StoreOperationsLibSQL } from '../operations';
 
 export class EvalsStorageLibSQL extends EvalsStorageBase {
   private domainBase: LibSQLDomainBase;
@@ -23,16 +22,10 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
     this.domainBase = new LibSQLDomainBase(opts);
   }
 
-  private get client(): Client {
-    return this.domainBase['client'];
-  }
-
-  private get operations(): StoreOperationsLibSQL {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
   }
 
   async close(): Promise<void> {
@@ -40,7 +33,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SCORERS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SCORERS });
   }
 
   async listScoresByRunId({
@@ -54,7 +47,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const { page, perPage: perPageInput } = pagination;
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.domainBase.getClient().execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = ?`,
         args: [runId],
       });
@@ -77,7 +70,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.domainBase.getClient().execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [runId, limitValue, start],
       });
@@ -147,7 +140,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.domainBase.getClient().execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
         args: queryParams,
       });
@@ -170,7 +163,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.domainBase.getClient().execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
@@ -241,7 +234,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    const result = await this.client.execute({
+    const result = await this.domainBase.getClient().execute({
       sql: `SELECT * FROM ${TABLE_SCORERS} WHERE id = ?`,
       args: [id],
     });
@@ -273,7 +266,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
     try {
       const id = crypto.randomUUID();
 
-      await this.operations.insert({
+      await this.domainBase.getOperations().insert({
         tableName: TABLE_SCORERS,
         record: {
           id,
@@ -310,7 +303,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const { page, perPage: perPageInput } = pagination;
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.domainBase.getClient().execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ?`,
         args: [entityId, entityType],
       });
@@ -333,7 +326,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.domainBase.getClient().execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [entityId, entityType, limitValue, start],
       });
@@ -375,7 +368,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const countSQLResult = await this.client.execute({
+      const countSQLResult = await this.domainBase.getClient().execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
         args: [traceId, spanId],
       });
@@ -385,7 +378,7 @@ export class EvalsStorageLibSQL extends EvalsStorageBase {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.domainBase.getClient().execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [traceId, spanId, limitValue, start],
       });

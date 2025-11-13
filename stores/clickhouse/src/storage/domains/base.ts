@@ -57,4 +57,12 @@ export class ClickhouseDomainBase {
   protected get isStandalone(): boolean {
     return this.ownedClient;
   }
+
+  getClient(): ClickHouseClient {
+    return this.client;
+  }
+
+  getOperations(): StoreOperationsClickhouse {
+    return this.operations;
+  }
 }

@@ -29,7 +29,7 @@ export class MemoryStorageMongoDB extends MemoryStorageBase {
   constructor(opts: MongoDBDomainConfig) {
     super();
     this.domainBase = new MongoDBDomainBase(opts);
-    this.db = this.domainBase['db'];
+    this.db = this.domainBase.getOperations();
   }
 
   /**

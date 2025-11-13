@@ -5,7 +5,6 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
 import { MSSQLDomainBase } from '../base';
 import type { MSSQLDomainConfig } from '../base';
-import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
 export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
@@ -16,20 +15,8 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
     this.domainBase = new MSSQLDomainBase(opts);
   }
 
-  private get pool(): sql.ConnectionPool {
-    return this.domainBase['pool'];
-  }
-
-  private get schema(): string {
-    return this.domainBase['schema'];
-  }
-
-  private get operations(): StoreOperationsMSSQL {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
-    await this.operations.createTable({
+    await this.domainBase.getOperations().createTable({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
     });
@@ -40,7 +27,7 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -75,8 +62,11 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
-    const transaction = this.pool.transaction();
+    const table = getTableName({
+      indexName: TABLE_WORKFLOW_SNAPSHOT,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
+    const transaction = this.domainBase.getClient().transaction();
 
     try {
       await transaction.begin();
@@ -173,8 +163,11 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
       waitingPaths?: Record<string, number[]>;
     };
   }): Promise<WorkflowRunState | undefined> {
-    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
-    const transaction = this.pool.transaction();
+    const table = getTableName({
+      indexName: TABLE_WORKFLOW_SNAPSHOT,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
+    const transaction = this.domainBase.getClient().transaction();
 
     try {
       await transaction.begin();
@@ -261,10 +254,13 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
     resourceId?: string;
     snapshot: WorkflowRunState;
   }): Promise<void> {
-    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const table = getTableName({
+      indexName: TABLE_WORKFLOW_SNAPSHOT,
+      schemaName: getSchemaName(this.domainBase.getSchema()),
+    });
     const now = new Date().toISOString();
     try {
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       request.input('workflow_name', workflowId);
       request.input('run_id', runId);
       request.input('resourceId', resourceId);
@@ -305,7 +301,7 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load({
+      const result = await this.domainBase.getOperations().load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowId,
@@ -348,9 +344,12 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+      const tableName = getTableName({
+        indexName: TABLE_WORKFLOW_SNAPSHOT,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
       const query = `SELECT * FROM ${tableName} ${whereClause}`;
-      const request = this.pool.request();
+      const request = this.domainBase.getClient().request();
       Object.entries(paramMap).forEach(([key, value]) => request.input(key, value));
       const result = await request.query(query);
 
@@ -399,7 +398,7 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.domainBase.getOperations().hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;
@@ -420,8 +419,11 @@ export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       let total = 0;
-      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
-      const request = this.pool.request();
+      const tableName = getTableName({
+        indexName: TABLE_WORKFLOW_SNAPSHOT,
+        schemaName: getSchemaName(this.domainBase.getSchema()),
+      });
+      const request = this.domainBase.getClient().request();
       Object.entries(paramMap).forEach(([key, value]) => {
         if (value instanceof Date) {
           request.input(key, sql.DateTime, value);

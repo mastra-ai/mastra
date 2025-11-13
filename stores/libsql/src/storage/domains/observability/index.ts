@@ -10,7 +10,6 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDomainBase } from '../base';
 import type { LibSQLDomainConfig } from '../base';
-import type { StoreOperationsLibSQL } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow } from '../utils';
 
 export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
@@ -21,12 +20,8 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
     this.domainBase = new LibSQLDomainBase(opts);
   }
 
-  private get operations(): StoreOperationsLibSQL {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    await this.domainBase.getOperations().createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
   }
 
   async close(): Promise<void> {
@@ -34,7 +29,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SPANS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SPANS });
   }
 
   async createSpan(span: CreateSpanRecord): Promise<void> {
@@ -46,7 +41,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
         createdAt: now,
         updatedAt: now,
       };
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.domainBase.getOperations().insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -67,7 +62,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     try {
-      const spans = await this.operations.loadMany<SpanRecord>({
+      const spans = await this.domainBase.getOperations().loadMany<SpanRecord>({
         tableName: TABLE_SPANS,
         whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
         orderBy: 'startedAt DESC',
@@ -106,7 +101,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
     updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     try {
-      await this.operations.update({
+      await this.domainBase.getOperations().update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data: { ...updates, updatedAt: new Date().toISOString() },
@@ -178,7 +173,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
 
     let count = 0;
     try {
-      count = await this.operations.loadTotalCount({
+      count = await this.domainBase.getOperations().loadTotalCount({
         tableName: TABLE_SPANS,
         whereClause: { sql: actualWhereClause, args: whereClause.args },
       });
@@ -206,7 +201,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
     }
 
     try {
-      const spans = await this.operations.loadMany<SpanRecord>({
+      const spans = await this.domainBase.getOperations().loadMany<SpanRecord>({
         tableName: TABLE_SPANS,
         whereClause: {
           sql: actualWhereClause,
@@ -242,7 +237,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
     try {
       // Use single timestamp for all records in the batch
       const now = new Date().toISOString();
-      return this.operations.batchInsert({
+      return this.domainBase.getOperations().batchInsert({
         tableName: TABLE_SPANS,
         records: args.records.map(record => ({
           ...record,
@@ -270,7 +265,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
+      return this.domainBase.getOperations().batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => ({
           keys: { spanId: record.spanId, traceId: record.traceId },
@@ -292,7 +287,7 @@ export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     try {
       const keys = args.traceIds.map(traceId => ({ traceId }));
-      return this.operations.batchDelete({
+      return this.domainBase.getOperations().batchDelete({
         tableName: TABLE_SPANS,
         keys,
       });

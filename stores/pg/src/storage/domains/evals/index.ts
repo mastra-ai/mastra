@@ -10,11 +10,9 @@ import {
   TABLE_SCORERS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
 import { IndexManagementPG } from '../operations';
-import type { StoreOperationsPG } from '../operations';
 import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
@@ -43,23 +41,15 @@ export class EvalsStoragePG extends EvalsStorageBase {
     this.domainBase = new PGDomainBase(opts);
   }
 
-  public get client(): IDatabase<{}> {
-    return this.domainBase['client'];
-  }
-
-  private get schema(): string | undefined {
-    return this.domainBase['schema'];
-  }
-
-  private get operations(): StoreOperationsPG {
-    return this.domainBase['operations'];
-  }
-
   async createIndexes(): Promise<void> {
     // Create indexes for evals domain
-    const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    const indexManagement = new IndexManagementPG({
+      client: this.domainBase.getClient(),
+      schemaName: this.domainBase.getSchema(),
+    });
     this.indexManagement = indexManagement;
-    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
 
     // Create scores index
     try {
@@ -76,14 +66,20 @@ export class EvalsStoragePG extends EvalsStorageBase {
 
   async dropIndexes(): Promise<void> {
     if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
     }
-    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    const schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
     await this.indexManagement.dropIndex(`${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`);
   }
 
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
 
     await this.createIndexes();
   }
@@ -93,15 +89,17 @@ export class EvalsStoragePG extends EvalsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearTable({ tableName: TABLE_SCORERS });
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const result = await this.client.oneOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE id = $1`,
-        [id],
-      );
+      const result = await this.domainBase
+        .getClient()
+        .oneOrNone<ScoreRowData>(
+          `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() })} WHERE id = $1`,
+          [id],
+        );
 
       return result ? transformScoreRow(result) : null;
     } catch (error) {
@@ -151,10 +149,9 @@ export class EvalsStoragePG extends EvalsStorageBase {
 
       const whereClause = conditions.join(' AND ');
 
-      const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause}`,
-        queryParams,
-      );
+      const total = await this.domainBase.getClient().oneOrNone<{
+        count: string;
+      }>(`SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() })} WHERE ${whereClause}`, queryParams);
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -172,10 +169,12 @@ export class EvalsStoragePG extends EvalsStorageBase {
       }
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
-      const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
-        [...queryParams, limitValue, start],
-      );
+      const result = await this.domainBase
+        .getClient()
+        .manyOrNone<ScoreRowData>(
+          `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+          [...queryParams, limitValue, start],
+        );
 
       return {
         pagination: {
@@ -237,7 +236,7 @@ export class EvalsStoragePG extends EvalsStorageBase {
         ...rest
       } = parsedScore;
 
-      await this.operations.insert({
+      await this.domainBase.getOperations().insert({
         tableName: TABLE_SCORERS,
         record: {
           id,
@@ -278,10 +277,9 @@ export class EvalsStoragePG extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1`,
-        [runId],
-      );
+      const total = await this.domainBase.getClient().oneOrNone<{
+        count: string;
+      }>(`SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() })} WHERE "runId" = $1`, [runId]);
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -301,10 +299,12 @@ export class EvalsStoragePG extends EvalsStorageBase {
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
-      const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
-        [runId, limitValue, start],
-      );
+      const result = await this.domainBase
+        .getClient()
+        .manyOrNone<ScoreRowData>(
+          `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
+          [runId, limitValue, start],
+        );
       return {
         pagination: {
           total: Number(total?.count) || 0,
@@ -336,10 +336,9 @@ export class EvalsStoragePG extends EvalsStorageBase {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2`,
-        [entityId, entityType],
-      );
+      const total = await this.domainBase.getClient().oneOrNone<{
+        count: string;
+      }>(`SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() })} WHERE "entityId" = $1 AND "entityType" = $2`, [entityId, entityType]);
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -359,10 +358,12 @@ export class EvalsStoragePG extends EvalsStorageBase {
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
-      const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
-        [entityId, entityType, limitValue, start],
-      );
+      const result = await this.domainBase
+        .getClient()
+        .manyOrNone<ScoreRowData>(
+          `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
+          [entityId, entityType, limitValue, start],
+        );
       return {
         pagination: {
           total: Number(total?.count) || 0,
@@ -394,11 +395,10 @@ export class EvalsStoragePG extends EvalsStorageBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema });
-      const countSQLResult = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) as count FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2`,
-        [traceId, spanId],
-      );
+      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: this.domainBase.getSchema() });
+      const countSQLResult = await this.domainBase.getClient().oneOrNone<{
+        count: string;
+      }>(`SELECT COUNT(*) as count FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2`, [traceId, spanId]);
 
       const total = Number(countSQLResult?.count ?? 0);
       const { page, perPage: perPageInput } = pagination;
@@ -406,10 +406,12 @@ export class EvalsStoragePG extends EvalsStorageBase {
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
-      const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
-        [traceId, spanId, limitValue, start],
-      );
+      const result = await this.domainBase
+        .getClient()
+        .manyOrNone<ScoreRowData>(
+          `SELECT * FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
+          [traceId, spanId, limitValue, start],
+        );
 
       const hasMore = end < total;
       const scores = result.map(row => transformScoreRow(row)) ?? [];

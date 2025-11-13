@@ -64,4 +64,8 @@ export class MongoDBDomainBase {
   protected get isStandalone(): boolean {
     return !!this.ownedConnector;
   }
+
+  getOperations(): MongoDBOperations {
+    return this.db;
+  }
 }

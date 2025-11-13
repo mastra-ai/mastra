@@ -127,7 +127,7 @@ export class EvalsStorageMongoDB extends EvalsStorageBase {
   constructor(opts: MongoDBDomainConfig) {
     super();
     this.domainBase = new MongoDBDomainBase(opts);
-    this.db = this.domainBase['db'];
+    this.db = this.domainBase.getOperations();
   }
 
   async init(): Promise<void> {

@@ -32,4 +32,12 @@ export class UpstashDomainBase {
   protected get isStandalone(): boolean {
     return this.ownedClient;
   }
+
+  getClient(): Redis {
+    return this.client;
+  }
+
+  getOperations(): StoreOperationsUpstash {
+    return this.operations;
+  }
 }

@@ -1,4 +1,4 @@
-import type { Client, InValue } from '@libsql/client';
+import type { InValue } from '@libsql/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -22,7 +22,6 @@ import {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDomainBase } from '../base';
 import type { LibSQLDomainConfig } from '../base';
-import type { StoreOperationsLibSQL } from '../operations';
 
 export class MemoryStorageLibSQL extends MemoryStorageBase {
   private domainBase: LibSQLDomainBase;
@@ -32,18 +31,16 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
     this.domainBase = new LibSQLDomainBase(opts);
   }
 
-  private get client(): Client {
-    return this.domainBase['client'];
-  }
-
-  private get operations(): StoreOperationsLibSQL {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
-    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
-    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
   }
 
   async close(): Promise<void> {
@@ -52,9 +49,9 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
 
   async dropData(): Promise<void> {
     await Promise.all([
-      this.operations.clearTable({ tableName: TABLE_THREADS }),
-      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
-      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_THREADS }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_MESSAGES }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_RESOURCES }),
     ]);
   }
 
@@ -120,7 +117,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
       params.push(searchId, id, withPreviousMessages, withNextMessages);
     }
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-    const includedResult = await this.client.execute({ sql: finalQuery, args: params });
+    const includedResult = await this.domainBase.getClient().execute({ sql: finalQuery, args: params });
     const includedRows = includedResult.rows?.map(row => this.parseRow(row));
     const seen = new Set<string>();
     const dedupedRows = includedRows.filter(row => {
@@ -148,7 +145,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
         WHERE id IN (${messageIds.map(() => '?').join(', ')})
         ORDER BY "createdAt" DESC
       `;
-      const result = await this.client.execute({ sql, args: messageIds });
+      const result = await this.domainBase.getClient().execute({ sql, args: messageIds });
       if (!result.rows) return { messages: [] };
 
       const list = new MessageList().add(result.rows.map(this.parseRow), 'memory');
@@ -227,7 +224,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
-      const countResult = await this.client.execute({
+      const countResult = await this.domainBase.getClient().execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
         args: queryParams,
       });
@@ -235,7 +232,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.client.execute({
+      const dataResult = await this.domainBase.getClient().execute({
         sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${orderByStatement} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
@@ -385,13 +382,13 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
       for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
         const batch = messageStatements.slice(i, i + BATCH_SIZE);
         if (batch.length > 0) {
-          await this.client.batch(batch, 'write');
+          await this.domainBase.getClient().batch(batch, 'write');
         }
       }
 
       // Execute thread update separately
       if (threadUpdateStatement) {
-        await this.client.execute(threadUpdateStatement);
+        await this.domainBase.getClient().execute(threadUpdateStatement);
       }
 
       const list = new MessageList().add(messages as any, 'memory');
@@ -424,7 +421,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
     const placeholders = messageIds.map(() => '?').join(',');
 
     const selectSql = `SELECT * FROM ${TABLE_MESSAGES} WHERE id IN (${placeholders})`;
-    const existingResult = await this.client.execute({ sql: selectSql, args: messageIds });
+    const existingResult = await this.domainBase.getClient().execute({ sql: selectSql, args: messageIds });
     const existingMessages: MastraDBMessage[] = existingResult.rows.map(row => this.parseRow(row));
 
     if (existingMessages.length === 0) {
@@ -508,9 +505,9 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
       }
     }
 
-    await this.client.batch(batchStatements, 'write');
+    await this.domainBase.getClient().batch(batchStatements, 'write');
 
-    const updatedResult = await this.client.execute({ sql: selectSql, args: messageIds });
+    const updatedResult = await this.domainBase.getClient().execute({ sql: selectSql, args: messageIds });
     return updatedResult.rows.map(row => this.parseRow(row));
   }
 
@@ -525,7 +522,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
       const threadIds = new Set<string>();
 
       // Use a transaction to ensure consistency
-      const tx = await this.client.transaction('write');
+      const tx = await this.domainBase.getClient().transaction('write');
 
       try {
         for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
@@ -583,7 +580,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const result = await this.operations.load<StorageResourceType>({
+    const result = await this.domainBase.getOperations().load<StorageResourceType>({
       tableName: TABLE_RESOURCES,
       keys: { id: resourceId },
     });
@@ -606,7 +603,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    await this.operations.insert({
+    await this.domainBase.getOperations().insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,
@@ -668,7 +665,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
 
     values.push(resourceId);
 
-    await this.client.execute({
+    await this.domainBase.getClient().execute({
       sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
       args: values,
     });
@@ -678,12 +675,12 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const result = await this.operations.load<
-        Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
-      >({
-        tableName: TABLE_THREADS,
-        keys: { id: threadId },
-      });
+      const result = await this.domainBase
+        .getOperations()
+        .load<Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }>({
+          tableName: TABLE_THREADS,
+          keys: { id: threadId },
+        });
 
       if (!result) {
         return null;
@@ -742,7 +739,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
-      const countResult = await this.client.execute({
+      const countResult = await this.domainBase.getClient().execute({
         sql: `SELECT COUNT(*) as count ${baseQuery}`,
         args: queryParams,
       });
@@ -759,7 +756,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataResult = await this.client.execute({
+      const dataResult = await this.domainBase.getClient().execute({
         sql: `SELECT * ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
@@ -797,7 +794,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      await this.operations.insert({
+      await this.domainBase.getOperations().insert({
         tableName: TABLE_THREADS,
         record: {
           ...thread,
@@ -855,7 +852,7 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
     };
 
     try {
-      await this.client.execute({
+      await this.domainBase.getClient().execute({
         sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = ? WHERE id = ?`,
         args: [title, JSON.stringify(updatedThread.metadata), id],
       });
@@ -878,11 +875,11 @@ export class MemoryStorageLibSQL extends MemoryStorageBase {
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     // Delete messages for this thread (manual step)
     try {
-      await this.client.execute({
+      await this.domainBase.getClient().execute({
         sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
         args: [threadId],
       });
-      await this.client.execute({
+      await this.domainBase.getClient().execute({
         sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
         args: [threadId],
       });

@@ -2,10 +2,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { Redis } from '@upstash/redis';
 import { UpstashDomainBase } from '../base';
 import type { UpstashDomainConfig } from '../base';
-import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey } from '../utils';
 
 function parseWorkflowRun(row: any): WorkflowRun {
@@ -36,14 +34,6 @@ export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
     this.domainBase = new UpstashDomainBase(opts);
   }
 
-  private get client(): Redis {
-    return this.domainBase['client'];
-  }
-
-  private get operations(): StoreOperationsUpstash {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
     // Upstash/Redis doesn't require table creation
   }
@@ -53,7 +43,7 @@ export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearKeyspace({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    await this.domainBase.getOperations().clearKeyspace({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -104,7 +94,7 @@ export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
   }): Promise<void> {
     const { namespace = 'workflows', workflowId, runId, resourceId, snapshot } = params;
     try {
-      await this.operations.insert({
+      await this.domainBase.getOperations().insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
           namespace,
@@ -145,7 +135,7 @@ export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
       run_id: runId,
     });
     try {
-      const data = await this.client.get<{
+      const data = await this.domainBase.getClient().get<{
         namespace: string;
         workflow_name: string;
         run_id: string;
@@ -174,10 +164,10 @@ export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
     try {
       const key =
         getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowId, run_id: runId }) + '*';
-      const keys = await this.operations.scanKeys(key);
+      const keys = await this.domainBase.getOperations().scanKeys(key);
       const workflows = await Promise.all(
         keys.map(async key => {
-          const data = await this.client.get<{
+          const data = await this.domainBase.getClient().get<{
             workflow_name: string;
             run_id: string;
             snapshot: WorkflowRunState | string;
@@ -249,7 +239,7 @@ export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
           resourceId,
         });
       }
-      const keys = await this.operations.scanKeys(pattern);
+      const keys = await this.domainBase.getOperations().scanKeys(pattern);
 
       // Check if we have any keys before using pipeline
       if (keys.length === 0) {
@@ -257,7 +247,7 @@ export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
       }
 
       // Use pipeline for batch fetching to improve performance
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 

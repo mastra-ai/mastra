@@ -98,7 +98,7 @@ When a workflow is suspended, Mastra automatically persists the workflow snapsho
 
 1. The `suspend()` function in a step execution triggers the snapshot process
 2. The `WorkflowInstance.suspend()` method records the suspended machine
-3. `persistWorkflowSnapshot()` is called to save the current state
+3. `createWorkflowSnapshot()` is called to save the current state
 4. The snapshot is serialized and stored in the configured database in the `workflow_snapshots` table
 5. The storage record includes the workflow name, run ID, and the serialized snapshot
 

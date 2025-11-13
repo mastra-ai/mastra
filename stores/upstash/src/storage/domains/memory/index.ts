@@ -19,10 +19,8 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
 } from '@mastra/core/storage';
-import type { Redis } from '@upstash/redis';
 import { UpstashDomainBase } from '../base';
 import type { UpstashDomainConfig } from '../base';
-import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey, processRecord } from '../utils';
 
 function getThreadMessagesKey(threadId: string): string {
@@ -42,14 +40,6 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
     this.domainBase = new UpstashDomainBase(opts);
   }
 
-  private get client(): Redis {
-    return this.domainBase['client'];
-  }
-
-  private get operations(): StoreOperationsUpstash {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
     // Upstash/Redis doesn't require table creation
   }
@@ -60,15 +50,15 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
 
   async dropData(): Promise<void> {
     await Promise.all([
-      this.operations.clearKeyspace({ tableName: TABLE_THREADS }),
-      this.operations.clearKeyspace({ tableName: TABLE_MESSAGES }),
-      this.operations.clearKeyspace({ tableName: TABLE_RESOURCES }),
+      this.domainBase.getOperations().clearKeyspace({ tableName: TABLE_THREADS }),
+      this.domainBase.getOperations().clearKeyspace({ tableName: TABLE_MESSAGES }),
+      this.domainBase.getOperations().clearKeyspace({ tableName: TABLE_RESOURCES }),
     ]);
 
     // Also clear thread message keys
-    const threadMessageKeys = await this.client.keys('thread:*:messages');
+    const threadMessageKeys = await this.domainBase.getClient().keys('thread:*:messages');
     if (threadMessageKeys.length > 0) {
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
       for (const key of threadMessageKeys) {
         pipeline.del(key);
       }
@@ -78,7 +68,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.operations.load<StorageThreadType>({
+      const thread = await this.domainBase.getOperations().load<StorageThreadType>({
         tableName: TABLE_THREADS,
         keys: { id: threadId },
       });
@@ -130,9 +120,9 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
     try {
       let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
-      const keys = await this.operations.scanKeys(pattern);
+      const keys = await this.domainBase.getOperations().scanKeys(pattern);
 
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
@@ -192,7 +182,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      await this.operations.insert({
+      await this.domainBase.getOperations().insert({
         tableName: TABLE_THREADS,
         record: thread,
       });
@@ -269,9 +259,9 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
     const threadKey = getKey(TABLE_THREADS, { id: threadId });
     const threadMessagesKey = getThreadMessagesKey(threadId);
     try {
-      const messageIds: string[] = await this.client.zrange(threadMessagesKey, 0, -1);
+      const messageIds: string[] = await this.domainBase.getClient().zrange(threadMessagesKey, 0, -1);
 
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
       pipeline.del(threadKey);
       pipeline.del(threadMessagesKey);
 
@@ -284,7 +274,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       await pipeline.exec();
 
       // Bulk delete all message keys for this thread if any remain
-      await this.operations.scanAndDelete(getMessageKey(threadId, '*'));
+      await this.domainBase.getOperations().scanAndDelete(getMessageKey(threadId, '*'));
     } catch (error) {
       throw new MastraError(
         {
@@ -346,13 +336,13 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
 
     // Get current thread data once (all messages belong to same thread)
     const threadKey = getKey(TABLE_THREADS, { id: threadId });
-    const existingThread = await this.client.get<StorageThreadType>(threadKey);
+    const existingThread = await this.domainBase.getClient().get<StorageThreadType>(threadKey);
 
     try {
       const batchSize = 1000;
       for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
         const batch = messagesWithIndex.slice(i, i + batchSize);
-        const pipeline = this.client.pipeline();
+        const pipeline = this.domainBase.getClient().pipeline();
 
         for (const message of batch) {
           const key = getMessageKey(message.threadId!, message.id);
@@ -361,10 +351,10 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
 
           // Check if this message id exists in another thread
           const existingKeyPattern = getMessageKey('*', message.id);
-          const keys = await this.operations.scanKeys(existingKeyPattern);
+          const keys = await this.domainBase.getOperations().scanKeys(existingKeyPattern);
 
           if (keys.length > 0) {
-            const pipeline2 = this.client.pipeline();
+            const pipeline2 = this.domainBase.getClient().pipeline();
             keys.forEach(key => pipeline2.get(key));
             const results = await pipeline2.exec();
             const existingMessages = results.filter((msg): msg is MastraDBMessage => msg !== null) as MastraDBMessage[];
@@ -437,13 +427,14 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
         const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
 
         // Get the rank of this message in the sorted set
-        const rank = await this.client.zrank(itemThreadMessagesKey, item.id);
+        const rank = await this.domainBase.getClient().zrank(itemThreadMessagesKey, item.id);
         if (rank === null) continue;
 
         // Get previous messages if requested
         if (item.withPreviousMessages) {
           const start = Math.max(0, rank - item.withPreviousMessages);
-          const prevIds = rank === 0 ? [] : await this.client.zrange(itemThreadMessagesKey, start, rank - 1);
+          const prevIds =
+            rank === 0 ? [] : await this.domainBase.getClient().zrange(itemThreadMessagesKey, start, rank - 1);
           prevIds.forEach(id => {
             messageIds.add(id as string);
             messageIdToThreadIds[id as string] = itemThreadId;
@@ -452,7 +443,9 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
 
         // Get next messages if requested
         if (item.withNextMessages) {
-          const nextIds = await this.client.zrange(itemThreadMessagesKey, rank + 1, rank + item.withNextMessages);
+          const nextIds = await this.domainBase
+            .getClient()
+            .zrange(itemThreadMessagesKey, rank + 1, rank + item.withNextMessages);
           nextIds.forEach(id => {
             messageIds.add(id as string);
             messageIdToThreadIds[id as string] = itemThreadId;
@@ -460,7 +453,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
         }
       }
 
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
       Array.from(messageIds).forEach(id => {
         const tId = messageIdToThreadIds[id] || threadId;
         pipeline.get(getMessageKey(tId, id as string));
@@ -487,15 +480,15 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
 
     try {
       // Search in all threads in parallel
-      const threadKeys = await this.client.keys('thread:*');
+      const threadKeys = await this.domainBase.getClient().keys('thread:*');
 
       const result = await Promise.all(
         threadKeys.map(threadKey => {
           const threadId = threadKey.split(':')[1];
           if (!threadId) throw new Error(`Failed to parse thread ID from thread key "${threadKey}"`);
-          return this.client.mget<(MastraDBMessage & { _index?: number })[]>(
-            messageIds.map(id => getMessageKey(threadId, id)),
-          );
+          return this.domainBase
+            .getClient()
+            .mget<(MastraDBMessage & { _index?: number })[]>(messageIds.map(id => getMessageKey(threadId, id)));
         }),
       );
 
@@ -559,7 +552,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       }
 
       // Get all message IDs from the sorted set
-      const allMessageIds = await this.client.zrange(threadMessagesKey, 0, -1);
+      const allMessageIds = await this.domainBase.getClient().zrange(threadMessagesKey, 0, -1);
       if (allMessageIds.length === 0) {
         return {
           messages: [],
@@ -571,7 +564,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       }
 
       // Use pipeline to fetch all messages efficiently
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
       allMessageIds.forEach(id => pipeline.get(getMessageKey(threadId, id as string)));
       const results = await pipeline.exec();
 
@@ -722,7 +715,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
       const key = `${TABLE_RESOURCES}:${resourceId}`;
-      const data = await this.client.get<StorageResourceType>(key);
+      const data = await this.domainBase.getClient().get<StorageResourceType>(key);
 
       if (!data) {
         return null;
@@ -752,7 +745,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
         updatedAt: resource.updatedAt.toISOString(),
       };
 
-      await this.client.set(key, serializedResource);
+      await this.domainBase.getClient().set(key, serializedResource);
 
       return resource;
     } catch (error) {
@@ -826,10 +819,10 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       // Scan for all message keys that match any of the IDs
       for (const messageId of messageIds) {
         const pattern = getMessageKey('*', messageId);
-        const keys = await this.operations.scanKeys(pattern);
+        const keys = await this.domainBase.getOperations().scanKeys(pattern);
 
         for (const key of keys) {
-          const message = await this.client.get<MastraDBMessage>(key);
+          const message = await this.domainBase.getClient().get<MastraDBMessage>(key);
           if (message && message.id === messageId) {
             existingMessages.push(message);
             messageIdToKey[messageId] = key;
@@ -843,7 +836,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       }
 
       const threadIdsToUpdate = new Set<string>();
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
 
       // Process each existing message for updates
       for (const existingMessage of existingMessages) {
@@ -923,7 +916,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       for (const threadId of threadIdsToUpdate) {
         if (threadId) {
           const threadKey = getKey(TABLE_THREADS, { id: threadId });
-          const existingThread = await this.client.get<StorageThreadType>(threadKey);
+          const existingThread = await this.domainBase.getClient().get<StorageThreadType>(threadKey);
           if (existingThread) {
             const updatedThread = {
               ...existingThread,
@@ -942,7 +935,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       for (const messageId of messageIds) {
         const key = messageIdToKey[messageId];
         if (key) {
-          const updatedMessage = await this.client.get<MastraDBMessage>(key);
+          const updatedMessage = await this.domainBase.getClient().get<MastraDBMessage>(key);
           if (updatedMessage) {
             updatedMessages.push(updatedMessage);
           }
@@ -977,10 +970,10 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       // Find all message keys and collect thread IDs
       for (const messageId of messageIds) {
         const pattern = getMessageKey('*', messageId);
-        const keys = await this.operations.scanKeys(pattern);
+        const keys = await this.domainBase.getOperations().scanKeys(pattern);
 
         for (const key of keys) {
-          const message = await this.client.get<MastraDBMessage>(key);
+          const message = await this.domainBase.getClient().get<MastraDBMessage>(key);
           if (message && message.id === messageId) {
             messageKeys.push(key);
             if (message.threadId) {
@@ -996,7 +989,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
         return;
       }
 
-      const pipeline = this.client.pipeline();
+      const pipeline = this.domainBase.getClient().pipeline();
 
       // Delete all messages
       for (const key of messageKeys) {
@@ -1007,7 +1000,7 @@ export class MemoryStorageUpstash extends MemoryStorageBase {
       if (threadIds.size > 0) {
         for (const threadId of threadIds) {
           const threadKey = getKey(TABLE_THREADS, { id: threadId });
-          const thread = await this.client.get<StorageThreadType>(threadKey);
+          const thread = await this.domainBase.getClient().get<StorageThreadType>(threadKey);
           if (thread) {
             const updatedThread = {
               ...thread,

@@ -58,4 +58,8 @@ export class CloudflareDomainBase {
   protected get isStandalone(): boolean {
     return this.ownedOperations;
   }
+
+  getOperations(): StoreOperationsCloudflare {
+    return this.operations;
+  }
 }

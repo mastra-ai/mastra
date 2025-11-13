@@ -105,6 +105,12 @@ describe('Output Processor Memory Persistence Integration', () => {
   }
 
   it('should persist PII-redacted messages to memory using generate', async () => {
+    const memoryStore = storage.getStore('memory');
+
+    if (!memoryStore) {
+      throw new Error('Memory store not found');
+    }
+
     // Create a mock model that returns PII data
     const mockModel = new MockLanguageModelV2({
       doStream: async () => ({
@@ -145,7 +151,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     });
 
     // Verify the returned messages have redacted parts
-    const returnedAssistantMsg = result.response?.messages?.find((m: any) => m.role === 'assistant');
+    const returnedAssistantMsg = result.response?.messages?.find(m => m.role === 'assistant')!;
     expect(returnedAssistantMsg).toBeDefined();
 
     // content is an array in v5 response format
@@ -162,7 +168,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const { messages: savedMessages } = await storage.getStore('memory')?.listMessages({
+    const { messages: savedMessages } = await memoryStore.listMessages({
       threadId,
     });
 
@@ -188,6 +194,12 @@ describe('Output Processor Memory Persistence Integration', () => {
   });
 
   it('should persist PII-redacted messages to memory using stream', async () => {
+    const memoryStore = storage.getStore('memory');
+
+    if (!memoryStore) {
+      throw new Error('Memory store not found');
+    }
+
     // Create a mock model that returns PII data
     const mockModel = new MockLanguageModelV2({
       doStream: async () => ({
@@ -245,7 +257,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const { messages: savedMessages } = await storage.getStore('memory')?.listMessages({
+    const { messages: savedMessages } = await memoryStore.listMessages({
       threadId,
     });
 
@@ -271,6 +283,12 @@ describe('Output Processor Memory Persistence Integration', () => {
   });
 
   it('should chain multiple output processors and persist the result', async () => {
+    const memoryStore = storage.getStore('memory');
+
+    if (!memoryStore) {
+      throw new Error('Memory store not found');
+    }
+
     // First processor: Add a warning prefix
     class WarningPrefixProcessor implements Processor {
       readonly id = 'warning-prefix';
@@ -423,7 +441,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve from storage
-    const { messages: savedMessages } = await storage.getStore('memory')?.listMessages({
+    const { messages: savedMessages } = await memoryStore.listMessages({
       threadId,
     });
 
@@ -435,6 +453,12 @@ describe('Output Processor Memory Persistence Integration', () => {
   });
 
   it('should persist processed messages when refreshing conversation', async () => {
+    const memoryStore = storage.getStore('memory');
+
+    if (!memoryStore) {
+      throw new Error('Memory store not found');
+    }
+
     // This tests the original bug scenario - refreshing should show processed messages
     class SensitiveDataRedactor implements Processor {
       readonly id = 'sensitive-data-redactor';
@@ -547,7 +571,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Simulate page refresh - retrieve messages from storage
-    const { messages: messagesAfterRefresh } = await storage.getStore('memory')?.listMessages({
+    const { messages: messagesAfterRefresh } = await memoryStore.listMessages({
       threadId,
     });
 

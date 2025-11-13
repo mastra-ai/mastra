@@ -48,4 +48,12 @@ export class LanceDomainBase {
   protected get isStandalone(): boolean {
     return this.ownedClient;
   }
+
+  getClient(): Connection {
+    return this.client;
+  }
+
+  getOperations(): StoreOperationsLance {
+    return this.operations;
+  }
 }

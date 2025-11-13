@@ -3,10 +3,8 @@ import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@ma
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import { calculatePagination, normalizePerPage, EvalsStorageBase, TABLE_SCORERS } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { Redis } from '@upstash/redis';
 import { UpstashDomainBase } from '../base';
 import type { UpstashDomainConfig } from '../base';
-import type { StoreOperationsUpstash } from '../operations';
 import { processRecord } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
@@ -46,14 +44,6 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
     this.domainBase = new UpstashDomainBase(opts);
   }
 
-  private get client(): Redis {
-    return this.domainBase['client'];
-  }
-
-  private get operations(): StoreOperationsUpstash {
-    return this.domainBase['operations'];
-  }
-
   async init(): Promise<void> {
     // Upstash/Redis doesn't require table creation
   }
@@ -63,12 +53,12 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await this.operations.clearKeyspace({ tableName: TABLE_SCORERS });
+    await this.domainBase.getOperations().clearKeyspace({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const data = await this.operations.load<ScoreRowData>({
+      const data = await this.domainBase.getOperations().load<ScoreRowData>({
         tableName: TABLE_SCORERS,
         keys: { id },
       });
@@ -104,7 +94,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.domainBase.getOperations().scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -112,7 +102,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
         pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
-    const pipeline = this.client.pipeline();
+    const pipeline = this.domainBase.getClient().pipeline();
     keys.forEach(key => pipeline.get(key));
     const results = await pipeline.exec();
     // Filter out nulls and by scorerId
@@ -169,7 +159,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
     }
     const { key, processedRecord } = processRecord(TABLE_SCORERS, validatedScore);
     try {
-      await this.client.set(key, processedRecord);
+      await this.domainBase.getClient().set(key, processedRecord);
       return { score };
     } catch (error) {
       throw new MastraError(
@@ -195,7 +185,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.domainBase.getOperations().scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -203,7 +193,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
         pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
-    const pipeline = this.client.pipeline();
+    const pipeline = this.domainBase.getClient().pipeline();
     keys.forEach(key => pipeline.get(key));
     const results = await pipeline.exec();
     // Filter out nulls and by runId
@@ -250,7 +240,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.domainBase.getOperations().scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -258,7 +248,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
         pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
-    const pipeline = this.client.pipeline();
+    const pipeline = this.domainBase.getClient().pipeline();
     keys.forEach(key => pipeline.get(key));
     const results = await pipeline.exec();
 
@@ -310,7 +300,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.domainBase.getOperations().scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -318,7 +308,7 @@ export class EvalsStorageUpstash extends EvalsStorageBase {
         pagination: { total: 0, page, perPage: perPageInput, hasMore: false },
       };
     }
-    const pipeline = this.client.pipeline();
+    const pipeline = this.domainBase.getClient().pipeline();
     keys.forEach(key => pipeline.get(key));
     const results = await pipeline.exec();
     // Filter out nulls and by traceId and spanId
