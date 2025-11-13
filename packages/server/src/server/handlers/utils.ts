@@ -26,3 +26,18 @@ export function sanitizeBody(body: Record<string, unknown>, disallowedKeys: stri
     }
   }
 }
+
+export function parsePerPage(
+  value: string | undefined,
+  defaultValue: number = 100,
+  max: number = 1000,
+): number | false {
+  const normalized = (value || '').trim().toLowerCase();
+  // Handle explicit false to bypass pagination
+  if (normalized === 'false') {
+    return false;
+  }
+  const parsed = parseInt(value || String(defaultValue), 10);
+  if (isNaN(parsed)) return defaultValue;
+  return Math.min(max, Math.max(1, parsed));
+}

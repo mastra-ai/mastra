@@ -72,10 +72,8 @@ export async function getTracesPaginatedHandler(c: Context) {
 
     const result = await getOriginalTracesPaginatedHandler({
       mastra,
-      body: {
-        pagination,
-        filters,
-      },
+      pagination,
+      filters,
     });
 
     return c.json(result);
@@ -84,14 +82,15 @@ export async function getTracesPaginatedHandler(c: Context) {
   }
 }
 
-export async function processTraceScoringHandler(c: Context) {
+export async function scoreTracesHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const { scorerName, targets } = await c.req.json();
 
     const result = await getOriginalScoreTracesHandler({
       mastra,
-      body: { scorerName, targets },
+      scorerName,
+      targets,
     });
 
     return c.json(result);
@@ -106,14 +105,14 @@ export async function listScoresBySpan(c: Context) {
   const spanId = c.req.param('spanId');
   const page = parseInt(c.req.query('page') || '0');
   const perPage = parseInt(c.req.query('perPage') || '10');
-  const pagination: StoragePagination = { page, perPage };
 
   try {
     const scores = await getOriginalScoresBySpanHandler({
       mastra,
       traceId,
       spanId,
-      pagination,
+      page,
+      perPage,
     });
 
     return c.json(scores);

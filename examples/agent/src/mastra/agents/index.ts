@@ -1,7 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { google } from '@ai-sdk/google';
 import { jsonSchema, tool } from 'ai';
-import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
@@ -57,7 +56,7 @@ export const chefAgent = new Agent({
     myWorkflow,
   },
   memory,
-  voice: new OpenAIVoice(),
+  // voice: new OpenAIVoice(),
 });
 
 export const dynamicAgent = new Agent({

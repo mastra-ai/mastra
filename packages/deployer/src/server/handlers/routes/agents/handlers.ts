@@ -161,7 +161,7 @@ export async function generateLegacyHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
 
@@ -182,7 +182,7 @@ export async function generateHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
 
@@ -203,7 +203,7 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
 
@@ -226,7 +226,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
   } catch (err) {
@@ -287,7 +287,7 @@ export async function approveToolCallHandler(c: Context): Promise<Response | und
       mastra,
       requestContext,
       agentId,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
   } catch (err) {
@@ -355,7 +355,7 @@ export async function declineToolCallHandler(c: Context): Promise<Response | und
       mastra,
       requestContext,
       agentId,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
   } catch (err) {
@@ -444,7 +444,7 @@ export async function streamNetworkHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       // abortSignal: c.req.raw.signal,
     });
   } catch (err) {
@@ -557,10 +557,13 @@ export async function updateAgentModelHandler(c: Context) {
     const agentId = c.req.param('agentId');
     const body = await c.req.json();
 
+    const { modelId, provider } = body;
+
     const result = await getOriginalUpdateAgentModelHandler({
       mastra,
       agentId,
-      body,
+      modelId,
+      provider,
     });
 
     return c.json(result);
@@ -604,11 +607,15 @@ export async function updateAgentModelInModelListHandler(c: Context) {
     const modelConfigId = c.req.param('modelConfigId');
     const body = await c.req.json();
 
+    const { model, maxRetries, enabled } = body;
+
     const result = await getOriginalUpdateAgentModelInModelListHandler({
       mastra,
       agentId,
-      body,
       modelConfigId,
+      model,
+      maxRetries,
+      enabled,
     });
 
     return c.json(result);
@@ -623,10 +630,12 @@ export async function reorderAgentModelListHandler(c: Context) {
     const agentId = c.req.param('agentId');
     const body = await c.req.json();
 
+    const { reorderedModelIds } = body;
+
     const result = await getOriginalReorderAgentModelListHandler({
       mastra,
       agentId,
-      body,
+      reorderedModelIds,
     });
 
     return c.json(result);

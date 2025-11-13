@@ -242,7 +242,8 @@ export async function resumeAsyncAgentBuilderActionHandler(c: Context) {
       requestContext,
       actionId,
       runId,
-      body: { step, resumeData },
+      step,
+      resumeData,
       tracingOptions,
     });
 
@@ -272,7 +273,8 @@ export async function resumeAgentBuilderActionHandler(c: Context) {
       requestContext,
       actionId,
       runId,
-      body: { step, resumeData },
+      step,
+      resumeData,
       tracingOptions,
     });
 
@@ -584,7 +586,8 @@ export async function resumeStreamAgentBuilderActionHandler(c: Context) {
             actionId,
             runId,
             requestContext,
-            body: { step, resumeData },
+            step,
+            resumeData,
             tracingOptions,
           });
 

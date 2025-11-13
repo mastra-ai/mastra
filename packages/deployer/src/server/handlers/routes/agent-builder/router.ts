@@ -310,7 +310,6 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   },
                 },
               },
-              required: ['step'],
             },
           },
         },
@@ -333,7 +332,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -423,7 +422,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -544,7 +543,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],

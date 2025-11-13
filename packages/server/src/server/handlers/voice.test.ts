@@ -87,10 +87,8 @@ describe('Voice Handlers', () => {
       await expect(
         generateSpeechHandler({
           mastra,
-          body: {
-            text: 'test',
-            speakerId: '1',
-          },
+          text: 'test',
+          speakerId: '1',
         }),
       ).rejects.toThrow('Agent ID is required');
     });
@@ -100,9 +98,7 @@ describe('Voice Handlers', () => {
         generateSpeechHandler({
           mastra,
           agentId: 'test-agent',
-          body: {
-            text: 'test',
-          },
+          text: 'test',
         }),
       ).rejects.toThrow('Failed to generate speech');
     });
@@ -112,10 +108,8 @@ describe('Voice Handlers', () => {
         generateSpeechHandler({
           mastra,
           agentId: 'non-existent',
-          body: {
-            text: 'test',
-            speakerId: '1',
-          },
+          text: 'test',
+          speakerId: '1',
         }),
       ).rejects.toThrow('Agent with id non-existent not found');
     });
@@ -127,10 +121,8 @@ describe('Voice Handlers', () => {
         generateSpeechHandler({
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
           agentId: 'test-agent',
-          body: {
-            text: 'test',
-            speakerId: '1',
-          },
+          text: 'test',
+          speakerId: '1',
         }),
       ).rejects.toThrow('No voice provider configured');
     });
@@ -147,10 +139,8 @@ describe('Voice Handlers', () => {
         generateSpeechHandler({
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
           agentId: 'test-agent',
-          body: {
-            text: 'test',
-            speakerId: '1',
-          },
+          text: 'test',
+          speakerId: '1',
         }),
       ).rejects.toThrow('Failed to generate speech');
     });
@@ -171,10 +161,8 @@ describe('Voice Handlers', () => {
       const audioStream = await generateSpeechHandler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
         agentId: 'test-agent',
-        body: {
-          text: 'test',
-          speakerId: '1',
-        },
+        text: 'test',
+        speakerId: '1',
       });
 
       expect(audioStream).toBeDefined();
@@ -200,10 +188,8 @@ describe('Voice Handlers', () => {
       const audioStream = await generateSpeechHandler({
         mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }),
         agentId: 'test-agent',
-        body: {
-          text: 'test',
-          speakerId: '1',
-        },
+        text: 'test',
+        speakerId: '1',
       });
 
       expect(audioStream).toBeDefined();
@@ -216,9 +202,7 @@ describe('Voice Handlers', () => {
       await expect(
         transcribeSpeechHandler({
           mastra,
-          body: {
-            audioData: Buffer.from('test'),
-          },
+          audioData: Buffer.from('test'),
         }),
       ).rejects.toThrow('Agent ID is required');
     });
@@ -228,7 +212,6 @@ describe('Voice Handlers', () => {
         transcribeSpeechHandler({
           mastra,
           agentId: 'test-agent',
-          body: {},
         }),
       ).rejects.toThrow('Audio data is required');
     });
@@ -238,9 +221,7 @@ describe('Voice Handlers', () => {
         transcribeSpeechHandler({
           mastra,
           agentId: 'non-existent',
-          body: {
-            audioData: Buffer.from('test'),
-          },
+          audioData: Buffer.from('test'),
         }),
       ).rejects.toThrow('Agent with id non-existent not found');
     });
@@ -252,9 +233,7 @@ describe('Voice Handlers', () => {
         transcribeSpeechHandler({
           mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
           agentId: 'test-agent',
-          body: {
-            audioData: Buffer.from('test'),
-          },
+          audioData: Buffer.from('test'),
         }),
       ).rejects.toThrow('No voice provider configured');
     });
@@ -270,10 +249,8 @@ describe('Voice Handlers', () => {
       const result = await transcribeSpeechHandler({
         mastra,
         agentId: 'test-agent',
-        body: {
-          audioData: Buffer.from('test'),
-          options: { language: 'en' },
-        },
+        audioData: Buffer.from('test'),
+        options: { language: 'en' },
       });
 
       expect(result).toEqual({ text: mockText });

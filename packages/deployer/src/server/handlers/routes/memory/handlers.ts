@@ -147,10 +147,12 @@ export async function saveMessagesHandler(c: Context) {
     const body = await c.req.json();
     const requestContext = c.get('requestContext');
 
+    const { messages } = body;
+
     const result = await getOriginalSaveMessagesHandler({
       mastra,
       agentId,
-      body,
+      messages,
       requestContext,
     });
 
@@ -167,10 +169,15 @@ export async function createThreadHandler(c: Context) {
     const body = await c.req.json();
     const requestContext = c.get('requestContext');
 
+    const { title, metadata, memoryConfig, saveThread } = body;
+
     const result = await getOriginalCreateThreadHandler({
       mastra,
       agentId,
-      body,
+      title,
+      metadata,
+      memoryConfig,
+      saveThread,
       requestContext,
     });
 
@@ -188,11 +195,15 @@ export async function updateThreadHandler(c: Context) {
     const body = await c.req.json();
     const requestContext = c.get('requestContext');
 
+    const { title, metadata, resourceId } = body;
+
     const result = await getOriginalUpdateThreadHandler({
       mastra,
       agentId,
       threadId,
-      body,
+      title,
+      metadata,
+      resourceId,
       requestContext,
     });
 
@@ -262,11 +273,15 @@ export async function updateWorkingMemoryHandler(c: Context) {
     const body = await c.req.json();
     const requestContext = c.get('requestContext');
 
+    const { resourceId, memoryConfig, workingMemory } = body;
+
     const result = await getOriginalUpdateWorkingMemoryHandler({
       mastra,
       agentId,
       threadId,
-      body,
+      resourceId,
+      memoryConfig,
+      workingMemory,
       requestContext,
     });
 

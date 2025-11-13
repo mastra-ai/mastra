@@ -25,7 +25,7 @@ import {
   approveToolCallHandler,
   declineToolCallHandler,
 } from './handlers';
-import { getListenerHandler, getSpeakersHandler, speakHandler, listenHandler } from './voice';
+import { getListenerHandler, getSpeakersHandler, generateSpeechHandler, transcribeSpeechHandler } from './voice';
 
 export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
   const router = new Hono();
@@ -110,11 +110,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 output: { type: 'object' },
                 tracingOptions: {
@@ -173,11 +168,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 structuredOutput: {
                   type: 'object',
@@ -368,11 +358,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 output: { type: 'object' },
                 tracingOptions: {
@@ -431,11 +416,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 structuredOutput: {
                   type: 'object',
@@ -1013,7 +993,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    speakHandler,
+    generateSpeechHandler,
   );
 
   router.post(
@@ -1089,7 +1069,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    speakHandler,
+    generateSpeechHandler,
   );
 
   router.get(
@@ -1193,7 +1173,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    listenHandler,
+    transcribeSpeechHandler,
   );
 
   router.post(
@@ -1263,7 +1243,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    listenHandler,
+    transcribeSpeechHandler,
   );
 
   router.get(
@@ -1325,7 +1305,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                requestContext: { type: 'object' },
+                agentRequestContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -1367,7 +1347,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
                 toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
-                requestContext: { type: 'object', description: 'Request Context for the execution' },
+                agentRequestContext: { type: 'object', description: 'Request Context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
               required: ['runId', 'toolCallId'],
@@ -1410,7 +1390,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
                 toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
-                requestContext: { type: 'object', description: 'Request Context for the execution' },
+                agentRequestContext: { type: 'object', description: 'Request Context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
               required: ['runId', 'toolCallId'],

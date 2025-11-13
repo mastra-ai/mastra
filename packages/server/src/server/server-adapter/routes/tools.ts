@@ -1,0 +1,61 @@
+import {
+  getToolByIdHandler,
+  listToolsHandler,
+  executeToolHandler as executeToolHandlerWrapped,
+} from '../../handlers/tools';
+import {
+  listToolsResponseSchema,
+  serializedToolSchema,
+  toolIdPathParams,
+  executeToolContextBodySchema,
+  executeToolResponseSchema,
+} from '../../schemas/agents';
+import { optionalRunIdSchema } from '../../schemas/common';
+import { createRoute } from './route-builder';
+import type { ServerRoute, ServerRouteHandler } from '.';
+
+/**
+ * Wrapper for executeToolHandler to properly handle the curried function signature.
+ * executeToolHandler is curried: executeToolHandler(tools) returns the actual handler.
+ */
+const executeToolHandler = async (params: any) => {
+  const { tools } = params;
+  return executeToolHandlerWrapped(tools);
+};
+
+export const TOOLS_ROUTES: ServerRoute[] = [
+  createRoute({
+    method: 'GET',
+    responseType: 'json',
+    handler: listToolsHandler as unknown as ServerRouteHandler,
+    path: '/api/tools',
+    responseSchema: listToolsResponseSchema,
+    summary: 'List all tools',
+    description: 'Returns a list of all available tools in the system',
+    tags: ['Tools'],
+  }),
+  createRoute({
+    method: 'GET',
+    responseType: 'json',
+    handler: getToolByIdHandler as unknown as ServerRouteHandler,
+    path: '/api/tools/:toolId',
+    pathParamSchema: toolIdPathParams,
+    responseSchema: serializedToolSchema,
+    summary: 'Get tool by ID',
+    description: 'Returns details for a specific tool including its schema and configuration',
+    tags: ['Tools'],
+  }),
+  createRoute({
+    method: 'POST',
+    responseType: 'json',
+    handler: executeToolHandler as unknown as ServerRouteHandler,
+    path: '/api/tools/:toolId/execute',
+    pathParamSchema: toolIdPathParams,
+    queryParamSchema: optionalRunIdSchema,
+    bodySchema: executeToolContextBodySchema,
+    responseSchema: executeToolResponseSchema,
+    summary: 'Execute tool',
+    description: 'Executes a specific tool with the provided input data',
+    tags: ['Tools'],
+  }),
+];

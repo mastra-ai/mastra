@@ -42,7 +42,7 @@ export async function getToolByIdHandler(c: Context) {
 }
 
 export function executeToolHandler(tools: Record<string, any>) {
-  return async (c: Context) => {
+  const handler = async (c: Context) => {
     try {
       const mastra: Mastra = c.get('mastra');
       const requestContext = c.get('requestContext');
@@ -63,6 +63,11 @@ export function executeToolHandler(tools: Record<string, any>) {
       return handleError(error, 'Error executing tool');
     }
   };
+
+  // Set the function name for route parity testing
+  Object.defineProperty(handler, 'name', { value: 'executeToolHandler', writable: false });
+
+  return handler;
 }
 
 export async function getAgentToolHandler(c: Context) {

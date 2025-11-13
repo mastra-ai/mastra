@@ -312,16 +312,14 @@ describe('Agent Handlers', () => {
       const result = await generateHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        // @ts-expect-error
+        experimental_output: undefined,
+        agentRequestContext: {
+          user: {
+            name: 'test-user',
           },
         },
         requestContext: new RequestContext(),
@@ -335,16 +333,14 @@ describe('Agent Handlers', () => {
         generateHandler({
           mastra: mockMastra,
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            requestContext: {
-              user: {
-                name: 'test-user',
-              },
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          // @ts-expect-error
+          experimental_output: undefined,
+          agentRequestContext: {
+            user: {
+              name: 'test-user',
             },
           },
           requestContext: new RequestContext(),
@@ -364,16 +360,13 @@ describe('Agent Handlers', () => {
       const result = await streamGenerateLegacyHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
+        agentRequestContext: {
+          user: {
+            name: 'test-user',
           },
         },
         requestContext: new RequestContext(),
@@ -387,16 +380,13 @@ describe('Agent Handlers', () => {
         streamGenerateLegacyHandler({
           mastra: mockMastra,
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            requestContext: {
-              user: {
-                name: 'test-user',
-              },
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+          agentRequestContext: {
+            user: {
+              name: 'test-user',
             },
           },
           requestContext: new RequestContext(),
@@ -415,10 +405,8 @@ describe('Agent Handlers', () => {
       const updateResult = await updateAgentModelHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          modelId: 'gpt-4o-mini',
-          provider: 'openai',
-        },
+        modelId: 'gpt-4o-mini',
+        provider: 'openai',
       });
 
       const agent = mockMastra.getAgentById('test-agent');
@@ -431,16 +419,14 @@ describe('Agent Handlers', () => {
       const result = await streamGenerateHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        // @ts-expect-error
+        experimental_output: undefined,
+        agentRequestContext: {
+          user: {
+            name: 'test-user',
           },
         },
         requestContext: new RequestContext(),
@@ -465,9 +451,7 @@ describe('Agent Handlers', () => {
       await reorderAgentModelListHandler({
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
-        body: {
-          reorderedModelIds: reversedModelListIds,
-        },
+        reorderedModelIds: reversedModelListIds,
       });
 
       const reorderedModelList = await agent.getModelList();
@@ -488,13 +472,11 @@ describe('Agent Handlers', () => {
         mastra: mockMastra,
         agentId: 'test-multi-model-agent',
         modelConfigId: model1Id,
-        body: {
-          model: {
-            modelId: 'gpt-5',
-            provider: 'openai',
-          },
-          maxRetries: 4,
+        model: {
+          modelId: 'gpt-5',
+          provider: 'openai',
         },
+        maxRetries: 4,
       });
       const updatedModelList = await agent.getModelList();
       expect(updatedModelList?.[0].model.modelId).toBe('gpt-4o-mini');

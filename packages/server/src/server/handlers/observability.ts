@@ -6,18 +6,17 @@ import { handleError } from './error';
 
 interface ObservabilityContext extends Context {
   traceId?: string;
-  body?: TracesPaginatedArg;
+  pagination?: TracesPaginatedArg['pagination'];
+  filters?: TracesPaginatedArg['filters'];
 }
 
 interface ScoreTracesContext extends Context {
-  body?: {
-    // scorer.id
-    scorerName: string;
-    targets: Array<{
-      traceId: string;
-      spanId?: string;
-    }>;
-  };
+  // scorer.id
+  scorerName?: string;
+  targets?: Array<{
+    traceId: string;
+    spanId?: string;
+  }>;
 }
 
 /**
@@ -51,18 +50,12 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
  * Get paginated traces with filtering and pagination
  * Returns only root spans (parent spans) for pagination, not child spans
  */
-export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityContext) {
+export async function getTracesPaginatedHandler({ mastra, pagination, filters }: ObservabilityContext) {
   try {
     const storage = mastra.getStorage();
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
-
-    if (!body) {
-      throw new HTTPException(400, { message: 'Request body is required' });
-    }
-
-    const { filters, pagination } = body;
 
     if (pagination?.page && pagination.page < 0) {
       throw new HTTPException(400, { message: 'Page must be a non-negative integer' });
@@ -97,14 +90,8 @@ export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityC
  * Score traces using a specified scorer
  * Fire-and-forget approach - returns immediately while scoring runs in background
  */
-export async function scoreTracesHandler({ mastra, body }: ScoreTracesContext) {
+export async function scoreTracesHandler({ mastra, scorerName, targets }: ScoreTracesContext) {
   try {
-    if (!body) {
-      throw new HTTPException(400, { message: 'Request body is required' });
-    }
-
-    const { scorerName, targets } = body;
-
     if (!scorerName) {
       throw new HTTPException(400, { message: 'Scorer ID is required' });
     }
@@ -148,8 +135,14 @@ export async function listScoresBySpan({
   mastra,
   traceId,
   spanId,
-  pagination,
-}: Context & { traceId: string; spanId: string; pagination: StoragePagination }) {
+  page,
+  perPage,
+}: Context & {
+  traceId: string;
+  spanId: string;
+  page: StoragePagination['page'];
+  perPage: StoragePagination['perPage'];
+}) {
   try {
     const storage = mastra.getStorage();
     if (!storage) {
@@ -160,7 +153,7 @@ export async function listScoresBySpan({
       throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
     }
 
-    return await storage.listScoresBySpan({ traceId, spanId, pagination });
+    return await storage.listScoresBySpan({ traceId, spanId, pagination: { page, perPage } });
   } catch (error) {
     return handleError(error, 'Error getting scores by span');
   }

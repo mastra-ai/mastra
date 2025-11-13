@@ -14,11 +14,12 @@ import {
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
-  streamVNextWorkflowHandler,
   resumeStreamWorkflowHandler,
   observeStreamVNextWorkflowHandler,
   streamLegacyWorkflowHandler,
   observeStreamLegacyWorkflowHandler,
+  streamWorkflowHandler,
+  observeStreamWorkflowHandler,
 } from './handlers';
 
 export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
@@ -187,6 +188,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -285,6 +297,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -308,7 +331,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -398,7 +421,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -444,7 +467,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    streamVNextWorkflowHandler,
+    streamWorkflowHandler,
   );
 
   router.post(
@@ -475,7 +498,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    observeStreamVNextWorkflowHandler,
+    observeStreamWorkflowHandler,
   );
 
   router.post(
@@ -492,7 +515,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -538,7 +561,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
       tags: ['workflows'],
     }),
-    streamVNextWorkflowHandler,
+    streamWorkflowHandler,
   );
 
   router.post(

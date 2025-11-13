@@ -51,7 +51,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
       tags: ['networkMemory'],
       parameters: [
         {
-          name: 'resourceid',
+          name: 'resourceId',
           in: 'query',
           required: true,
           schema: { type: 'string' },
@@ -268,6 +268,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
                 resourceId: { type: 'string' },
                 threadId: { type: 'string' },
               },
+              required: ['resourceId'],
             },
           },
         },
@@ -304,7 +305,14 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         required: true,
         content: {
           'application/json': {
-            schema: { type: 'object' },
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                metadata: { type: 'object' },
+                resourceId: { type: 'string' },
+              },
+            },
           },
         },
       },
@@ -958,6 +966,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
               properties: {
                 workingMemory: { type: 'string' },
                 resourceId: { type: 'string' },
+                memoryConfig: { type: 'object' },
               },
               required: ['workingMemory'],
             },
@@ -1002,6 +1011,7 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
                 resourceId: { type: 'string' },
                 threadId: { type: 'string' },
               },
+              required: ['resourceId'],
             },
           },
         },
@@ -1038,7 +1048,14 @@ export function memoryRoutes(bodyLimitOptions: BodyLimitOptions) {
         required: true,
         content: {
           'application/json': {
-            schema: { type: 'object' },
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                metadata: { type: 'object' },
+                resourceId: { type: 'string' },
+              },
+            },
           },
         },
       },

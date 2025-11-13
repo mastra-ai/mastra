@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { describeRoute } from 'hono-openapi';
-import { getTraceHandler, getTracesPaginatedHandler, listScoresBySpan, processTraceScoringHandler } from './handlers';
+import { getTraceHandler, getTracesPaginatedHandler, listScoresBySpan, scoreTracesHandler } from './handlers';
 
 export function observabilityRouter() {
   const router = new Hono();
@@ -256,7 +256,7 @@ export function observabilityRouter() {
         },
       },
     }),
-    processTraceScoringHandler,
+    scoreTracesHandler,
   );
 
   return router;
