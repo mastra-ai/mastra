@@ -32,7 +32,7 @@ vi.mock('../graph-rag', async importOriginal => {
       { content: 'bar', metadata: { text: 'bar' } },
     ]);
 
-    constructor(...args: any[]) {
+    constructor() {
       mockGraphRAGInstances.push(this);
     }
   }

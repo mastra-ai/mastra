@@ -3,7 +3,6 @@ import * as pkg from 'empathic/package';
 import type { WorkspacesRoot } from 'find-workspaces';
 import { findWorkspacesRoot, findWorkspaces } from 'find-workspaces';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DepsService } from '../services';
 import {
   collectTransitiveWorkspaceDependencies,
   packWorkspaceDependencies,
