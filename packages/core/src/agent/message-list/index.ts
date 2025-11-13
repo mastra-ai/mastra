@@ -1039,8 +1039,6 @@ export class MessageList {
                   ...part.toolInvocation.args,
                 },
               };
-              // Tool invocations are now managed only within parts array
-              // No need to maintain a separate toolInvocations array
             }
             // Map the index of the tool call in messageV2 to the index of the tool call in latestMessage
             const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
@@ -1405,13 +1403,11 @@ export class MessageList {
       parts: message.parts,
     };
 
-    // Tool invocations are now stored only in parts array
     if (message.reasoning) content.reasoning = message.reasoning;
     if (message.annotations) content.annotations = message.annotations;
     if (message.experimental_attachments) {
       content.experimental_attachments = message.experimental_attachments;
     }
-    // Preserve metadata field if present
     if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
       content.metadata = message.metadata as Record<string, unknown>;
     }
@@ -2257,13 +2253,6 @@ export class MessageList {
           hasNonToolReasoningParts = true;
         }
       }
-    }
-
-    // 5. Text content is now only stored in parts array
-    // Extract text from parts if needed for fallback
-    const textFromParts = dbMsg.content.parts?.find(p => p.type === 'text')?.text;
-    if (textFromParts && !hasNonToolReasoningParts && !parts.some(p => p.type === 'text')) {
-      parts.push({ type: 'text', text: textFromParts });
     }
 
     return {
