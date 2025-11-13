@@ -22,12 +22,21 @@ export function safeParseErrorObject(obj: unknown): string {
   }
 }
 
-export type SerializableError = Error & { toJSON: () => Record<string, any> };
+export type SerializedError = {
+  name: string;
+  message: string;
+  stack?: string;
+  cause?: SerializedError | unknown;
+} & Record<string, any>;
+
+export type SerializableError = Error & {
+  toJSON: () => SerializedError;
+};
 
 /**
  * Safely converts an unknown error to an Error instance.
  */
-export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
+export function getErrorFromUnknown<SERIALIZABLE extends boolean = true, SERIALIZE_STACK extends boolean = true>(
   unknown: unknown,
   options: {
     /**
@@ -54,7 +63,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
      * Only affects JSON serialization when supportSerialization is true.
      * Defaults to `true`
      */
-    serializeStack?: boolean;
+    serializeStack?: SERIALIZE_STACK;
   } = {},
 ): SERIALIZABLE extends true ? SerializableError : Error {
   const defaultOptions = {
@@ -68,7 +77,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
 
   if (unknown && unknown instanceof Error) {
     if (supportSerialization) {
-      addErrorToJSON(unknown, { serializeStack });
+      addErrorToJSON(unknown, { serializeStack, maxDepth });
     }
     return unknown as SERIALIZABLE extends true ? SerializableError : Error;
   }
@@ -103,7 +112,7 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
   }
 
   if (supportSerialization) {
-    addErrorToJSON(error, { serializeStack });
+    addErrorToJSON(error, { serializeStack, maxDepth });
   }
   return error as SERIALIZABLE extends true ? SerializableError : Error;
 }
@@ -112,15 +121,30 @@ export function getErrorFromUnknown<SERIALIZABLE extends boolean = true>(
  * Adds a toJSON method to an Error instance for proper serialization.
  * Ensures that message, name, stack, cause, and custom properties are all serialized.
  */
-function addErrorToJSON(error: Error, options?: { serializeStack?: boolean }): void {
+function addErrorToJSON(
+  error: Error,
+  options?: { serializeStack?: boolean; maxDepth?: number; currentDepth?: number },
+): void {
   if ((error as SerializableError).toJSON) {
     return;
+  }
+
+  const maxDepth = options?.maxDepth ?? 5;
+  const currentDepth = options?.currentDepth ?? 0;
+
+  // Recursively add toJSON to cause chain
+  if (error.cause instanceof Error && currentDepth < maxDepth) {
+    addErrorToJSON(error.cause, {
+      serializeStack: options?.serializeStack,
+      maxDepth,
+      currentDepth: currentDepth + 1,
+    });
   }
 
   // Define toJSON as non-enumerable to avoid interfering with object comparisons
   Object.defineProperty(error, 'toJSON', {
     value: function (this: Error) {
-      const json: Record<string, any> = {
+      const json: SerializedError = {
         message: this.message,
         name: this.name,
       };
@@ -130,9 +154,15 @@ function addErrorToJSON(error: Error, options?: { serializeStack?: boolean }): v
         json.stack = this.stack;
       }
 
+      // Serialize cause if it's an Error and has a toJSON method, else include as is
       if (this.cause !== undefined) {
-        json.cause = this.cause;
+        if (this.cause instanceof Error && 'toJSON' in this.cause && typeof this.cause.toJSON === 'function') {
+          json.cause = this.cause.toJSON();
+        } else {
+          json.cause = this.cause;
+        }
       }
+
       // Include all enumerable custom properties
       const errorAsAny = this as any;
       for (const key in errorAsAny) {
