@@ -3,11 +3,19 @@ import { validateAndSaveScore, createOnScorerHook } from './hooks';
 
 describe('validateAndSaveScore', () => {
   let mockStorage: any;
+  let mockEvalsStore: any;
 
   beforeEach(() => {
-    mockStorage = {
+    mockEvalsStore = {
       saveScore: vi.fn().mockResolvedValue({ score: 'mocked' }),
     };
+
+    mockStorage = {
+      getStore: vi.fn().mockResolvedValue(mockEvalsStore),
+    };
+
+    // Keep saveScore for backward compatibility with tests that access it directly
+    mockStorage.saveScore = mockEvalsStore.saveScore;
   });
 
   it('should validate and save score with correct payload', async () => {
@@ -89,9 +97,16 @@ describe('createOnScorerHook', () => {
   let hook: (hookData: any) => Promise<void>;
 
   beforeEach(() => {
-    mockStorage = {
+    const mockEvalsStore = {
       saveScore: vi.fn().mockResolvedValue({ score: 'mocked' }),
     };
+
+    mockStorage = {
+      getStore: vi.fn().mockResolvedValue(mockEvalsStore),
+    };
+
+    // Keep saveScore for backward compatibility with tests that access it directly
+    mockStorage.saveScore = mockEvalsStore.saveScore;
 
     mockMastra = {
       getStorage: vi.fn().mockReturnValue(mockStorage),
