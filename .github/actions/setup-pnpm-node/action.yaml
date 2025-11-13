@@ -1,0 +1,32 @@
+name: Setup pnpm and Node.js
+description: Setup pnpm with custom registry and Node.js with cache
+
+inputs:
+  install-dependencies:
+    description: 'Whether to run pnpm install after setup'
+    required: false
+    default: 'true'
+  package-manager-cache::
+    description: 'Should use package manager cache'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      name: Install pnpm
+      with:
+        run_install: false
+
+    - name: Setup Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.13.0
+        cache: 'pnpm'
+        package-manager-cache: ${{ inputs.package-manager-cache == 'true' }}
+
+    - name: Install dependencies
+      if: ${{ inputs.install-dependencies == 'true' }}
+      shell: bash
+      run: pnpm install

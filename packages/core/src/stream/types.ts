@@ -1,4 +1,3 @@
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider';
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
@@ -8,13 +7,12 @@ import type {
   LanguageModelV2,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai';
+import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { TracingContext } from '../ai-tracing/types';
+import type { TracingContext } from '../observability';
 import type { OutputProcessor } from '../processors';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
@@ -334,6 +332,7 @@ interface RoutingAgentEndPayload {
   selectionReason: string;
   iteration: number;
   runId: string;
+  usage: LanguageModelV2Usage;
 }
 
 interface RoutingAgentTextDeltaPayload {
@@ -365,6 +364,7 @@ interface AgentExecutionEndPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  usage: LanguageModelV2Usage;
 }
 
 interface WorkflowExecutionStartPayload {
@@ -390,6 +390,7 @@ interface WorkflowExecutionEndPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  usage: LanguageModelV2Usage;
 }
 
 interface ToolExecutionStartPayload {
@@ -436,6 +437,7 @@ interface NetworkFinishPayload {
   threadId?: string;
   threadResourceId?: string;
   isOneOff: boolean;
+  usage: LanguageModelV2Usage;
 }
 
 interface ToolCallApprovalPayload {
@@ -663,8 +665,6 @@ export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Prom
 
 export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
-  rootSpan?: Span;
-  telemetry_settings?: TelemetrySettings;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;

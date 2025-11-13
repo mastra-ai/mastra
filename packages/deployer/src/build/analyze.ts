@@ -15,6 +15,37 @@ import { getPackageInfo } from 'local-pkg';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { findNativePackageModule } from './utils';
 
+type ErrorId = 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD';
+
+function throwExternalDependencyError({
+  errorId,
+  moduleName,
+  packageName,
+  messagePrefix,
+}: {
+  errorId: ErrorId;
+  moduleName: string;
+  packageName: string;
+  messagePrefix: string;
+}): never {
+  throw new MastraError({
+    id: errorId,
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+    details: {
+      importFile: moduleName,
+      packageName: packageName,
+    },
+    text: `${messagePrefix} \`${packageName}\` to your externals.
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["${packageName}"],
+  }
+})`,
+  });
+}
+
 /**
  * Validates the bundled output by attempting to import each generated module.
  * Tracks external dependencies that couldn't be bundled.
@@ -76,35 +107,49 @@ async function validateOutput(
         await validate(join(projectRoot, file.fileName));
       }
     } catch (err) {
-      if (err instanceof Error && err.message.includes('Error: No native build was found for ')) {
-        const moduleName = findNativePackageModule(file.moduleIds);
+      if (err instanceof Error) {
+        let moduleName: string | undefined | null = null;
+        let errorConfig: {
+          id: ErrorId;
+          messagePrefix: string;
+        } | null = null;
 
-        if (!moduleName) {
-          logger.debug(`Could not determine the module name for file ${file.fileName}`);
-          continue;
-        }
+        if (err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
+          // This is the preferred way to get the module name that caused the issue
+          const moduleIdName = file.moduleIds.length >= 2 ? file.moduleIds[file.moduleIds.length - 2] : undefined;
+          // For some reason some virtual modules are quite sparse on their details, so name (e.g. '.mastra/.build/puppeteer') is a good enough fallback
+          const fallbackName = file.name.split('/').pop();
 
-        const pkgInfo = await getPackageInfo(moduleName);
-        const packageName = pkgInfo?.packageJson?.name;
-
-        if (packageName) {
-          throw new MastraError({
+          moduleName = moduleIdName ?? fallbackName;
+          errorConfig = {
+            id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
+            messagePrefix: "Mastra wasn't able to build your project. Please add",
+          };
+        } else if (err.message.includes('Error: No native build was found for ')) {
+          moduleName = findNativePackageModule(file.moduleIds);
+          errorConfig = {
             id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              importFile: moduleName,
-              packageName: packageName,
-            },
-            text: `We found a binary dependency in your bundle. Please add \`${packageName}\` to your externals.
-
-export const mastra = new Mastra({
-  bundler: {
-    externals: ["${packageName}"],
-  }
-})`,
-          });
+            messagePrefix: 'We found a binary dependency in your bundle. Please add',
+          };
         }
+
+        if (moduleName && errorConfig) {
+          const pkgInfo = await getPackageInfo(moduleName);
+          const packageName = pkgInfo?.packageJson?.name;
+
+          if (packageName) {
+            throwExternalDependencyError({
+              errorId: errorConfig.id,
+              moduleName,
+              packageName,
+              messagePrefix: errorConfig.messagePrefix,
+            });
+          } else {
+            logger.debug(`Could not determine the module name for file ${file.fileName}`);
+          }
+        }
+
+        logger.debug(`Error while validating module ${file.fileName}: ${err.message}`);
       }
     }
   }

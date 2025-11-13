@@ -44,6 +44,7 @@ const meta = {
   togetherai: "Together AI",
   upstage: "Upstage",
   venice: "Venice AI",
+  vultr: "Vultr",
   wandb: "Weights & Biases",
   zai: "Z.AI",
   "zai-coding-plan": "Z.AI Coding Plan",

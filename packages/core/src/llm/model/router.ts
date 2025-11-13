@@ -110,7 +110,7 @@ export class ModelRouterLanguageModel implements LanguageModelV2 {
           start(controller) {
             controller.enqueue({
               type: 'error',
-              error: error instanceof Error ? error.message : String(error),
+              error: error,
             } as LanguageModelV2StreamPart);
           },
         }),

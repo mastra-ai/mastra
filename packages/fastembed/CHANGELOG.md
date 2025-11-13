@@ -1,5 +1,15 @@
 # @mastra/fastembed
 
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Upgraded to AI SDK v5 (specification version v2) for compatibility with @mastra/core. Default exports now use v2 specification. Legacy v1 exports available for backwards compatibility via `fastembed.smallLegacy` and `fastembed.baseLegacy`. ([#9349](https://github.com/mastra-ai/mastra/pull/9349))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
 ## 0.10.5
 
 ### Patch Changes

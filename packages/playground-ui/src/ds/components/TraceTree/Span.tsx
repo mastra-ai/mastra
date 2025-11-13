@@ -7,7 +7,6 @@ import { ChevronIcon } from '../../icons/ChevronIcon';
 import { DbIcon } from '../../icons/DbIcon';
 import { Icon } from '../../icons/Icon';
 import { MemoryIcon } from '../../icons/MemoryIcon';
-import { ScoreIcon } from '../../icons/ScoreIcon';
 import { ToolsIcon } from '../../icons/ToolsIcon';
 import { TraceIcon } from '../../icons/TraceIcon';
 import { WorkflowIcon } from '../../icons/WorkflowIcon';
@@ -18,7 +17,7 @@ import { Time } from './Time';
 export interface SpanProps {
   children: React.ReactNode;
   durationMs: number;
-  variant: 'tool' | 'agent' | 'workflow' | 'memory' | 'rag' | 'storage' | 'eval' | 'other';
+  variant: 'tool' | 'agent' | 'workflow' | 'memory' | 'rag' | 'storage' | 'other';
   tokenCount?: number;
   spans?: React.ReactNode;
   isRoot?: boolean;
@@ -35,7 +34,6 @@ export const spanIconMap = {
   memory: MemoryIcon,
   rag: TraceIcon,
   storage: DbIcon,
-  eval: ScoreIcon,
   other: TraceIcon,
 };
 
@@ -46,7 +44,6 @@ export const spanVariantClasses = {
   memory: 'text-accent2',
   rag: 'text-accent2',
   storage: 'text-accent2',
-  eval: 'text-accent4',
   other: 'text-icon6',
 };
 

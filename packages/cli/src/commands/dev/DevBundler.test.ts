@@ -38,7 +38,6 @@ vi.mock('@mastra/deployer/build', () => {
       off: vi.fn(),
     }),
     getWatcherInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
-    writeTelemetryConfig: vi.fn(),
   };
 });
 

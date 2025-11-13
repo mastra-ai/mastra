@@ -5,7 +5,8 @@ import { webAgent } from './agents/web-agent';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    id: 'mastra-storage',
+    // stores observability, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ':memory:',
   }),
   agents: { webAgent },

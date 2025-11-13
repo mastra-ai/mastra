@@ -178,7 +178,7 @@ The main workflow (`databaseQueryWorkflow`) is a multi-step interactive workflow
 
 ```typescript
 const workflow = mastra.getWorkflow('databaseQueryWorkflow');
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 // Start workflow (will suspend for connection string)
 let result = await run.start({ inputData: {} });

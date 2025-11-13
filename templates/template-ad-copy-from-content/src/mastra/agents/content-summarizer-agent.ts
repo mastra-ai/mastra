@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 export const contentSummarizerAgent = new Agent({
+  id: 'content-summarizer-agent',
   name: 'Content Summarizer Agent',
   description: 'Specialized agent for creating marketing-focused summaries from content',
   instructions: `

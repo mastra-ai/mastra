@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 export const webSummarizationAgent = new Agent({
+  id: 'web-summarization-agent',
   name: 'Web Content Summarization Agent',
   description: 'An agent that summarizes web content from search results to prevent token limit issues',
   instructions: `

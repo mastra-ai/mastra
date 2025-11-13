@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.15.8",
+  "version": "1.0.0-beta.0",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -65,7 +65,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "@types/pg": "^8.15.5",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
@@ -75,7 +75,7 @@
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.1-0 <0.23.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",
@@ -86,5 +86,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

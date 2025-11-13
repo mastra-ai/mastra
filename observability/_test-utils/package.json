@@ -1,0 +1,20 @@
+{
+  "name": "@observability/test-utils",
+  "version": "0.0.1",
+  "description": "Test utilities for observability exporters",
+  "type": "module",
+  "private": true,
+  "main": "./index.ts",
+  "files": [
+    "index.ts"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=0.18.1-0 <2.0.0-0"
+  }
+}

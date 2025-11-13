@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
-import type { ScoreRowData } from '@mastra/core/scores';
+import type { ScoreRowData } from '@mastra/core/evals';
 import { TABLE_SCORERS, type MastraStorage } from '@mastra/core/storage';
 
 // Helper function for creating test scores
@@ -52,7 +52,10 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       await storage.saveScore(score3);
 
       // Test getting all evals for the agent
-      const allScoresByScorerId = await storage.getScoresByScorerId({ scorerId, pagination: { page: 0, perPage: 10 } });
+      const allScoresByScorerId = await storage.listScoresByScorerId({
+        scorerId,
+        pagination: { page: 0, perPage: 10 },
+      });
       expect(allScoresByScorerId?.scores).toHaveLength(3);
       expect(allScoresByScorerId?.scores.map(e => e.runId)).toEqual(
         expect.arrayContaining([score1.runId, score2.runId, score3.runId]),
@@ -62,7 +65,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       );
 
       // Test getting scores for non-existent scorer
-      const nonExistentScores = await storage.getScoresByScorerId({
+      const nonExistentScores = await storage.listScoresByScorerId({
         scorerId: 'non-existent-scorer',
         pagination: { page: 0, perPage: 10 },
       });
@@ -75,7 +78,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       const score2 = createSampleScore({ scorerId, source: 'LIVE' });
       await storage.saveScore(score1);
       await storage.saveScore(score2);
-      const scoresBySource = await storage.getScoresByScorerId({
+      const scoresBySource = await storage.listScoresByScorerId({
         scorerId,
         pagination: { page: 0, perPage: 10 },
         source: 'TEST',
@@ -88,7 +91,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       const scorerId = `scorer-${randomUUID()}`;
       const scorer = createSampleScore({ scorerId });
       await storage.saveScore(scorer);
-      const result = await storage.getScoresByRunId({ runId: scorer.runId, pagination: { page: 0, perPage: 10 } });
+      const result = await storage.listScoresByRunId({ runId: scorer.runId, pagination: { page: 0, perPage: 10 } });
       expect(result.scores).toHaveLength(1);
       expect(result.pagination.total).toBe(1);
       expect(result.pagination.page).toBe(0);
@@ -96,11 +99,11 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       expect(result.pagination.hasMore).toBe(false);
     });
 
-    it('getScoresByEntityId should return paginated scores with total count when returnPaginationResults is true', async () => {
+    it('listScoresByEntityId should return paginated scores with total count when returnPaginationResults is true', async () => {
       const scorer = createSampleScore({ scorerId: `scorer-${randomUUID()}` });
       await storage.saveScore(scorer);
 
-      const result = await storage.getScoresByEntityId({
+      const result = await storage.listScoresByEntityId({
         entityId: scorer.entity!.id!,
         entityType: scorer.entityType!,
         pagination: { page: 0, perPage: 10 },
@@ -112,7 +115,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       expect(result.pagination.hasMore).toBe(false);
     });
 
-    if (storage.supports.getScoresBySpan) {
+    if (storage.supports.listScoresBySpan) {
       it('should retrieve scores by trace and span id', async () => {
         const scorerId = `scorer-${randomUUID()}`;
         const traceId = randomUUID();
@@ -121,7 +124,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         const score = createSampleScore({ scorerId, traceId, spanId });
         await storage.saveScore(score);
 
-        const result = await storage.getScoresBySpan({
+        const result = await storage.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 10 },
@@ -148,7 +151,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
         await storage.saveScore(score2);
         await storage.saveScore(score3);
 
-        const result = await storage.getScoresBySpan({
+        const result = await storage.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 10 },
@@ -173,7 +176,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
           { count: 1, scorerId, traceId: randomUUID(), spanId: randomUUID() }, // both different
         ]);
 
-        const firstPage = await storage.getScoresBySpan({
+        const firstPage = await storage.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 2 },
@@ -200,7 +203,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
           { count: 1, scorerId, traceId: randomUUID(), spanId: randomUUID() }, // both different
         ]);
 
-        const secondPage = await storage.getScoresBySpan({
+        const secondPage = await storage.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 1, perPage: 2 },
@@ -234,19 +237,19 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
           { count: 1, scorerId, traceId, spanId: otherSpanId2 }, // same trace, different span (again)
         ]);
 
-        const firstPage = await storage.getScoresBySpan({
+        const firstPage = await storage.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 0, perPage: 2 },
         });
 
-        const secondPage = await storage.getScoresBySpan({
+        const secondPage = await storage.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 1, perPage: 2 },
         });
 
-        const lastPage = await storage.getScoresBySpan({
+        const lastPage = await storage.listScoresBySpan({
           traceId,
           spanId,
           pagination: { page: 2, perPage: 2 },

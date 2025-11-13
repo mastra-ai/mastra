@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, ArrowRightToLineIcon, CoinsIcon } from 'lucide-react';
-import { AISpanRecord } from '@mastra/core';
+import { SpanRecord } from '@mastra/core/storage';
 
 // V5 format (AI SDK v5)
 type V5TokenUsage = {
@@ -22,7 +22,7 @@ type TokenUsage = V5TokenUsage | LegacyTokenUsage;
 
 type TraceSpanUsageProps = {
   traceUsage?: TokenUsage;
-  traceSpans?: AISpanRecord[];
+  traceSpans?: SpanRecord[];
   className?: string;
   spanUsage?: TokenUsage;
 };
@@ -38,7 +38,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
     return null;
   }
 
-  const generationSpans = traceSpans.filter(span => span.spanType === 'llm_generation');
+  const generationSpans = traceSpans.filter(span => span.spanType === 'model_generation');
 
   // Determine if we're using v5 format (inputTokens/outputTokens) or legacy format (promptTokens/completionTokens)
   const hasV5Format = generationSpans.some(
@@ -46,7 +46,7 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
   );
 
   const tokensByProvider = generationSpans.reduce(
-    (acc: Record<string, TokenUsage>, span: AISpanRecord) => {
+    (acc: Record<string, TokenUsage>, span: SpanRecord) => {
       const spanUsage = span.attributes?.usage || {};
       const model = span?.attributes?.model || '';
       const provider = span?.attributes?.provider || '';

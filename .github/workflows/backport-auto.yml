@@ -1,0 +1,48 @@
+name: Backport PRs
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  backport:
+    # Only run on the main repository, not on forks
+    if: |
+      github.repository == 'mastra-ai/mastra' && 
+      github.event.pull_request.merged == true && 
+      contains(github.event.pull_request.labels.*.name, 'cherry')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Initial checkout
+        uses: actions/checkout@v5
+        with:
+          # Use default GITHUB_TOKEN for initial checkout
+          # This is needed to access the .github/actions/app-auth action
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          app-id: ${{ vars.DANE_APP_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+
+      - name: Re-checkout with app token
+        uses: actions/checkout@v5
+        with:
+          token: ${{ steps.app-auth.outputs.token }}
+          persist-credentials: true
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Backport PR
+        run: pnpm dlx tsx packages/_changeset-cli/src/git/backport.ts ${{ github.event.pull_request.number }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}

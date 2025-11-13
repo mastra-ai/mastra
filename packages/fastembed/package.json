@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.10.5",
+  "version": "1.0.0-beta.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -37,15 +37,20 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ai": "^4.3.19",
+    "ai": "^5.0.76",
+    "ai-v4": "npm:ai@4.3.19",
+    "@ai-sdk/provider": "^2.0.0",
     "fastembed": "^1.14.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
     "@internal/types-builder": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

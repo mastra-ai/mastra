@@ -12,6 +12,7 @@ overrides:
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
   '@mastra/libsql': link:../../stores/libsql
+  '@mastra/observability': link:../../observability/mastra
   '@mastra/evals': link:../../packages/evals
   mastra: link:../../packages/cli
 
@@ -52,6 +53,9 @@ importers:
       '@mastra/memory':
         specifier: link:../../packages/memory
         version: link:../../packages/memory
+      '@mastra/observability':
+        specifier: link:../../observability/mastra
+        version: link:../../observability/mastra
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai

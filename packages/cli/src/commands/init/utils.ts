@@ -86,6 +86,7 @@ ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
   model: ${modelString},
@@ -119,6 +120,7 @@ export const weatherAgent = new Agent({
   }
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "memory-storage",
       url: "file:../mastra.db", // path is relative to the .mastra/output directory
     })
   })
@@ -334,11 +336,13 @@ export async function writeToolSample(destPath: string) {
   await fileService.copyStarterFile('tools.ts', destPath);
 }
 
-export async function writeScorersSample(destPath: string) {
+export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
+  const modelString = getModelIdentifier(llmProvider);
   const content = `import { z } from 'zod';
-import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
-import { createCompletenessScorer } from '@mastra/evals/scorers/code';
-import { createScorer } from '@mastra/core/scores';
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
+import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
+import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'weatherTool',
@@ -349,11 +353,12 @@ export const completenessScorer = createCompletenessScorer();
 
 // Custom LLM-judged scorer: evaluates if non-English locations are translated appropriately
 export const translationScorer = createScorer({
+  id: 'translation-quality-scorer',
   name: 'Translation Quality',
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
-    model: 'openai/gpt-4o-mini',
+    model: ${modelString},
     instructions:
       'You are an expert evaluator of translation quality for geographic locations. ' +
       'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
@@ -362,8 +367,8 @@ export const translationScorer = createScorer({
   },
 })
   .preprocess(({ run }) => {
-    const userText = (run.input?.inputMessages?.[0]?.content as string) || '';
-    const assistantText = (run.output?.[0]?.content as string) || '';
+    const userText = getUserMessageFromRunInput(run.input) || '';
+    const assistantText = getAssistantMessageFromRunOutput(run.output) || '';
     return { userText, assistantText };
   })
   .analyze({
@@ -441,7 +446,7 @@ export async function writeCodeSampleForComponents(
     case 'workflows':
       return writeWorkflowSample(destPath);
     case 'scorers':
-      return writeScorersSample(destPath);
+      return writeScorersSample(llmprovider, destPath);
     default:
       return '';
   }
@@ -479,7 +484,7 @@ export const writeIndexFile = async ({
       await fs.writeFile(
         destPath,
         `
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,
@@ -493,6 +498,7 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { Observability } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';` : ''}
@@ -500,6 +506,7 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
   storage: new LibSQLStore({
+    id: "mastra-storage",
     // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
@@ -507,14 +514,10 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  telemetry: {
-    // Telemetry is deprecated and will be removed in the Nov 4th release
-    enabled: false, 
-  },
-  observability: {
-    // Enables DefaultExporter and CloudExporter for AI tracing
-    default: { enabled: true }, 
-  },
+  observability: new Observability({
+    // Enables DefaultExporter and CloudExporter for tracing
+    default: { enabled: true },
+    }),
 });
 `,
     );
@@ -542,10 +545,15 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
     spinner.start();
 
     const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
+    const needsCli = (await depService.checkDependencies(['mastra'])) !== `ok`;
     const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
     if (needsCore) {
       packages.push({ name: '@mastra/core', version: 'latest' });
+    }
+
+    if (needsCli) {
+      packages.push({ name: 'mastra', version: 'latest' });
     }
 
     if (needsZod) {

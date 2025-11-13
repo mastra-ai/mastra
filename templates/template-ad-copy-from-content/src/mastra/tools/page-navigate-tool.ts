@@ -14,12 +14,12 @@ export const pageNavigateTool = createTool({
     title: z.string().optional(),
     currentUrl: z.string().optional(),
   }),
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
       const stagehand = await sessionManager.ensureStagehand();
 
       // Navigate to the URL
-      await stagehand.page.goto(context.url);
+      await stagehand.page.goto(input.url);
 
       // Get page title and current URL
       const title = await stagehand.page.evaluate(() => document.title);
