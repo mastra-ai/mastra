@@ -51,6 +51,17 @@ export type MastraMessageContentV2 = {
   metadata?: Record<string, unknown>;
 };
 
+/**
+ * Extended type for messages that may still have deprecated fields from the database.
+ * Used for backward compatibility during migration.
+ */
+type MastraMessageContentV2WithDeprecated = MastraMessageContentV2 & {
+  /** @deprecated Use parts array instead */
+  content?: string;
+  /** @deprecated Use parts array instead */
+  toolInvocations?: ToolInvocationV4[];
+};
+
 // maps to AI SDK V4 UIMessage
 export type MastraDBMessage = MastraMessageShared & {
   content: MastraMessageContentV2;
@@ -1100,7 +1111,8 @@ export class MessageList {
    * @returns The migrated message with deprecated fields converted to parts
    */
   private migrateDeprecatedFields(message: MastraDBMessage): MastraDBMessage {
-    const content = message.content as any; // Cast to any to access potentially deprecated fields
+    // Type assertion to access potentially deprecated fields from database
+    const content = message.content as MastraMessageContentV2WithDeprecated;
 
     // If there are no deprecated fields, return as-is
     if (!content.content && !content.toolInvocations) {
@@ -1139,13 +1151,11 @@ export class MessageList {
       }
     }
 
-    // Update the message with migrated parts
+    // Update the message with migrated parts, excluding deprecated fields
+    const { content: deprecatedContent, toolInvocations, ...cleanContent } = content;
     migratedMessage.content = {
-      ...content,
+      ...cleanContent,
       parts,
-      // Remove deprecated fields from the migrated version
-      content: undefined,
-      toolInvocations: undefined,
     };
 
     return migratedMessage;
