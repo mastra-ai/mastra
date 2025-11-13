@@ -110,9 +110,18 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
               text: part.text,
             }));
 
+          // Convert file parts from DB to attachments
+          const fileParts = message.content.parts
+            .filter(part => part.type === 'file')
+            .map(part => ({
+              type: 'file' as const,
+              data: part.url,
+              mimeType: part.mediaType,
+            }));
+
           const userContent = experimental_attachments
-            ? [...textParts, ...attachmentsToParts(experimental_attachments)]
-            : textParts;
+            ? [...textParts, ...attachmentsToParts(experimental_attachments), ...fileParts]
+            : [...textParts, ...fileParts];
           pushOrCombine({
             role: 'user',
             ...fields,
@@ -259,13 +268,16 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
         }
 
         // Extract tool invocations from parts
-        const partsArray = (message.content as any).parts || [];
+        const partsArray = message.content.parts || [];
         const toolInvocationParts = partsArray.filter(
-          (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName !== 'updateWorkingMemory',
-        ) as any[];
+          p => p.type === 'tool-invocation' && p.toolInvocation?.toolName !== 'updateWorkingMemory',
+        );
 
-        // Extract text content from parts
-        const textContent = partsArray.find((p: any) => p.type === 'text')?.text || '';
+        // Extract text content from parts - combine all text parts
+        const textContent = partsArray
+          .filter(p => p.type === 'text')
+          .map(p => (p.type === 'text' ? p.text : ''))
+          .join('\n');
 
         if (toolInvocationParts.length === 0) {
           pushOrCombine({ role: 'assistant', ...fields, content: textContent, type: 'text' });
