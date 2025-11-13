@@ -72,7 +72,7 @@ async function executeToolCallAndRespond({
       if (clientTool && clientTool.execute) {
         const result = await clientTool.execute(
           {
-            context: toolCall?.args,
+            context: toolCall?.payload.args,
             runId,
             resourceId,
             threadId,
@@ -82,7 +82,7 @@ async function executeToolCallAndRespond({
           },
           {
             messages: (response as unknown as { messages: CoreMessage[] }).messages,
-            toolCallId: toolCall?.toolCallId,
+            toolCallId: toolCall?.payload.toolCallId,
           },
         );
 
