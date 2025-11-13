@@ -38,7 +38,6 @@ export class TokenLimiterProcessor implements Processor {
   public readonly name = 'Token Limiter';
   private encoder: Tiktoken;
   private maxTokens: number;
-  private currentTokens: number = 0;
   private strategy: 'truncate' | 'abort';
   private countMode: 'cumulative' | 'part';
 
@@ -200,29 +199,34 @@ export class TokenLimiterProcessor implements Processor {
     abort: (reason?: string) => never;
   }): Promise<ChunkType | null> {
     // Always process output streams (this is the main/original functionality)
-    const { part, abort } = args;
+    const { part, state, abort } = args;
     const limit = this.maxTokens;
+
+    // Initialize currentTokens in state if not present
+    if (state.currentTokens === undefined) {
+      state.currentTokens = 0;
+    }
 
     // Count tokens in the current part
     const chunkTokens = this.countTokensInChunk(part);
 
     if (this.countMode === 'cumulative') {
       // Add to cumulative count
-      this.currentTokens += chunkTokens;
+      state.currentTokens += chunkTokens;
     } else {
       // Only check the current part
-      this.currentTokens = chunkTokens;
+      state.currentTokens = chunkTokens;
     }
 
     // Check if we've exceeded the limit
-    if (this.currentTokens > limit) {
+    if (state.currentTokens > limit) {
       if (this.strategy === 'abort') {
-        abort(`Token limit of ${limit} exceeded (current: ${this.currentTokens})`);
+        abort(`Token limit of ${limit} exceeded (current: ${state.currentTokens})`);
       } else {
         // truncate strategy - don't emit this part
         // If we're in part mode, reset the count for next part
         if (this.countMode === 'part') {
-          this.currentTokens = 0;
+          state.currentTokens = 0;
         }
         return null;
       }
@@ -233,7 +237,7 @@ export class TokenLimiterProcessor implements Processor {
 
     // If we're in part mode, reset the count for next part
     if (this.countMode === 'part') {
-      this.currentTokens = 0;
+      state.currentTokens = 0;
     }
 
     return result;
@@ -288,8 +292,8 @@ export class TokenLimiterProcessor implements Processor {
     const { messages, abort } = args;
     const limit = this.maxTokens;
 
-    // Reset token count for result processing
-    this.currentTokens = 0;
+    // Use a local variable to track tokens within this single result processing
+    let cumulativeTokens = 0;
 
     const processedMessages = messages.map(message => {
       if (message.role !== 'assistant' || !message.content?.parts) {
@@ -302,17 +306,17 @@ export class TokenLimiterProcessor implements Processor {
           const tokens = this.encoder.encode(textContent).length;
 
           // Check if adding this part's tokens would exceed the cumulative limit
-          if (this.currentTokens + tokens <= limit) {
-            this.currentTokens += tokens;
+          if (cumulativeTokens + tokens <= limit) {
+            cumulativeTokens += tokens;
             return part;
           } else {
             if (this.strategy === 'abort') {
-              abort(`Token limit of ${limit} exceeded (current: ${this.currentTokens + tokens})`);
+              abort(`Token limit of ${limit} exceeded (current: ${cumulativeTokens + tokens})`);
             } else {
               // Truncate the text to fit within the remaining token limit
               let truncatedText = '';
               let currentTokens = 0;
-              const remainingTokens = limit - this.currentTokens;
+              const remainingTokens = limit - cumulativeTokens;
 
               // Find the cutoff point that fits within the remaining limit using binary search
               let left = 0;
@@ -339,7 +343,7 @@ export class TokenLimiterProcessor implements Processor {
               truncatedText = textContent.slice(0, bestLength);
               currentTokens = bestTokens;
 
-              this.currentTokens += currentTokens;
+              cumulativeTokens += currentTokens;
 
               return {
                 ...part,
@@ -363,20 +367,6 @@ export class TokenLimiterProcessor implements Processor {
     });
 
     return processedMessages;
-  }
-
-  /**
-   * Reset the token counter (useful for testing or reusing the processor)
-   */
-  reset(): void {
-    this.currentTokens = 0;
-  }
-
-  /**
-   * Get the current token count
-   */
-  getCurrentTokens(): number {
-    return this.currentTokens;
   }
 
   /**

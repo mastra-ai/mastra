@@ -38,11 +38,12 @@ describe('TokenLimiterProcessor', () => {
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
       };
-      const result = await processor.processOutputStream({ part, streamParts: [part], state: {}, abort: mockAbort });
+      const state: Record<string, any> = {};
+      const result = await processor.processOutputStream({ part, streamParts: [part], state, abort: mockAbort });
 
       expect(result).toEqual(part);
-      expect(processor.getCurrentTokens()).toBeGreaterThan(0);
-      expect(processor.getCurrentTokens()).toBeLessThanOrEqual(10);
+      expect(state.currentTokens).toBeGreaterThan(0);
+      expect(state.currentTokens).toBeLessThanOrEqual(10);
     });
 
     it('should truncate when token limit is exceeded (default strategy)', async () => {
@@ -154,19 +155,22 @@ describe('TokenLimiterProcessor', () => {
         from: ChunkFrom.AGENT,
       };
 
-      await processor.processOutputStream({ part: chunk1, streamParts: [], state: {}, abort: mockAbort });
-      const tokensAfter1 = processor.getCurrentTokens();
+      // Use the same state object across all calls to simulate a single stream
+      const state: Record<string, any> = {};
 
-      await processor.processOutputStream({ part: chunk2, streamParts: [], state: {}, abort: mockAbort });
-      const tokensAfter2 = processor.getCurrentTokens();
+      await processor.processOutputStream({ part: chunk1, streamParts: [], state, abort: mockAbort });
+      const tokensAfter1 = state.currentTokens;
+
+      await processor.processOutputStream({ part: chunk2, streamParts: [chunk1], state, abort: mockAbort });
+      const tokensAfter2 = state.currentTokens;
 
       expect(tokensAfter2).toBeGreaterThan(tokensAfter1);
 
       // Third part should be truncated due to cumulative limit
       const result3 = await processor.processOutputStream({
         part: chunk3,
-        streamParts: [],
-        state: {},
+        streamParts: [chunk1, chunk2],
+        state,
         abort: mockAbort,
       });
       expect(result3).toBeNull();
@@ -192,25 +196,27 @@ describe('TokenLimiterProcessor', () => {
       };
 
       // First part should be allowed (within limit)
+      const state1: Record<string, any> = {};
       const result1 = await processor.processOutputStream({
         part: chunk1,
         streamParts: [],
-        state: {},
+        state: state1,
         abort: mockAbort,
       });
       expect(result1).toEqual(chunk1);
 
       // Second part should be truncated (exceeds limit)
+      const state2: Record<string, any> = {};
       const result2 = await processor.processOutputStream({
         part: chunk2,
         streamParts: [],
-        state: {},
+        state: state2,
         abort: mockAbort,
       });
       expect(result2).toBeNull();
 
-      // Token count should be reset for next part
-      expect(processor.getCurrentTokens()).toBe(0);
+      // Token count should be reset for next part (part mode resets after each part)
+      expect(state2.currentTokens).toBe(0);
     });
   });
 
@@ -232,12 +238,12 @@ describe('TokenLimiterProcessor', () => {
     it('should handle object chunks', async () => {
       processor = new TokenLimiterProcessor({ limit: 50 });
 
-      const part: ChunkType<any> = {
-        type: 'object',
+      const part = {
+        type: 'object' as const,
         object: { message: 'Hello world', count: 42 },
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
-      };
+      } as any;
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toEqual(part);
@@ -246,12 +252,12 @@ describe('TokenLimiterProcessor', () => {
     it('should count tokens in object chunks correctly', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
-      const part: ChunkType<any> = {
-        type: 'object',
+      const part = {
+        type: 'object' as const,
         object: { message: 'This is a very long message that will exceed the token limit' },
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
-      };
+      } as any;
       const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
 
       expect(result).toBeNull();
@@ -259,7 +265,7 @@ describe('TokenLimiterProcessor', () => {
   });
 
   describe('utility methods', () => {
-    it('should reset token counter', async () => {
+    it('should initialize state correctly', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
       const part: ChunkType = {
@@ -268,12 +274,15 @@ describe('TokenLimiterProcessor', () => {
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
       };
-      await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
+      const state: Record<string, any> = {};
+      await processor.processOutputStream({ part, streamParts: [], state, abort: mockAbort });
 
-      expect(processor.getCurrentTokens()).toBeGreaterThan(0);
+      expect(state.currentTokens).toBeGreaterThan(0);
 
-      processor.reset();
-      expect(processor.getCurrentTokens()).toBe(0);
+      // New state object should start fresh
+      const freshState: Record<string, any> = {};
+      await processor.processOutputStream({ part, streamParts: [], state: freshState, abort: mockAbort });
+      expect(freshState.currentTokens).toBeGreaterThan(0);
     });
 
     it('should return max tokens', () => {
@@ -281,10 +290,11 @@ describe('TokenLimiterProcessor', () => {
       expect(processor.getMaxTokens()).toBe(42);
     });
 
-    it('should return current tokens', async () => {
+    it('should track tokens in state', async () => {
       processor = new TokenLimiterProcessor({ limit: 10 });
 
-      expect(processor.getCurrentTokens()).toBe(0);
+      const state: Record<string, any> = {};
+      expect(state.currentTokens).toBeUndefined();
 
       const part: ChunkType = {
         type: 'text-delta',
@@ -292,9 +302,9 @@ describe('TokenLimiterProcessor', () => {
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
       };
-      await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
+      await processor.processOutputStream({ part, streamParts: [], state, abort: mockAbort });
 
-      expect(processor.getCurrentTokens()).toBeGreaterThan(0);
+      expect(state.currentTokens).toBeGreaterThan(0);
     });
   });
 
@@ -308,10 +318,11 @@ describe('TokenLimiterProcessor', () => {
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
       };
-      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
+      const state: Record<string, any> = {};
+      const result = await processor.processOutputStream({ part, streamParts: [], state, abort: mockAbort });
 
       expect(result).toEqual(part);
-      expect(processor.getCurrentTokens()).toBe(0);
+      expect(state.currentTokens || 0).toBe(0);
     });
 
     it('should handle single character chunks', async () => {
@@ -387,10 +398,20 @@ describe('TokenLimiterProcessor', () => {
     it('should work with mixed part types', async () => {
       processor = new TokenLimiterProcessor({ limit: 30 });
 
-      const chunks: ChunkType[] = [
-        { type: 'text-delta', payload: { text: 'Hello', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
-        { type: 'object', object: { status: 'ok' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
-        { type: 'text-delta', payload: { text: ' world', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
+      const chunks = [
+        {
+          type: 'text-delta' as const,
+          payload: { text: 'Hello', id: 'test-id' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
+        { type: 'object' as const, object: { status: 'ok' }, runId: 'test-run-id', from: ChunkFrom.AGENT } as any,
+        {
+          type: 'text-delta' as const,
+          payload: { text: ' world', id: 'test-id' },
+          runId: 'test-run-id',
+          from: ChunkFrom.AGENT,
+        },
       ];
 
       for (let i = 0; i < chunks.length; i++) {
@@ -425,7 +446,11 @@ describe('TokenLimiterProcessor', () => {
       expect((result[0].content.parts[0] as TextPart).text.length).toBeLessThan(
         (messages[0].content.parts[0] as TextPart).text.length,
       );
-      expect(processor.getCurrentTokens()).toBeLessThanOrEqual(10);
+
+      // Verify the truncated text is not empty and is shorter than original
+      const truncatedText = (result[0].content.parts[0] as TextPart).text;
+      expect(truncatedText.length).toBeGreaterThan(0);
+      expect(truncatedText.length).toBeLessThan((messages[0].content.parts[0] as TextPart).text.length);
     });
 
     it('should not truncate text content within token limit', async () => {
@@ -522,8 +547,8 @@ describe('TokenLimiterProcessor', () => {
       const fourthPartText = (result[0].content.parts[3] as TextPart).text;
       expect(fourthPartText).toBe('Final part'); // Should fit within the 15 token limit
 
-      // Total tokens should not exceed the limit
-      expect(processor.getCurrentTokens()).toBeLessThanOrEqual(15);
+      // Verify all parts are present and the message structure is intact
+      expect(result[0].content.parts.every(part => part.type === 'text')).toBe(true);
     });
   });
 
@@ -534,7 +559,7 @@ describe('TokenLimiterProcessor', () => {
       });
 
       // Create messages with content that will exceed the limit
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'message-1',
           role: 'user',
@@ -620,7 +645,7 @@ describe('TokenLimiterProcessor', () => {
         limit: 200,
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'system-1',
           role: 'system',
@@ -670,7 +695,7 @@ describe('TokenLimiterProcessor', () => {
         limit: 300,
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'tool-call-1',
           role: 'assistant',
@@ -704,6 +729,7 @@ describe('TokenLimiterProcessor', () => {
                   state: 'result',
                   toolCallId: 'call_1',
                   toolName: 'calculator',
+                  args: { a: 2, b: 2 },
                   result: 'The result is 4',
                 },
               },
@@ -738,7 +764,7 @@ describe('TokenLimiterProcessor', () => {
         limit: 50,
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         {
           id: 'message-1',
           role: 'user',
