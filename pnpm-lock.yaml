@@ -1144,6 +1144,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.6(hono@4.10.3)
+      '@hono/otel':
+        specifier: ^1.0.1
+        version: 1.0.1(hono@4.10.3)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../../../packages/core
@@ -6830,6 +6833,11 @@ packages:
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
+
+  '@hono/otel@1.0.1':
+    resolution: {integrity: sha512-WEV2M2gvGfLgafznoD5uz/wY9TbOvzt0asaoqplb0rSiMYTZxqVhxKa1teOF+PasnrXNFUhgYt04zvdUuF16Cw==}
+    peerDependencies:
+      hono: '>=4.0.0'
 
   '@hono/swagger-ui@0.5.2':
     resolution: {integrity: sha512-7wxLKdb8h7JTdZ+K8DJNE3KXQMIpJejkBTQjrYlUWF28Z1PGOKw6kUykARe5NTfueIN37jbyG/sBYsbzXzG53A==}
@@ -20489,6 +20497,12 @@ snapshots:
     dependencies:
       hono: 4.10.3
 
+  '@hono/otel@1.0.1(hono@4.10.3)':
+    dependencies:
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/semantic-conventions': 1.37.0
+      hono: 4.10.3
+
   '@hono/swagger-ui@0.5.2(hono@4.10.3)':
     dependencies:
       hono: 4.10.3
@@ -25353,7 +25367,7 @@ snapshots:
       std-env: 3.10.0
       test-exclude: 7.0.1
       tinyrainbow: 2.0.0
-      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
+      vitest: 3.2.4(@types/debug@4.1.12)(@types/node@20.19.23)(@vitest/ui@3.2.3)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.11.6(@types/node@20.19.23)(typescript@5.9.3))(tsx@4.20.6)(yaml@2.8.1)
     transitivePeerDependencies:
       - supports-color
 

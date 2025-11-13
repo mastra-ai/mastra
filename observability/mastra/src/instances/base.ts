@@ -44,11 +44,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
-    // Validate: at least exporters or bridge must be provided
-    if (!config.exporters?.length && !config.bridge) {
-      throw new Error(`ObservabilityInstance [name=${config.name}] requires at least one exporter or a bridge`);
-    }
-
     // Apply defaults for optional fields
     this.config = {
       serviceName: config.serviceName,

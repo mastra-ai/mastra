@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@hono/otel": "^1.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/otel-bridge": "workspace:*",
     "@opentelemetry/api": "^1.9.0",

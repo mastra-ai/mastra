@@ -21,7 +21,7 @@ import Fastify from 'fastify';
 const chatAgentDef = new Agent({
   name: 'chat-agent',
   instructions: 'You are a helpful assistant. Keep responses brief.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-4.1-nano', // Using faster model for tests
 });
 
 // Configure Mastra with OtelBridge
@@ -83,7 +83,19 @@ fastify.post<{ Body: { message: string } }>('/chat', async (request, reply) => {
 if (process.env.NODE_ENV === 'test' && memoryExporter) {
   fastify.get('/test/spans', async (_request, _reply) => {
     const spans = memoryExporter!.getFinishedSpans();
-    return { spans };
+    // Convert spans to JSON-safe format (they have circular references)
+    const serializedSpans = spans.map(span => ({
+      name: span.name,
+      traceId: span.spanContext().traceId,
+      spanId: span.spanContext().spanId,
+      parentSpanId: span.parentSpanId,
+      kind: span.kind,
+      status: span.status,
+      attributes: span.attributes,
+      startTime: span.startTime,
+      endTime: span.endTime,
+    }));
+    return { spans: serializedSpans, count: serializedSpans.length };
   });
 
   fastify.post('/test/reset-spans', async (_request, _reply) => {

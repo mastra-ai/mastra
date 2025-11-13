@@ -21,7 +21,7 @@ import express from 'express';
 const chatAgentDef = new Agent({
   name: 'chat-agent',
   instructions: 'You are a helpful assistant. Keep responses brief.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-4.1-nano', // Using faster model for tests
 });
 
 // Configure Mastra with OtelBridge
@@ -76,7 +76,19 @@ app.post('/chat', async (req, res) => {
 if (process.env.NODE_ENV === 'test' && memoryExporter) {
   app.get('/test/spans', (_req, res) => {
     const spans = memoryExporter!.getFinishedSpans();
-    res.json({ spans });
+    // Convert spans to JSON-safe format (they have circular references)
+    const serializedSpans = spans.map(span => ({
+      name: span.name,
+      traceId: span.spanContext().traceId,
+      spanId: span.spanContext().spanId,
+      parentSpanId: span.parentSpanId,
+      kind: span.kind,
+      status: span.status,
+      attributes: span.attributes,
+      startTime: span.startTime,
+      endTime: span.endTime,
+    }));
+    res.json({ spans: serializedSpans, count: serializedSpans.length });
   });
 
   app.post('/test/reset-spans', (_req, res) => {

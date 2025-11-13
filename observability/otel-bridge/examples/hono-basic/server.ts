@@ -12,20 +12,18 @@
 import { memoryExporter } from './instrumentation';
 
 import { serve } from '@hono/node-server';
+import { httpInstrumentationMiddleware } from '@hono/otel';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Observability } from '@mastra/observability';
 import { OtelBridge } from '@mastra/otel-bridge';
 import { Hono } from 'hono';
 
-// Optional: Add @hono/otel middleware for Hono-specific spans
-// import { instrument } from '@hono/otel';
-
 // Create agent instance
 const chatAgentDef = new Agent({
   name: 'chat-agent',
   instructions: 'You are a helpful assistant. Keep responses brief.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-4.1-nano', // Using faster model for tests
 });
 
 // Configure Mastra with OtelBridge
@@ -46,10 +44,9 @@ const chatAgent = mastra.getAgent('chatAgent');
 
 const app = new Hono();
 
-// No middleware needed! OTEL auto-instrumentation handles context propagation
-
-// Optional: Add Hono middleware for enhanced observability
-// app.use('*', instrument('hono-example'));
+// Add @hono/otel middleware for proper trace context propagation
+// This ensures traceparent headers are properly extracted and propagated
+app.use('*', httpInstrumentationMiddleware());
 
 // Health check endpoint
 app.get('/health', c => {
@@ -87,7 +84,19 @@ app.post('/chat', async c => {
 if (process.env.NODE_ENV === 'test' && memoryExporter) {
   app.get('/test/spans', c => {
     const spans = memoryExporter!.getFinishedSpans();
-    return c.json({ spans });
+    // Convert spans to JSON-safe format (they have circular references)
+    const serializedSpans = spans.map(span => ({
+      name: span.name,
+      traceId: span.spanContext().traceId,
+      spanId: span.spanContext().spanId,
+      parentSpanId: span.parentSpanId,
+      kind: span.kind,
+      status: span.status,
+      attributes: span.attributes,
+      startTime: span.startTime,
+      endTime: span.endTime,
+    }));
+    return c.json({ spans: serializedSpans, count: serializedSpans.length });
   });
 
   app.post('/test/reset-spans', c => {
