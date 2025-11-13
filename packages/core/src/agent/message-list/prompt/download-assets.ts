@@ -107,11 +107,12 @@ export async function downloadAssetsFromMessages({
       (
         downloadedFile,
       ): downloadedFile is {
+        url: string;
         mediaType: string | undefined;
         data: Uint8Array<ArrayBuffer>;
       } => downloadedFile?.data != null,
     )
-    .map(({ data, mediaType }, index) => [filesToDownload?.[index]?.url.toString(), { data, mediaType }]);
+    .map(({ url, data, mediaType }) => [url, { data, mediaType }]);
 
   return Object.fromEntries(downloadFileList);
 }
