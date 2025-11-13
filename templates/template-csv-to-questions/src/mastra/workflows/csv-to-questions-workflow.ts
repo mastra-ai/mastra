@@ -32,11 +32,17 @@ const downloadAndSummarizeCSVStep = createStep({
     console.log('Executing Step: download-and-summarize-csv');
     const { csvUrl } = inputData;
 
-    const result = await csvFetcherTool.execute({
-      context: { csvUrl },
-      mastra,
-      requestContext: requestContext || new RequestContext(),
-    });
+    const result = await csvFetcherTool.execute(
+      { csvUrl },
+      {
+        mastra,
+        requestContext: requestContext || new RequestContext(),
+      },
+    );
+
+    if ('error' in result) {
+      throw new Error('Failed to download and summarize CSV: ' + result.error);
+    }
 
     console.log(
       `Step download-and-summarize-csv: Succeeded - Downloaded ${result.fileSize} bytes, extracted ${result.characterCount} characters from ${result.rowCount} rows and ${result.columnCount} columns, generated ${result.summary.length} character summary`,
@@ -63,11 +69,17 @@ const generateQuestionsFromSummaryStep = createStep({
     }
 
     try {
-      const result = await generateQuestionsFromTextTool.execute({
-        context: { extractedText: summary }, // Use summary as the text input
-        mastra,
-        requestContext: requestContext || new RequestContext(),
-      });
+      const result = await generateQuestionsFromTextTool.execute(
+        { extractedText: summary }, // Use summary as the text input
+        {
+          mastra,
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
+
+      if ('error' in result) {
+        return { questions: [], success: false };
+      }
 
       console.log(
         `Step generate-questions-from-summary: Succeeded - Generated ${result.questions.length} questions from summary`,

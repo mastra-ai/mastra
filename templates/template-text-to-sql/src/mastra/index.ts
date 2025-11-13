@@ -1,11 +1,13 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { PinoLogger } from '@mastra/loggers';
 import { sqlAgent } from './agents/sql-agent';
 import { databaseQueryWorkflow } from './workflows/database-query-workflow';
+import { sqlGenerationAgent } from './agents/sql-generation-agent';
 
 export const mastra = new Mastra({
-  agents: { sqlAgent },
+  agents: { sqlAgent, sqlGenerationAgent },
   workflows: {
     databaseQueryWorkflow,
   },
@@ -18,9 +20,9 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  observability: {
+  observability: new Observability({
     default: {
       enabled: true,
     },
-  },
+  }),
 });
