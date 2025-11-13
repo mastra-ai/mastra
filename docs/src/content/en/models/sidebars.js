@@ -233,6 +233,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/ovhcloud",
+          label: "OVHcloud AI Endpoints",
+        },
+        {
+          type: "doc",
           id: "providers/perplexity",
           label: "Perplexity",
         },

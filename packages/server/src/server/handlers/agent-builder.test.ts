@@ -448,6 +448,7 @@ describe('Agent Builder Handlers', () => {
             payload: {},
           },
         },
+        serializedStepGraph: mockWorkflow.serializedStepGraph,
       });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
         {
