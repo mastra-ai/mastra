@@ -385,7 +385,7 @@ describe('Memory Handlers', () => {
       const result = await saveMessagesHandler({
         mastra,
         agentId: 'test-agent',
-        body: { messages: mockMessages },
+        body: { messages: mockMessages as any },
       });
       expect(result).toBeDefined();
       expect(spy).toHaveBeenCalled();
@@ -440,7 +440,7 @@ describe('Memory Handlers', () => {
       const saveResponse = await saveMessagesHandler({
         mastra,
         agentId: 'test-agent',
-        body: { messages: [v1Message, v2Message] },
+        body: { messages: [v1Message as any, v2Message] },
       });
 
       expect(saveResponse).toBeDefined();
@@ -562,7 +562,7 @@ describe('Memory Handlers', () => {
       const saveResponse = await saveMessagesHandler({
         mastra,
         agentId: 'test-agent',
-        body: { messages },
+        body: { messages: messages as any },
       });
 
       expect(saveResponse).toBeDefined();
@@ -681,7 +681,13 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      const memoryStore = storage.getStore('memory')!;
+      const memoryStore = await storage.getStore('memory')!;
+
+      expect(memoryStore).toBeDefined();
+
+      if (!memoryStore) {
+        throw new Error('Memory storage is not defined');
+      }
 
       vi.spyOn(memoryStore, 'getThreadById').mockResolvedValue(null);
       await expect(listMessagesHandler({ mastra, threadId: 'non-existent', agentId: 'test-agent' })).rejects.toThrow(
@@ -716,10 +722,15 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      const memoryStore = storage.getStore('memory')!;
+      const memoryStore = await storage.getStore('memory')!;
+      expect(memoryStore).toBeDefined();
+
+      if (!memoryStore) {
+        throw new Error('Memory storage is not defined');
+      }
 
       vi.spyOn(memoryStore, 'getThreadById').mockResolvedValue(createThread({}));
-      vi.spyOn(memoryStore, 'listMessages').mockResolvedValue(mockResult);
+      vi.spyOn(memoryStore, 'listMessages').mockResolvedValue(mockResult as any);
 
       const result = await listMessagesHandler({
         mastra,

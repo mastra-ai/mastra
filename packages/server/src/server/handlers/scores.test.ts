@@ -23,11 +23,11 @@ describe('Scores Handlers', () => {
   let evalsStorage: EvalsStorageBase;
   let mastra: Mastra;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockStorage = new InMemoryStore();
 
-    evalsStorage = mockStorage.getStore('evals') as EvalsStorageBase;
+    evalsStorage = await mockStorage.getStore('evals');
 
     mastra = new Mastra({
       logger: false,

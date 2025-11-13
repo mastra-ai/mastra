@@ -18,11 +18,22 @@ describe('Observability Handlers', () => {
   let evalsStorage: EvalsStorageBase;
   let mastra: Mastra;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     storage = new InMemoryStore();
-    observabilityStorage = storage.getStore('observability')!;
-    evalsStorage = storage.getStore('evals')!;
+    const observabilityStore = await storage.getStore('observability');
+    expect(observabilityStore).toBeDefined();
+    if (!observabilityStore) {
+      throw new Error('Observability storage is not defined');
+    }
+    observabilityStorage = observabilityStore;
+
+    const evalsStore = await storage.getStore('evals');
+    expect(evalsStore).toBeDefined();
+    if (!evalsStore) {
+      throw new Error('Evals storage is not defined');
+    }
+    evalsStorage = evalsStore;
 
     mastra = new Mastra({
       logger: false,
@@ -113,7 +124,7 @@ describe('Observability Handlers', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
         expect(error.status).toBe(500);
-        expect(error.message).toBe('Storage is not available');
+        expect(error.message).toBe('Mastra Storage: Observability store is not configured.');
       }
     });
 

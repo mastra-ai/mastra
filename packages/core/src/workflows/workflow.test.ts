@@ -5863,8 +5863,12 @@ describe('Workflow', () => {
 
     it('should persist error message without stack trace in snapshot', async () => {
       const mockStorage = new InMemoryStore();
-      const workflowStorage = mockStorage.getStore('workflows');
-      const persistSpy = vi.spyOn(workflowStorage, 'createWorkflowSnapshot');
+      const workflowStorage = await mockStorage.getStore('workflows');
+      expect(workflowStorage).toBeDefined();
+      if (!workflowStorage) {
+        throw new Error('Workflow storage is not defined');
+      }
+      const persistSpy = vi.spyOn(workflowStorage!, 'createWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,
@@ -5917,8 +5921,12 @@ describe('Workflow', () => {
 
     it('should persist MastraError message without stack trace in snapshot', async () => {
       const mockStorage = new InMemoryStore();
-      const workflowStorage = mockStorage.getStore('workflows');
-      const persistSpy = vi.spyOn(workflowStorage, 'createWorkflowSnapshot');
+      const workflowStorage = await mockStorage.getStore('workflows');
+      expect(workflowStorage).toBeDefined();
+      if (!workflowStorage) {
+        throw new Error('Workflow storage is not defined');
+      }
+      const persistSpy = vi.spyOn(workflowStorage!, 'createWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,
