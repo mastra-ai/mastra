@@ -979,7 +979,6 @@ describe('BraintrustExporter', () => {
 describe('BraintrustExporter with braintrustLogger parameter', () => {
   let mockLogger: any;
   let mockExternalSpan: any;
-  let mockCurrentSpan: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -996,9 +995,6 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
       log: vi.fn(),
       end: vi.fn(),
     };
-
-    // Mock currentSpan to return NOOP_SPAN by default
-    mockCurrentSpan = vi.fn().mockReturnValue({ id: undefined });
   });
 
   it('should use provided logger when no external span exists', async () => {
