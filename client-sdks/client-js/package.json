@@ -45,18 +45,14 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "json-schema": "^0.4.0",
-    "rxjs": "7.8.1",
     "zod-to-json-schema": "^3.24.6"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.28.5",
-    "@babel/preset-typescript": "^7.27.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@tsconfig/recommended": "^1.0.11",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.13.17",
     "zod": "^3.25.76",

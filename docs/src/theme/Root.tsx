@@ -4,6 +4,7 @@ import { CookieConsent } from "@site/src/components/cookie/cookie-consent";
 import { Toaster } from "@site/src/components/ui/sonner";
 import { PostHogProvider } from "posthog-js/react";
 import React from "react";
+import { ChatbotSidebarProvider } from "./DocRoot/Layout/ChatbotSidebar/context";
 
 export default function Root({ children }: { children: React.ReactNode }) {
   const { siteConfig } = useDocusaurusContext();
@@ -23,7 +24,9 @@ export default function Root({ children }: { children: React.ReactNode }) {
       <KapaProvider integrationId={kapaIntegrationId || ""}>
         <Toaster />
         <CookieConsent />
-        {children}
+        <ChatbotSidebarProvider defaultHidden={true}>
+          {children}
+        </ChatbotSidebarProvider>
       </KapaProvider>
     </PostHogProvider>
   );
