@@ -1,4 +1,4 @@
-import type { FlexibleSchema, ProviderDefinedTool, ToolExecutionOptions } from '@internal/external-types';
+import type { ProviderDefinedTool, ToolExecutionOptions } from '@internal/external-types';
 import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
