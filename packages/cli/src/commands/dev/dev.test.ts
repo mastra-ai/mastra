@@ -66,6 +66,7 @@ vi.mock('./DevBundler', () => ({
     __setLogger: vi.fn(),
     loadEnvVars: vi.fn().mockResolvedValue(new Map()),
     prepare: vi.fn().mockResolvedValue(undefined),
+    getAllToolPaths: vi.fn().mockReturnValue([]),
     watch: vi.fn().mockResolvedValue(mockWatcher),
   })),
 }));
