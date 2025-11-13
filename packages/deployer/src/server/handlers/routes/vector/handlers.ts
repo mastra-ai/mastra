@@ -50,10 +50,15 @@ export async function upsertVectors(c: Context) {
     const vectorName = c.req.param('vectorName');
     const body = await c.req.json<UpsertRequest>();
 
+    const { indexName, vectors, metadata, ids } = body;
+
     const result = await getOriginalUpsertVectorsHandler({
       mastra,
       vectorName,
-      body,
+      indexName,
+      vectors,
+      metadata,
+      ids,
     });
 
     return c.json({ ids: result });
@@ -69,10 +74,14 @@ export async function createIndex(c: Context) {
     const vectorName = c.req.param('vectorName');
     const body = await c.req.json<CreateIndexRequest>();
 
+    const { indexName, dimension, metric } = body;
+
     await getOriginalCreateIndexHandler({
       mastra,
       vectorName,
-      body,
+      indexName,
+      dimension,
+      metric,
     });
 
     return c.json({ success: true });
@@ -91,7 +100,11 @@ export async function queryVectors(c: Context) {
     const results: QueryResult[] = await getOriginalQueryVectorsHandler({
       mastra,
       vectorName,
-      body: { indexName, queryVector, topK, filter, includeVector },
+      indexName,
+      queryVector,
+      topK,
+      filter,
+      includeVector,
     });
 
     return c.json({ results });
