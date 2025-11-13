@@ -8686,22 +8686,14 @@ describe('Workflow', () => {
         },
       });
 
-      expect(result.status).toBe('failed'); // Assert status first
-
-      // Type guard for result.error
-      if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error?.message).toContain(
-          'Step input validation failed: \n- start: Invalid input: expected string, received number',
-        ); // Now safe to access
-        console.log('result.error', result.error);
-        console.log('result.error stringified', JSON.stringify(result.error, null, 2));
-        expect(result.error).toBeInstanceOf(MastraError);
-      } else {
-        // This case should not be reached in this specific test.
-        // If it is, the test should fail clearly.
+      expect(result.status).toBe('failed');
+      if (result.status !== 'failed') {
         throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
       }
+      expect(result.error?.message).toContain(
+        'Step input validation failed: \n- start: Invalid input: expected string, received number',
+      );
+      expect(result.error).toBeInstanceOf(MastraError);
 
       expect(result.steps?.input).toEqual({ start: 2 });
       const step1Result = result.steps?.step1;
