@@ -61,7 +61,6 @@
     "@microsoft/api-extractor": "^7.52.8",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.13.17",
-    "@types/pg": "^8.15.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
