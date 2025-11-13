@@ -44,7 +44,7 @@ export class MemoryStorageMongoDB extends MemoryStorageBase {
   }
 
   async dropData(): Promise<void> {
-    await Promise.all([
+    const results = await Promise.allSettled([
       this.db.deleteCollection({
         tableName: TABLE_THREADS,
       }),
@@ -55,6 +55,28 @@ export class MemoryStorageMongoDB extends MemoryStorageBase {
         tableName: TABLE_RESOURCES,
       }),
     ]);
+
+    // Log individual failures but don't throw - allow partial cleanup
+    const tableNames = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES];
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const error = result.reason;
+        const tableName = tableNames[index];
+
+        // Ignore MastraError cases (already logged by deleteCollection)
+        // but log unexpected errors
+        if (error instanceof MastraError) {
+          // MastraError is already logged by deleteCollection, just continue
+          return;
+        }
+
+        // Log unexpected errors
+        this.logger?.warn(`Failed to delete collection ${tableName}`, {
+          error: error instanceof Error ? error.message : String(error),
+          tableName,
+        });
+      }
+    });
   }
 
   private parseRow(row: any): MastraDBMessage {

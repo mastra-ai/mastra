@@ -197,7 +197,7 @@ export class StoreOperationsClickhouse extends MastraBase {
     const updatedAt = (record.updatedAt || new Date()).toISOString();
 
     try {
-      const result = await this.client.insert({
+      await this.client.insert({
         table: tableName,
         values: [
           {
@@ -214,7 +214,6 @@ export class StoreOperationsClickhouse extends MastraBase {
           use_client_time_zone: 1,
         },
       });
-      console.info('INSERT RESULT', result);
     } catch (error: any) {
       throw new MastraError(
         {
