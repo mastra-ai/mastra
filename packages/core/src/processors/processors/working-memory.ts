@@ -44,17 +44,18 @@ export class WorkingMemory implements InputProcessor {
   readonly id = 'working-memory';
   name = 'WorkingMemory';
 
-  private defaultWorkingMemoryTemplate = `# Working Memory
-
-## User Information
-- Name:
-- Preferences:
-- Context:
-
-## Conversation State
-- Current Topic:
-- Key Points:
-- Action Items:`;
+  public defaultWorkingMemoryTemplate = `
+# User Information
+- **First Name**: 
+- **Last Name**: 
+- **Location**: 
+- **Occupation**: 
+- **Interests**: 
+- **Goals**: 
+- **Events**: 
+- **Facts**: 
+- **Projects**: 
+`;
 
   constructor(
     private options: {
@@ -207,7 +208,7 @@ ${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object
 ${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
 
 <working_memory_data>
-${data || ''}
+${data}
 </working_memory_data>
 
 Notes:
@@ -243,7 +244,7 @@ ${template.content}
 </working_memory_template>
 
 <working_memory_data>
-${data || ''}
+${data}
 </working_memory_data>
 
 Notes:
