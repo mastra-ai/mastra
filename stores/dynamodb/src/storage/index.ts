@@ -15,8 +15,8 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
+import { EvalsStorageDynamoDB } from './domains/evals';
 import { MemoryStorageDynamoDB } from './domains/memory';
-import { EvalsStorageDynamoDB } from './domains/score';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
 export interface DynamoDBStoreConfig {
@@ -34,6 +34,10 @@ export interface DynamoDBStoreConfig {
 type MastraService = Service<Record<string, any>> & {
   [key: string]: any;
 };
+
+export { EvalsStorageDynamoDB as EvalsStorage } from './domains/evals';
+export { MemoryStorageDynamoDB as MemoryStorage } from './domains/memory';
+export { WorkflowStorageDynamoDB as WorkflowsStorage } from './domains/workflows';
 
 export class DynamoDBStore extends MastraStorage {
   private tableName: string;

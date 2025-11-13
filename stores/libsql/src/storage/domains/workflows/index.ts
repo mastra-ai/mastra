@@ -1,8 +1,10 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
+import { LibSQLDomainBase } from '../base';
+import type { LibSQLDomainConfig } from '../base';
 import type { StoreOperationsLibSQL } from '../operations';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -25,34 +27,54 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   };
 }
 
-export class WorkflowsLibSQL extends WorkflowsStorage {
-  operations: StoreOperationsLibSQL;
-  client: Client;
+export class WorkflowsStorageLibSQL extends WorkflowsStorageBase {
+  private domainBase: LibSQLDomainBase;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
 
-  constructor({
-    operations,
-    client,
-    maxRetries = 5,
-    initialBackoffMs = 500,
-  }: {
-    operations: StoreOperationsLibSQL;
-    client: Client;
-    maxRetries?: number;
-    initialBackoffMs?: number;
-  }) {
+  constructor(opts: LibSQLDomainConfig) {
     super();
-    this.operations = operations;
-    this.client = client;
-    this.maxRetries = maxRetries;
-    this.initialBackoffMs = initialBackoffMs;
+    this.domainBase = new LibSQLDomainBase(opts);
+
+    // Extract maxRetries and initialBackoffMs from either format
+    if ('config' in opts && opts.config) {
+      this.maxRetries = opts.config.maxRetries ?? 5;
+      this.initialBackoffMs = opts.config.initialBackoffMs ?? 500;
+    } else {
+      this.maxRetries = opts.maxRetries ?? 5;
+      this.initialBackoffMs = opts.initialBackoffMs ?? 500;
+    }
 
     // Set PRAGMA settings to help with database locks
     // Note: This is async but we can't await in constructor, so we'll handle it as a fire-and-forget
     this.setupPragmaSettings().catch(err =>
       this.logger.warn('LibSQL Workflows: Failed to setup PRAGMA settings.', err),
     );
+  }
+
+  private get client(): Client {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsLibSQL {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.operations.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private async setupPragmaSettings() {
@@ -263,19 +285,23 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowId: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }) {
     const data = {
       workflow_name: workflowId,
       run_id: runId,
       resourceId,
       snapshot,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: createdAt || new Date(),
+      updatedAt: updatedAt || new Date(),
     };
 
     this.logger.debug('Persisting workflow snapshot', { workflowId, runId, data });
@@ -306,7 +332,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     workflowId,
   }: {
     runId: string;
-    workflowName?: string;
+    workflowId?: string;
   }): Promise<WorkflowRun | null> {
     const conditions: string[] = [];
     const args: (string | number)[] = [];
@@ -316,9 +342,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       args.push(runId);
     }
 
-    if (workflowName) {
+    if (workflowId) {
       conditions.push('workflow_name = ?');
-      args.push(workflowName);
+      args.push(workflowId);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -359,9 +385,9 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       const conditions: string[] = [];
       const args: InValue[] = [];
 
-      if (workflowName) {
+      if (workflowId) {
         conditions.push('workflow_name = ?');
-        args.push(workflowName);
+        args.push(workflowId);
       }
 
       if (status) {

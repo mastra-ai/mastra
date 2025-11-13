@@ -1,6 +1,6 @@
 import { describe, beforeAll, afterAll } from 'vitest';
 import type { MastraStorage } from '@mastra/core/storage';
-import { createScoresTest } from './domains/scores';
+import { createScoresTest } from './domains/evals';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createObservabilityTests } from './domains/observability';
@@ -8,7 +8,7 @@ import { createIndexManagementTests } from './domains/operations/index-managemen
 
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
-export * from './domains/scores/data';
+export * from './domains/evals/data';
 export * from './domains/observability/data';
 
 
@@ -23,6 +23,9 @@ export function createTestSuite(storage: MastraStorage) {
     });
 
     afterAll(async () => {
+
+      console.log(storage.getStore('workflows'), 'workflows');
+
       // Clear tables after tests
       await Promise.all([
         storage.getStore('workflows')?.dropData(),

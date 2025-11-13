@@ -1,6 +1,7 @@
 import type { Client, InValue } from '@libsql/client';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SPANS, getDefaultValue, getSqlType } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -10,7 +11,7 @@ import {
   prepareUpdateStatement,
 } from '../utils';
 
-export class StoreOperationsLibSQL extends StoreOperations {
+export class StoreOperationsLibSQL extends MastraBase {
   private client: Client;
   /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
@@ -33,7 +34,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
     maxRetries?: number;
     initialBackoffMs?: number;
   }) {
-    super();
+    super({ component: 'STORAGE', name: 'OPERATIONS' });
     this.client = client;
 
     this.maxRetries = maxRetries ?? 5;
@@ -115,7 +116,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
       case 'jsonb':
         return 'TEXT'; // Store JSON as TEXT in SQLite
       default:
-        return super.getSqlType(type);
+        return getSqlType(type);
     }
   }
 
@@ -441,7 +442,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
           const sqlType = this.getSqlType(columnDef.type); // ensure this exists or implement
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
           // In SQLite, you must provide a DEFAULT if adding a NOT NULL column to a non-empty table
-          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          const defaultValue = columnDef.nullable === false ? getDefaultValue(columnDef.type) : '';
           const alterSql =
             `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 

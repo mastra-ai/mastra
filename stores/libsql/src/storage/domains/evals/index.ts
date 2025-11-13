@@ -4,21 +4,43 @@ import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import {
   TABLE_SCORERS,
-  ScoresStorage,
+  EvalsStorageBase,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import { LibSQLDomainBase } from '../base';
+import type { LibSQLDomainConfig } from '../base';
 import type { StoreOperationsLibSQL } from '../operations';
 
-export class ScoresLibSQL extends ScoresStorage {
-  private operations: StoreOperationsLibSQL;
-  private client: Client;
-  constructor({ client, operations }: { client: Client; operations: StoreOperationsLibSQL }) {
+export class EvalsStorageLibSQL extends EvalsStorageBase {
+  private domainBase: LibSQLDomainBase;
+
+  constructor(opts: LibSQLDomainConfig) {
     super();
-    this.operations = operations;
-    this.client = client;
+    this.domainBase = new LibSQLDomainBase(opts);
+  }
+
+  private get client(): Client {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsLibSQL {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async listScoresByRunId({

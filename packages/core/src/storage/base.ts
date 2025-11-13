@@ -83,6 +83,43 @@ export function calculatePagination(
   };
 }
 
+export function getDefaultValue(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'text':
+    case 'uuid':
+      return "DEFAULT ''";
+    case 'timestamp':
+      return "DEFAULT '1970-01-01 00:00:00'";
+    case 'integer':
+    case 'float':
+    case 'bigint':
+      return 'DEFAULT 0';
+    case 'jsonb':
+      return "DEFAULT '{}'";
+    default:
+      return "DEFAULT ''";
+  }
+}
+
+export function getSqlType(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'text':
+      return 'TEXT';
+    case 'timestamp':
+      return 'TIMESTAMP';
+    case 'float':
+      return 'FLOAT';
+    case 'integer':
+      return 'INTEGER';
+    case 'bigint':
+      return 'BIGINT';
+    case 'jsonb':
+      return 'JSONB';
+    default:
+      return 'TEXT';
+  }
+}
+
 export class MastraStorage extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;

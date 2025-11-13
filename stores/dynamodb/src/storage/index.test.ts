@@ -9,6 +9,7 @@ import {
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
 import { createTestSuite } from '@internal/storage-test-utils';
+import { Mastra } from '@mastra/core/mastra';
 import { beforeAll, describe } from 'vitest';
 import { DynamoDBStore } from '..';
 
@@ -222,8 +223,9 @@ describe('DynamoDBStore', () => {
     }
   }, 60000); // Increase timeout for beforeAll to accommodate Docker startup and table creation
 
-  createTestSuite(
-    new DynamoDBStore({
+
+  const mastra = new Mastra({
+    storage: new DynamoDBStore({
       name: 'DynamoDBStoreTest',
       config: {
         id: 'dynamodb-test-store',
@@ -233,5 +235,9 @@ describe('DynamoDBStore', () => {
         credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
       },
     }),
+  });
+
+  createTestSuite(
+    mastra.getStorage()!
   );
-});
+})

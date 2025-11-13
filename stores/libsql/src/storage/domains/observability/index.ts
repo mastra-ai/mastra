@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { SPAN_SCHEMA, ObservabilityStorageBase, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   CreateSpanRecord,
@@ -8,14 +8,33 @@ import type {
   TracesPaginatedArg,
   PaginationInfo,
 } from '@mastra/core/storage';
+import { LibSQLDomainBase } from '../base';
+import type { LibSQLDomainConfig } from '../base';
 import type { StoreOperationsLibSQL } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow } from '../utils';
 
-export class ObservabilityLibSQL extends ObservabilityStorage {
-  private operations: StoreOperationsLibSQL;
-  constructor({ operations }: { operations: StoreOperationsLibSQL }) {
+export class ObservabilityStorageLibSQL extends ObservabilityStorageBase {
+  private domainBase: LibSQLDomainBase;
+
+  constructor(opts: LibSQLDomainConfig) {
     super();
-    this.operations = operations;
+    this.domainBase = new LibSQLDomainBase(opts);
+  }
+
+  private get operations(): StoreOperationsLibSQL {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_SPANS });
   }
 
   async createSpan(span: CreateSpanRecord): Promise<void> {

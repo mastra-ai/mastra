@@ -4,10 +4,10 @@ import type {
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
+import { EvalsStorageMongoDB } from './domains/evals';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { MongoDBOperations } from './domains/operations';
-import { EvalsStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
 
@@ -52,7 +52,7 @@ export {
   MemoryStorageMongoDB as MemoryStorage,
 } from './domains/memory';
 export { ObservabilityMongoDB as ObservabilityStorage } from './domains/observability';
-export { EvalsStorageMongoDB as EvalsStorage } from './domains/scores';
+export { EvalsStorageMongoDB as EvalsStorage } from './domains/evals';
 export { WorkflowsStorageMongoDB as WorkflowsStorage } from './domains/workflows';
 
 export class MongoDBStore extends MastraStorage {

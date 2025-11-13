@@ -11,23 +11,51 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { LibSQLDomainBase } from '../base';
+import type { LibSQLDomainConfig } from '../base';
 import type { StoreOperationsLibSQL } from '../operations';
 
-export class MemoryLibSQL extends MemoryStorage {
-  private client: Client;
-  private operations: StoreOperationsLibSQL;
-  constructor({ client, operations }: { client: Client; operations: StoreOperationsLibSQL }) {
+export class MemoryStorageLibSQL extends MemoryStorageBase {
+  private domainBase: LibSQLDomainBase;
+
+  constructor(opts: LibSQLDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = new LibSQLDomainBase(opts);
+  }
+
+  private get client(): Client {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsLibSQL {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearTable({ tableName: TABLE_THREADS }),
+      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
+      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   private parseRow(row: any): MastraDBMessage {
@@ -433,11 +461,11 @@ export class MemoryLibSQL extends MemoryStorage {
           // Deep merge metadata if it exists on both
           ...(existingMessage.content?.metadata && updatableFields.content.metadata
             ? {
-                metadata: {
-                  ...existingMessage.content.metadata,
-                  ...updatableFields.content.metadata,
-                },
-              }
+              metadata: {
+                ...existingMessage.content.metadata,
+                ...updatableFields.content.metadata,
+              },
+            }
             : {}),
         };
         setClauses.push(`${parseSqlIdentifier('content', 'column name')} = ?`);
