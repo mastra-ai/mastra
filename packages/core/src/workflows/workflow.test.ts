@@ -5746,7 +5746,6 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // Step error is also the actual error, not wrapped
       expect((step1Result as any)?.error).toBe(error);
       expect((step1Result as any)?.error?.message).toBe('Step execution failed');
     });
