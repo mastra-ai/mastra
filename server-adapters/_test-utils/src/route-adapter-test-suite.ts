@@ -3,12 +3,12 @@ import type { ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { buildRouteRequest, expectValidSchema } from '@mastra/server/server-adapter';
-import { createDefaultTestContext, parseDatesInResponse } from './test-helpers';
+import { buildRouteRequest, createDefaultTestContext, parseDatesInResponse } from './test-helpers';
+import { expectValidSchema } from './route-test-utils';
 
 /**
  * Test context for adapter integration tests
- * Convention: Create entities with IDs that match auto-generated values in getDefaultValidPathParams:
+ * Convention: Create entities with IDs that match auto-generated values:
  * - agentId: 'test-agent'
  * - workflowId: 'test-workflow'
  * - toolId: 'test-tool'

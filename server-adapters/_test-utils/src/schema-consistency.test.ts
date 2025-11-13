@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { SERVER_ROUTES } from '../index';
 import { createRouteTestSuite } from './route-test-suite';
+import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 import { extractPathParams } from './route-test-utils';
 
 describe('Schema Consistency Across All Routes', () => {

@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import type { ServerRoute } from '../index';
 import {
   expectInvalidSchema,
   expectValidSchema,
@@ -8,6 +7,7 @@ import {
   getDefaultInvalidPathParams,
   validateRouteMetadata,
 } from './route-test-utils';
+import { ServerRoute } from '@mastra/server/server-adapter';
 
 /**
  * Configuration for route test suite

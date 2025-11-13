@@ -49,6 +49,3 @@ export const SERVER_ROUTES: ServerRoute[] = [
 // Export route builder and OpenAPI utilities
 export { createRoute } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';
-
-// Export test utilities for adapter integration tests
-export { getDefaultValidPathParams, buildRouteRequest, expectValidSchema } from './__tests__/route-test-utils';

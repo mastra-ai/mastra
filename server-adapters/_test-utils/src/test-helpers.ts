@@ -13,8 +13,9 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
-import { WorkflowRegistry } from '@mastra/server/server-adapter';
+import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
 import { BaseLogMessage, IMastraLogger, LogLevel } from '@mastra/core/logger';
+import { generateValidDataFromSchema, getDefaultValidPathParams } from './route-test-utils';
 
 vi.mock('@mastra/core/vector');
 
@@ -470,3 +471,83 @@ const mockLogger = {
   transports: Record<string, unknown>;
   getTransports: () => Map<string, unknown>;
 };
+
+export interface RouteRequestPayload {
+  method: ServerRoute['method'];
+  path: string;
+  query?: Record<string, string | string[]>;
+  body?: unknown;
+}
+
+export interface RouteRequestOverrides {
+  pathParams?: Record<string, string>;
+  query?: Record<string, unknown>;
+  body?: Record<string, unknown>;
+}
+
+export function buildRouteRequest(route: ServerRoute, overrides: RouteRequestOverrides = {}): RouteRequestPayload {
+  const method = route.method;
+  let path = route.path;
+
+  if (route.pathParamSchema) {
+    const defaults = getDefaultValidPathParams(route);
+    const params = { ...defaults, ...(overrides.pathParams ?? {}) };
+    for (const [key, value] of Object.entries(params)) {
+      path = path.replace(`:${key}`, encodeURIComponent(String(value)));
+    }
+  }
+
+  let query: Record<string, string | string[]> | undefined;
+  if (route.queryParamSchema) {
+    const generated = generateValidDataFromSchema(route.queryParamSchema) as Record<string, unknown>;
+    query = convertQueryValues({ ...generated, ...(overrides.query ?? {}) });
+  } else if (overrides.query) {
+    query = convertQueryValues(overrides.query);
+  }
+
+  let body: Record<string, unknown> | undefined;
+  if (route.bodySchema) {
+    const generated = generateValidDataFromSchema(route.bodySchema) as Record<string, unknown>;
+    body = { ...generated, ...(overrides.body ?? {}) };
+  } else if (overrides.body) {
+    body = { ...overrides.body };
+  }
+
+  return {
+    method,
+    path,
+    query,
+    body,
+  };
+}
+
+export function convertQueryValues(values: Record<string, unknown>): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
+  const appendValue = (prefix: string, value: unknown) => {
+    if (value === undefined || value === null) return;
+    if (Array.isArray(value)) {
+      query[prefix] = value.map(item => convertQueryValue(item));
+      return;
+    }
+    if (value instanceof Date) {
+      query[prefix] = value.toISOString();
+      return;
+    }
+    if (typeof value === 'object') {
+      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+        appendValue(`${prefix}[${key}]`, nested);
+      }
+      return;
+    }
+    query[prefix] = convertQueryValue(value);
+  };
+
+  for (const [key, value] of Object.entries(values)) {
+    appendValue(key, value);
+  }
+  return query;
+}
+
+function convertQueryValue(value: unknown): string {
+  return String(value);
+}
