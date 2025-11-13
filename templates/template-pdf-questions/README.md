@@ -218,9 +218,9 @@ console.log(questionsResult.questions);
 
 - ✅ **Token Limit Protection**: Demonstrates how to handle large datasets without hitting context limits
 - ✅ **80-95% Token Reduction**: AI summarization drastically reduces processing costs
-- ✅ **Large Context Window**: Uses OpenAI GPT-4.1 Mini to handle large documents efficiently
+- ✅ **Large Context Window**: Uses large context window models to handle documents efficiently
 - ✅ **Zero System Dependencies**: Pure JavaScript solution
-- ✅ **Single API Setup**: OpenAI for both summarization and question generation
+- ✅ **Multi-Provider Support**: Choose from OpenAI, Anthropic, Google, Groq, Cerebras, or Mistral
 - ✅ **Fast Text Extraction**: Direct PDF parsing (no OCR needed for text-based PDFs)
 - ✅ **Educational Focus**: Generates focused learning questions from key insights
 - ✅ **Multiple Interfaces**: Workflow, Agent, and individual tools available
