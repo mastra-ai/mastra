@@ -260,6 +260,19 @@ export class DuckDBVector extends MastraVector {
         throw new Error(`Index "${indexName}" already exists`);
       }
 
+      // Validate dimension and metric match the store configuration
+      if (dimension !== this.config.dimensions) {
+        throw new Error(
+          `Dimension mismatch: store configured for ${this.config.dimensions} but index "${indexName}" requested ${dimension}. ` +
+            'Either update the DuckDBVector configuration or recreate the store with matching dimensions.',
+        );
+      }
+      if (metric !== this.config.metric) {
+        throw new Error(
+          `Metric mismatch: store configured for "${this.config.metric}" but index "${indexName}" requested "${metric}".`,
+        );
+      }
+
       // Validate dimension and metric consistency across all indexes
       const allIndexes = await this.execute(conn, 'SELECT dimension, metric FROM vector_indexes LIMIT 1');
       if (allIndexes.length > 0) {
