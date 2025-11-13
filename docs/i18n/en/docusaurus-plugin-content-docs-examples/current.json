@@ -127,10 +127,6 @@
     "message": "Memory with Schema",
     "description": "The label for the doc item 'Memory with Schema' in sidebar 'examplesSidebar', linking to the doc memory/working-memory-schema"
   },
-  "sidebar.examplesSidebar.doc.Memory with MongoDB": {
-    "message": "Memory with MongoDB",
-    "description": "The label for the doc item 'Memory with MongoDB' in sidebar 'examplesSidebar', linking to the doc memory/memory-with-mongodb"
-  },
   "sidebar.examplesSidebar.doc.Creating a Workflow": {
     "message": "Creating a Workflow",
     "description": "The label for the doc item 'Creating a Workflow' in sidebar 'examplesSidebar', linking to the doc workflows_legacy/creating-a-workflow"
