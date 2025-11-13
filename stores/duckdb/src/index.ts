@@ -11,7 +11,7 @@ export type {
   DuckDBQueryOptions,
 } from './vector/types';
 
-// Re-export commonly used types from core
+// Re-export commonly used types from core/vector
 export type {
   CreateIndexParams,
   UpsertVectorParams,
@@ -22,7 +22,7 @@ export type {
   DeleteIndexParams,
   DescribeIndexParams,
   IndexStats,
-} from '@mastra/core';
+} from '@mastra/core/vector';
 
 /**
  * @example

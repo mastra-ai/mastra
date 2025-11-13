@@ -19,18 +19,18 @@
  * explaining why it's safe despite appearances.
  */
 
-import { MastraVector } from '@mastra/core';
-import type {
-  CreateIndexParams,
-  UpsertVectorParams,
-  QueryVectorParams,
-  QueryResult,
-  UpdateVectorParams,
-  DeleteVectorParams,
-  DeleteIndexParams,
-  DescribeIndexParams,
-  IndexStats,
-} from '@mastra/core';
+import {
+  MastraVector,
+  type CreateIndexParams,
+  type UpsertVectorParams,
+  type QueryVectorParams,
+  type QueryResult,
+  type UpdateVectorParams,
+  type DeleteVectorParams,
+  type DeleteIndexParams,
+  type DescribeIndexParams,
+  type IndexStats,
+} from '@mastra/core/vector';
 
 import duckdb from 'duckdb';
 import { Mutex } from 'async-mutex';
@@ -62,9 +62,11 @@ export class DuckDBVector extends MastraVector {
   private initialized = false;
 
   constructor(config: DuckDBVectorConfig = {}) {
-    super();
+    const id = config.id || 'duckdb-vector';
+    super({ id });
 
     this.config = {
+      id,
       path: config.path || ':memory:',
       dimensions: config.dimensions || 512,
       metric: config.metric || 'cosine',

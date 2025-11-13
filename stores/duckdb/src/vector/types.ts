@@ -9,6 +9,12 @@ import type { VectorFilter as BaseVectorFilter } from '@mastra/core/vector/filte
  */
 export interface DuckDBVectorConfig {
   /**
+   * Unique identifier for this vector store instance
+   * @default 'duckdb-vector'
+   */
+  id?: string;
+
+  /**
    * Path to DuckDB database file
    * Use ':memory:' for in-memory database
    * @default ':memory:'
