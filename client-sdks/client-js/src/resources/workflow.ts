@@ -249,10 +249,10 @@ export class Workflow extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
-    const requestContext = parseClientRequestContext(params.requestContext);
+    const workflowRequestContext = parseClientRequestContext(params.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, requestContext, tracingOptions: params.tracingOptions },
+      body: { inputData: params?.inputData, workflowRequestContext, tracingOptions: params.tracingOptions },
     });
   }
 
@@ -274,13 +274,13 @@ export class Workflow extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
-    const requestContext = parseClientRequestContext(rest.requestContext);
+    const workflowRequestContext = parseClientRequestContext(rest.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       body: {
         step,
         resumeData,
-        requestContext,
+        workflowRequestContext,
         tracingOptions,
       },
     });
@@ -303,11 +303,11 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const requestContext = parseClientRequestContext(params.requestContext);
+    const workflowRequestContext = parseClientRequestContext(params.requestContext);
 
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, requestContext, tracingOptions: params.tracingOptions },
+      body: { inputData: params.inputData, workflowRequestContext, tracingOptions: params.tracingOptions },
     });
   }
 
@@ -328,12 +328,12 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const requestContext = parseClientRequestContext(params.requestContext);
+    const workflowRequestContext = parseClientRequestContext(params.requestContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
       {
         method: 'POST',
-        body: { inputData: params.inputData, requestContext, tracingOptions: params.tracingOptions },
+        body: { inputData: params.inputData, workflowRequestContext, tracingOptions: params.tracingOptions },
         stream: true,
       },
     );
@@ -462,14 +462,14 @@ export class Workflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const requestContext = parseClientRequestContext(params.requestContext);
+    const workflowRequestContext = parseClientRequestContext(params.requestContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
       {
         method: 'POST',
         body: {
           inputData: params.inputData,
-          requestContext,
+          workflowRequestContext,
           closeOnSuspend: params.closeOnSuspend,
           tracingOptions: params.tracingOptions,
         },
@@ -596,13 +596,13 @@ export class Workflow extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
-    const requestContext = parseClientRequestContext(params.requestContext);
+    const workflowRequestContext = parseClientRequestContext(params.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
         step: params.step,
         resumeData: params.resumeData,
-        requestContext,
+        workflowRequestContext,
         tracingOptions: params.tracingOptions,
       },
     });
@@ -622,7 +622,7 @@ export class Workflow extends BaseResource {
   }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
-    const requestContext = parseClientRequestContext(params.requestContext);
+    const workflowRequestContext = parseClientRequestContext(params.requestContext);
     const response: Response = await this.request(
       `/api/workflows/${this.workflowId}/resume-stream?${searchParams.toString()}`,
       {
@@ -630,7 +630,7 @@ export class Workflow extends BaseResource {
         body: {
           step: params.step,
           resumeData: params.resumeData,
-          requestContext,
+          workflowRequestContext,
           tracingOptions: params.tracingOptions,
         },
         stream: true,

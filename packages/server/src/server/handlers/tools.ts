@@ -1,4 +1,4 @@
-import type { RequestContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { isVercelTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -68,9 +68,11 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
     toolId,
     data,
     requestContext,
+    toolRequestContext,
   }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & {
     data?: unknown;
     requestContext: RequestContext;
+    toolRequestContext?: Record<string, unknown>;
   }) => {
     try {
       if (!toolId) {
@@ -89,6 +91,12 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
 
       validateBody({ data });
 
+      // Merge Context's requestContext with body's toolRequestContext
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext?.entries() ?? []),
+        ...Array.from(Object.entries(toolRequestContext ?? {})),
+      ]);
+
       if (isVercelTool(tool)) {
         const result = await (tool as any).execute(data);
         return result;
@@ -96,7 +104,7 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
 
       const result = await tool.execute(data!, {
         mastra,
-        requestContext,
+        requestContext: finalRequestContext,
         // TODO: Pass proper tracing context when server API supports tracing
         tracingContext: { currentSpan: undefined },
         ...(runId

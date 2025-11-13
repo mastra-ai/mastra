@@ -185,7 +185,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },
@@ -240,7 +240,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },
@@ -294,7 +294,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },
@@ -344,7 +344,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },
@@ -434,7 +434,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },
@@ -555,7 +555,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },
@@ -649,7 +649,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },
@@ -708,7 +708,7 @@ export function agentBuilderRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                actionRequestContext: {
                   type: 'object',
                   description: 'Request Context for the agent builder action execution',
                 },

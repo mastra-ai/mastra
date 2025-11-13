@@ -77,7 +77,7 @@ export async function startAsyncWorkflowHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const requestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
-    const { inputData, tracingOptions } = await c.req.json();
+    const { inputData, tracingOptions, workflowRequestContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
@@ -87,6 +87,7 @@ export async function startAsyncWorkflowHandler(c: Context) {
       runId,
       inputData,
       tracingOptions,
+      workflowRequestContext,
     });
 
     return c.json(result);
@@ -100,7 +101,7 @@ export async function startWorkflowRunHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const requestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
-    const { inputData, tracingOptions } = await c.req.json();
+    const { inputData, tracingOptions, workflowRequestContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartWorkflowRunHandler({
@@ -110,6 +111,7 @@ export async function startWorkflowRunHandler(c: Context) {
       runId,
       inputData,
       tracingOptions,
+      workflowRequestContext,
     });
 
     return c.json({ message: 'Workflow run started' });
@@ -132,7 +134,7 @@ export async function streamVNextWorkflowHandler(c: Context) {
     const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const { inputData, closeOnSuspend, tracingOptions } = await c.req.json();
+    const { inputData, closeOnSuspend, tracingOptions, workflowRequestContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -149,6 +151,7 @@ export async function streamVNextWorkflowHandler(c: Context) {
             requestContext,
             closeOnSuspend,
             tracingOptions,
+            workflowRequestContext,
           });
 
           const reader = result.getReader();
@@ -222,7 +225,7 @@ export async function streamLegacyWorkflowHandler(c: Context) {
     const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const { inputData, tracingOptions } = await c.req.json();
+    const { inputData, tracingOptions, workflowRequestContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -238,6 +241,7 @@ export async function streamLegacyWorkflowHandler(c: Context) {
             inputData,
             requestContext,
             tracingOptions,
+            workflowRequestContext,
           });
 
           const reader = result.stream.getReader();
@@ -317,7 +321,7 @@ export async function resumeStreamWorkflowHandler(c: Context) {
     const requestContext = c.get('requestContext');
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
-    const { step, resumeData, tracingOptions } = await c.req.json();
+    const { step, resumeData, tracingOptions, workflowRequestContext } = await c.req.json();
     const runId = c.req.query('runId');
 
     c.header('Transfer-Encoding', 'chunked');
@@ -334,6 +338,7 @@ export async function resumeStreamWorkflowHandler(c: Context) {
             resumeData,
             requestContext,
             tracingOptions,
+            workflowRequestContext,
           });
 
           const reader = result.getReader();
@@ -365,7 +370,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
     const requestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData, tracingOptions } = await c.req.json();
+    const { step, resumeData, tracingOptions, workflowRequestContext } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -379,6 +384,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
       step,
       resumeData,
       tracingOptions,
+      workflowRequestContext,
     });
 
     return c.json(result);
@@ -393,7 +399,7 @@ export async function resumeWorkflowHandler(c: Context) {
     const requestContext = c.get('requestContext');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData, tracingOptions } = await c.req.json();
+    const { step, resumeData, tracingOptions, workflowRequestContext } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -407,6 +413,7 @@ export async function resumeWorkflowHandler(c: Context) {
       step,
       resumeData,
       tracingOptions,
+      workflowRequestContext,
     });
 
     return c.json({ message: 'Workflow run resumed' });

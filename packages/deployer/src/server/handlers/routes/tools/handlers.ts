@@ -48,7 +48,7 @@ export function executeToolHandler(tools: Record<string, any>) {
       const requestContext = c.get('requestContext');
       const toolId = decodeURIComponent(c.req.param('toolId'));
       const runId = c.req.query('runId');
-      const { data } = await c.req.json();
+      const { data, toolRequestContext } = await c.req.json();
 
       const result = await getOriginalExecuteToolHandler(tools)({
         mastra,
@@ -56,6 +56,7 @@ export function executeToolHandler(tools: Record<string, any>) {
         data,
         requestContext,
         runId,
+        toolRequestContext,
       });
 
       return c.json(result);

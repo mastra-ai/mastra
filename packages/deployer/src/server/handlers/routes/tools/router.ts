@@ -74,7 +74,10 @@ export function toolsRouter(bodyLimitOptions: BodyLimitOptions, tools: Record<st
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                toolRequestContext: { type: 'object' },
+                toolRequestContext: {
+                  type: 'object',
+                  description: 'Request Context for the tool execution',
+                },
               },
               required: ['data'],
             },

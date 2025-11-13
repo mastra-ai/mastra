@@ -1,5 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import type { RequestContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, WorkflowInfo, ChunkType, StreamEvent, WorkflowState } from '@mastra/core/workflows';
@@ -7,7 +7,6 @@ import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
-import { parsePerPage } from './utils';
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -188,10 +187,12 @@ export async function startAsyncWorkflowHandler({
   runId,
   inputData,
   tracingOptions,
+  workflowRequestContext,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -204,10 +205,16 @@ export async function startAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
+    // Merge Context's requestContext with body's workflowRequestContext
+    const finalRequestContext = new RequestContext<Record<string, unknown>>([
+      ...Array.from(requestContext?.entries() ?? []),
+      ...Array.from(Object.entries(workflowRequestContext ?? {})),
+    ]);
+
     const _run = await workflow.createRun({ runId });
     const result = await _run.start({
       inputData,
-      requestContext,
+      requestContext: finalRequestContext,
       tracingOptions,
     });
     return result;
@@ -223,10 +230,12 @@ export async function startWorkflowRunHandler({
   runId,
   inputData,
   tracingOptions,
+  workflowRequestContext,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -249,10 +258,16 @@ export async function startWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
+    // Merge Context's requestContext with body's workflowRequestContext
+    const finalRequestContext = new RequestContext<Record<string, unknown>>([
+      ...Array.from(requestContext?.entries() ?? []),
+      ...Array.from(Object.entries(workflowRequestContext ?? {})),
+    ]);
+
     const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     void _run.start({
       inputData,
-      requestContext,
+      requestContext: finalRequestContext,
       tracingOptions,
     });
 
@@ -269,12 +284,22 @@ export async function streamWorkflowHandler({
   runId,
   inputData,
   tracingOptions,
+  workflowRequestContext,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
-  return streamVNextWorkflowHandler({ mastra, workflowId, runId, inputData, requestContext, tracingOptions });
+  return streamVNextWorkflowHandler({
+    mastra,
+    workflowId,
+    runId,
+    inputData,
+    requestContext,
+    tracingOptions,
+    workflowRequestContext,
+  });
 }
 
 export async function streamLegacyWorkflowHandler({
@@ -284,10 +309,12 @@ export async function streamLegacyWorkflowHandler({
   runId,
   inputData,
   tracingOptions,
+  workflowRequestContext,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -304,12 +331,18 @@ export async function streamLegacyWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
+    // Merge Context's requestContext with body's workflowRequestContext
+    const finalRequestContext = new RequestContext<Record<string, unknown>>([
+      ...Array.from(requestContext?.entries() ?? []),
+      ...Array.from(Object.entries(workflowRequestContext ?? {})),
+    ]);
+
     const serverCache = mastra.getServerCache();
 
     const run = await workflow.createRun({ runId });
     const result = run.streamLegacy({
       inputData,
-      requestContext,
+      requestContext: finalRequestContext,
       onChunk: async chunk => {
         if (serverCache) {
           const cacheKey = runId;
@@ -392,11 +425,13 @@ export async function streamVNextWorkflowHandler({
   inputData,
   closeOnSuspend,
   tracingOptions,
+  workflowRequestContext,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   requestContext?: RequestContext;
   closeOnSuspend?: boolean;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -413,12 +448,18 @@ export async function streamVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
+    // Merge Context's requestContext with body's workflowRequestContext
+    const finalRequestContext = new RequestContext<Record<string, unknown>>([
+      ...Array.from(requestContext?.entries() ?? []),
+      ...Array.from(Object.entries(workflowRequestContext ?? {})),
+    ]);
+
     const serverCache = mastra.getServerCache();
 
     const run = await workflow.createRun({ runId });
     const result = run.stream({
       inputData,
-      requestContext,
+      requestContext: finalRequestContext,
       closeOnSuspend,
       tracingOptions,
     });
@@ -529,11 +570,13 @@ export async function resumeAsyncWorkflowHandler({
   resumeData,
   requestContext,
   tracingOptions,
+  workflowRequestContext,
 }: WorkflowContext & {
   step: string | string[];
   resumeData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -556,11 +599,17 @@ export async function resumeAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
+    // Merge Context's requestContext with body's workflowRequestContext
+    const finalRequestContext = new RequestContext<Record<string, unknown>>([
+      ...Array.from(requestContext?.entries() ?? []),
+      ...Array.from(Object.entries(workflowRequestContext ?? {})),
+    ]);
+
     const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     const result = await _run.resume({
       step,
       resumeData,
-      requestContext,
+      requestContext: finalRequestContext,
       tracingOptions,
     });
 
@@ -578,11 +627,13 @@ export async function resumeWorkflowHandler({
   resumeData,
   requestContext,
   tracingOptions,
+  workflowRequestContext,
 }: WorkflowContext & {
   step: string | string[];
   resumeData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -605,12 +656,18 @@ export async function resumeWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
+    // Merge Context's requestContext with body's workflowRequestContext
+    const finalRequestContext = new RequestContext<Record<string, unknown>>([
+      ...Array.from(requestContext?.entries() ?? []),
+      ...Array.from(Object.entries(workflowRequestContext ?? {})),
+    ]);
+
     const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
     void _run.resume({
       step,
       resumeData,
-      requestContext,
+      requestContext: finalRequestContext,
       tracingOptions,
     });
 
@@ -628,11 +685,13 @@ export async function resumeStreamWorkflowHandler({
   resumeData,
   requestContext,
   tracingOptions,
+  workflowRequestContext,
 }: WorkflowContext & {
   step: string | string[];
   resumeData?: unknown;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  workflowRequestContext?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -655,6 +714,12 @@ export async function resumeStreamWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
+    // Merge Context's requestContext with body's workflowRequestContext
+    const finalRequestContext = new RequestContext<Record<string, unknown>>([
+      ...Array.from(requestContext?.entries() ?? []),
+      ...Array.from(Object.entries(workflowRequestContext ?? {})),
+    ]);
+
     const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
     const serverCache = mastra.getServerCache();
 
@@ -662,7 +727,7 @@ export async function resumeStreamWorkflowHandler({
       .resumeStream({
         step,
         resumeData,
-        requestContext,
+        requestContext: finalRequestContext,
         tracingOptions,
       })
       .fullStream.pipeThrough(

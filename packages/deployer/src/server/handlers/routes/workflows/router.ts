@@ -184,7 +184,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
@@ -238,7 +238,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
@@ -293,7 +293,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
@@ -343,7 +343,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
@@ -433,7 +433,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
@@ -527,7 +527,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
@@ -652,7 +652,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
@@ -711,7 +711,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                requestContext: {
+                workflowRequestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
