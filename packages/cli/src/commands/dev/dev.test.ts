@@ -14,11 +14,16 @@ vi.mock('@expo/devcert', () => ({
   },
 }));
 
-vi.mock('@mastra/deployer', () => ({
-  FileService: vi.fn().mockImplementation(() => ({
-    getFirstExistingFile: vi.fn().mockReturnValue('/mock/index.ts'),
-  })),
-}));
+vi.mock('@mastra/deployer', () => {
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockFileService {
+    getFirstExistingFile = vi.fn().mockReturnValue('/mock/index.ts');
+  }
+
+  return {
+    FileService: MockFileService,
+  };
+});
 
 vi.mock('@mastra/deployer/build', () => ({
   getServerOptions: vi.fn().mockResolvedValue({
@@ -61,15 +66,20 @@ const mockWatcher = {
   close: vi.fn().mockResolvedValue(undefined),
 };
 
-vi.mock('./DevBundler', () => ({
-  DevBundler: vi.fn().mockImplementation(() => ({
-    __setLogger: vi.fn(),
-    loadEnvVars: vi.fn().mockResolvedValue(new Map()),
-    prepare: vi.fn().mockResolvedValue(undefined),
-    getAllToolPaths: vi.fn().mockReturnValue([]),
-    watch: vi.fn().mockResolvedValue(mockWatcher),
-  })),
-}));
+vi.mock('./DevBundler', () => {
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockDevBundler {
+    __setLogger = vi.fn();
+    loadEnvVars = vi.fn().mockResolvedValue(new Map());
+    prepare = vi.fn().mockResolvedValue(undefined);
+    getAllToolPaths = vi.fn().mockReturnValue([]);
+    watch = vi.fn().mockResolvedValue(mockWatcher);
+  }
+
+  return {
+    DevBundler: MockDevBundler,
+  };
+});
 
 describe('dev command - inspect flag behavior', () => {
   let execaMock: any;
