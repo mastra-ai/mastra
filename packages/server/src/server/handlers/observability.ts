@@ -57,7 +57,7 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
  */
 export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityContext) {
   try {
-    const storage = mastra.getStorage('evals');
+    const storage = mastra.getStorage('observability');
     if (!storage) {
       throw new HTTPException(500, { message: 'Storage is not available' });
     }

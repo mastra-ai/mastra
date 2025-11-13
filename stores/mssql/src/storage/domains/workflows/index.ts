@@ -1,29 +1,46 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, normalizePerPage } from '@mastra/core/storage';
+import { WorkflowsStorageBase, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, normalizePerPage } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
+import { MSSQLDomainBase } from '../base';
+import type { MSSQLDomainConfig } from '../base';
 import type { StoreOperationsMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
-export class WorkflowsMSSQL extends WorkflowsStorage {
-  public pool: sql.ConnectionPool;
-  private operations: StoreOperationsMSSQL;
-  private schema: string;
+export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
+  private domainBase: MSSQLDomainBase;
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: sql.ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema: string;
-  }) {
+  constructor(opts: MSSQLDomainConfig) {
     super();
-    this.pool = pool;
-    this.operations = operations;
-    this.schema = schema;
+    this.domainBase = new MSSQLDomainBase(opts);
+  }
+
+  private get pool(): sql.ConnectionPool {
+    return this.domainBase['pool'];
+  }
+
+  private get schema(): string {
+    return this.domainBase['schema'];
+  }
+
+  private get operations(): StoreOperationsMSSQL {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+    });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -102,7 +119,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
       // Upsert within the same transaction to handle both insert and update
       const upsertReq = new sql.Request(transaction);
-      upsertReq.input('workflow_name', workflowName);
+      upsertReq.input('workflow_name', workflowId);
       upsertReq.input('run_id', runId);
       upsertReq.input('snapshot', JSON.stringify(snapshot));
       upsertReq.input('createdAt', sql.DateTime2, new Date());
@@ -202,7 +219,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       // Update the snapshot within the same transaction
       const updateRequest = new sql.Request(transaction);
       updateRequest.input('snapshot', JSON.stringify(updatedSnapshot));
-      updateRequest.input('workflow_name', workflowName);
+      updateRequest.input('workflow_name', workflowId);
       updateRequest.input('run_id', runId);
       updateRequest.input('updatedAt', sql.DateTime2, new Date());
 
@@ -248,7 +265,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     const now = new Date().toISOString();
     try {
       const request = this.pool.request();
-      request.input('workflow_name', workflowName);
+      request.input('workflow_name', workflowId);
       request.input('run_id', runId);
       request.input('resourceId', resourceId);
       request.input('snapshot', JSON.stringify(snapshot));
@@ -315,13 +332,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRunById({
-    runId,
-    workflowId,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
+  async getWorkflowRunById({ runId, workflowId }: { runId: string; workflowId?: string }): Promise<WorkflowRun | null> {
     try {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
@@ -331,9 +342,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         paramMap['runId'] = runId;
       }
 
-      if (workflowName) {
-        conditions.push(`[workflow_name] = @workflowName`);
-        paramMap['workflowName'] = workflowName;
+      if (workflowId) {
+        conditions.push(`[workflow_name] = @workflowId`);
+        paramMap['workflowId'] = workflowId;
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -356,7 +367,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             runId,
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
           },
         },
         error,
@@ -377,9 +388,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
 
-      if (workflowName) {
-        conditions.push(`[workflow_name] = @workflowName`);
-        paramMap['workflowName'] = workflowName;
+      if (workflowId) {
+        conditions.push(`[workflow_name] = @workflowId`);
+        paramMap['workflowId'] = workflowId;
       }
 
       if (status) {
@@ -444,7 +455,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            workflowName: workflowName || 'all',
+            workflowId: workflowId || 'all',
           },
         },
         error,

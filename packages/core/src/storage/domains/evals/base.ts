@@ -67,4 +67,12 @@ export abstract class EvalsStorageBase extends MastraBase {
   }
 
   abstract dropData(): Promise<void>;
+
+  async createIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async dropIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
+  }
 }

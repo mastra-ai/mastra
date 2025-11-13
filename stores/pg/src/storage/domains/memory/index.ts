@@ -39,6 +39,7 @@ type MessageRowFromDB = {
 
 export class MemoryPG extends MemoryStorageBase {
   private domainBase: PGDomainBase;
+  indexManagement?: IndexManagementPG;
 
   constructor(opts: PGDomainConfig) {
     super();
@@ -57,6 +58,46 @@ export class MemoryPG extends MemoryStorageBase {
     return this.domainBase['operations'];
   }
 
+  async createIndexes(): Promise<void> {
+    // Create indexes for memory domain
+    const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    this.indexManagement = indexManagement;
+
+    // Create threads index
+    try {
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'createdAt DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create memory threads index:', error);
+    }
+
+    // Create messages index
+    try {
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'createdAt DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create memory messages index:', error);
+    }
+  }
+
+  async dropIndexes(): Promise<void> {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    }
+    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_threads_resourceid_createdat_idx`);
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_messages_thread_id_createdat_idx`);
+  }
+
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
@@ -68,24 +109,7 @@ export class MemoryPG extends MemoryStorageBase {
       ifNotExists: ['resourceId'],
     });
 
-    // Create indexes for memory domain
-    const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
-    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
-    try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
-        table: TABLE_THREADS,
-        columns: ['resourceId', 'createdAt DESC'],
-      });
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id', 'createdAt DESC'],
-      });
-    } catch (error) {
-      // Log but don't fail initialization - indexes are performance optimizations
-      this.logger?.warn?.('Failed to create memory indexes:', error);
-    }
+    await this.createIndexes();
   }
 
   async close(): Promise<void> {

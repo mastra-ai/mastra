@@ -11,7 +11,6 @@ import type {
   StorageListThreadsByResourceIdOutput,
   StorageOrderBy,
 } from '../../types';
-
 export abstract class MemoryStorageBase extends MastraBase {
   constructor() {
     super({
@@ -104,6 +103,14 @@ export abstract class MemoryStorageBase extends MastraBase {
   }
 
   abstract dropData(): Promise<void>;
+
+  async createIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async dropIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
+  }
 }
 
 const THREAD_ORDER_BY_SET: Record<ThreadOrderBy, true> = {

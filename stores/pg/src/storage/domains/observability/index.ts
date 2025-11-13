@@ -18,6 +18,7 @@ import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTable
 
 export class ObservabilityPG extends ObservabilityStorageBase {
   private domainBase: PGDomainBase;
+  indexManagement?: IndexManagementPG;
 
   constructor(opts: PGDomainConfig) {
     super();
@@ -36,28 +37,50 @@ export class ObservabilityPG extends ObservabilityStorageBase {
     return this.domainBase['operations'];
   }
 
-  async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
-
+  async createIndexes(): Promise<void> {
     // Create indexes for observability domain
     const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    this.indexManagement = indexManagement;
     const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+
+    // Create traceId + startedAt index
     try {
       await indexManagement.createIndex({
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
         table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability traceId index:', error);
+    }
+
+    // Create parentSpanId + startedAt index
+    try {
       await indexManagement.createIndex({
         name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
         table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability parentSpanId index:', error);
+    }
+
+    // Create name index
+    try {
       await indexManagement.createIndex({
         name: `${schemaPrefix}mastra_ai_spans_name_idx`,
         table: TABLE_SPANS,
         columns: ['name'],
       });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability name index:', error);
+    }
+
+    // Create spanType + startedAt index
+    try {
       await indexManagement.createIndex({
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
         table: TABLE_SPANS,
@@ -65,8 +88,24 @@ export class ObservabilityPG extends ObservabilityStorageBase {
       });
     } catch (error) {
       // Log but don't fail initialization - indexes are performance optimizations
-      this.logger?.warn?.('Failed to create observability indexes:', error);
+      this.logger?.warn?.('Failed to create observability spanType index:', error);
     }
+  }
+
+  async dropIndexes(): Promise<void> {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    }
+    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`);
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`);
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_name_idx`);
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`);
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    await this.createIndexes();
   }
 
   async close(): Promise<void> {

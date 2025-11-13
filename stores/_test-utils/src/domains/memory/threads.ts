@@ -141,10 +141,10 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       // Create and save a message to the thread
       const message = createSampleMessageV2({ threadId: thread.id, content: { content: 'Test message' } });
-      await storage.getStore('memory')?.saveMessages({ messages: [message] });
+      await memoryStore.saveMessages({ messages: [message] });
 
       // Retrieve the thread again and check that updatedAt was updated
-      const updatedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const updatedThread = await memoryStore.getThreadById({ threadId: thread.id });
       expect(updatedThread).toBeDefined();
 
       let originalUpdatedAtTime: number;

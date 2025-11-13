@@ -64,4 +64,12 @@ export abstract class WorkflowsStorageBase extends MastraBase {
   abstract getWorkflowRunById(args: { runId: string; workflowId?: string }): Promise<WorkflowRun | null>;
 
   abstract dropData(): Promise<void>;
+
+  async createIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async dropIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
+  }
 }

@@ -2,12 +2,12 @@ import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
 import type { ScoreRowData } from '@mastra/core/evals';
-import { TABLE_SCORERS, type MastraStorage } from '@mastra/core/storage';
-import type { ScoresStorageBase } from '@mastra/core/storage';
+import type { MastraStorage } from '@mastra/core/storage';
+import type { EvalsStorageBase } from '@mastra/core/storage';
 
 // Helper function for creating test scores
 async function createScores(
-  scoresStore: ScoresStorageBase,
+  scoresStore: EvalsStorageBase,
   configs: Array<{
     count: number;
     scorerId: string;

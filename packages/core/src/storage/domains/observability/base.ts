@@ -9,7 +9,6 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '../../types';
-
 export abstract class ObservabilityStorageBase extends MastraBase {
   constructor() {
     super({
@@ -131,4 +130,12 @@ export abstract class ObservabilityStorageBase extends MastraBase {
   }
 
   abstract dropData(): Promise<void>;
+
+  async createIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async dropIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
+  }
 }

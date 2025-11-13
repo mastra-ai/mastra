@@ -6,22 +6,26 @@ import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createListMessagesTest({ storage }: { storage: MastraStorage }) {
+  const memoryStore = storage.getStore('memory');
+  if (!memoryStore) {
+    throw new Error('Memory store not found');
+  }
   describe('listMessages', () => {
     it('should return paginated messages with total count', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
       // Reset role to 'assistant' before creating messages
       resetRole();
       // Create messages sequentially to ensure unique timestamps
       for (let i = 0; i < 15; i++) {
         const message = createSampleMessageV2({ threadId: thread.id, content: { content: `Message ${i + 1}` } });
-        await storage.getStore('memory')?.saveMessages({
+        await memoryStore.saveMessages({
           messages: [message],
         });
         await new Promise(r => setTimeout(r, 5));
       }
 
-      const page1 = await storage.getStore('memory')?.listMessages({
+      const page1 = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 5,
         page: 0,
@@ -32,7 +36,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       expect(page1.perPage).toBe(5);
       expect(page1.hasMore).toBe(true);
 
-      const page2 = await storage.getStore('memory')?.listMessages({
+      const page2 = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 5,
         page: 1,
@@ -45,7 +49,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     it('should filter by date with pagination', async () => {
       resetRole();
       const threadData = createSampleThread();
-      const thread = await storage.getStore('memory')?.saveThread({ thread: threadData as StorageThreadType });
+      const thread = await memoryStore.saveThread({ thread: threadData as StorageThreadType });
       const now = new Date();
       const yesterday = new Date(
         now.getFullYear(),
@@ -98,10 +102,10 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         createSampleMessageV2({ threadId: thread.id, createdAt: now, content: { content: 'Message 6' } }),
       );
 
-      await storage.getStore('memory')?.saveMessages({ messages: messagesToSave });
+      await memoryStore.saveMessages({ messages: messagesToSave });
       // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
 
-      const fromYesterday = await storage.getStore('memory')?.listMessages({
+      const fromYesterday = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 3,
         page: 0,
@@ -123,7 +127,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
     it('should save and retrieve messages', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       const messages = [
         createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 1' } }),
@@ -131,12 +135,12 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       ];
 
       // Save messages
-      const { messages: savedMessages } = await storage.getStore('memory')?.saveMessages({ messages });
+      const { messages: savedMessages } = await memoryStore.saveMessages({ messages });
 
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const retrievedMessages = await memoryStore.listMessages({ threadId: thread.id });
 
       expect(retrievedMessages.messages).toHaveLength(2);
 
@@ -146,13 +150,13 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should handle empty message array', async () => {
-      const { messages: result } = await storage.getStore('memory')?.saveMessages({ messages: [] });
+      const { messages: result } = await memoryStore.saveMessages({ messages: [] });
       expect(result).toEqual([]);
     });
 
     it('should maintain message order', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       const messages = [
         createSampleMessageV2({
@@ -172,9 +176,9 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.getStore('memory')?.saveMessages({ messages });
+      await memoryStore.saveMessages({ messages });
 
-      const { messages: retrievedMessages } = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await memoryStore.listMessages({ threadId: thread.id });
 
       expect(retrievedMessages).toHaveLength(3);
 
@@ -186,29 +190,29 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
     it('should rollback on error during message save', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       const messages = [
         createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 1' } }),
         { ...createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 2' } }), resourceId: null }, // This will cause an error
       ] as MastraDBMessage[];
 
-      await expect(storage.getStore('memory')?.saveMessages({ messages })).rejects.toThrow();
+      await expect(memoryStore.saveMessages({ messages })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const savedMessages = await memoryStore.listMessages({ threadId: thread.id });
       expect(savedMessages.messages).toHaveLength(0);
     });
 
     it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       const thread2 = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread: thread2 });
+      await memoryStore.saveThread({ thread: thread2 });
 
       const thread3 = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread: thread3 });
+      await memoryStore.saveThread({ thread: thread3 });
 
       const messages: MastraDBMessage[] = [
         createSampleMessageV2({
@@ -263,24 +267,24 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.getStore('memory')?.saveMessages({ messages: messages });
+      await memoryStore.saveMessages({ messages: messages });
 
-      const { messages: retrievedMessages } = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await memoryStore.listMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
       const contentParts = retrievedMessages.map((m: MastraDBMessage) => m.content.content);
       expect(contentParts).toEqual(['First', 'Second', 'Third']);
 
-      const { messages: retrievedMessages2 } = await storage.getStore('memory')?.listMessages({ threadId: thread2.id });
+      const { messages: retrievedMessages2 } = await memoryStore.listMessages({ threadId: thread2.id });
       expect(retrievedMessages2).toHaveLength(3);
       const contentParts2 = retrievedMessages2.map((m: MastraDBMessage) => m.content.content);
       expect(contentParts2).toEqual(['Fourth', 'Fifth', 'Sixth']);
 
-      const { messages: retrievedMessages3 } = await storage.getStore('memory')?.listMessages({ threadId: thread3.id });
+      const { messages: retrievedMessages3 } = await memoryStore.listMessages({ threadId: thread3.id });
       expect(retrievedMessages3).toHaveLength(2);
       const contentParts3 = retrievedMessages3.map((m: MastraDBMessage) => m.content.content);
       expect(contentParts3).toEqual(['Seventh', 'Eighth']);
 
-      const { messages: crossThreadMessages } = await storage.getStore('memory')?.listMessages({
+      const { messages: crossThreadMessages } = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 0,
         include: [
@@ -303,7 +307,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       expect(crossThreadMessages.filter(m => m.threadId === thread.id)).toHaveLength(3);
       expect(crossThreadMessages.filter(m => m.threadId === thread2.id)).toHaveLength(3);
 
-      const { messages: crossThreadMessages2 } = await storage.getStore('memory')?.listMessages({
+      const { messages: crossThreadMessages2 } = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 0,
         include: [
@@ -320,7 +324,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       expect(crossThreadMessages2.filter(m => m.threadId === thread.id)).toHaveLength(0);
       expect(crossThreadMessages2.filter(m => m.threadId === thread2.id)).toHaveLength(3);
 
-      const { messages: crossThreadMessages3 } = await storage.getStore('memory')?.listMessages({
+      const { messages: crossThreadMessages3 } = await memoryStore.listMessages({
         threadId: thread2.id,
         perPage: 0,
         include: [
@@ -340,10 +344,10 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
     it('should return messages using both last and include (cross-thread, deduped)', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       const thread2 = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread: thread2 });
+      await memoryStore.saveThread({ thread: thread2 });
 
       const now = new Date();
 
@@ -380,10 +384,10 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
           createdAt: new Date(now.getTime() + 5000),
         }),
       ];
-      await storage.getStore('memory')?.saveMessages({ messages });
+      await memoryStore.saveMessages({ messages });
 
       // Include a message from another thread with context
-      const { messages: result } = await storage.getStore('memory')?.listMessages({
+      const { messages: result } = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 2,
         orderBy: { field: 'createdAt', direction: 'DESC' },
@@ -419,8 +423,8 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       const thread1 = createSampleThread();
       const thread2 = createSampleThread();
 
-      await storage.getStore('memory')?.saveThread({ thread: thread1 });
-      await storage.getStore('memory')?.saveThread({ thread: thread2 });
+      await memoryStore.saveThread({ thread: thread1 });
+      await memoryStore.saveThread({ thread: thread2 });
 
       const message = createSampleMessageV2({
         threadId: thread1.id,
@@ -430,7 +434,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       });
 
       // Insert message into thread1
-      await storage.getStore('memory')?.saveMessages({ messages: [message] });
+      await memoryStore.saveMessages({ messages: [message] });
 
       // Attempt to insert a message with the same id but different threadId
       const conflictingMessage = {
@@ -443,11 +447,11 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       };
 
       // Save should move the message to the new thread
-      await storage.getStore('memory')?.saveMessages({ messages: [conflictingMessage] });
+      await memoryStore.saveMessages({ messages: [conflictingMessage] });
 
       // Retrieve messages for both threads
-      const { messages: thread1Messages } = await storage.getStore('memory')?.listMessages({ threadId: thread1.id });
-      const { messages: thread2Messages } = await storage.getStore('memory')?.listMessages({ threadId: thread2.id });
+      const { messages: thread1Messages } = await memoryStore.listMessages({ threadId: thread1.id });
+      const { messages: thread2Messages } = await memoryStore.listMessages({ threadId: thread2.id });
 
       // Thread 1 should NOT have the message with that id
       expect(thread1Messages.find(m => m.id === message.id)).toBeUndefined();
@@ -458,9 +462,9 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
     it('should update thread timestamp when saving messages', async () => {
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
-      const initialThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const initialThread = await memoryStore.getThreadById({ threadId: thread.id });
       const initialUpdatedAt = new Date(initialThread!.updatedAt);
 
       // Wait a bit to ensure timestamp difference
@@ -478,17 +482,17 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
           resourceId: thread.resourceId,
         }),
       ];
-      await storage.getStore('memory')?.saveMessages({ messages });
+      await memoryStore.saveMessages({ messages });
 
       // Verify thread updatedAt timestamp was updated
-      const updatedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const updatedThread = await memoryStore.getThreadById({ threadId: thread.id });
       const newUpdatedAt = new Date(updatedThread!.updatedAt);
       expect(newUpdatedAt.getTime()).toBeGreaterThan(initialUpdatedAt.getTime());
     });
 
     it('should upsert messages: duplicate id+threadId results in update, not duplicate row', async () => {
       const thread = await createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
       const baseMessage = createSampleMessageV2({
         threadId: thread.id,
         createdAt: new Date(),
@@ -497,7 +501,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
       });
 
       // Insert the message for the first time
-      await storage.getStore('memory')?.saveMessages({ messages: [baseMessage] });
+      await memoryStore.saveMessages({ messages: [baseMessage] });
 
       // Insert again with the same id and threadId but different content
       const updatedMessage = {
@@ -510,11 +514,11 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         id: baseMessage.id,
       };
 
-      await storage.getStore('memory')?.saveMessages({ messages: [updatedMessage] });
+      await memoryStore.saveMessages({ messages: [updatedMessage] });
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Retrieve messages for the thread
-      const { messages: retrievedMessages } = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const { messages: retrievedMessages } = await memoryStore.listMessages({ threadId: thread.id });
 
       // Only one message should exist for that id+threadId
       expect(retrievedMessages.filter(m => m.id === baseMessage.id)).toHaveLength(1);
@@ -524,9 +528,11 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should throw error if threadId is an empty string or whitespace only', async () => {
-      await expect(storage.getStore('memory')?.listMessages({ threadId: '' })).rejects.toThrow('threadId must be a non-empty string');
+      await expect(memoryStore.listMessages({ threadId: '' })).rejects.toThrow('threadId must be a non-empty string');
 
-      await expect(storage.getStore('memory')?.listMessages({ threadId: '   ' })).rejects.toThrow('threadId must be a non-empty string');
+      await expect(memoryStore.listMessages({ threadId: '   ' })).rejects.toThrow(
+        'threadId must be a non-empty string',
+      );
     });
   });
 
@@ -569,7 +575,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
 
       // Save threads to storage
       for (const thread of threads) {
-        await storage.getStore('memory')?.saveThread({ thread });
+        await memoryStore.saveThread({ thread });
       }
 
       thread1Messages = [
@@ -616,13 +622,13 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.getStore('memory')?.saveMessages({ messages: thread1Messages });
-      await storage.getStore('memory')?.saveMessages({ messages: thread2Messages });
-      await storage.getStore('memory')?.saveMessages({ messages: resource2Messages });
+      await memoryStore.saveMessages({ messages: thread1Messages });
+      await memoryStore.saveMessages({ messages: thread2Messages });
+      await memoryStore.saveMessages({ messages: resource2Messages });
     });
 
     it('should return an empty array if no message IDs are provided', async () => {
-      const { messages } = await storage.getStore('memory')?.listMessagesById({ messageIds: [] });
+      const { messages } = await memoryStore.listMessagesById({ messageIds: [] });
       expect(messages).toHaveLength(0);
     });
 
@@ -634,7 +640,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         thread1Messages[0]!.id,
         thread2Messages[1]!.id,
       ];
-      const { messages } = await storage.getStore('memory')?.listMessagesById({
+      const { messages } = await memoryStore.listMessagesById({
         messageIds,
       });
 
@@ -643,7 +649,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should return V2 messages', async () => {
-      const { messages } = await storage.getStore('memory')?.listMessagesById({
+      const { messages } = await memoryStore.listMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
       });
 
@@ -652,7 +658,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should return messages in MastraDBMessage format', async () => {
-      const { messages: v2messages } = await storage.getStore('memory')?.listMessagesById({
+      const { messages: v2messages } = await memoryStore.listMessagesById({
         messageIds: thread1Messages.map(msg => msg.id),
       });
 
@@ -661,7 +667,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should return messages from multiple threads', async () => {
-      const { messages } = await storage.getStore('memory')?.listMessagesById({
+      const { messages } = await memoryStore.listMessagesById({
         messageIds: [...thread1Messages.map(msg => msg.id), ...thread2Messages.map(msg => msg.id)],
       });
 
@@ -671,7 +677,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should return messages from multiple resources', async () => {
-      const { messages } = await storage.getStore('memory')?.listMessagesById({
+      const { messages } = await memoryStore.listMessagesById({
         messageIds: [...thread1Messages.map(msg => msg.id), ...resource2Messages.map(msg => msg.id)],
       });
 

@@ -36,6 +36,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 
 export class EvalsStoragePG extends EvalsStorageBase {
   private domainBase: PGDomainBase;
+  indexManagement?: IndexManagementPG;
 
   constructor(opts: PGDomainConfig) {
     super();
@@ -54,12 +55,13 @@ export class EvalsStoragePG extends EvalsStorageBase {
     return this.domainBase['operations'];
   }
 
-  async init(): Promise<void> {
-    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
-
+  async createIndexes(): Promise<void> {
     // Create indexes for evals domain
     const indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    this.indexManagement = indexManagement;
     const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+
+    // Create scores index
     try {
       await indexManagement.createIndex({
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
@@ -68,8 +70,22 @@ export class EvalsStoragePG extends EvalsStorageBase {
       });
     } catch (error) {
       // Log but don't fail initialization - indexes are performance optimizations
-      this.logger?.warn?.('Failed to create evals indexes:', error);
+      this.logger?.warn?.('Failed to create evals scores index:', error);
     }
+  }
+
+  async dropIndexes(): Promise<void> {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({ client: this.client, schemaName: this.schema });
+    }
+    const schemaPrefix = this.schema && this.schema !== 'public' ? `${this.schema}_` : '';
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`);
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+
+    await this.createIndexes();
   }
 
   async close(): Promise<void> {

@@ -3,7 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
@@ -19,15 +19,17 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
+import { MSSQLDomainBase } from '../base';
+import type { MSSQLDomainConfig } from '../base';
 import type { StoreOperationsMSSQL } from '../operations';
+import { IndexManagementMSSQL } from '../operations';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
-export class MemoryMSSQL extends MemoryStorage {
-  private pool: sql.ConnectionPool;
-  private schema: string;
-  private operations: StoreOperationsMSSQL;
+export class MemoryStorageMSSQL extends MemoryStorageBase {
+  private domainBase: MSSQLDomainBase;
+  indexManagement?: IndexManagementMSSQL;
 
-  private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
+  private _parseAndFormatMessages(messages: any[]) {
     // Parse content back to objects if they were stringified during storage
     const messagesWithParsedContent = messages.map(message => {
       if (typeof message.content === 'string') {
@@ -46,22 +48,83 @@ export class MemoryMSSQL extends MemoryStorage {
 
     // Use MessageList to ensure proper structure for both v1 and v2
     const list = new MessageList().add(cleanMessages, 'memory');
-    return format === 'v2' ? list.get.all.db() : list.get.all.v1();
+    return list.get.all.db();
   }
 
-  constructor({
-    pool,
-    schema,
-    operations,
-  }: {
-    pool: sql.ConnectionPool;
-    schema: string;
-    operations: StoreOperationsMSSQL;
-  }) {
+  constructor(opts: MSSQLDomainConfig) {
     super();
-    this.pool = pool;
-    this.schema = schema;
-    this.operations = operations;
+    this.domainBase = new MSSQLDomainBase(opts);
+  }
+
+  private get pool(): sql.ConnectionPool {
+    return this.domainBase['pool'];
+  }
+
+  private get schema(): string {
+    return this.domainBase['schema'];
+  }
+
+  private get operations(): StoreOperationsMSSQL {
+    return this.domainBase['operations'];
+  }
+
+  async createIndexes(): Promise<void> {
+    // Create indexes for memory domain
+    const indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
+    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    this.indexManagement = indexManagement;
+
+    // Create threads index
+    try {
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_threads_resourceid_seqid_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'seq_id DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create memory threads index:', error);
+    }
+
+    // Create messages index
+    try {
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_messages_thread_id_seqid_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'seq_id DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create memory messages index:', error);
+    }
+  }
+
+  async dropIndexes(): Promise<void> {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
+    }
+    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_threads_resourceid_seqid_idx`);
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_messages_thread_id_seqid_idx`);
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.operations.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.operations.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    await this.createIndexes();
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearTable({ tableName: TABLE_THREADS }),
+      this.operations.clearTable({ tableName: TABLE_MESSAGES }),
+      this.operations.clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -604,10 +667,10 @@ export class MemoryMSSQL extends MemoryStorage {
         });
       }
       // Parse and format messages to V2
-      const parsed = this._parseAndFormatMessages(messages, 'v2');
+      const parsed = this._parseAndFormatMessages(messages);
       const mult = direction === 'ASC' ? 1 : -1;
 
-      const finalMessages = (parsed as MastraDBMessage[]).sort((a, b) => {
+      const finalMessages = parsed.sort((a, b) => {
         const aVal = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
         const bVal = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
 

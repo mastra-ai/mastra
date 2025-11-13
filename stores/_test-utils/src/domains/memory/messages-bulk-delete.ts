@@ -4,6 +4,10 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { createSampleThread, createSampleMessageV2 } from './data';
 
 export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStorage }) {
+  const memoryStore = storage.getStore('memory');
+  if (!memoryStore) {
+    throw new Error('Memory store not found');
+  }
   describe('Messages Bulk Delete', () => {
     // Skip tests if the storage adapter doesn't support deleteMessages
     if (!storage.supports.deleteMessages) {
@@ -15,7 +19,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
     it('should delete multiple messages successfully', async () => {
       // Create a thread first
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       // Save multiple messages
       const messages = Array.from({ length: 5 }, (_, index) => {
@@ -27,32 +31,32 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
         return msg;
       });
 
-      const { messages: savedMessages } = await storage.getStore('memory')?.saveMessages({ messages });
+      const { messages: savedMessages } = await memoryStore.saveMessages({ messages });
       expect(savedMessages).toHaveLength(5);
 
       // Delete messages 1, 2, and 4
-      await storage.getStore('memory')?.deleteMessages(['msg-1', 'msg-2', 'msg-4']);
+      await memoryStore.deleteMessages(['msg-1', 'msg-2', 'msg-4']);
 
       // Verify only messages 0 and 3 remain
-      const { messages: remainingMessages } = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const { messages: remainingMessages } = await memoryStore.listMessages({ threadId: thread.id });
       expect(remainingMessages).toHaveLength(2);
       expect(remainingMessages.map(m => m.id).sort()).toEqual(['msg-0', 'msg-3']);
     });
 
     it('should handle empty array gracefully', async () => {
       // Should not throw when deleting empty array
-      await expect(storage.getStore('memory')?.deleteMessages([])).resolves.not.toThrow();
+      await expect(memoryStore.deleteMessages([])).resolves.not.toThrow();
     });
 
     it('should handle deleting non-existent messages', async () => {
       // Should not throw when deleting messages that don't exist
-      await expect(storage.getStore('memory')?.deleteMessages(['non-existent-1', 'non-existent-2'])).resolves.not.toThrow();
+      await expect(memoryStore.deleteMessages(['non-existent-1', 'non-existent-2'])).resolves.not.toThrow();
     });
 
     it('should update thread timestamp when messages are deleted', async () => {
       // Create a thread
       const thread = createSampleThread();
-      const savedThread = await storage.getStore('memory')?.saveThread({ thread });
+      const savedThread = await memoryStore.saveThread({ thread });
       const originalUpdatedAt = new Date(savedThread.updatedAt).getTime();
 
       // Wait a bit to ensure timestamp difference
@@ -67,16 +71,16 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
         msg.id = `bulk-msg-${index}`;
         return msg;
       });
-      await storage.getStore('memory')?.saveMessages({ messages });
+      await memoryStore.saveMessages({ messages });
 
       // Wait a bit more
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Delete all messages
-      await storage.getStore('memory')?.deleteMessages(['bulk-msg-0', 'bulk-msg-1', 'bulk-msg-2']);
+      await memoryStore.deleteMessages(['bulk-msg-0', 'bulk-msg-1', 'bulk-msg-2']);
 
       // Check thread timestamp was updated
-      const updatedThread = await storage.getStore('memory')?.getThreadById({ threadId: thread.id });
+      const updatedThread = await memoryStore.getThreadById({ threadId: thread.id });
       const newUpdatedAt = new Date(updatedThread!.updatedAt).getTime();
       expect(newUpdatedAt).toBeGreaterThan(originalUpdatedAt);
     });
@@ -85,8 +89,8 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       // Create two threads
       const thread1 = createSampleThread({ id: 'bulk-thread-1' });
       const thread2 = createSampleThread({ id: 'bulk-thread-2' });
-      await storage.getStore('memory')?.saveThread({ thread: thread1 });
-      await storage.getStore('memory')?.saveThread({ thread: thread2 });
+      await memoryStore.saveThread({ thread: thread1 });
+      await memoryStore.saveThread({ thread: thread2 });
 
       // Save messages to both threads
       const messages1 = Array.from({ length: 2 }, (_, index) => {
@@ -106,19 +110,19 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
         return msg;
       });
 
-      await storage.getStore('memory')?.saveMessages({ messages: messages1 });
-      await storage.getStore('memory')?.saveMessages({ messages: messages2 });
+      await memoryStore.saveMessages({ messages: messages1 });
+      await memoryStore.saveMessages({ messages: messages2 });
 
       // Delete one message from each thread
-      await storage.getStore('memory')?.deleteMessages(['bulk-thread1-msg-0', 'bulk-thread2-msg-1']);
+      await memoryStore.deleteMessages(['bulk-thread1-msg-0', 'bulk-thread2-msg-1']);
 
       // Verify thread 1 has one message remaining
-      const { messages: thread1Messages } = await storage.getStore('memory')?.listMessages({ threadId: 'bulk-thread-1' });
+      const { messages: thread1Messages } = await memoryStore.listMessages({ threadId: 'bulk-thread-1' });
       expect(thread1Messages).toHaveLength(1);
       expect(thread1Messages[0]!.id).toBe('bulk-thread1-msg-1');
 
       // Verify thread 2 has one message remaining
-      const { messages: thread2Messages } = await storage.getStore('memory')?.listMessages({ threadId: 'bulk-thread-2' });
+      const { messages: thread2Messages } = await memoryStore.listMessages({ threadId: 'bulk-thread-2' });
       expect(thread2Messages).toHaveLength(1);
       expect(thread2Messages[0]!.id).toBe('bulk-thread2-msg-0');
     });
@@ -126,7 +130,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
     it('should handle large batches of message deletions', async () => {
       // Create a thread with a unique ID for this test
       const thread = createSampleThread({ id: `bulk-delete-test-thread-${Date.now()}` });
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       // Save 100 messages with alternating roles
       const messages = Array.from({ length: 100 }, (_, index) => {
@@ -140,10 +144,10 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
         return msg;
       });
 
-      await storage.getStore('memory')?.saveMessages({ messages });
+      await memoryStore.saveMessages({ messages });
 
       // Verify all 100 messages were saved
-      const { messages: allMessages } = await storage.getStore('memory')?.listMessages({
+      const { messages: allMessages } = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 100,
         orderBy: { field: 'createdAt', direction: 'DESC' },
@@ -153,10 +157,10 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
       // Delete the most recent 50 messages (indices 50-99)
       const messagesToDelete = messages.slice(50).map(msg => msg.id);
 
-      await storage.getStore('memory')?.deleteMessages(messagesToDelete);
+      await memoryStore.deleteMessages(messagesToDelete);
 
       // Verify 50 messages remain - need to specify limit to get all remaining messages
-      const { messages: remainingMessages } = await storage.getStore('memory')?.listMessages({
+      const { messages: remainingMessages } = await memoryStore.listMessages({
         threadId: thread.id,
         perPage: 100,
         orderBy: { field: 'createdAt', direction: 'DESC' },
@@ -178,7 +182,7 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
     it('should handle mixed valid and invalid message IDs', async () => {
       // Create a thread
       const thread = createSampleThread();
-      await storage.getStore('memory')?.saveThread({ thread });
+      await memoryStore.saveThread({ thread });
 
       // Save some messages
       const messages = Array.from({ length: 3 }, (_, index) => {
@@ -190,13 +194,13 @@ export function createMessagesBulkDeleteTest({ storage }: { storage: MastraStora
         return msg;
       });
 
-      await storage.getStore('memory')?.saveMessages({ messages });
+      await memoryStore.saveMessages({ messages });
 
       // Delete mix of valid and invalid IDs
-      await storage.getStore('memory')?.deleteMessages(['mixed-msg-0', 'invalid-id-1', 'mixed-msg-2', 'invalid-id-2']);
+      await memoryStore.deleteMessages(['mixed-msg-0', 'invalid-id-1', 'mixed-msg-2', 'invalid-id-2']);
 
       // Verify only the valid messages were deleted
-      const { messages: remainingMessages } = await storage.getStore('memory')?.listMessages({ threadId: thread.id });
+      const { messages: remainingMessages } = await memoryStore.listMessages({ threadId: thread.id });
       expect(remainingMessages).toHaveLength(1);
       expect(remainingMessages[0]!.id).toBe('mixed-msg-1');
     });

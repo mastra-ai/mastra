@@ -5,6 +5,7 @@
  * index creation to validate the performance improvements.
  */
 
+import { IndexManagementPG } from '../domains/operations';
 import { PostgresStore } from '../index';
 
 interface PerformanceTestConfig {
@@ -58,15 +59,15 @@ export class PostgresPerformanceTest {
 
     // Clean up traces and evals (if tables exist)
     try {
-      await db.none('DELETE FROM mastra_traces WHERE id LIKE $1', ['trace_%']);
+      await db.none('DELETE FROM mastra_ai_spans WHERE "traceId" LIKE $1', ['trace_%']);
     } catch {
       // Table might not exist
     }
 
     try {
-      await db.none('DELETE FROM mastra_evals WHERE input LIKE $1 OR global_run_id LIKE $2', [
+      await db.none('DELETE FROM mastra_scorers WHERE "runId" LIKE $1 OR "scorerId" LIKE $2', [
         '%perf_test%',
-        'global_run_%',
+        'perf_test_%',
       ]);
     } catch {
       // Table might not exist
@@ -74,7 +75,7 @@ export class PostgresPerformanceTest {
 
     // Update PostgreSQL statistics after cleanup
     try {
-      await db.none('ANALYZE mastra_threads, mastra_messages, mastra_traces, mastra_evals');
+      await db.none('ANALYZE mastra_threads, mastra_messages, mastra_ai_spans, mastra_scorers');
       console.info('📊 Updated PostgreSQL statistics after cleanup');
     } catch (error) {
       console.warn('Could not update statistics:', error);
@@ -90,8 +91,8 @@ export class PostgresPerformanceTest {
     try {
       await db.none('TRUNCATE TABLE mastra_threads CASCADE');
       await db.none('TRUNCATE TABLE mastra_messages CASCADE');
-      await db.none('TRUNCATE TABLE mastra_traces CASCADE');
-      await db.none('TRUNCATE TABLE mastra_evals CASCADE');
+      await db.none('TRUNCATE TABLE mastra_ai_spans CASCADE');
+      await db.none('TRUNCATE TABLE mastra_scorers CASCADE');
       console.info('🧨 All tables truncated');
     } catch (error) {
       console.warn('Could not truncate tables:', error);
@@ -102,22 +103,24 @@ export class PostgresPerformanceTest {
     console.info('Dropping performance indexes...');
     // Get schema name for index naming
     const schemaPrefix = this.store['schema'] ? `${this.store['schema']}_` : '';
+    const indexManagement = new IndexManagementPG({ client: this.store.db, schemaName: this.store['schema'] });
 
     const indexesToDrop = [
       `${schemaPrefix}mastra_threads_resourceid_idx`,
       `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
       `${schemaPrefix}mastra_messages_thread_id_idx`,
       `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-      `${schemaPrefix}mastra_traces_name_idx`,
-      `${schemaPrefix}mastra_traces_name_pattern_idx`,
-      `${schemaPrefix}mastra_evals_agent_name_idx`,
-      `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
+      `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+      `${schemaPrefix}mastra_ai_spans_name_idx`,
+      `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+      `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
       `${schemaPrefix}mastra_workflow_snapshot_resourceid_idx`,
     ];
 
     for (const indexName of indexesToDrop) {
       try {
-        await this.store.stores.operations.dropIndex(indexName);
+        await indexManagement.dropIndex(indexName);
       } catch (error) {
         // Ignore errors for non-existent indexes
         console.warn(`Could not drop index ${indexName}:`, error);
@@ -127,8 +130,12 @@ export class PostgresPerformanceTest {
 
   async createAutomaticIndexes(): Promise<void> {
     console.info('Creating indexes...');
-    const operations = this.store.stores.operations as any; // Cast to access PG-specific method
-    await operations.createAutomaticIndexes();
+    // Each domain manages its own indexes
+    await this.store.stores.memory.createIndexes();
+    if (this.store.stores.observability) {
+      await this.store.stores.observability.createIndexes();
+    }
+    await this.store.stores.evals.createIndexes();
   }
 
   async seedTestData(): Promise<void> {
@@ -250,78 +257,78 @@ export class PostgresPerformanceTest {
     console.info('Inserting traces...');
 
     try {
-      const traces: Array<{
-        id: string;
-        name: string;
+      const spans: Array<{
         traceId: string;
-        scope: string;
-        kind: number;
-        startTime: string; // bigint as string
-        endTime: string; // bigint as string
+        spanId: string;
+        parentSpanId: string | null;
+        name: string;
+        scope: object | null;
+        spanType: string;
+        startedAt: Date;
+        endedAt: Date | null;
         createdAt: Date;
-        parentSpanId?: string;
-        attributes?: object;
-        status?: object;
-        events?: object;
-        links?: object;
-        other?: string;
+        isEvent: boolean;
       }> = [];
 
       // Use same scale as main dataset - equal scaling across all tables!
-      const tracesCount = Math.floor(this.config.testDataSize);
-      console.info(`  Creating ${tracesCount.toLocaleString()} traces...`);
+      const spansCount = Math.floor(this.config.testDataSize);
+      console.info(`  Creating ${spansCount.toLocaleString()} spans...`);
 
-      for (let i = 0; i < tracesCount; i++) {
+      for (let i = 0; i < spansCount; i++) {
         const now = Date.now();
         const startTimeMs = now - Math.random() * 86400000 * 30; // Random time in last 30 days
         const endTimeMs = startTimeMs + Math.random() * 10000; // End 0-10 seconds after start
 
-        traces.push({
-          id: `trace_${i}`,
-          name: i % 5 === 0 ? 'test_trace' : `trace_${i % 10}`, // Some will match our test query
-          traceId: `trace_${i}`,
-          scope: 'test_scope',
-          kind: 1,
-          startTime: (startTimeMs * 1000000).toString(), // Convert to nanoseconds as string
-          endTime: (endTimeMs * 1000000).toString(), // Convert to nanoseconds as string
+        spans.push({
+          traceId: `trace_${Math.floor(i / 5)}`, // Group spans into traces (5 spans per trace)
+          spanId: `span_${i}`,
+          parentSpanId: i > 0 && i % 5 !== 0 ? `span_${i - 1}` : null, // First span in trace has no parent
+          name: i % 5 === 0 ? 'test_span' : `span_${i % 10}`, // Some will match our test query
+          scope: { 'test-scope': 'perf-test' },
+          spanType: i % 2 === 0 ? 'AGENT_RUN' : 'TOOL_RUN',
+          startedAt: new Date(startTimeMs),
+          endedAt: new Date(endTimeMs),
           createdAt: new Date(now - Math.random() * 86400000 * 30),
+          isEvent: false,
         });
       }
 
-      if (traces.length > 0) {
-        for (let i = 0; i < traces.length; i += batchSize) {
-          const batch = traces.slice(i, i + batchSize);
+      if (spans.length > 0) {
+        for (let i = 0; i < spans.length; i += batchSize) {
+          const batch = spans.slice(i, i + batchSize);
           const values = batch
             .map(
               (_, index) =>
-                `($${index * 8 + 1}, $${index * 8 + 2}, $${index * 8 + 3}, $${index * 8 + 4}, $${index * 8 + 5}, $${index * 8 + 6}, $${index * 8 + 7}, $${index * 8 + 8})`,
+                `($${index * 10 + 1}, $${index * 10 + 2}, $${index * 10 + 3}, $${index * 10 + 4}, $${index * 10 + 5}, $${index * 10 + 6}, $${index * 10 + 7}, $${index * 10 + 8}, $${index * 10 + 9}, $${index * 10 + 10})`,
             )
             .join(', ');
 
-          const params = batch.flatMap(trace => [
-            trace.id,
-            trace.name,
-            trace.traceId,
-            trace.scope,
-            trace.kind,
-            trace.startTime,
-            trace.endTime,
-            trace.createdAt,
+          const params = batch.flatMap(span => [
+            span.traceId,
+            span.spanId,
+            span.parentSpanId,
+            span.name,
+            JSON.stringify(span.scope),
+            span.spanType,
+            span.startedAt,
+            span.endedAt,
+            span.createdAt,
+            span.isEvent,
           ]);
 
           await db.none(
-            `INSERT INTO mastra_traces (id, name, "traceId", scope, kind, "startTime", "endTime", "createdAt") VALUES ${values}`,
+            `INSERT INTO mastra_ai_spans ("traceId", "spanId", "parentSpanId", name, scope, "spanType", "startedAt", "endedAt", "createdAt", "isEvent") VALUES ${values}`,
             params,
           );
 
           if (i % (batchSize * 10) === 0) {
-            console.info(`  Inserted ${Math.min(i + batchSize, traces.length)} / ${traces.length} traces`);
+            console.info(`  Inserted ${Math.min(i + batchSize, spans.length)} / ${spans.length} spans`);
           }
         }
-        console.info(`  Inserted ${traces.length} test traces`);
+        console.info(`  Inserted ${spans.length} test spans`);
       }
     } catch (error) {
-      throw new Error(`Failed to seed traces data: ${error}`);
+      throw new Error(`Failed to seed spans data: ${error}`);
     }
 
     console.info('Test data seeding completed');

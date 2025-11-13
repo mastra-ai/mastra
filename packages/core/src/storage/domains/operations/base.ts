@@ -1,18 +1,6 @@
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { TABLE_NAMES } from '../../constants';
-import type { StorageColumn, CreateIndexOptions, IndexInfo, StorageIndexStats } from '../../types';
-
-export abstract class DatabaseInterface extends MastraBase {
-  constructor() {
-    super({
-      component: 'STORAGE',
-      name: 'OPERATIONS',
-    });
-  }
-
-  abstract initialize(args: { name: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
-}
+import type { CreateIndexOptions, IndexInfo, StorageIndexStats } from '../../types';
 
 export abstract class IndexManagementBase extends MastraBase {
   constructor() {

@@ -4,14 +4,18 @@ import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@ma
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import {
-  ScoresStorage,
+  EvalsStorageBase,
   TABLE_SCORERS,
+  TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
 } from '@mastra/core/storage';
-import type { ConnectionPool } from 'mssql';
+import type sql from 'mssql';
+import { MSSQLDomainBase } from '../base';
+import type { MSSQLDomainConfig } from '../base';
 import type { StoreOperationsMSSQL } from '../operations';
+import { IndexManagementMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
@@ -31,24 +35,65 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   } as ScoreRowData;
 }
 
-export class ScoresMSSQL extends ScoresStorage {
-  public pool: ConnectionPool;
-  private operations: StoreOperationsMSSQL;
-  private schema?: string;
+export class EvalsStorageMSSQL extends EvalsStorageBase {
+  private domainBase: MSSQLDomainBase;
+  indexManagement?: IndexManagementMSSQL;
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema?: string;
-  }) {
+  constructor(opts: MSSQLDomainConfig) {
     super();
-    this.pool = pool;
-    this.operations = operations;
-    this.schema = schema;
+    this.domainBase = new MSSQLDomainBase(opts);
+  }
+
+  private get pool(): sql.ConnectionPool {
+    return this.domainBase['pool'];
+  }
+
+  private get schema(): string {
+    return this.domainBase['schema'];
+  }
+
+  private get operations(): StoreOperationsMSSQL {
+    return this.domainBase['operations'];
+  }
+
+  async createIndexes(): Promise<void> {
+    // Create indexes for evals domain
+    const indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
+    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    this.indexManagement = indexManagement;
+
+    // Create scores index
+    try {
+      await indexManagement.createIndex({
+        name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,
+        table: TABLE_SCORERS,
+        columns: ['traceId', 'spanId', 'seq_id DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create evals scores index:', error);
+    }
+  }
+
+  async dropIndexes(): Promise<void> {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementMSSQL({ pool: this.pool, schemaName: this.schema });
+    }
+    const schemaPrefix = this.schema && this.schema !== 'dbo' ? `${this.schema}_` : '';
+    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`);
+  }
+
+  async init(): Promise<void> {
+    await this.operations.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.createIndexes();
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
