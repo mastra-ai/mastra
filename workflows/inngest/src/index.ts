@@ -1658,7 +1658,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         startedAt: number;
         endedAt?: number;
         payload: any;
-        error?: string;
+        error?: Error;
         resumedAt?: number;
         resumePayload?: any;
         suspendPayload?: any;
@@ -1666,7 +1666,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       };
       stepResults: Record<
         string,
-        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
+        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: Error })
       >;
       executionContext: ExecutionContext;
     };
@@ -1679,7 +1679,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           startedAt: number;
           endedAt?: number;
           payload: any;
-          error?: string;
+          error?: Error;
           resumedAt?: number;
           resumePayload?: any;
           suspendPayload?: any;
@@ -1760,10 +1760,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           };
         } catch (e) {
-          const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } = {
+          const fallbackErrorMessage = `Step ${step.id} failed`;
+          const error = getErrorFromUnknown(e, { serializeStack: false, fallbackMessage: fallbackErrorMessage });
+
+          const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: Error } = {
             status: 'failed',
             payload: inputData,
-            error: e instanceof Error ? e.message : String(e),
+            error,
             endedAt: Date.now(),
             startedAt,
             resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
@@ -1772,9 +1775,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
           execResults = stepFailure;
 
-          const fallbackErrorMessage = `Step ${step.id} failed`;
-          stepSpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
-          throw new RetryAfterError(execResults.error ?? fallbackErrorMessage, executionContext.retryConfig.delay, {
+          stepSpan?.error({ error });
+          throw new RetryAfterError(error.message, executionContext.retryConfig.delay, {
             cause: execResults,
           });
         }
@@ -1830,16 +1832,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return { result: execResults, executionContext, stepResults };
       });
     } catch (e) {
-      const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: string } =
-        e instanceof Error
-          ? (e?.cause as unknown as Omit<StepFailure<any, any, any>, 'error'> & { error?: string })
-          : {
-              status: 'failed' as const,
-              error: e instanceof Error ? e.message : String(e),
-              payload: inputData,
-              startedAt,
-              endedAt: Date.now(),
-            };
+      const error = getErrorFromUnknown(e, { serializeStack: false });
+
+      // TODO: do we need to use the error.cause here as the stepFailure instead?
+      // ? since we added the execResult to the error cause on line 1780
+
+      const stepFailure: StepFailure<any, any, any> = {
+        status: 'failed' as const,
+        error,
+        payload: inputData,
+        startedAt,
+        endedAt: Date.now(),
+      };
 
       stepRes = {
         result: stepFailure,
