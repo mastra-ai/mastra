@@ -2868,3 +2868,32 @@ export class MessageList {
     return key;
   }
 }
+
+/**
+ * Utility function to extract text content from message parts array.
+ * Combines all text parts into a single string, joined by newlines.
+ *
+ * @param parts - Array of message parts
+ * @returns Combined text content from all text parts
+ *
+ * @example
+ * ```ts
+ * const message = {
+ *   content: {
+ *     parts: [
+ *       { type: 'text', text: 'Hello' },
+ *       { type: 'text', text: 'World' }
+ *     ]
+ *   }
+ * };
+ * const text = extractTextFromParts(message.content.parts); // "Hello\nWorld"
+ * ```
+ */
+export function extractTextFromParts(parts: MastraMessageContentV2['parts'] | undefined): string {
+  if (!parts) return '';
+
+  return parts
+    .filter(p => p.type === 'text')
+    .map(p => (p.type === 'text' ? p.text : ''))
+    .join('\n');
+}
