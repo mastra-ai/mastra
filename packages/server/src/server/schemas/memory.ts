@@ -246,7 +246,7 @@ export const updateThreadBodySchema = z.object({
  * Body schema for PUT /api/memory/threads/:threadId/working-memory
  */
 export const updateWorkingMemoryBodySchema = z.object({
-  workingMemory: z.unknown(),
+  workingMemory: z.string(),
   resourceId: z.string().optional(),
   memoryConfig: z.record(z.string(), z.unknown()).optional(),
 });

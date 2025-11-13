@@ -331,7 +331,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -421,7 +421,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -515,7 +515,7 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
