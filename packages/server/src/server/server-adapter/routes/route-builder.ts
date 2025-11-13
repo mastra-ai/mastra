@@ -13,6 +13,7 @@ interface RouteConfig<TParams = Record<string, unknown>, TResponse = unknown> {
   summary?: string;
   description?: string;
   tags?: string[];
+  deprecated?: boolean;
 }
 
 /**
@@ -38,7 +39,7 @@ interface RouteConfig<TParams = Record<string, unknown>, TResponse = unknown> {
 export function createRoute<TParams = Record<string, unknown>, TResponse = unknown>(
   config: RouteConfig<TParams, TResponse>,
 ): ServerRoute<TParams, TResponse> {
-  const { summary, description, tags, ...baseRoute } = config;
+  const { summary, description, tags, deprecated, ...baseRoute } = config;
 
   // Generate OpenAPI specification from the route config
   // Skip OpenAPI generation for 'ALL' method as it doesn't map to OpenAPI
@@ -54,11 +55,13 @@ export function createRoute<TParams = Record<string, unknown>, TResponse = unkno
           queryParamSchema: config.queryParamSchema,
           bodySchema: config.bodySchema,
           responseSchema: config.responseSchema,
+          deprecated,
         })
       : undefined;
 
   return {
     ...baseRoute,
     openapi: openapi as any,
+    deprecated,
   };
 }

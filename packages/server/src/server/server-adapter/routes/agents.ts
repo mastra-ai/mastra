@@ -11,6 +11,7 @@ import {
   streamNetworkHandler,
   updateAgentModelHandler,
   updateAgentModelInModelListHandler,
+  streamUIMessageHandler,
 } from '../../handlers/agents';
 import { executeAgentToolHandler, getAgentToolHandler } from '../../handlers/tools';
 import {
@@ -317,5 +318,52 @@ export const AGENTS_ROUTES: ServerRoute[] = [
     summary: 'Get voice listener',
     description: 'Returns the voice listener configuration for the agent',
     tags: ['Agents', 'Voice'],
+  }),
+
+  // ============================================================================
+  // Deprecated routes (for route parity only - non-functional)
+  // These handlers throw errors in the server package
+  // ============================================================================
+
+  createRoute({
+    method: 'POST',
+    responseType: 'stream',
+    handler: streamGenerateHandler as unknown as ServerRouteHandler,
+    path: '/api/agents/:agentId/streamVNext',
+    pathParamSchema: agentIdPathParams,
+    bodySchema: agentExecutionBodySchema,
+    responseSchema: streamResponseSchema,
+    summary: 'Stream a response from an agent',
+    description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
+    tags: ['Agents'],
+    deprecated: true,
+  }),
+  createRoute({
+    method: 'POST',
+    responseType: 'stream',
+    handler: streamUIMessageHandler as unknown as ServerRouteHandler,
+    path: '/api/agents/:agentId/stream/vnext/ui',
+    pathParamSchema: agentIdPathParams,
+    bodySchema: agentExecutionBodySchema,
+    responseSchema: streamResponseSchema,
+    summary: 'Stream UI messages from an agent',
+    description:
+      '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
+    tags: ['Agents'],
+    deprecated: true,
+  }),
+  createRoute({
+    method: 'POST',
+    responseType: 'stream',
+    handler: streamUIMessageHandler as unknown as ServerRouteHandler,
+    path: '/api/agents/:agentId/stream/ui',
+    pathParamSchema: agentIdPathParams,
+    bodySchema: agentExecutionBodySchema,
+    responseSchema: streamResponseSchema,
+    summary: 'Stream UI messages from an agent',
+    description:
+      '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
+    tags: ['Agents'],
+    deprecated: true,
   }),
 ];

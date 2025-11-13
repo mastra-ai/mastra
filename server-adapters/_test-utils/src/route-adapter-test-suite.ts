@@ -116,7 +116,22 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
       app = setup.app;
     });
 
-    routes.forEach(route => {
+    // Test deprecated routes separately - just verify they're marked correctly
+    const deprecatedRoutes = routes.filter(r => r.deprecated);
+    console.log(deprecatedRoutes);
+    deprecatedRoutes.forEach(route => {
+      const testName = `${route.method} ${route.path}`;
+      describe(testName, () => {
+        it('should be marked as deprecated', () => {
+          expect(route.deprecated).toBe(true);
+          expect(route.openapi?.deprecated).toBe(true);
+        });
+      });
+    });
+
+    // Test non-deprecated routes with full test suite
+    const activeRoutes = routes.filter(r => !r.deprecated);
+    activeRoutes.forEach(route => {
       const testName = `${route.method} ${route.path}`;
       describe(testName, () => {
         it('should execute with valid request', async () => {
@@ -348,8 +363,8 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
     // Additional cross-route tests
     describe('Cross-Route Tests', () => {
       it('should handle array query parameters', async () => {
-        // Find a GET route to test with
-        const getRoute = routes.find(r => r.method === 'GET');
+        // Find a non-deprecated GET route to test with
+        const getRoute = routes.find(r => r.method === 'GET' && !r.deprecated);
         if (!getRoute) return;
 
         const request = buildRouteRequest(getRoute);
@@ -370,8 +385,8 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
       });
 
       it('should return valid error response structure', async () => {
-        // Find a route with agentId to test 404
-        const agentRoute = routes.find(r => r.path.includes(':agentId'));
+        // Find a non-deprecated route with agentId to test 404
+        const agentRoute = routes.find(r => r.path.includes(':agentId') && !r.deprecated);
         if (!agentRoute) return;
 
         const request = buildRouteRequest(agentRoute, {
@@ -405,8 +420,8 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
       });
 
       it('should return 400 for empty body when fields are required', async () => {
-        // Find a POST route with body schema
-        const postRoute = routes.find(r => r.method === 'POST' && r.bodySchema);
+        // Find a non-deprecated POST route with body schema
+        const postRoute = routes.find(r => r.method === 'POST' && r.bodySchema && !r.deprecated);
         if (!postRoute) return;
 
         const request = buildRouteRequest(postRoute);

@@ -49,6 +49,15 @@ export function createRouteTestSuite(config: RouteTestConfig) {
     const routeKey = `${route.method} ${route.path}`;
 
     describe(routeKey, () => {
+      // Skip deprecated routes - they are placeholders for route parity only
+      if (route.deprecated) {
+        it('should be marked as deprecated', () => {
+          expect(route.deprecated).toBe(true);
+          expect(route.openapi?.deprecated).toBe(true);
+        });
+        return;
+      }
+
       // Route configuration test
       it('should have correct route configuration', () => {
         expect(route).toBeDefined();

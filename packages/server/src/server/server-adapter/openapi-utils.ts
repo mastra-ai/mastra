@@ -12,12 +12,14 @@ interface RouteOpenAPIConfig {
   queryParamSchema?: ZodSchema;
   bodySchema?: ZodSchema;
   responseSchema?: ZodSchema;
+  deprecated?: boolean;
 }
 
 interface OpenAPIRoute {
   summary?: string;
   description?: string;
   tags?: string[];
+  deprecated?: boolean;
   requestParams?: {
     path?: ZodSchema;
     query?: ZodSchema;
@@ -55,11 +57,13 @@ export function generateRouteOpenAPI({
   queryParamSchema,
   bodySchema,
   responseSchema,
+  deprecated,
 }: RouteOpenAPIConfig): OpenAPIRoute {
   const route: OpenAPIRoute = {
     summary: summary || `${method} ${path}`,
     description,
     tags,
+    deprecated,
     responses: {
       200: {
         description: 'Successful response',
@@ -162,7 +166,10 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
       required: true,
       content: {
         'application/json': {
-          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, { target: 'openApi3', $refStrategy: 'none' }),
+          schema: zodToJsonSchema(spec.requestBody.content['application/json'].schema, {
+            target: 'openApi3',
+            $refStrategy: 'none',
+          }),
         },
       },
     };
@@ -177,7 +184,10 @@ function convertZodToJsonSchema(spec: OpenAPIRoute): any {
     if (response.content?.['application/json']?.schema) {
       converted.responses[statusCode].content = {
         'application/json': {
-          schema: zodToJsonSchema(response.content['application/json'].schema, { target: 'openApi3', $refStrategy: 'none' }),
+          schema: zodToJsonSchema(response.content['application/json'].schema, {
+            target: 'openApi3',
+            $refStrategy: 'none',
+          }),
         },
       };
     }

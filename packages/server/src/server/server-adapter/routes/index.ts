@@ -29,6 +29,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   responseSchema?: z.ZodSchema;
   openapi?: any; // Auto-generated OpenAPI spec for this route
   maxBodySize?: number; // Optional route-specific body size limit in bytes
+  deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
 };
 
 export const SERVER_ROUTES: ServerRoute[] = [

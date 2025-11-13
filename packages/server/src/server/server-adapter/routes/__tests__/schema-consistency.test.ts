@@ -36,6 +36,9 @@ describe('Schema Consistency Across All Routes', () => {
   describe('Path Parameter Schemas', () => {
     it('all routes with path params should have pathParamSchema', () => {
       SERVER_ROUTES.forEach(route => {
+        // Skip deprecated routes - they are placeholders for route parity
+        if (route.deprecated) return;
+
         const pathParams = extractPathParams(route.path);
         if (pathParams.length > 0) {
           expect(route.pathParamSchema).toBeDefined();
@@ -94,7 +97,8 @@ describe('Schema Consistency Across All Routes', () => {
   describe('Response Schemas', () => {
     it('all JSON routes must have response schemas', () => {
       const jsonRoutes = SERVER_ROUTES.filter(route => route.responseType === 'json');
-      const jsonRoutesWithoutResponse = jsonRoutes.filter(route => !route.responseSchema);
+      // Skip deprecated routes - they are placeholders for route parity
+      const jsonRoutesWithoutResponse = jsonRoutes.filter(route => !route.responseSchema && !route.deprecated);
 
       if (jsonRoutesWithoutResponse.length > 0) {
         const routeList = jsonRoutesWithoutResponse.map(r => `${r.method} ${r.path}`).join('\n  ');
