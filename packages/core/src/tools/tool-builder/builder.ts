@@ -343,7 +343,7 @@ export class CoreToolBuilder extends MastraBase {
         }
 
         toolSpan?.end({ output: outputValidation.data });
-        return outputValidation.data ?? undefined;
+        return outputValidation.data;
       } catch (error) {
         toolSpan?.error({ error: error as Error });
         throw error;
