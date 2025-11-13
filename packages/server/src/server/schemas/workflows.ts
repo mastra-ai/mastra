@@ -116,7 +116,7 @@ export const streamWorkflowBodySchema = workflowExecutionBodySchema.extend({
  * Used by resume-stream, resume-async and resume endpoints
  */
 export const resumeBodySchema = z.object({
-  step: z.union([z.string(), z.array(z.string())]),
+  step: z.union([z.string(), z.array(z.string())]).optional(), // Optional - workflow can auto-resume all suspended steps
   resumeData: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),

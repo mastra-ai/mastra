@@ -134,7 +134,7 @@ export const AGENT_BUILDER_ROUTES: ServerRoute[] = [
     handler: startAsyncAgentBuilderActionHandler as unknown as ServerRouteHandler,
     path: '/api/agent-builder/:actionId/start-async',
     pathParamSchema: actionIdPathParams,
-    queryParamSchema: runIdSchema,
+    queryParamSchema: optionalRunIdSchema, // Optional - auto-generates if not provided
     bodySchema: startAsyncWorkflowBodySchema,
     responseSchema: workflowExecutionResultSchema,
     summary: 'Start action asynchronously',

@@ -405,9 +405,9 @@ export async function updateWorkingMemoryHandler({
   body: Omit<Parameters<MastraMemory['updateWorkingMemory']>[0], 'threadId'>;
 }) {
   try {
-    validateBody({ threadId });
-    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     const { resourceId, memoryConfig, workingMemory } = body;
+    validateBody({ threadId, workingMemory });
+    const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
     if (!memory) {
       throw new HTTPException(400, { message: 'Memory is not initialized' });
     }

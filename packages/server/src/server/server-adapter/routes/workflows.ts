@@ -144,7 +144,7 @@ export const WORKFLOWS_ROUTES: ServerRoute[] = [
     handler: startAsyncWorkflowHandler as unknown as ServerRouteHandler,
     path: '/api/workflows/:workflowId/start-async',
     pathParamSchema: workflowIdPathParams,
-    queryParamSchema: runIdSchema,
+    queryParamSchema: optionalRunIdSchema, // Optional - auto-generates if not provided
     bodySchema: startAsyncWorkflowBodySchema,
     responseSchema: workflowExecutionResultSchema,
     summary: 'Start workflow asynchronously',
