@@ -93,14 +93,23 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
  */
 const workflowExecutionBodySchema = z.object({
   inputData: z.unknown().optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
 });
+
+/**
+ * Schema for legacy stream workflow body (no closeOnSuspend support)
+ * Used by /stream-legacy endpoints
+ */
+export const streamLegacyWorkflowBodySchema = workflowExecutionBodySchema;
 
 /**
  * Schema for stream workflow body
  * Used by both /stream and /streamVNext endpoints
  */
-export const streamWorkflowBodySchema = workflowExecutionBodySchema;
+export const streamWorkflowBodySchema = workflowExecutionBodySchema.extend({
+  closeOnSuspend: z.boolean().optional(),
+});
 
 /**
  * Schema for resume workflow body
@@ -109,6 +118,8 @@ export const streamWorkflowBodySchema = workflowExecutionBodySchema;
 export const resumeBodySchema = z.object({
   step: z.union([z.string(), z.array(z.string())]),
   resumeData: z.unknown().optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+  tracingOptions: tracingOptionsSchema.optional(),
 });
 
 /**

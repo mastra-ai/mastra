@@ -30,6 +30,7 @@ import {
   workflowRunsResponseSchema,
   workflowInfoSchema,
   listWorkflowsResponseSchema,
+  streamLegacyWorkflowBodySchema,
 } from '../../schemas/agent-builder';
 import { createRoute } from './route-builder';
 import type { ServerRoute, ServerRouteHandler } from '.';
@@ -110,7 +111,7 @@ export const AGENT_BUILDER_ROUTES: ServerRoute[] = [
     path: '/api/agent-builder/:actionId/stream',
     pathParamSchema: actionIdPathParams,
     queryParamSchema: runIdSchema,
-    bodySchema: streamWorkflowBodySchema,
+    bodySchema: streamLegacyWorkflowBodySchema,
     summary: 'Stream action execution',
     description: 'Executes an action and streams the results in real-time',
     tags: ['Agent Builder'],

@@ -110,11 +110,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 output: { type: 'object' },
                 tracingOptions: {
@@ -173,11 +168,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 structuredOutput: {
                   type: 'object',
@@ -368,11 +358,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 output: { type: 'object' },
                 tracingOptions: {
@@ -431,11 +416,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                 },
                 threadId: { type: 'string' },
                 resourceId: { type: 'string', description: 'The resource ID for the conversation' },
-                resourceid: {
-                  type: 'string',
-                  description: 'The resource ID for the conversation (deprecated, use resourceId instead)',
-                  deprecated: true,
-                },
                 runId: { type: 'string' },
                 structuredOutput: {
                   type: 'object',

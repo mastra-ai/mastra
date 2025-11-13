@@ -17,6 +17,7 @@ export {
   listWorkflowRunsQuerySchema,
   resumeBodySchema,
   streamWorkflowBodySchema,
+  streamLegacyWorkflowBodySchema,
   startAsyncWorkflowBodySchema,
   sendWorkflowRunEventBodySchema,
   workflowExecutionResultSchema,

@@ -188,6 +188,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
                 },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
+                },
               },
             },
           },
@@ -285,6 +296,17 @@ export function workflowsRouter(bodyLimitOptions: BodyLimitOptions) {
                 requestContext: {
                   type: 'object',
                   description: 'Request Context for the workflow execution',
+                },
+                tracingOptions: {
+                  type: 'object',
+                  description: 'Tracing options for the workflow execution',
+                  properties: {
+                    metadata: {
+                      type: 'object',
+                      description: 'Custom metadata to attach to the trace',
+                      additionalProperties: true,
+                    },
+                  },
                 },
               },
             },

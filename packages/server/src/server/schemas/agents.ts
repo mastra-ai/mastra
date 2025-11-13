@@ -261,6 +261,7 @@ export const agentExecutionBodySchema = z
  */
 export const executeToolBodySchema = z.object({
   data: z.unknown(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -287,6 +288,7 @@ const toolCallActionBodySchema = z.object({
   runId: z.string(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
+  format: z.string().optional(),
 });
 
 /**
