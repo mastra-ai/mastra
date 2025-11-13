@@ -60,8 +60,12 @@ async function resolveTracingStorageStrategy(
   logger: IMastraLogger,
 ): Promise<TracingStorageStrategy> {
   const observabilityStore = await storage.getStore('observability');
+  if (!observabilityStore) {
+    logger.warn('Observability store not configured, using default tracing strategy');
+    return 'batch-with-updates';
+  }
   if (config.strategy && config.strategy !== 'auto') {
-    const hints = observabilityStore?.tracingStrategy;
+    const hints = observabilityStore.tracingStrategy;
     if (hints?.supported?.includes(config.strategy)) {
       return config.strategy;
     }
@@ -73,7 +77,7 @@ async function resolveTracingStorageStrategy(
       fallbackStrategy: hints?.preferred,
     });
   }
-  return observabilityStore?.tracingStrategy?.preferred ?? 'batch-with-updates';
+  return observabilityStore.tracingStrategy?.preferred ?? 'batch-with-updates';
 }
 
 export class DefaultExporter extends BaseExporter {

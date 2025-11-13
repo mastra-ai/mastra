@@ -70,6 +70,8 @@ export function getDefaultValue(type: StorageColumn['type']): string {
     case 'float':
     case 'bigint':
       return 'DEFAULT 0';
+    case 'boolean':
+      return 'DEFAULT FALSE';
     case 'jsonb':
       return "DEFAULT '{}'";
     default:
@@ -140,56 +142,11 @@ export class MastraStorage extends MastraBase {
     };
   }
 
-  protected ensureDate(date: Date | string | undefined): Date | undefined {
-    return ensureDate(date);
-  }
-
-  protected serializeDate(date: Date | string | undefined): string | undefined {
-    return serializeDate(date);
-  }
-
   /**
    * Get access to the underlying storage domains for advanced operations
    */
   public async getStore<K extends keyof StorageDomains>(id: K): Promise<StorageDomains[K] | undefined> {
     return this.stores?.[id];
-  }
-
-  protected getSqlType(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TIMESTAMP';
-      case 'float':
-        return 'FLOAT';
-      case 'integer':
-        return 'INTEGER';
-      case 'bigint':
-        return 'BIGINT';
-      case 'jsonb':
-        return 'JSONB';
-      default:
-        return 'TEXT';
-    }
-  }
-
-  protected getDefaultValue(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-      case 'uuid':
-        return "DEFAULT ''";
-      case 'timestamp':
-        return "DEFAULT '1970-01-01 00:00:00'";
-      case 'integer':
-      case 'float':
-      case 'bigint':
-        return 'DEFAULT 0';
-      case 'jsonb':
-        return "DEFAULT '{}'";
-      default:
-        return "DEFAULT ''";
-    }
   }
 
   async init(): Promise<void> {

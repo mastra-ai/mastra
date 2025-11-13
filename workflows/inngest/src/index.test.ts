@@ -5635,7 +5635,7 @@ describe('MastraInngestWorkflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({}) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const begin = vi.fn().mockImplementation(async ({ inputData }) => {

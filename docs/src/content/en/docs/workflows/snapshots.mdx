@@ -107,7 +107,7 @@ When a workflow is suspended, Mastra automatically persists the workflow snapsho
 When a workflow is resumed, Mastra retrieves the persisted snapshot with these steps:
 
 1. The `resume()` method is called with a specific step ID
-2. The snapshot is loaded from storage using `loadWorkflowSnapshot()`
+2. The snapshot is loaded from storage using `getWorkflowSnapshot()`
 3. The snapshot is parsed and prepared for resumption
 4. The workflow execution is recreated with the snapshot state
 5. The suspended step is resumed, and execution continues
