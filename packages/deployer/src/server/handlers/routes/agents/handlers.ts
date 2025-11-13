@@ -161,7 +161,7 @@ export async function generateLegacyHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
 
@@ -182,7 +182,7 @@ export async function generateHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
 
@@ -203,7 +203,7 @@ export async function streamGenerateLegacyHandler(c: Context): Promise<Response 
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
 
@@ -226,7 +226,7 @@ export async function streamGenerateHandler(c: Context): Promise<Response | unde
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
   } catch (err) {
@@ -287,7 +287,7 @@ export async function approveToolCallHandler(c: Context): Promise<Response | und
       mastra,
       requestContext,
       agentId,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
   } catch (err) {
@@ -355,7 +355,7 @@ export async function declineToolCallHandler(c: Context): Promise<Response | und
       mastra,
       requestContext,
       agentId,
-      body,
+      ...body,
       abortSignal: c.req.raw.signal,
     });
   } catch (err) {
@@ -444,7 +444,7 @@ export async function streamNetworkHandler(c: Context) {
       mastra,
       agentId,
       requestContext,
-      body,
+      ...body,
       // abortSignal: c.req.raw.signal,
     });
   } catch (err) {

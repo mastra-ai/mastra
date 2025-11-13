@@ -197,8 +197,8 @@ export const agentExecutionBodySchema = z
     runId: z.string().optional(),
     savePerStep: z.boolean().optional(),
 
-    // Request Context (handler-specific field)
-    requestContext: z.record(z.string(), z.unknown()).optional(),
+    // Agent Request Context (handler-specific field - merged with server's requestContext)
+    agentRequestContext: z.record(z.string(), z.unknown()).optional(),
 
     // Execution Control
     maxSteps: z.number().optional(),
@@ -263,7 +263,7 @@ export const agentExecutionBodySchema = z
  */
 export const executeToolBodySchema = z.object({
   data: z.custom<unknown>(x => x !== undefined, { message: 'data is required' }),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
+  agentRequestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -288,7 +288,7 @@ export const voiceSpeakersResponseSchema = z.array(
  */
 const toolCallActionBodySchema = z.object({
   runId: z.string(),
-  requestContext: z.record(z.string(), z.unknown()).optional(),
+  agentRequestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
 });

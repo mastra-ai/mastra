@@ -312,16 +312,14 @@ describe('Agent Handlers', () => {
       const result = await generateHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        // @ts-expect-error
+        experimental_output: undefined,
+        agentRequestContext: {
+          user: {
+            name: 'test-user',
           },
         },
         requestContext: new RequestContext(),
@@ -335,16 +333,14 @@ describe('Agent Handlers', () => {
         generateHandler({
           mastra: mockMastra,
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            requestContext: {
-              user: {
-                name: 'test-user',
-              },
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          // @ts-expect-error
+          experimental_output: undefined,
+          agentRequestContext: {
+            user: {
+              name: 'test-user',
             },
           },
           requestContext: new RequestContext(),
@@ -364,16 +360,13 @@ describe('Agent Handlers', () => {
       const result = await streamGenerateLegacyHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        experimental_output: undefined,
+        agentRequestContext: {
+          user: {
+            name: 'test-user',
           },
         },
         requestContext: new RequestContext(),
@@ -387,16 +380,13 @@ describe('Agent Handlers', () => {
         streamGenerateLegacyHandler({
           mastra: mockMastra,
           agentId: 'non-existing',
-          body: {
-            messages: ['test message'],
-            resourceId: 'test-resource',
-            threadId: 'test-thread',
-            experimental_output: undefined,
-            // @ts-expect-error
-            requestContext: {
-              user: {
-                name: 'test-user',
-              },
+          messages: ['test message'],
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+          agentRequestContext: {
+            user: {
+              name: 'test-user',
             },
           },
           requestContext: new RequestContext(),
@@ -429,16 +419,14 @@ describe('Agent Handlers', () => {
       const result = await streamGenerateHandler({
         mastra: mockMastra,
         agentId: 'test-agent',
-        body: {
-          messages: ['test message'],
-          resourceId: 'test-resource',
-          threadId: 'test-thread',
-          experimental_output: undefined,
-          // @ts-expect-error
-          requestContext: {
-            user: {
-              name: 'test-user',
-            },
+        messages: ['test message'],
+        resourceId: 'test-resource',
+        threadId: 'test-thread',
+        // @ts-expect-error
+        experimental_output: undefined,
+        agentRequestContext: {
+          user: {
+            name: 'test-user',
           },
         },
         requestContext: new RequestContext(),

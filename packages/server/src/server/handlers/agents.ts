@@ -462,26 +462,25 @@ export async function generateLegacyHandler({
   mastra,
   requestContext,
   agentId,
-  body,
   abortSignal,
+  ...params
 }: Context & {
   requestContext: RequestContext;
   agentId: string;
-  body: GetBody<'generateLegacy'> & {
+  abortSignal?: AbortSignal;
+} & GetBody<'generateLegacy'> & {
     // @deprecated use resourceId
     resourceid?: string;
-    requestContext?: Record<string, unknown>;
-  };
-  abortSignal?: AbortSignal;
-}) {
+    agentRequestContext?: Record<string, unknown>;
+  }) {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
+    sanitizeBody(params, ['tools']);
 
-    const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = body;
+    const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params;
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
@@ -510,24 +509,23 @@ export async function generateHandler({
   mastra,
   requestContext,
   agentId,
-  body,
   abortSignal,
+  ...params
 }: Context & {
   requestContext: RequestContext;
   agentId: string;
-  body: GetBody<'generate'> & {
-    requestContext?: Record<string, unknown>;
-  };
   abortSignal?: AbortSignal;
-}): Promise<ReturnType<Agent['generate']>> {
+} & GetBody<'generate'> & {
+    agentRequestContext?: Record<string, unknown>;
+  }): Promise<ReturnType<Agent['generate']>> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
+    sanitizeBody(params, ['tools']);
 
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
+    const { messages, agentRequestContext, ...rest } = params;
 
     const finalRequestContext = new RequestContext<Record<string, unknown>>([
       ...Array.from(requestContext.entries()),
@@ -552,22 +550,25 @@ export async function streamGenerateLegacyHandler({
   mastra,
   requestContext,
   agentId,
-  body,
   abortSignal,
+  ...params
 }: Context & {
   requestContext: RequestContext;
   agentId: string;
-  body: GetBody<'streamLegacy'> & {
+  abortSignal?: AbortSignal;
+} & GetBody<'streamLegacy'> & {
     // @deprecated use resourceId
     resourceid?: string;
-    requestContext?: string;
-  };
-  abortSignal?: AbortSignal;
-}): Promise<Response | undefined> {
+    agentRequestContext?: Record<string, unknown>;
+  }): Promise<Response | undefined> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
-    const { messages, resourceId, resourceid, requestContext: agentRequestContext, ...rest } = body;
+    // UI Frameworks may send "client tools" in the body,
+    // but it interferes with llm providers tool handling, so we remove them
+    sanitizeBody(params, ['tools']);
+
+    const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params;
     // Use resourceId if provided, fall back to resourceid (deprecated)
     const finalResourceId = resourceId ?? resourceid;
 
@@ -613,24 +614,23 @@ export async function streamGenerateHandler({
   mastra,
   requestContext,
   agentId,
-  body,
   abortSignal,
+  ...params
 }: Context & {
   requestContext: RequestContext;
   agentId: string;
-  body: GetBody<'stream'> & {
-    requestContext?: string;
-  };
   abortSignal?: AbortSignal;
-}): ReturnType<Agent['stream']> {
+} & GetBody<'stream'> & {
+    agentRequestContext?: Record<string, unknown>;
+  }): ReturnType<Agent['stream']> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
+    sanitizeBody(params, ['tools']);
 
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
+    const { messages, agentRequestContext, ...rest } = params;
     const finalRequestContext = new RequestContext<Record<string, unknown>>([
       ...Array.from(requestContext.entries()),
       ...Array.from(Object.entries(agentRequestContext ?? {})),
@@ -654,32 +654,31 @@ export async function approveToolCallHandler({
   mastra,
   requestContext,
   agentId,
-  body,
   abortSignal,
+  ...params
 }: Context & {
   requestContext: RequestContext;
   agentId: string;
-  body: GetHITLBody<'approveToolCall'> & {
-    requestContext?: string;
-  };
   abortSignal?: AbortSignal;
-}): ReturnType<Agent['approveToolCall']> {
+} & GetHITLBody<'approveToolCall'> & {
+    agentRequestContext?: Record<string, unknown>;
+  }): ReturnType<Agent['approveToolCall']> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
-    if (!body.runId) {
+    if (!params.runId) {
       throw new HTTPException(400, { message: 'Run id is required' });
     }
 
-    if (!body.toolCallId) {
+    if (!params.toolCallId) {
       throw new HTTPException(400, { message: 'Tool call id is required' });
     }
 
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
+    sanitizeBody(params, ['tools']);
 
-    const { runId, requestContext: agentRequestContext, ...rest } = body;
+    const { runId, agentRequestContext, ...rest } = params;
 
     const finalRequestContext = new RequestContext<Record<string, unknown>>([
       ...Array.from(requestContext.entries()),
@@ -703,32 +702,31 @@ export async function declineToolCallHandler({
   mastra,
   requestContext,
   agentId,
-  body,
   abortSignal,
+  ...params
 }: Context & {
   requestContext: RequestContext;
   agentId: string;
-  body: GetHITLBody<'declineToolCall'> & {
-    requestContext?: string;
-  };
   abortSignal?: AbortSignal;
-}): ReturnType<Agent['declineToolCall']> {
+} & GetHITLBody<'declineToolCall'> & {
+    agentRequestContext?: Record<string, unknown>;
+  }): ReturnType<Agent['declineToolCall']> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
-    if (!body.runId) {
+    if (!params.runId) {
       throw new HTTPException(400, { message: 'Run id is required' });
     }
 
-    if (!body.toolCallId) {
+    if (!params.toolCallId) {
       throw new HTTPException(400, { message: 'Tool call id is required' });
     }
 
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
+    sanitizeBody(params, ['tools']);
 
-    const { runId, requestContext: agentRequestContext, ...rest } = body;
+    const { runId, agentRequestContext, ...rest } = params;
 
     const finalRequestContext = new RequestContext<Record<string, unknown>>([
       ...Array.from(requestContext.entries()),
@@ -752,25 +750,25 @@ export async function streamNetworkHandler({
   mastra,
   requestContext,
   agentId,
-  body,
+  ...params
   // abortSignal,
 }: Context & {
   requestContext: RequestContext;
   agentId: string;
-  body: GetBody<'network'> & {
+  // abortSignal?: AbortSignal;
+} & GetBody<'network'> & {
     thread?: string;
     resourceId?: string;
-  };
-  // abortSignal?: AbortSignal;
-}): ReturnType<Agent['network']> {
+    agentRequestContext?: Record<string, unknown>;
+  }): ReturnType<Agent['network']> {
   try {
     const agent = await getAgentFromSystem({ mastra, agentId });
 
     // UI Frameworks may send "client tools" in the body,
     // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(body, ['tools']);
+    sanitizeBody(params, ['tools']);
 
-    const { messages, requestContext: agentRequestContext, ...rest } = body;
+    const { messages, agentRequestContext, ...rest } = params;
     const finalRequestContext = new RequestContext<Record<string, unknown>>([
       ...Array.from(requestContext.entries()),
       ...Array.from(Object.entries(agentRequestContext ?? {})),
