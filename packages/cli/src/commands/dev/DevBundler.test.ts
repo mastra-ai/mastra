@@ -10,19 +10,36 @@ vi.stubGlobal('process', {
 });
 
 // Mock commander to prevent CLI from running
-vi.mock('commander', () => ({
-  Command: vi.fn(() => ({
-    name: vi.fn().mockReturnThis(),
-    version: vi.fn().mockReturnThis(),
-    addHelpText: vi.fn().mockReturnThis(),
-    action: vi.fn().mockReturnThis(),
-    command: vi.fn().mockReturnThis(),
-    description: vi.fn().mockReturnThis(),
-    option: vi.fn().mockReturnThis(),
-    parse: vi.fn(),
-    help: vi.fn(),
-  })),
-}));
+vi.mock('commander', () => {
+  // Use a class for the Command constructor mock (Vitest v4 requirement)
+  class CommandMock {
+    name: any;
+    version: any;
+    addHelpText: any;
+    action: any;
+    command: any;
+    description: any;
+    option: any;
+    parse: any;
+    help: any;
+
+    constructor() {
+      this.name = vi.fn().mockReturnThis();
+      this.version = vi.fn().mockReturnThis();
+      this.addHelpText = vi.fn().mockReturnThis();
+      this.action = vi.fn().mockReturnThis();
+      this.command = vi.fn().mockReturnThis();
+      this.description = vi.fn().mockReturnThis();
+      this.option = vi.fn().mockReturnThis();
+      this.parse = vi.fn();
+      this.help = vi.fn();
+    }
+  }
+
+  return {
+    Command: CommandMock,
+  };
+});
 
 import { DevBundler } from './DevBundler';
 
