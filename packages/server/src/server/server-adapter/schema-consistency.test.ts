@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { createRouteTestSuite } from './route-test-suite';
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
-import { extractPathParams } from './route-test-utils';
+
+/**
+ * Extract path parameters from a path pattern
+ * e.g., '/api/agents/:agentId/tools/:toolId' -> ['agentId', 'toolId']
+ */
+export function extractPathParams(path: string): string[] {
+  const matches = path.match(/:(\w+)/g);
+  if (!matches) return [];
+  return matches.map(m => m.slice(1));
+}
 
 describe('Schema Consistency Across All Routes', () => {
-  describe('Route Validation', () => {
-    createRouteTestSuite({
-      routes: SERVER_ROUTES,
-    });
-  });
   describe('OpenAPI Specification', () => {
     it('all routes should have OpenAPI specs except ALL method routes', () => {
       SERVER_ROUTES.forEach(route => {

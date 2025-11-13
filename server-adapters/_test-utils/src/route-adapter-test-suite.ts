@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+import { SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { buildRouteRequest, createDefaultTestContext, parseDatesInResponse } from './test-helpers';
 import { expectValidSchema } from './route-test-utils';
+import { createRouteTestSuite } from './route-test-suite';
 
 /**
  * Test context for adapter integration tests
@@ -97,6 +98,12 @@ export function createRouteAdapterTestSuite(config: RouteAdapterTestSuiteConfig)
     executeHttpRequest,
     createTestContext,
   } = config;
+
+  describe('Route Validation', () => {
+    createRouteTestSuite({
+      routes: SERVER_ROUTES,
+    });
+  });
 
   describe(suiteName, () => {
     let context: AdapterTestContext;

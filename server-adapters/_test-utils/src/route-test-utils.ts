@@ -172,16 +172,6 @@ export function expectInvalidSchema(schema: ZodSchema, value: unknown) {
 }
 
 /**
- * Extract path parameters from a path pattern
- * e.g., '/api/agents/:agentId/tools/:toolId' -> ['agentId', 'toolId']
- */
-export function extractPathParams(path: string): string[] {
-  const matches = path.match(/:(\w+)/g);
-  if (!matches) return [];
-  return matches.map(m => m.slice(1));
-}
-
-/**
  * Validate route metadata
  */
 export function validateRouteMetadata(
