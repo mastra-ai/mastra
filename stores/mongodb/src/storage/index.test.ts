@@ -443,6 +443,10 @@ describe('MongoDB Specific Tests', () => {
     });
 
     it('should handle Span creation with MongoDB-specific features', async () => {
+      const observabilityStore = await store.getStore('observability');
+      if (!observabilityStore) {
+        throw new Error('Observability store not found');
+      }
       const Span = {
         spanId: 'mongodb-span-1',
         traceId: 'mongodb-trace-1',
@@ -492,16 +496,20 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(store.createSpan(Span)).resolves.not.toThrow();
+      await expect(observabilityStore.createSpan(Span)).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await store.getTrace('mongodb-trace-1');
+      const trace = await observabilityStore.getTrace('mongodb-trace-1');
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe('mongodb-span-1');
     });
 
     it('should handle Span updates with complex data', async () => {
+      const observabilityStore = await store.getStore('observability');
+      if (!observabilityStore) {
+        throw new Error('Observability store not found');
+      }
       // Create initial span with all required fields
       const initialSpan = {
         spanId: 'update-span-1',
@@ -524,7 +532,7 @@ describe('MongoDB Specific Tests', () => {
         links: null,
       };
 
-      await store.createSpan(initialSpan);
+      await observabilityStore.createSpan(initialSpan);
 
       // Update with complex nested data
       const updates = {
