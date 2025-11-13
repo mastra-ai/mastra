@@ -10,7 +10,7 @@ import { CustomSearch } from "@site/src/components/custom-search";
 import { Button } from "@site/src/components/ui/button";
 import { useEffect, useState } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
-import { useChatbotSidebar } from "../../DocRoot/Layout/ChatbotSidebar/context";
+import { useChatbotSidebar } from "@site/src/theme/DocRoot/Layout/ChatbotSidebar/context";
 
 const SHORTCUT_OS_KEY = "shortcut-os-preference";
 
