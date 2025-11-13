@@ -20,7 +20,11 @@ export const extractLearningsTool = createTool({
 
       const learningExtractionAgent = context?.mastra?.getAgent('learningExtractionAgent');
 
-      const response = await learningExtractionAgent!.generate(
+      if (!learningExtractionAgent) {
+        throw new Error('Learning extraction agent not found');
+      }
+
+      const response = await learningExtractionAgent.generate(
         [
           {
             role: 'user',

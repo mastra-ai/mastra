@@ -30,7 +30,14 @@ export const evaluateResultTool = createTool({
 
       const evaluationAgent = context?.mastra?.getAgent('evaluationAgent');
 
-      const response = await evaluationAgent!.generate(
+      if (!evaluationAgent) {
+        return {
+          isRelevant: false,
+          reason: 'Evaluation agent not available',
+        };
+      }
+
+      const response = await evaluationAgent.generate(
         [
           {
             role: 'user',

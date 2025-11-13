@@ -38,6 +38,11 @@ export const webSearchTool = createTool({
       // Get the summarization agent
       const summaryAgent = context?.mastra?.getAgent('webSummarizationAgent');
 
+      if (!summaryAgent) {
+        console.error('Web summarization agent not found');
+        return { results: [], error: 'Summarization agent not available' };
+      }
+
       // Process each result with summarization
       const processedResults = [];
       for (const result of results) {
@@ -53,7 +58,7 @@ export const webSearchTool = createTool({
           }
 
           // Summarize the content
-          const summaryResponse = await summaryAgent!.generate([
+          const summaryResponse = await summaryAgent.generate([
             {
               role: 'user',
               content: `Please summarize the following web content for research query: "${query}"
