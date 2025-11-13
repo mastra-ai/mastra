@@ -7,7 +7,7 @@ import NavbarLayout from "@theme/Navbar/Layout";
 import NavbarMobileSidebarToggle from "@theme/Navbar/MobileSidebar/Toggle";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import { type ReactNode } from "react";
-import SearchContainer from "./Search";
+import SearchContainer, { AskAI } from "./Search";
 import { Logo } from "./logo";
 import { TabSwitcher } from "./tab-switcher";
 import { MobileDocsDropdown } from "@site/src/components/mobile-docs-dropdown";
@@ -45,7 +45,10 @@ function NavbarContentDesktop() {
           </div>
         </div>
         <div className="hidden @[798px]:block">
-          <SearchContainer locale={locale} />
+          <div className="flex gap-2 items-center">
+            <SearchContainer locale={locale} />
+            <AskAI />
+          </div>
         </div>
         <NavbarMobileSidebarToggle />
       </div>
