@@ -10,7 +10,7 @@
 
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
@@ -31,9 +31,11 @@ export function register() {
 
     // Option 2: Use standard OTEL SDK (shown here for clarity)
     sdk = new NodeSDK({
-      resource: new Resource({
-        [ATTR_SERVICE_NAME]: 'otel-bridge-example-nextjs-basic',
-      }),
+      resource: defaultResource().merge(
+        resourceFromAttributes({
+          [ATTR_SERVICE_NAME]: 'otel-bridge-example-nextjs-basic',
+        }),
+      ),
       traceExporter: new OTLPTraceExporter({
         url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
       }),
