@@ -1,9 +1,11 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { calculatePagination, normalizePerPage, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import { calculatePagination, normalizePerPage, EvalsStorageBase, TABLE_SCORERS } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
+import { UpstashDomainBase } from '../base';
+import type { UpstashDomainConfig } from '../base';
 import type { StoreOperationsUpstash } from '../operations';
 import { processRecord } from '../utils';
 
@@ -36,14 +38,32 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   } as ScoreRowData;
 }
 
-export class ScoresUpstash extends ScoresStorage {
-  private client: Redis;
-  private operations: StoreOperationsUpstash;
+export class EvalsStorageUpstash extends EvalsStorageBase {
+  private domainBase: UpstashDomainBase;
 
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+  constructor(opts: UpstashDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = new UpstashDomainBase(opts);
+  }
+
+  private get client(): Redis {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsUpstash {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    // Upstash/Redis doesn't require table creation
+  }
+
+  async close(): Promise<void> {
+    // Redis client doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearKeyspace({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

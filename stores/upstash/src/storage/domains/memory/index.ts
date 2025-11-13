@@ -3,7 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_MESSAGES,
@@ -20,6 +20,8 @@ import type {
   ThreadSortDirection,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
+import { UpstashDomainBase } from '../base';
+import type { UpstashDomainConfig } from '../base';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey, processRecord } from '../utils';
 
@@ -32,13 +34,46 @@ function getMessageKey(threadId: string, messageId: string): string {
   return key;
 }
 
-export class StoreMemoryUpstash extends MemoryStorage {
-  private client: Redis;
-  private operations: StoreOperationsUpstash;
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+export class MemoryStorageUpstash extends MemoryStorageBase {
+  private domainBase: UpstashDomainBase;
+
+  constructor(opts: UpstashDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = new UpstashDomainBase(opts);
+  }
+
+  private get client(): Redis {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsUpstash {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    // Upstash/Redis doesn't require table creation
+  }
+
+  async close(): Promise<void> {
+    // Redis client doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.operations.clearKeyspace({ tableName: TABLE_THREADS }),
+      this.operations.clearKeyspace({ tableName: TABLE_MESSAGES }),
+      this.operations.clearKeyspace({ tableName: TABLE_RESOURCES }),
+    ]);
+
+    // Also clear thread message keys
+    const threadMessageKeys = await this.client.keys('thread:*:messages');
+    if (threadMessageKeys.length > 0) {
+      const pipeline = this.client.pipeline();
+      for (const key of threadMessageKeys) {
+        pipeline.del(key);
+      }
+      await pipeline.exec();
+    }
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

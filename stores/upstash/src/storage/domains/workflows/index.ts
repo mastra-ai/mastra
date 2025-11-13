@@ -1,8 +1,10 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase } from '@mastra/core/storage';
 import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
+import { UpstashDomainBase } from '../base';
+import type { UpstashDomainConfig } from '../base';
 import type { StoreOperationsUpstash } from '../operations';
 import { ensureDate, getKey } from '../utils';
 
@@ -26,14 +28,32 @@ function parseWorkflowRun(row: any): WorkflowRun {
     resourceId: row.resourceId,
   };
 }
-export class WorkflowsUpstash extends WorkflowsStorage {
-  private client: Redis;
-  private operations: StoreOperationsUpstash;
+export class WorkflowsStorageUpstash extends WorkflowsStorageBase {
+  private domainBase: UpstashDomainBase;
 
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+  constructor(opts: UpstashDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = new UpstashDomainBase(opts);
+  }
+
+  private get client(): Redis {
+    return this.domainBase['client'];
+  }
+
+  private get operations(): StoreOperationsUpstash {
+    return this.domainBase['operations'];
+  }
+
+  async init(): Promise<void> {
+    // Upstash/Redis doesn't require table creation
+  }
+
+  async close(): Promise<void> {
+    // Redis client doesn't need explicit cleanup
+  }
+
+  async dropData(): Promise<void> {
+    await this.operations.clearKeyspace({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -79,6 +99,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     const { namespace = 'workflows', workflowId, runId, resourceId, snapshot } = params;
     try {
@@ -90,8 +112,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           run_id: runId,
           resourceId,
           snapshot,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: params.createdAt ?? new Date(),
+          updatedAt: params.updatedAt ?? new Date(),
         },
       });
     } catch (error) {
@@ -194,7 +216,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     page,
     resourceId,
     status,
-  }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       if (page !== undefined && page < 0) {
         throw new MastraError(
@@ -247,7 +269,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
             record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
         )
         // Only filter by workflowName if it was specifically requested
-        .filter(record => !workflowName || record.workflow_name === workflowName)
+        .filter(record => !workflowId || record.workflow_name === workflowId)
         .map(w => parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
@@ -286,7 +308,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             namespace: 'workflows',
-            workflowName: workflowName || '',
+            workflowId: workflowId || '',
             resourceId: resourceId || '',
           },
         },
