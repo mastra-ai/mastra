@@ -149,7 +149,7 @@ export class CoreToolBuilder extends MastraBase {
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: processedParameters
+        parameters: processedParameters,
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
