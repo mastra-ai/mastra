@@ -26,7 +26,7 @@ export const useInstanceConfig = () => {
       const parsedConfig = JSON.parse(storedConfig);
 
       if (parsedConfig.url) {
-        setConfig({ ...parsedConfig, isLoading: false });
+        return setConfig({ ...parsedConfig, isLoading: false });
       }
     }
 

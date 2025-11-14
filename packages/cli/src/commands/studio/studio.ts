@@ -30,13 +30,15 @@ export async function studio(options: StudioOptions = {}) {
     });
 
     process.on('SIGINT', () => {
-      server.close();
-      process.exit(0);
+      server.close(() => {
+        process.exit(0);
+      });
     });
 
     process.on('SIGTERM', () => {
-      server.close();
-      process.exit(0);
+      server.close(() => {
+        process.exit(0);
+      });
     });
   } catch (error: any) {
     logger.error(`Failed to start Mastra Studio: ${error.message}`);
