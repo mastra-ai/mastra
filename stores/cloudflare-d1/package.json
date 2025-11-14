@@ -32,7 +32,7 @@
     "cloudflare": "^4.5.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251109.0",
+    "@cloudflare/workers-types": "^4.20251111.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -43,7 +43,7 @@
     "@vitest/ui": "catalog:",
     "dotenv": "^17.0.0",
     "eslint": "^9.37.0",
-    "miniflare": "^4.20251105.0",
+    "miniflare": "^4.20251109.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "catalog:"
