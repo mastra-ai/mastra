@@ -89,7 +89,7 @@
     "@uiw/codemirror-theme-dracula": "^4.23.14",
     "@uiw/codemirror-theme-github": "^4.25.3",
     "@uiw/react-codemirror": "^4.23.14",
-    "@xyflow/react": "^12.8.6",
+    "@xyflow/react": "^12.9.2",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "json-schema-to-zod": "^2.6.1",
