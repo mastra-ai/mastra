@@ -88,130 +88,8 @@ function createAgentBuilderWorkflowHandler<TWorkflowArgs, TResult>(
   return handler;
 }
 
-export const getAgentBuilderActionsHandler = createAgentBuilderWorkflowHandler(
-  async () => {
-    try {
-      const registryWorkflows = WorkflowRegistry.getAllWorkflows();
-      const _workflows = Object.entries(registryWorkflows).reduce<Record<string, WorkflowInfo>>(
-        (acc, [key, workflow]) => {
-          acc[key] = getWorkflowInfo(workflow);
-          return acc;
-        },
-        {},
-      );
-      return _workflows;
-    } catch (error) {
-      return handleError(error, 'Error getting agent builder workflows');
-    }
-  },
-  'Getting agent builder actions',
-  'getAgentBuilderActionsHandler',
-);
-
-export const getAgentBuilderActionByIdHandler = createAgentBuilderWorkflowHandler(
-  workflows.getWorkflowByIdHandler,
-  'Getting agent builder action by ID',
-  'getAgentBuilderActionByIdHandler',
-);
-
-export const getAgentBuilderActionRunByIdHandler = createAgentBuilderWorkflowHandler(
-  workflows.getWorkflowRunByIdHandler,
-  'Getting agent builder action run by ID',
-  'getAgentBuilderActionRunByIdHandler',
-);
-
-export const getAgentBuilderActionRunExecutionResultHandler = createAgentBuilderWorkflowHandler(
-  workflows.getWorkflowRunExecutionResultHandler,
-  'Getting agent builder action run execution result',
-  'getAgentBuilderActionRunExecutionResultHandler',
-);
-
-export const createAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandler(
-  workflows.createWorkflowRunHandler,
-  'Creating agent builder action run',
-  'createAgentBuilderActionRunHandler',
-);
-
-export const startAsyncAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.startAsyncWorkflowHandler,
-  'Starting async agent builder action',
-  'startAsyncAgentBuilderActionHandler',
-);
-
-export const startAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandler(
-  workflows.startWorkflowRunHandler,
-  'Starting agent builder action run',
-  'startAgentBuilderActionRunHandler',
-);
-
-export const streamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.streamWorkflowHandler,
-  'Streaming agent builder action',
-  'streamAgentBuilderActionHandler',
-);
-
-export const streamLegacyAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.streamLegacyWorkflowHandler,
-  'Streaming legacy agent builder action',
-  'streamLegacyAgentBuilderActionHandler',
-);
-
-export const streamVNextAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.streamVNextWorkflowHandler,
-  'Streaming VNext agent builder action',
-  'streamVNextAgentBuilderActionHandler',
-);
-
-export const observeStreamLegacyAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.observeStreamLegacyWorkflowHandler,
-  'Observing legacy stream for agent builder action',
-  'observeStreamLegacyAgentBuilderActionHandler',
-);
-
-export const observeStreamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.observeStreamWorkflowHandler,
-  'Observing stream for agent builder action',
-  'observeStreamAgentBuilderActionHandler',
-);
-
-export const observeStreamVNextAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.observeStreamVNextWorkflowHandler,
-  'Observing VNext stream for agent builder action',
-  'observeStreamVNextAgentBuilderActionHandler',
-);
-
-export const resumeAsyncAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.resumeAsyncWorkflowHandler,
-  'Resuming async agent builder action',
-  'resumeAsyncAgentBuilderActionHandler',
-);
-
-export const resumeAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.resumeWorkflowHandler,
-  'Resuming agent builder action',
-  'resumeAgentBuilderActionHandler',
-);
-
-export const resumeStreamAgentBuilderActionHandler = createAgentBuilderWorkflowHandler(
-  workflows.resumeStreamWorkflowHandler,
-  'Resuming stream for agent builder action',
-  'resumeStreamAgentBuilderActionHandler',
-);
-
-export const getAgentBuilderActionRunsHandler = createAgentBuilderWorkflowHandler(
-  workflows.listWorkflowRunsHandler,
-  'Getting agent builder action runs',
-  'getAgentBuilderActionRunsHandler',
-);
-
-export const cancelAgentBuilderActionRunHandler = createAgentBuilderWorkflowHandler(
-  workflows.cancelWorkflowRunHandler,
-  'Cancelling agent builder action run',
-  'cancelAgentBuilderActionRunHandler',
-);
-
 // ============================================================================
-// Route Definitions (new pattern - handlers defined inline with createRoute)
+// Route Definitions (handlers inlined with createRoute using wrapper pattern)
 // ============================================================================
 
 export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
@@ -222,10 +100,22 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
   summary: 'List agent-builder actions',
   description: 'Returns a list of all available agent-builder actions',
   tags: ['Agent Builder'],
-  handler: async ctx => {
-    const result = await getAgentBuilderActionsHandler(ctx);
-    return result as unknown as z.infer<typeof listWorkflowsResponseSchema>;
-  },
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(async () => {
+      try {
+        const registryWorkflows = WorkflowRegistry.getAllWorkflows();
+        const _workflows = Object.entries(registryWorkflows).reduce<Record<string, WorkflowInfo>>(
+          (acc, [key, workflow]) => {
+            acc[key] = getWorkflowInfo(workflow);
+            return acc;
+          },
+          {},
+        );
+        return _workflows as any;
+      } catch (error) {
+        return handleError(error, 'Error getting agent builder workflows');
+      }
+    }, 'Getting agent builder actions')(ctx),
 });
 
 export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
@@ -237,10 +127,11 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
   summary: 'Get action by ID',
   description: 'Returns details for a specific agent-builder action',
   tags: ['Agent Builder'],
-  handler: async ctx => {
-    const result = await getAgentBuilderActionByIdHandler(ctx);
-    return result as unknown as z.infer<typeof workflowInfoSchema>;
-  },
+  handler: async ctx =>
+    (await createAgentBuilderWorkflowHandler(
+      workflows.getWorkflowByIdHandler,
+      'Getting agent builder action by ID',
+    )(ctx)) as any,
 });
 
 export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
@@ -253,10 +144,11 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
   summary: 'List action runs',
   description: 'Returns a paginated list of execution runs for the specified action',
   tags: ['Agent Builder'],
-  handler: async ctx => {
-    const result = await getAgentBuilderActionRunsHandler(ctx);
-    return result as unknown as z.infer<typeof workflowRunsResponseSchema>;
-  },
+  handler: async ctx =>
+    (await createAgentBuilderWorkflowHandler(
+      workflows.listWorkflowRunsHandler,
+      'Getting agent builder action runs',
+    )(ctx)) as any,
 });
 
 export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
@@ -268,10 +160,11 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   summary: 'Get action run by ID',
   description: 'Returns details for a specific action run',
   tags: ['Agent Builder'],
-  handler: async ctx => {
-    const result = await getAgentBuilderActionRunByIdHandler(ctx);
-    return result as unknown as z.infer<typeof workflowRunResponseSchema>;
-  },
+  handler: async ctx =>
+    (await createAgentBuilderWorkflowHandler(
+      workflows.getWorkflowRunByIdHandler,
+      'Getting agent builder action run by ID',
+    )(ctx)) as any,
 });
 
 export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
@@ -283,10 +176,11 @@ export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
   summary: 'Get action execution result',
   description: 'Returns the final execution result of a completed action run',
   tags: ['Agent Builder'],
-  handler: async ctx => {
-    const result = await getAgentBuilderActionRunExecutionResultHandler(ctx);
-    return result as unknown as z.infer<typeof workflowExecutionResultSchema>;
-  },
+  handler: async ctx =>
+    (await createAgentBuilderWorkflowHandler(
+      workflows.getWorkflowRunExecutionResultHandler,
+      'Getting agent builder action run execution result',
+    )(ctx)) as any,
 });
 
 export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
@@ -299,7 +193,11 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   summary: 'Create action run',
   description: 'Creates a new action execution instance with an optional custom run ID',
   tags: ['Agent Builder'],
-  handler: async ctx => await createAgentBuilderActionRunHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.createWorkflowRunHandler,
+      'Creating agent builder action run',
+    )(ctx),
 });
 
 export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -312,7 +210,8 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Stream action execution',
   description: 'Executes an action and streams the results in real-time',
   tags: ['Agent Builder'],
-  handler: async ctx => await streamAgentBuilderActionHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(workflows.streamWorkflowHandler, 'Streaming agent builder action')(ctx),
 });
 
 export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -325,7 +224,11 @@ export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Stream action execution (v2)',
   description: 'Executes an action using the v2 streaming API and streams the results in real-time',
   tags: ['Agent Builder'],
-  handler: async ctx => await streamVNextAgentBuilderActionHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.streamVNextWorkflowHandler,
+      'Streaming agent builder action (v2)',
+    )(ctx),
 });
 
 export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -339,7 +242,11 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Start action asynchronously',
   description: 'Starts an action execution asynchronously without streaming results',
   tags: ['Agent Builder'],
-  handler: async ctx => await startAsyncAgentBuilderActionHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.startAsyncWorkflowHandler,
+      'Starting agent builder action asynchronously',
+    )(ctx),
 });
 
 export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
@@ -353,7 +260,11 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   summary: 'Start specific action run',
   description: 'Starts execution of a specific action run by ID',
   tags: ['Agent Builder'],
-  handler: async ctx => await startAgentBuilderActionRunHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.startWorkflowRunHandler,
+      'Starting specific agent builder action run',
+    )(ctx),
 });
 
 export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -365,7 +276,11 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Observe action stream',
   description: 'Observes and streams updates from an already running action execution',
   tags: ['Agent Builder'],
-  handler: async ctx => await observeStreamAgentBuilderActionHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.observeStreamWorkflowHandler,
+      'Observing agent builder action stream',
+    )(ctx),
 });
 
 export const OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -377,7 +292,11 @@ export const OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Observe action stream (v2)',
   description: 'Observes and streams updates from an already running action execution using v2 streaming API',
   tags: ['Agent Builder'],
-  handler: async ctx => await observeStreamVNextAgentBuilderActionHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.observeStreamVNextWorkflowHandler,
+      'Observing agent builder action stream (v2)',
+    )(ctx),
 });
 
 export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -391,7 +310,11 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Resume action asynchronously',
   description: 'Resumes a suspended action execution asynchronously without streaming',
   tags: ['Agent Builder'],
-  handler: async ctx => await resumeAsyncAgentBuilderActionHandler(ctx as any),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.resumeAsyncWorkflowHandler,
+      'Resuming agent builder action asynchronously',
+    )(ctx as any),
 });
 
 export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -405,7 +328,11 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Resume action',
   description: 'Resumes a suspended action execution from a specific step',
   tags: ['Agent Builder'],
-  handler: async ctx => await resumeAgentBuilderActionHandler(ctx as any),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.resumeWorkflowHandler,
+      'Resuming agent builder action',
+    )(ctx as any),
 });
 
 export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -418,7 +345,11 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   summary: 'Resume action stream',
   description: 'Resumes a suspended action execution and continues streaming results',
   tags: ['Agent Builder'],
-  handler: async ctx => await resumeStreamAgentBuilderActionHandler(ctx as any),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.resumeStreamWorkflowHandler,
+      'Resuming agent builder action stream',
+    )(ctx as any),
 });
 
 export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
@@ -430,7 +361,11 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   summary: 'Cancel action run',
   description: 'Cancels an in-progress action execution',
   tags: ['Agent Builder'],
-  handler: async ctx => await cancelAgentBuilderActionRunHandler(ctx),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.cancelWorkflowRunHandler,
+      'Cancelling agent builder action run',
+    )(ctx),
 });
 
 // Legacy routes (deprecated)
@@ -445,7 +380,11 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description:
     'Legacy endpoint for streaming agent-builder action execution. Use /api/agent-builder/:actionId/stream instead.',
   tags: ['Agent Builder', 'Legacy'],
-  handler: async ctx => await streamLegacyAgentBuilderActionHandler(ctx as any),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.streamLegacyWorkflowHandler,
+      'Streaming agent builder action (legacy)',
+    )(ctx as any),
 });
 
 export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
@@ -458,5 +397,9 @@ export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description:
     'Legacy endpoint for observing agent-builder action stream. Use /api/agent-builder/:actionId/observe instead.',
   tags: ['Agent Builder', 'Legacy'],
-  handler: async ctx => await observeStreamLegacyAgentBuilderActionHandler(ctx as any),
+  handler: async ctx =>
+    await createAgentBuilderWorkflowHandler(
+      workflows.observeStreamLegacyWorkflowHandler,
+      'Observing agent builder action stream (legacy)',
+    )(ctx as any),
 });
