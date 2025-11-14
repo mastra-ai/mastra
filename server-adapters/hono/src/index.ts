@@ -284,6 +284,9 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     app: Hono<E, any, any>,
     { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
   ): Promise<void> {
+    // Register context middleware globally
+    app.use('*', this.createContextMiddleware());
+
     // Cast to base type for super call - safe because registerRoute is generic
     await super.registerRoutes(app as any, { prefix, openapiPath });
   }

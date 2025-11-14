@@ -261,6 +261,9 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     app: Application,
     { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
   ): Promise<void> {
+    // Register context middleware globally
+    app.use(this.createContextMiddleware());
+
     await super.registerRoutes(app, { prefix, openapiPath });
   }
 }
