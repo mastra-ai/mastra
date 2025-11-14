@@ -1,15 +1,15 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
-import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4/message';
+import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4';
 import type {
   LanguageModelV1Message,
   IdGenerator,
   LanguageModelV1Prompt,
   CoreMessage as CoreMessageV4,
   UIMessage as UIMessageV4,
-} from '@internal/ai-sdk-v4/message';
-import type * as AIV4Type from '@internal/ai-sdk-v4/message';
-import type { ToolInvocation as ToolInvocationV4 } from '@internal/ai-sdk-v4/tool';
+  ToolInvocation as ToolInvocationV4,
+} from '@internal/ai-sdk-v4';
+import type * as AIV4Type from '@internal/ai-sdk-v4';
 import { v4 as randomUUID } from '@lukeed/uuid';
 import * as AIV5 from 'ai-v5';
 
@@ -311,36 +311,34 @@ export class MessageList {
 
         let messages = [...systemMessages, ...modelMessages];
 
-        if (Object.keys(downloadedAssets || {}).length > 0) {
-          messages = messages.map(message => {
-            if (message.role === 'user') {
-              if (typeof message.content === 'string') {
-                return {
-                  role: 'user' as const,
-                  content: [{ type: 'text' as const, text: message.content }],
-                  providerOptions: message.providerOptions,
-                } as AIV5Type.ModelMessage;
-              }
-
-              const convertedContent = message.content
-                .map(part => {
-                  if (part.type === 'image' || part.type === 'file') {
-                    return convertImageFilePart(part, downloadedAssets);
-                  }
-                  return part;
-                })
-                .filter(part => part.type !== 'text' || part.text !== '');
-
+        messages = messages.map(message => {
+          if (message.role === 'user') {
+            if (typeof message.content === 'string') {
               return {
                 role: 'user' as const,
-                content: convertedContent,
+                content: [{ type: 'text' as const, text: message.content }],
                 providerOptions: message.providerOptions,
               } as AIV5Type.ModelMessage;
             }
 
-            return message;
-          });
-        }
+            const convertedContent = message.content
+              .map(part => {
+                if (part.type === 'image' || part.type === 'file') {
+                  return convertImageFilePart(part, downloadedAssets);
+                }
+                return part;
+              })
+              .filter(part => part.type !== 'text' || part.text !== '');
+
+            return {
+              role: 'user' as const,
+              content: convertedContent,
+              providerOptions: message.providerOptions,
+            } as AIV5Type.ModelMessage;
+          }
+
+          return message;
+        });
 
         messages = ensureGeminiCompatibleMessages(messages);
 

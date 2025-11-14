@@ -319,6 +319,7 @@ describe('Observability Registry', () => {
           },
           custom: customInstance,
         },
+        configSelector: () => 'standard', // Required when multiple configs are present
       });
 
       // Verify both instances were registered
@@ -651,18 +652,18 @@ describe('Observability Registry', () => {
       expect(defaultInstance).toBeUndefined();
     });
 
-    it('should throw error when custom config named "default" conflicts with default config', () => {
+    it('should throw error when default is enabled with configs', () => {
       expect(() => {
         observability = new Observability({
           default: { enabled: true },
           configs: {
-            default: {
-              serviceName: 'my-custom-default',
+            myConfig: {
+              serviceName: 'my-custom-service',
               exporters: [],
             },
           },
         });
-      }).toThrow("Cannot use 'default' as a custom config name when default tracing is enabled");
+      }).toThrow(/Cannot specify both "default".*and "configs"/);
     });
 
     it('should allow custom config named "default" when default config is disabled', async () => {
@@ -681,9 +682,8 @@ describe('Observability Registry', () => {
       expect(defaultInstance?.getConfig().serviceName).toBe('my-custom-default');
     });
 
-    it('should work with both default and custom configs', async () => {
+    it('should work with multiple custom configs', async () => {
       observability = new Observability({
-        default: { enabled: true },
         configs: {
           custom1: {
             serviceName: 'custom-service-1',
@@ -694,17 +694,15 @@ describe('Observability Registry', () => {
             exporters: [],
           },
         },
+        configSelector: () => 'custom1', // Required when multiple configs are present
       });
 
-      // Default config should exist
-      const defaultInstance = observability.getInstance('default');
+      // First config should become the default
+      const defaultInstance = observability.getDefaultInstance();
       expect(defaultInstance).toBeDefined();
-      expect(defaultInstance?.getConfig().serviceName).toBe('mastra');
+      expect(defaultInstance?.getConfig().serviceName).toBe('custom-service-1');
 
-      // Default should be the default instance
-      expect(observability.getDefaultInstance()).toBe(defaultInstance);
-
-      // Custom configs should also exist
+      // Custom configs should exist
       const custom1 = observability.getInstance('custom1');
       expect(custom1).toBeDefined();
       expect(custom1?.getConfig().serviceName).toBe('custom-service-1');
@@ -714,36 +712,39 @@ describe('Observability Registry', () => {
       expect(custom2?.getConfig().serviceName).toBe('custom-service-2');
     });
 
-    it('should work with selector when default config is enabled', async () => {
+    it('should work with selector when using custom configs', async () => {
       const selector: ConfigSelector = (context, _availableTracers) => {
-        if (context.requestContext?.['useDefault'] === true) return 'default';
-        return 'custom';
+        if (context.requestContext?.['useConfig1'] === true) return 'config1';
+        return 'config2';
       };
 
       observability = new Observability({
-        default: { enabled: true },
         configs: {
-          custom: {
-            serviceName: 'custom-service',
+          config1: {
+            serviceName: 'service-1',
+            exporters: [],
+          },
+          config2: {
+            serviceName: 'service-2',
             exporters: [],
           },
         },
         configSelector: selector,
       });
 
-      const defaultOptions: ConfigSelectorOptions = {
-        requestContext: { useDefault: true } as any,
+      const config1Options: ConfigSelectorOptions = {
+        requestContext: { useConfig1: true } as any,
       };
 
-      const customOptions: ConfigSelectorOptions = {
-        requestContext: { useDefault: false } as any,
+      const config2Options: ConfigSelectorOptions = {
+        requestContext: { useConfig1: false } as any,
       };
 
-      // Should route to default config
-      expect(observability.getSelectedInstance(defaultOptions)).toBe(observability.getInstance('default'));
+      // Should route to config1
+      expect(observability.getSelectedInstance(config1Options)).toBe(observability.getInstance('config1'));
 
-      // Should route to custom config
-      expect(observability.getSelectedInstance(customOptions)).toBe(observability.getInstance('custom'));
+      // Should route to config2
+      expect(observability.getSelectedInstance(config2Options)).toBe(observability.getInstance('config2'));
     });
 
     it('should handle CloudExporter gracefully when token is missing', async () => {

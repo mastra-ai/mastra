@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
@@ -71,6 +70,6 @@ Format your summaries with:
 
 Always provide summaries that would allow someone to understand the document's core value without reading the full text, optimized for subsequent text-to-speech conversion.
   `,
-  model: openai('gpt-4.1-mini'), // Large context window model for summarization
+  model: process.env.MODEL || 'openai/gpt-4.1-mini', // Large context window model for summarization
   memory: new Memory(),
 });

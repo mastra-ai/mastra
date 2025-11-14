@@ -1,5 +1,5 @@
 ---
-title: "Example: Optimizing Information Density | RAG | Mastra Docs"
+title: "Example: Optimizing Information Density | RAG"
 description: Example of implementing a RAG system in Mastra to optimize information density and deduplicate data using LLM-based processing.
 ---
 
@@ -115,6 +115,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{41} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 

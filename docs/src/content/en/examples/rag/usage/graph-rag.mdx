@@ -1,5 +1,5 @@
 ---
-title: "Example: Graph RAG | RAG | Mastra Docs"
+title: "Example: Graph RAG | RAG"
 description: Example of implementing a Graph RAG system in Mastra using OpenAI embeddings and PGVector for vector storage.
 ---
 
@@ -94,6 +94,7 @@ Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{36} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 

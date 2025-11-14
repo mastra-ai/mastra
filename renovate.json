@@ -13,6 +13,7 @@
     "group:recommended",
     ":prConcurrentLimit20"
   ],
+  "labels": ["automation"],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
   "major": {

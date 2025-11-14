@@ -40,7 +40,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
 
   if (!workflow) {
     try {
-      workflow = mastra.getWorkflow(workflowId);
+      workflow = mastra.getWorkflowById(workflowId);
     } catch (error) {
       logger.debug('Error getting workflow, searching agents for workflow', error);
     }

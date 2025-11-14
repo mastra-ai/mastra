@@ -19,6 +19,8 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
  * Configuration for Cloudflare KV using REST API
  */
 export interface CloudflareRestConfig {
+  /** Storage instance ID */
+  id: string;
   /** Cloudflare account ID */
   accountId: string;
   /** Cloudflare API token with KV access */
@@ -35,6 +37,8 @@ export interface CloudflareRestConfig {
  * Configuration for Cloudflare KV using Workers Binding API
  */
 export interface CloudflareWorkersConfig {
+  /** Storage instance ID */
+  id: string;
   /** KV namespace bindings from Workers environment */
   bindings: {
     [key in TABLE_NAMES]: KVNamespace;

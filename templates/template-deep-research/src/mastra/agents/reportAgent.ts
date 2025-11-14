@@ -1,9 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-
-// Initialize model - using o3-mini as in the original implementation
-const reportModel = openai('gpt-4.1');
-
 export const reportAgent = new Agent({
   id: 'report-agent',
   name: 'Report Agent',
@@ -29,5 +24,5 @@ export const reportAgent = new Agent({
 
   Structure your reports with clear sections, headings, and focus on synthesizing the information
   into a cohesive narrative rather than simply listing facts.`,
-  model: reportModel,
+  model: process.env.MODEL || 'openai/gpt-4.1',
 });

@@ -163,11 +163,12 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             activePaths: [],
             timestamp: Date.now(),
             suspendedPaths: {},
+            activeStepsPath: {},
             resumeLabels: {},
             serializedStepGraph: [],
+            status: 'pending',
             value: {},
             waitingPaths: {},
-            status: 'pending',
             runId: runId,
             requestContext: {},
           } as WorkflowRunState;
@@ -352,6 +353,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     page,
     perPage,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -360,6 +362,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       if (workflowName) {
         conditions.push('workflow_name = ?');
         args.push(workflowName);
+      }
+
+      if (status) {
+        conditions.push("json_extract(snapshot, '$.status') = ?");
+        args.push(status);
       }
 
       if (fromDate) {

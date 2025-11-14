@@ -1,4 +1,4 @@
-import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4/message';
+import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { AIV5Type } from '../../types';
 
 export function hasAIV5CoreMessageCharacteristics(

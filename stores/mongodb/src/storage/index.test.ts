@@ -6,6 +6,7 @@ import type { MongoDBConfig } from './types';
 import { MongoDBStore } from './index';
 
 const TEST_CONFIG: MongoDBConfig = {
+  id: 'mongodb-test-store',
   url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
   dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
 };
@@ -32,6 +33,7 @@ describe('MongoDB Store Validation', () => {
 
   describe('with connection handler', () => {
     const validWithConnectionHandlerConfig = {
+      id: 'mongodb-handler-test',
       connectorHandler: {} as ConnectorHandler,
     };
 
@@ -76,6 +78,7 @@ describe('MongoDB Specific Tests', () => {
   describe('MongoDB Connection Options', () => {
     it('should handle MongoDB Atlas connection strings', () => {
       const atlasConfig = {
+        id: 'mongodb-atlas-test',
         url: 'mongodb+srv://user:pass@cluster.mongodb.net/',
         dbName: 'test-db',
         options: {
@@ -88,6 +91,7 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle MongoDB connection with auth options', () => {
       const authConfig = {
+        id: 'mongodb-auth-test',
         url: 'mongodb://user:pass@localhost:27017',
         dbName: 'test-db',
         options: {
@@ -100,6 +104,7 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle MongoDB connection pool options', () => {
       const poolConfig = {
+        id: 'mongodb-pool-test',
         url: 'mongodb://localhost:27017',
         dbName: 'test-db',
         options: {
@@ -577,6 +582,7 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle connection issues gracefully', async () => {
       const badStore = new MongoDBStore({
+        id: 'mongodb-bad-connection-test',
         url: 'mongodb://nonexistent:27017',
         dbName: 'test',
         options: {

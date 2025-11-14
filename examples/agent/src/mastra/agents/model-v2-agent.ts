@@ -29,7 +29,13 @@ export const weatherInfo = createTool({
   // requireApproval: true,
 });
 
-const memory = new Memory();
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+  },
+});
 
 const testAPICallError = new APICallError({
   message: 'Test API error',

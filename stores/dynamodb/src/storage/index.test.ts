@@ -226,6 +226,7 @@ describe('DynamoDBStore', () => {
     new DynamoDBStore({
       name: 'DynamoDBStoreTest',
       config: {
+        id: 'dynamodb-test-store',
         tableName: TEST_TABLE_NAME,
         endpoint: LOCAL_ENDPOINT,
         region: LOCAL_REGION,

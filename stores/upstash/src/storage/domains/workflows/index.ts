@@ -199,6 +199,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     perPage,
     page,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       if (page !== undefined && page < 0) {
@@ -257,6 +258,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
+          if (status) {
+            let snapshot = w.snapshot;
+            if (typeof snapshot === 'string') {
+              try {
+                snapshot = JSON.parse(snapshot) as WorkflowRunState;
+              } catch (e) {
+                console.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                return false;
+              }
+            }
+            return snapshot.status === status;
+          }
           return true;
         })
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
