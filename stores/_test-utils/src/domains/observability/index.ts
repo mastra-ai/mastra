@@ -296,7 +296,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
     });
 
-    describe('getTracesPaginated', () => {
+    describe('listTraces', () => {
       beforeEach(async () => {
         // Create test traces with different properties for filtering
         const traces = [
@@ -335,7 +335,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       describe('basic pagination', () => {
         it('should return root spans with pagination info', async () => {
-          const result = await observabilityStore.getTracesPaginated({
+          const result = await observabilityStore.listTraces({
             pagination: { page: 0, perPage: 10 },
           });
 
@@ -345,7 +345,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should respect perPage limit', async () => {
-          const result = await observabilityStore.getTracesPaginated({
+          const result = await observabilityStore.listTraces({
             pagination: { page: 0, perPage: 2 },
           });
 
@@ -354,11 +354,11 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should handle page navigation', async () => {
-          const page1 = await observabilityStore.getTracesPaginated({
+          const page1 = await observabilityStore.listTraces({
             pagination: { page: 0, perPage: 2 },
           });
 
-          const page2 = await observabilityStore.getTracesPaginated({
+          const page2 = await observabilityStore.listTraces({
             pagination: { page: 1, perPage: 2 },
           });
 
@@ -371,7 +371,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       describe('filtering', () => {
         it('should filter by span type', async () => {
-          const result = await observabilityStore.getTracesPaginated({
+          const result = await observabilityStore.listTraces({
             filters: { spanType: SpanType.WORKFLOW_RUN },
             pagination: { page: 0, perPage: 10 },
           });
@@ -386,7 +386,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should filter by name', async () => {
-          const result = await observabilityStore.getTracesPaginated({
+          const result = await observabilityStore.listTraces({
             filters: { name: 'workflow-trace-1' },
             pagination: { page: 0, perPage: 10 },
           });
@@ -398,7 +398,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should return empty results for non-matching filters', async () => {
-          const result = await observabilityStore.getTracesPaginated({
+          const result = await observabilityStore.listTraces({
             filters: { name: 'non-existent-trace' },
             pagination: { page: 0, perPage: 10 },
           });
@@ -410,7 +410,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
 
       describe('date range filtering', () => {
         it('should filter by date range', async () => {
-          const result = await observabilityStore.getTracesPaginated({
+          const result = await observabilityStore.listTraces({
             pagination: {
               dateRange: {
                 start: new Date('2024-01-01T00:00:00Z'),
@@ -431,7 +431,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         });
 
         it('should handle start date only', async () => {
-          const result = await observabilityStore.getTracesPaginated({
+          const result = await observabilityStore.listTraces({
             pagination: {
               dateRange: { start: new Date('2024-01-03T00:00:00Z') },
               page: 0,

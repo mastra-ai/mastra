@@ -52,7 +52,7 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
  * Get paginated traces with filtering and pagination
  * Returns only root spans (parent spans) for pagination, not child spans
  */
-export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityContext) {
+export async function listTracesHandler({ mastra, body }: ObservabilityContext) {
   try {
     const storage = await mastra.getStore('observability');
     if (!storage) {
@@ -85,7 +85,7 @@ export async function getTracesPaginatedHandler({ mastra, body }: ObservabilityC
       }
     }
 
-    return storage.getTracesPaginated({
+    return storage.listTraces({
       pagination,
       filters,
     });

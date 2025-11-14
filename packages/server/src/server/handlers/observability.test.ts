@@ -5,7 +5,7 @@ import type { ObservabilityStorageBase, EvalsStorageBase } from '@mastra/core/st
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { getTraceHandler, getTracesPaginatedHandler, listScoresBySpan, scoreTracesHandler } from './observability';
+import { getTraceHandler, listTracesHandler, listScoresBySpan, scoreTracesHandler } from './observability';
 
 // Mock scoreTraces - this is an external async function that runs in background
 vi.mock('@mastra/core/evals/scoreTraces', () => ({
@@ -141,14 +141,14 @@ describe('Observability Handlers', () => {
     });
   });
 
-  describe('getTracesPaginatedHandler', () => {
+  describe('listTracesHandler', () => {
     it('should return paginated results with valid parameters', async () => {
       const span1 = createRootSpan({ name: 'span-1', scope: 'test-scope' });
       const span2 = createRootSpan({ name: 'span-2', scope: 'test-scope' });
       await observabilityStorage.createSpan(span1);
       await observabilityStorage.createSpan(span2);
 
-      const result = await getTracesPaginatedHandler({
+      const result = await listTracesHandler({
         mastra,
         body: {
           filters: { name: 'span-1' },
@@ -162,7 +162,7 @@ describe('Observability Handlers', () => {
     });
 
     it('should work with minimal body parameters', async () => {
-      const result = await getTracesPaginatedHandler({
+      const result = await listTracesHandler({
         mastra,
         body: {
           filters: {},
@@ -181,14 +181,14 @@ describe('Observability Handlers', () => {
       });
 
       await expect(
-        getTracesPaginatedHandler({
+        listTracesHandler({
           mastra: mastraWithoutStorage,
           body: { filters: {}, pagination: {} },
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await getTracesPaginatedHandler({
+        await listTracesHandler({
           mastra: mastraWithoutStorage,
           body: { filters: {}, pagination: {} },
         });
@@ -201,14 +201,14 @@ describe('Observability Handlers', () => {
 
     it('should throw 400 when body is missing', async () => {
       await expect(
-        getTracesPaginatedHandler({
+        listTracesHandler({
           mastra,
           // body is undefined
         }),
       ).rejects.toThrow(HTTPException);
 
       try {
-        await getTracesPaginatedHandler({
+        await listTracesHandler({
           mastra,
         });
       } catch (error) {
@@ -221,7 +221,7 @@ describe('Observability Handlers', () => {
     describe('pagination validation', () => {
       it('should throw 400 when page is negative', async () => {
         await expect(
-          getTracesPaginatedHandler({
+          listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -231,7 +231,7 @@ describe('Observability Handlers', () => {
         ).rejects.toThrow(HTTPException);
 
         try {
-          await getTracesPaginatedHandler({
+          await listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -247,7 +247,7 @@ describe('Observability Handlers', () => {
 
       it('should throw 400 when perPage is negative', async () => {
         await expect(
-          getTracesPaginatedHandler({
+          listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -257,7 +257,7 @@ describe('Observability Handlers', () => {
         ).rejects.toThrow(HTTPException);
 
         try {
-          await getTracesPaginatedHandler({
+          await listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -272,7 +272,7 @@ describe('Observability Handlers', () => {
       });
 
       it('should allow page and perPage of 0', async () => {
-        const result = await getTracesPaginatedHandler({
+        const result = await listTracesHandler({
           mastra,
           body: {
             filters: {},
@@ -290,7 +290,7 @@ describe('Observability Handlers', () => {
         const startDate = new Date('2024-01-01');
         const endDate = new Date('2024-01-31');
 
-        const result = await getTracesPaginatedHandler({
+        const result = await listTracesHandler({
           mastra,
           body: {
             filters: {},
@@ -308,7 +308,7 @@ describe('Observability Handlers', () => {
 
       it('should throw 400 when start date is invalid', async () => {
         await expect(
-          getTracesPaginatedHandler({
+          listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -322,7 +322,7 @@ describe('Observability Handlers', () => {
         ).rejects.toThrow(HTTPException);
 
         try {
-          await getTracesPaginatedHandler({
+          await listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -342,7 +342,7 @@ describe('Observability Handlers', () => {
 
       it('should throw 400 when end date is invalid', async () => {
         await expect(
-          getTracesPaginatedHandler({
+          listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -356,7 +356,7 @@ describe('Observability Handlers', () => {
         ).rejects.toThrow(HTTPException);
 
         try {
-          await getTracesPaginatedHandler({
+          await listTracesHandler({
             mastra,
             body: {
               filters: {},
@@ -377,10 +377,10 @@ describe('Observability Handlers', () => {
 
     it('should handle storage errors gracefully', async () => {
       const storageError = new Error('Database query failed');
-      observabilityStorage.getTracesPaginated = vi.fn().mockRejectedValue(storageError);
+      observabilityStorage.listTraces = vi.fn().mockRejectedValue(storageError);
 
       await expect(
-        getTracesPaginatedHandler({
+        listTracesHandler({
           mastra,
           body: { filters: {}, pagination: {} },
         }),

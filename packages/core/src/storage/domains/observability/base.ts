@@ -82,7 +82,7 @@ export abstract class ObservabilityStorageBase extends MastraBase {
   /**
    * Retrieves a paginated list of traces with optional filtering.
    */
-  getTracesPaginated(_args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  listTraces(_args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_GET_TRACES_PAGINATED_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,

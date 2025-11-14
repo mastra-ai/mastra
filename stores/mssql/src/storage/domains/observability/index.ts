@@ -271,7 +271,7 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
     }
   }
 
-  async getTracesPaginated({
+  async listTraces({
     filters,
     pagination,
   }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {

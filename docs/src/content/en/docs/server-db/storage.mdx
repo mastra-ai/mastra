@@ -200,7 +200,7 @@ The message `content` column contains a JSON object conforming to the `MastraMes
 />
 <br />
 
-### Working with Messages
+<h3>Working with Messages</h3>
 
 Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
 
@@ -283,7 +283,7 @@ Groups related messages together and associates them with a resource. Contains m
   ]}
 />
 <br />
-### Working with Threads
+<h3>Working with Threads</h3>
 
 ```typescript copy
 const memoryStore = await mastra.getStore('memory');
@@ -360,7 +360,7 @@ Stores user-specific data for resource-scoped working memory. Each resource repr
   ]}
 />
 <br />
-### Working with Resources
+<h3>Working with Resources</h3>
 
 ```typescript copy
 const memoryStore = await mastra.getStore('memory');
@@ -446,7 +446,7 @@ When `suspend` is called on a workflow, its state is saved in the following form
 />
 <br />
 
-### Working with Workflow Snapshots
+<h3>Working with Workflow Snapshots</h3>
 
 ```typescript copy
 const workflowsStore = await mastra.getStore('workflows');
@@ -556,7 +556,7 @@ Stores eval results from running scorers against agent outputs.
   ]}
 />
 <br />
-### Working with Evals
+<h3>Working with Evals</h3>
 
 ```typescript copy
 const evalsStore = await mastra.getStore('evals');
@@ -591,24 +591,28 @@ const runScores = await evalsStore.listScoresByRunId({
 ```
 
   </TabItem>
-  <TabItem value="traces" label="Traces">
-Captures traces for monitoring and debugging.
+  <TabItem value="traces" label="Spans">
+Captures spans for monitoring and debugging. Spans represent individual operations within a trace. The table uses a composite primary key of `traceId` and `spanId`.
 
 <SchemaTable
   columns={[
     {
-      name: "id",
+      name: "traceId",
       type: "text",
-      description: "Unique trace identifier",
-      constraints: [
-        { type: "nullable", value: false },
-        { type: "primaryKey" }
-      ]
+      description: "Root trace identifier that groups related spans (part of composite primary key)",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "spanId",
+      type: "text",
+      description: "Unique identifier for this span within the trace (part of composite primary key)",
+      constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "parentSpanId",
       type: "text",
       description: "ID of the parent span. Null if span is top level",
+      constraints: [{ type: "nullable", value: true }]
     },
     {
       name: "name",
@@ -617,72 +621,81 @@ Captures traces for monitoring and debugging.
       constraints: [{ type: "nullable", value: false }],
     },
     {
-      name: "traceId",
-      type: "text",
-      description: "Root trace identifier that groups related spans",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
       name: "scope",
-      type: "text",
-      description: "Library/package/service that created the span (e.g. `@mastra/core`, `express`, `pg`)",
-      constraints: [{ type: "nullable", value: false }]
+      type: "jsonb",
+      description: "Mastra package info (e.g. `{\"core-version\": \"0.1.0\"}`)",
+      constraints: [{ type: "nullable", value: true }]
     },
     {
-      name: "kind",
-      type: "integer",
-      description: "`INTERNAL` (0, within process), `CLIENT` (1, outgoing calls), `SERVER` (2, incoming calls), `PRODUCER` (3, async job creation), `CONSUMER` (4, async job processing)",
+      name: "spanType",
+      type: "text",
+      description: "Type of span (e.g. `WORKFLOW_RUN`, `WORKFLOW_STEP`, `AGENT_RUN`, `AGENT_STEP`, `TOOL_RUN`, `TOOL_STEP`)",
       constraints: [{ type: "nullable", value: false }]
     },
     {
       name: "attributes",
       type: "jsonb",
       description: "User defined key-value pairs that contain span metadata",
+      constraints: [{ type: "nullable", value: true }]
     },
     {
-      name: "status",
+      name: "metadata",
       type: "jsonb",
-      description: "JSON object with `code` (UNSET=0, ERROR=1, OK=2) and optional `message`. Example:",
-      example: {
-        code: 1,
-        message: "HTTP request failed with status 500"
-      }
-    },
-    {
-      name: "events",
-      type: "jsonb",
-      description: "Time-stamped events that occurred during the span",
+      description: "Additional span metadata",
+      constraints: [{ type: "nullable", value: true }]
     },
     {
       name: "links",
       type: "jsonb",
       description: "Links to other related spans",
-      },
-    {
-      name: "other",
-      type: "text",
-      description: "Additional OpenTelemetry span fields as stringified JSON. Example:",
-      example: {
-        droppedAttributesCount: 2,
-        droppedEventsCount: 1,
-        instrumentationLibrary: "@opentelemetry/instrumentation-http"
-      }
+      constraints: [{ type: "nullable", value: true }]
     },
     {
-      name: "startTime",
-      type: "bigint",
-      description: "Nanoseconds since Unix epoch when span started",
+      name: "input",
+      type: "jsonb",
+      description: "Input data for the span operation",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "output",
+      type: "jsonb",
+      description: "Output data from the span operation",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "error",
+      type: "jsonb",
+      description: "Error information if the span operation failed",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "startedAt",
+      type: "timestamp",
+      description: "When the span started",
       constraints: [{ type: "nullable", value: false }]
     },
     {
-      name: "endTime",
-      type: "bigint",
-      description: "Nanoseconds since Unix epoch when span ended",
-      constraints: [{ type: "nullable", value: false }]
+      name: "endedAt",
+      type: "timestamp",
+      description: "When the span ended",
+      constraints: [{ type: "nullable", value: true }]
     },
     {
       name: "createdAt",
       type: "timestamp",
+      description: "When the database record was created",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "updatedAt",
+      type: "timestamp",
+      description: "When the database record was last updated",
+      constraints: [{ type: "nullable", value: true }]
+    },
+    {
+      name: "isEvent",
+      type: "boolean",
+      description: "Whether this span represents an event",
       constraints: [{ type: "nullable", value: false }]
     }
   ]}
@@ -690,35 +703,55 @@ Captures traces for monitoring and debugging.
 
 <br />
 
-### Working with Observability
+<h3>Working with Observability</h3>
 
 ```typescript copy
 const observabilityStore = await mastra.getStore('observability');
 
-// Get a trace by ID
-const trace = await observabilityStore.getTrace({
-  traceId: 'trace-123',
-});
+// Get a trace by ID (returns trace with all spans)
+const trace = await observabilityStore.getTrace('trace-123');
 
 // Get spans for a trace
-const spans = trace.spans;
+const spans = trace?.spans || [];
 
-// List traces with pagination and filters
-const traces = await observabilityStore.listTraces({
-  page: 0,
-  perPage: 50,
-  startTime: new Date('2024-01-01'),
-  endTime: new Date('2024-01-31'),
+// List traces with pagination and filters (returns root spans)
+const result = await observabilityStore.listTraces({
+  pagination: {
+    page: 0,
+    perPage: 50,
+    dateRange: {
+      start: new Date('2024-01-01'),
+      end: new Date('2024-01-31'),
+    },
+  },
+  filters: {
+    spanType: 'WORKFLOW_RUN',
+    entityType: 'workflow',
+    entityId: 'my-workflow-id',
+  },
 });
+
+// Access paginated spans (root spans representing traces)
+const rootSpans = result.spans;
+const paginationInfo = result.pagination;
 
 // Create a span (typically done automatically by observability system)
 await observabilityStore.createSpan({
-  spanId: 'span-123',
   traceId: 'trace-123',
+  spanId: 'span-123',
+  parentSpanId: null, // null if top-level span
   name: 'workflow.execute',
-  startTime: Date.now() * 1_000_000, // nanoseconds
-  endTime: (Date.now() + 100) * 1_000_000,
+  spanType: 'WORKFLOW_RUN',
+  scope: { 'core-version': '0.1.0' },
   attributes: { workflowId: 'my-workflow' },
+  metadata: null,
+  links: null,
+  startedAt: new Date(),
+  endedAt: null, // null if span is still active
+  input: { workflowId: 'my-workflow' },
+  output: null,
+  error: null,
+  isEvent: false,
 });
 ```
 
