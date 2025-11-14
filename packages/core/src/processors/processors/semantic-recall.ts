@@ -1,6 +1,6 @@
 import type { SystemModelMessage } from 'ai-v5';
 import { LRUCache } from 'lru-cache';
-import XXH from 'xxhashjs';
+import xxhash from 'xxhash-wasm';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRuntimeContext } from '../../memory/types';
@@ -112,6 +112,9 @@ export class SemanticRecall implements Processor {
 
   // LRU cache for embeddings: contentHash -> embedding vector
   private embeddingCache: LRUCache<string, number[]>;
+  
+  // xxhash-wasm hasher instance (initialized as a promise)
+  private hasher = xxhash();
 
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
@@ -370,8 +373,9 @@ ${formattedSections.join('\n')}
   /**
    * Hash content using xxhash for fast cache key generation
    */
-  private hashContent(content: string): string {
-    return XXH.h64(content, 0).toString(16);
+  private async hashContent(content: string): Promise<string> {
+    const h = await this.hasher;
+    return h.h64(content).toString(16);
   }
 
   private async embedMessageContent(content: string): Promise<{
@@ -379,7 +383,7 @@ ${formattedSections.join('\n')}
     dimension: number;
   }> {
     // Check cache first
-    const contentHash = this.hashContent(content);
+    const contentHash = await this.hashContent(content);
     const cachedEmbedding = this.embeddingCache.get(contentHash);
 
     if (cachedEmbedding) {
