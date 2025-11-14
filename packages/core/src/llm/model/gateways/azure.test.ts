@@ -80,18 +80,15 @@ describe('AzureGateway', () => {
     };
 
     beforeEach(() => {
-      // Set environment variables
       Object.assign(process.env, mockEnvVars);
     });
 
     it('should fetch and parse deployments from Azure Management API', async () => {
-      // Mock token endpoint
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockTokenResponse,
       });
 
-      // Mock deployments endpoint
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockDeploymentsResponse,
@@ -110,13 +107,12 @@ describe('AzureGateway', () => {
         }),
       );
 
-      // Verify the body contains all required OAuth2 parameters (URL-encoded)
       const tokenCallArgs = mockFetch.mock.calls.find(call => call[0].includes('login.microsoftonline.com'));
       const requestBody = tokenCallArgs?.[1]?.body as string;
       expect(requestBody).toContain('grant_type=client_credentials');
       expect(requestBody).toContain('client_id=client-456');
       expect(requestBody).toContain('client_secret=secret-789');
-      expect(requestBody).toContain('scope=https%3A%2F%2Fmanagement.azure.com%2F.default'); // URL-encoded
+      expect(requestBody).toContain('scope=https%3A%2F%2Fmanagement.azure.com%2F.default');
 
       // Verify deployments endpoint was called
       expect(mockFetch).toHaveBeenCalledWith(
@@ -130,7 +126,6 @@ describe('AzureGateway', () => {
         }),
       );
 
-      // Verify provider config
       expect(providers).toBeDefined();
       expect(providers['azure']).toBeDefined();
       expect(providers['azure'].models).toContain('my-gpt4');
@@ -226,16 +221,14 @@ describe('AzureGateway', () => {
 
       await gateway.fetchProviders();
 
-      // Token endpoint should be called TWICE (not cached because expiring)
+      // Token endpoint should be called twice (not cached because token expires within 60 seconds)
       const tokenCalls = mockFetch.mock.calls.filter(call => call[0].includes('login.microsoftonline.com'));
       expect(tokenCalls.length).toBe(2);
     });
 
     it('should throw MastraError when Management API credentials are missing', async () => {
-      // Remove credentials
       delete process.env.AZURE_TENANT_ID;
 
-      // Should throw MastraError with specific ID and message
       await expect(gateway.fetchProviders()).rejects.toMatchObject({
         id: 'AZURE_MANAGEMENT_CREDENTIALS_MISSING',
         message: expect.stringContaining('AZURE_TENANT_ID'),
@@ -249,7 +242,6 @@ describe('AzureGateway', () => {
         text: async () => 'Unauthorized',
       });
 
-      // Should throw MastraError with specific ID and status code
       await expect(gateway.fetchProviders()).rejects.toMatchObject({
         id: 'AZURE_AD_TOKEN_ERROR',
         message: expect.stringContaining('401'),
@@ -257,20 +249,17 @@ describe('AzureGateway', () => {
     });
 
     it('should throw MastraError on Management API fetch failure', async () => {
-      // Token succeeds
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockTokenResponse,
       });
 
-      // Deployments fails
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 403,
         text: async () => 'Forbidden',
       });
 
-      // Should throw MastraError with specific ID and status code
       await expect(gateway.fetchProviders()).rejects.toMatchObject({
         id: 'AZURE_DEPLOYMENTS_FETCH_ERROR',
         message: expect.stringContaining('403'),
@@ -306,14 +295,8 @@ describe('AzureGateway', () => {
       process.env.AZURE_RESOURCE_NAME = 'my-resource';
       process.env.AZURE_API_KEY = 'test-key';
 
-      // Note: This test will need to mock the @ai-sdk/azure module
-      // For now, we can just verify it doesn't throw
       await expect(
-        gateway.resolveLanguageModel({
-          modelId: 'my-gpt4',
-          providerId: 'azure',
-          apiKey: 'test-key',
-        }),
+        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azure', apiKey: 'test-key' }),
       ).resolves.toBeDefined();
     });
 
@@ -333,14 +316,8 @@ describe('AzureGateway', () => {
       process.env.AZURE_RESOURCE_NAME = 'my-resource';
       delete process.env.OPENAI_API_VERSION;
 
-      // The SDK should be called with default version '2024-04-01-preview'
-      // This would require mocking the createAzure function
       await expect(
-        gateway.resolveLanguageModel({
-          modelId: 'my-gpt4',
-          providerId: 'azure',
-          apiKey: 'test-key',
-        }),
+        gateway.resolveLanguageModel({ modelId: 'my-gpt4', providerId: 'azure', apiKey: 'test-key' }),
       ).resolves.toBeDefined();
     });
   });

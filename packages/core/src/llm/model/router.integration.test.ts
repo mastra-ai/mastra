@@ -28,7 +28,7 @@ const testConfigs = [
     provider: 'azure',
     model: 'gpt-4o-mini', // Note: Must match an actual deployment name in your Azure OpenAI resource
     envVar: 'AZURE_API_KEY',
-    requiresResourceName: true, // Azure also needs AZURE_RESOURCE_NAME
+    requiresResourceName: true,
   },
 ];
 
