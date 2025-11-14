@@ -1,0 +1,214 @@
+---
+title: "Azure OpenAI | Gateways | Mastra"
+description: "Use Azure OpenAI Service with custom model deployments."
+---
+
+# <img src="https://models.dev/logos/azure.svg" alt="Azure OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Azure OpenAI
+
+Azure OpenAI provides enterprise-grade access to OpenAI models through dedicated deployments with security, compliance, and SLA guarantees.
+
+Unlike other providers that have fixed model names, Azure uses **deployment names** that you configure in the Azure Portal.
+
+## How Azure Deployments Work
+
+Azure model IDs follow this pattern: `azure/your-deployment-name`
+
+The deployment name is **specific to your Azure account** and chosen when you create a deployment in Azure Portal. Common examples:
+- `azure/my-gpt4-deployment`
+- `azure/production-gpt-35-turbo`
+- `azure/staging-gpt-4o`
+
+## Setup
+
+### Step 1: Create Deployments in Azure Portal
+
+1. Navigate to [Azure OpenAI Studio](https://oai.azure.com/)
+2. Go to **Deployments** → **Create new deployment**
+3. Choose a model (e.g., GPT-4, GPT-3.5-turbo)
+4. Set a deployment name (e.g., `my-gpt4-deployment`)
+5. Configure capacity and settings
+6. Note your deployment name for use in Mastra
+
+### Step 2: Get Your Credentials
+
+From your Azure OpenAI resource:
+- **Resource Name**: Found in Azure Portal (e.g., `my-openai-resource`)
+- **API Key**: Under "Keys and Endpoint"
+- **Region**: Your resource's Azure region
+
+### Step 3: Configure Environment Variables
+
+#### Required (for API calls)
+
+```bash
+AZURE_RESOURCE_NAME=my-openai-resource
+AZURE_API_KEY=xxxxxxxxxxxxxxxxxxxxx
+```
+
+#### Optional
+
+```bash
+# API version (defaults to 2024-04-01-preview)
+OPENAI_API_VERSION=2024-04-01-preview
+```
+
+#### For TypeScript Autocomplete (Optional)
+
+To get IDE autocomplete for your deployment names, provide Azure Management API credentials:
+
+```bash
+AZURE_TENANT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AZURE_CLIENT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AZURE_CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxx
+AZURE_SUBSCRIPTION_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+AZURE_RESOURCE_GROUP=my-resource-group
+```
+
+When these are set, Mastra will fetch your deployment names and provide autocomplete in your IDE.
+
+## Usage
+
+### Basic Usage
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "azure/my-gpt4-deployment"  // Your deployment name
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const environment = requestContext.get("environment");
+    return environment === "production"
+      ? "azure/prod-gpt4-deployment"
+      : "azure/staging-gpt-35-turbo";
+  }
+});
+```
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "Custom Agent",
+  model: {
+    id: "azure/my-deployment",
+    apiKey: process.env.AZURE_API_KEY,
+    headers: {
+      "x-ms-useragent": "my-app/1.0"
+    }
+  }
+});
+```
+
+## Available Models
+
+Azure OpenAI supports these model families through deployments:
+
+| Model Family | Capabilities |
+|--------------|--------------|
+| **GPT-4o** | Latest multimodal, vision, function calling |
+| **GPT-4 Turbo** | Advanced reasoning, 128K context |
+| **GPT-4** | Advanced reasoning, problem-solving |
+| **GPT-3.5 Turbo** | Fast, cost-effective for simpler tasks |
+| **Embedding Models** | ada-002, text-embedding-3-small/large |
+
+Check [Azure OpenAI Model Availability](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for region-specific availability.
+
+## Finding Your Deployment Names
+
+### Option 1: Azure Portal
+1. Go to [Azure OpenAI Studio](https://oai.azure.com/)
+2. Navigate to **Deployments**
+3. View your deployment names in the list
+
+### Option 2: Azure CLI
+```bash
+az cognitiveservices account deployment list \
+  --name my-openai-resource \
+  --resource-group my-resource-group
+```
+
+### Option 3: IDE Autocomplete
+When Management API credentials are configured (see Setup Step 3), Mastra automatically fetches your deployments and provides autocomplete:
+
+```typescript
+const agent = new Agent({
+  model: "azure/"  // ← Autocomplete shows your deployments
+});
+```
+
+## Troubleshooting
+
+### "Missing Azure Management API credentials"
+
+This warning appears if you haven't set the optional Management API credentials. You can either:
+
+**Option A**: Manually specify deployment names (no autocomplete)
+```typescript
+model: "azure/my-deployment-name"
+```
+
+**Option B**: Add Management API credentials for autocomplete (see Setup Step 3)
+
+### "Deployment not found"
+
+Verify:
+1. Deployment exists in Azure Portal
+2. Deployment name matches exactly (case-sensitive)
+3. `AZURE_RESOURCE_NAME` is correct
+4. API key has access to the deployment
+
+### Regional Considerations
+
+- Deployments are region-specific
+- Ensure your app and deployments are in supported regions
+- Check [Azure OpenAI Service regions](https://azure.microsoft.com/en-us/explore/global-infrastructure/products-by-region/?products=cognitive-services)
+
+## Security Best Practices
+
+### Use Managed Identities
+For Azure-hosted applications, use Managed Identity instead of API keys:
+
+```typescript
+// Configure Azure SDK to use DefaultAzureCredential
+// Mastra will automatically use managed identity when available
+```
+
+### Key Rotation
+Regularly rotate API keys in Azure Portal:
+1. Generate new key
+2. Update application
+3. Delete old key
+
+### Network Security
+- Use Private Endpoints for Azure OpenAI
+- Configure network rules to restrict access
+- Enable Azure Firewall for additional protection
+
+## Learn More
+
+- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+- [Model Deployment Guide](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/create-resource)
+- [Pricing Calculator](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/)
+- [Azure OpenAI Studio](https://oai.azure.com/)
