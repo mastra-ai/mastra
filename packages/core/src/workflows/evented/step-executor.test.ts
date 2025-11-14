@@ -204,10 +204,11 @@ describe('StepExecutor', () => {
 
   it('should save only error message without stack trace when step fails', async () => {
     const errorMessage = 'Test error: step execution failed.';
+    const testError = new Error(errorMessage);
     const failingStep = createStep({
       id: 'failing-step',
       execute: vi.fn().mockImplementation(() => {
-        throw new Error(errorMessage);
+        throw testError;
       }),
       inputSchema: z.object({}),
       outputSchema: z.object({}),
@@ -228,24 +229,24 @@ describe('StepExecutor', () => {
 
     expect(result.status).toBe('failed');
     const failedResult = result as Extract<typeof result, { status: 'failed' }>;
-    expect(failedResult.error).toBe('Error: ' + errorMessage);
-    expect(String(failedResult.error)).not.toContain('at Object.execute');
-    expect(String(failedResult.error)).not.toContain('at ');
-    expect(String(failedResult.error)).not.toContain('\n');
+    expect(failedResult.error).toBeInstanceOf(Error);
+    expect(failedResult.error).toBe(testError);
+    expect(failedResult.error.message).toBe(errorMessage);
   });
 
   it('should save MastraError message without stack trace when step fails', async () => {
     const errorMessage = 'Test MastraError: step execution failed.';
+    const testError = new MastraError({
+      id: 'VALIDATION_ERROR',
+      domain: 'MASTRA_WORKFLOW',
+      category: 'USER',
+      text: errorMessage,
+      details: { field: 'test' },
+    });
     const failingStep = createStep({
       id: 'failing-step',
       execute: vi.fn().mockImplementation(() => {
-        throw new MastraError({
-          id: 'VALIDATION_ERROR',
-          domain: 'MASTRA_WORKFLOW',
-          category: 'USER',
-          text: errorMessage,
-          details: { field: 'test' },
-        });
+        throw testError;
       }),
       inputSchema: z.object({}),
       outputSchema: z.object({}),
@@ -266,9 +267,7 @@ describe('StepExecutor', () => {
 
     expect(result.status).toBe('failed');
     const failedResult = result as Extract<typeof result, { status: 'failed' }>;
-    expect(failedResult.error).toBe('Error: ' + errorMessage);
-    expect(String(failedResult.error)).not.toContain('at Object.execute');
-    expect(String(failedResult.error)).not.toContain('at ');
-    expect(String(failedResult.error)).not.toContain('\n');
+    expect(failedResult.error).toBe(testError);
+    expect(failedResult.error.message).toBe(errorMessage);
   });
 });
