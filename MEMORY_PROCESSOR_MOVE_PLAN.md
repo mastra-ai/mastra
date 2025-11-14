@@ -1,5 +1,7 @@
 # Plan: Move Memory Processors from @mastra/core to @mastra/memory
 
+## Status: ✅ COMPLETED
+
 ## Goal
 Move memory-specific processors (`SemanticRecall`, `WorkingMemory`, `MessageHistory`) from `@mastra/core` to `@mastra/memory` to achieve proper separation of concerns and avoid architectural issues.
 

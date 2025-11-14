@@ -104,15 +104,15 @@
 - **Reason**: Breaking change for legacy users
 - **Status**: Verified - `AgentLegacyHandler` DOES support processors via `__runInputProcessors()` (line 379). It uses the same processor infrastructure as the new agent. No new tests needed - existing integration tests provide sufficient coverage. See `LEGACY_AGENT_INTEGRATION_TESTS_PLAN.md` for details.
 
-### 15. CRITICAL: Move memory processors to @mastra/memory 📋 PLANNED
+### 15. CRITICAL: Move memory processors to @mastra/memory ✅ DONE
 - **Files**: Memory-specific processors in `packages/core/src/processors/processors/`
   - `message-history.ts`
   - `semantic-recall.ts`
   - `working-memory.ts`
 - **Action**: Move to `packages/memory/src/processors/` and move instantiation logic to `Memory` class
 - **Reason**: Proper separation of concerns - memory-specific processors should live in `@mastra/memory`, not `@mastra/core`
-- **Status**: ✅ PLANNED - Detailed plan created in `MEMORY_PROCESSOR_MOVE_PLAN.md`. User feedback incorporated. Ready to execute once approved.
-- **Note**: This will NOT create a circular dependency because the concrete `Memory` class in `@mastra/memory` will instantiate the processors, not the abstract `MastraMemory` class in `@mastra/core`.
+- **Status**: ✅ DONE - All processors moved to `@mastra/memory`, instantiation logic moved to `Memory` class, dependencies updated (`xxhash-wasm` + `lru-cache`), all tests passing, lint and build passing. See `MEMORY_PROCESSOR_MOVE_PLAN.md` for full details.
+- **Note**: This did NOT create a circular dependency because the concrete `Memory` class in `@mastra/memory` instantiates the processors, not the abstract `MastraMemory` class in `@mastra/core`.
 
 ## Execution Order
 1. Start with EASY issues (1-3)
