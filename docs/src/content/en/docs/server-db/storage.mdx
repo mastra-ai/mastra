@@ -11,12 +11,15 @@ import TabItem from "@theme/TabItem";
 
 # MastraStorage
 
-`MastraStorage` provides a unified interface for managing:
+`MastraStorage` organizes data into four **domains**, each handling a specific type of data:
 
-- **Suspended Workflows**: the serialized state of suspended workflows (so they can be resumed later)
-- **Memory**: threads and messages per `resourceId` in your application
-- **Traces**: OpenTelemetry traces from all components of Mastra
-- **Eval Datasets**: scores and scoring reasons from eval runs
+- **`workflows`**: Stores suspended workflow snapshots and execution state
+- **`memory`**: Stores conversation threads, messages, and resource-scoped working memory
+- **`observability`**: Stores traces and spans for monitoring and debugging
+- **`evals`**: Stores evaluation scores and scoring metadata from eval runs
+
+Each domain can be configured independently, allowing you to use different storage backends for different domains if needed.
+
 
 <br />
 
@@ -25,6 +28,9 @@ import TabItem from "@theme/TabItem";
 <StorageOverviewImage />
 
 Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
+
+## Storage Domains
+
 
 ## Configuration
 
@@ -46,13 +52,56 @@ If you do not specify any `storage` configuration, Mastra will not persist data 
 deployment beyond local testing you should provide your own storage
 configuration either on `Mastra` or directly within `new Memory()`.
 
+### Composite Storage
+
+You can use a default store for most domains and override specific domains. This is useful when you want to use different storage backends for different domains (e.g., LibSQL for most domains, PostgreSQL for observability). The `default` parameter provides a fallback store for any domains not explicitly specified in `stores`:
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { MastraStorage } from "@mastra/core/storage";
+import { LibSQLStore } from "@mastra/libsql";
+import { ObservabilityStorage } from "@mastra/pg";
+import pgPromise from "pg-promise";
+
+// Default store for all domains
+const defaultStore = new LibSQLStore({
+  id: "default-storage",
+  url: "file:./default.db",
+});
+
+// Override observability to use PostgreSQL
+const pgp = pgPromise();
+const sharedDbClient = pgp({
+  connectionString: "postgresql://user:password@localhost:5432/mastra",
+});
+
+const observabilityStorage = new ObservabilityStorage({
+  client: sharedDbClient,
+  schema: "public",
+});
+
+const storage = new MastraStorage({
+  id: "mastra-storage",
+  name: "Mastra Storage",
+  default: defaultStore, // Default for workflows, memory, evals
+  stores: {
+    observability: observabilityStorage, // Override observability
+  },
+});
+
+const mastra = new Mastra({
+  storage,
+});
+```
+
+Only domains that are explicitly provided or exist in the default store will be initialized. This allows you to mix and match storage backends based on your needs.
+
 ## Data Schema
 
 <Tabs>
   <TabItem value="messages" label="Messages">
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -98,7 +147,7 @@ Stores conversation messages and their metadata. Each message belongs to a threa
     },
   ]}
 />
-
+<br />
 The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align closely with the AI SDK `UIMessage` message shape.
 
 <SchemaTable
@@ -149,13 +198,46 @@ The message `content` column contains a JSON object conforming to the `MastraMes
     },
   ]}
 />
+<br />
+
+### Working with Messages
+
+Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
+
+```typescript copy
+// Get messages for a thread with pagination
+const memoryStore = await mastra.getStore('memory');
+if (!memoryStore) {
+  throw new Error('Memory store not configured');
+}
+
+const result = await memoryStore.listMessages({
+  threadId: "your-thread-id",
+  page: 0,
+  perPage: 50
+});
+
+console.log(result.messages); // MastraDBMessage[]
+console.log(result.total); // Total count
+console.log(result.hasMore); // Whether more pages exist
+
+const messageIdArr = result.messages.map(message => message.id);
+
+// Get messages by their IDs
+const messages = await memoryStore.listMessagesById({ 
+  messageIds: messageIdArr 
+});
+
+// Convert to AI SDK v5 UIMessage format for UI rendering
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+const uiMessages = toAISdkV5Messages(result.messages);
+```
 
 </TabItem>
 
   <TabItem value="threads" label="Threads">
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -200,12 +282,43 @@ Groups related messages together and associates them with a resource. Contains m
     },
   ]}
 />
+<br />
+### Working with Threads
+
+```typescript copy
+const memoryStore = await mastra.getStore('memory');
+
+// Create a new thread
+const thread = await memoryStore.createThread({
+  resourceId: 'user-123',
+  title: 'Support Conversation',
+  metadata: { category: 'support', priority: 1 },
+});
+
+// Get thread by ID
+const retrievedThread = await memoryStore.getThreadById({
+  threadId: thread.id,
+});
+
+// List threads for a resource
+const threads = await memoryStore.listThreads({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
+});
+
+// Update thread
+await memoryStore.updateThread({
+  id: thread.id,
+  title: 'Updated Title',
+  metadata: { category: 'support', priority: 2 },
+});
+```
 
 </TabItem>
   <TabItem value="resources" label="Resources">
 Stores user-specific data for resource-scoped working memory. Each resource represents a user or entity, allowing working memory to persist across all conversation threads for that user.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -246,12 +359,47 @@ Stores user-specific data for resource-scoped working memory. Each resource repr
     },
   ]}
 />
+<br />
+### Working with Resources
+
+```typescript copy
+const memoryStore = await mastra.getStore('memory');
+
+// Get a resource by ID
+const resource = await memoryStore.getResourceById({
+  resourceId: 'user-123',
+});
+
+// Update resource working memory and metadata
+await memoryStore.updateResource({
+  resourceId: 'user-123',
+  workingMemory: '# User Profile\n\nName: John Doe\nPreferences: English, UTC',
+  metadata: {
+    preferences: { language: 'en', timezone: 'UTC' },
+    tags: ['premium', 'beta-user'],
+  },
+});
+
+// Update only working memory
+await memoryStore.updateResource({
+  resourceId: 'user-123',
+  workingMemory: '# Updated Profile\n\nName: John Doe\nEmail: john@example.com',
+});
+
+// Update only metadata
+await memoryStore.updateResource({
+  resourceId: 'user-123',
+  metadata: {
+    preferences: { language: 'en', timezone: 'PST' },
+    tags: ['premium', 'beta-user', 'vip'],
+  },
+});
+```
 
 </TabItem>
   <TabItem value="workflows" label="Workflows">
 When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -296,11 +444,48 @@ When `suspend` is called on a workflow, its state is saved in the following form
     }
   ]}
 />
+<br />
+
+### Working with Workflow Snapshots
+
+```typescript copy
+const workflowsStore = await mastra.getStore('workflows');
+
+// Save workflow snapshot (automatically called on suspend)
+await workflowsStore.createWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+  snapshot: {
+    value: { currentState: 'running' },
+    context: {
+      stepResults: {},
+      attempts: {},
+      triggerData: {},
+    },
+    activePaths: [],
+    runId: 'run-123',
+    timestamp: Date.now(),
+  },
+});
+
+// Load workflow snapshot (used when resuming)
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
+
+// List workflow runs
+const runs = await workflowsStore.listWorkflowRuns({
+  workflowId: 'my-workflow',
+  page: 0,
+  perPage: 50,
+});
+```
+
   </TabItem>
   <TabItem value="evals" label="Evals">
-Stores eval results from running metrics against agent outputs.
+Stores eval results from running scorers against agent outputs.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -370,11 +555,45 @@ Stores eval results from running metrics against agent outputs.
     }
   ]}
 />
+<br />
+### Working with Evals
+
+```typescript copy
+const evalsStore = await mastra.getStore('evals');
+
+// Save a score (automatically called by scorer hooks)
+await evalsStore.saveScore({
+  runId: 'run-123',
+  scorerId: 'faithfulness-scorer',
+  entityId: 'agent-1',
+  entityType: 'AGENT',
+  score: 0.95,
+  reason: 'Response accurately reflects source material',
+  source: 'LIVE',
+  input: { question: 'What is...' },
+  output: { answer: '...' },
+});
+
+// Get score by ID
+const score = await evalsStore.getScoreById({ id: 'score-id' });
+
+// List scores by scorer
+const scores = await evalsStore.listScoresByScorerId({
+  scorerId: 'faithfulness-scorer',
+  pagination: { page: 0, perPage: 50 },
+});
+
+// List scores by run ID
+const runScores = await evalsStore.listScoresByRunId({
+  runId: 'run-123',
+  pagination: { page: 0, perPage: 50 },
+});
+```
+
   </TabItem>
   <TabItem value="traces" label="Traces">
-Captures OpenTelemetry traces for monitoring and debugging.
+Captures traces for monitoring and debugging.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -468,48 +687,63 @@ Captures OpenTelemetry traces for monitoring and debugging.
     }
   ]}
 />
+
+<br />
+
+### Working with Observability
+
+```typescript copy
+const observabilityStore = await mastra.getStore('observability');
+
+// Get a trace by ID
+const trace = await observabilityStore.getTrace({
+  traceId: 'trace-123',
+});
+
+// Get spans for a trace
+const spans = trace.spans;
+
+// List traces with pagination and filters
+const traces = await observabilityStore.listTraces({
+  page: 0,
+  perPage: 50,
+  startTime: new Date('2024-01-01'),
+  endTime: new Date('2024-01-31'),
+});
+
+// Create a span (typically done automatically by observability system)
+await observabilityStore.createSpan({
+  spanId: 'span-123',
+  traceId: 'trace-123',
+  name: 'workflow.execute',
+  startTime: Date.now() * 1_000_000, // nanoseconds
+  endTime: (Date.now() + 100) * 1_000_000,
+  attributes: { workflowId: 'my-workflow' },
+});
+```
+
   </TabItem>
 </Tabs>
 
-### Querying Messages
-
-Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
-
-```typescript copy
-// Get messages for a thread with pagination
-const memoryStore = await mastra.getStore('memory');
-
-const result = await memoryStore?.listMessages({
-  threadId: "your-thread-id",
-  page: 0,
-  perPage: 50
-});
-
-console.log(result.messages); // MastraDBMessage[]
-console.log(result.total); // Total count
-console.log(result.hasMore); // Whether more pages exist
-
-// Get messages by their IDs
-const messages = await memoryStore?.listMessagesById({ messageIds: messageIdArr });
-```
-
-All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
-
-```typescript copy
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-
-const memoryStore = await mastra.getStore('memory');
-const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
-
-// Convert to AI SDK v5 UIMessage format for UI rendering
-const uiMessages = toAISdkV5Messages(result.messages);
-```
-
 ## Storage Providers
 
-Mastra supports the following providers:
+Mastra supports the following storage providers:
 
-- For local development, check out [LibSQL Storage](/reference/v1/storage/libsql)
-- For production, check out [PostgreSQL Storage](/reference/v1/storage/postgresql)
-- For serverless deployments, check out [Upstash Storage](/reference/v1/storage/upstash)
-- For document-based storage, check out [MongoDB Storage](/reference/v1/storage/mongodb)
+### SQL Databases
+
+- **[LibSQL Storage](/reference/v1/storage/libsql)** - SQLite storage
+- **[PostgreSQL Storage](/reference/v1/storage/postgresql)** - Production-ready relational database
+- **[MSSQL Storage](/reference/v1/storage/mssql)** - Microsoft SQL Server for enterprise deployments
+- **[Cloudflare D1 Storage](/reference/v1/storage/cloudflare-d1)** - Serverless SQL database for Cloudflare Workers
+
+### NoSQL Databases
+- **[MongoDB Storage](/reference/v1/storage/mongodb)** - Document-based storage
+- **[DynamoDB Storage](/reference/v1/storage/dynamodb)** - AWS DynamoDB with single-table design
+
+### KV Stores
+- **[Upstash Storage](/reference/v1/storage/upstash)** - Redis-based storage for serverless deployments
+- **[Cloudflare Storage](/reference/v1/storage/cloudflare)** - Cloudflare KV for globally distributed key-value storage
+
+### Specialized Storage
+- **[LanceDB Storage](/reference/v1/storage/lance)** - High-performance storage with built-in vector operations
+

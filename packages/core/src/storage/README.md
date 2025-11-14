@@ -74,6 +74,46 @@ const storage = new DefaultStorage({
 await storage.init();
 ```
 
+### Composite Storage
+
+You can use a default store for most domains and override specific domains. This is useful when you want to use different storage backends for different domains (e.g., LibSQL for most domains, PostgreSQL for observability):
+
+```typescript
+import { MastraStorage } from '@mastra/core/storage';
+import { LibSQLStore } from '@mastra/libsql';
+import { ObservabilityStorage } from '@mastra/pg';
+import pgPromise from 'pg-promise';
+
+// Default store for all domains
+const defaultStore = new LibSQLStore({
+  id: 'default-storage',
+  url: 'file:./default.db',
+});
+
+// Override observability to use PostgreSQL
+const pgp = pgPromise();
+const sharedDbClient = pgp({
+  connectionString: 'postgresql://user:password@localhost:5432/mastra',
+});
+
+const observabilityStorage = new ObservabilityStorage({
+  client: sharedDbClient,
+  schema: 'public',
+});
+
+const storage = new MastraStorage({
+  id: 'mastra-storage',
+  name: 'Mastra Storage',
+  default: defaultStore, // Default for workflows, memory, evals
+  stores: {
+    observability: observabilityStorage, // Override observability
+  },
+});
+
+// Only domains that are explicitly provided or exist in the default store will be initialized
+await storage.init();
+```
+
 ### Working with Threads
 
 ```typescript
@@ -85,13 +125,13 @@ const thread = await storage.createThread({
 });
 
 // Get thread by ID
-const memoryStore = storage.getStore('memory');
+const memoryStore = await storage.getStore('memory');
 const retrievedThread = await memoryStore?.getThreadById({
   threadId: thread.id,
 });
 
 // Update thread
-const memoryStore = storage.getStore('memory');
+const memoryStore = await storage.getStore('memory');
 await memoryStore?.updateThread({
   id: thread.id,
   title: 'Updated Title',
@@ -103,7 +143,7 @@ await memoryStore?.updateThread({
 
 ```typescript
 // Save messages
-const memoryStore = storage.getStore('memory');
+const memoryStore = await storage.getStore('memory');
 await memoryStore?.saveMessages({
   messages: [
     {
@@ -132,7 +172,8 @@ console.log(result.hasMore); // Whether more pages exist
 
 ```typescript
 // Save workflow state
-await storage.getStore('workflows')?.createWorkflowSnapshot({
+const workflowsStore = await storage.getStore('workflows');
+await workflowsStore?.createWorkflowSnapshot({
   workflowId: 'my-workflow',
   runId: 'run-123',
   snapshot: {
@@ -149,9 +190,9 @@ await storage.getStore('workflows')?.createWorkflowSnapshot({
 });
 
 // Load workflow state
-const store = storage.getStore('workflows');
+const store = await storage.getStore('workflows');
 
-const snapshot = await store.getWorkflowSnapshot({
+const snapshot = await store?.getWorkflowSnapshot({
   workflowId: 'my-workflow',
   runId: 'run-123',
 });
