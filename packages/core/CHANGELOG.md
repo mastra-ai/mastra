@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 0.24.1-alpha.0
+
+### Patch Changes
+
+- Integrates the native **Mistral AI SDK** provider (`@ai-sdk/mistral`) to replace the current OpenAI-compatible endpoint implementation for Mistral models. ([#10048](https://github.com/mastra-ai/mastra/pull/10048))
+
+- Fix: Don't download unsupported media ([#9860](https://github.com/mastra-ai/mastra/pull/9860))
+
+- Use a shared `getAllToolPaths()` method from the bundler to discover tool paths. ([#10049](https://github.com/mastra-ai/mastra/pull/10049))
+
+- Add an additional check to determine whether the model natively supports specific file types. Only download the file if the model does not support it natively. ([#10052](https://github.com/mastra-ai/mastra/pull/10052))
+
+- Fix agent network iteration counter bug causing infinite loops ([#9934](https://github.com/mastra-ai/mastra/pull/9934))
+
+  The iteration counter in agent networks was stuck at 0 due to a faulty ternary operator that treated 0 as falsy. This prevented `maxSteps` from working correctly, causing infinite loops when the routing agent kept selecting primitives instead of returning "none".
+
+  **Changes:**
+  - Fixed iteration counter logic in `loop/network/index.ts` from `(inputData.iteration ? inputData.iteration : -1) + 1` to `(inputData.iteration ?? -1) + 1`
+  - Changed initial iteration value from `0` to `-1` so first iteration correctly starts at 0
+  - Added `checkIterations()` helper to validate iteration counting in all network tests
+
+  Fixes #9314
+
+- Revert download supported files for now ([`16a324f`](https://github.com/mastra-ai/mastra/commit/16a324f8c30a07d0d899bc2e4e7998c6b40a4cb6))
+
+- Exposes requiresAuth to custom api routes ([#10046](https://github.com/mastra-ai/mastra/pull/10046))
+
+- Fix agent network working memory tool routing. Memory tools are now included in routing agent instructions but excluded from its direct tool calls, allowing the routing agent to properly route to tool execution steps for memory updates. ([#9730](https://github.com/mastra-ai/mastra/pull/9730))
+
+- Fixes assets not being downloaded when available ([#10080](https://github.com/mastra-ai/mastra/pull/10080))
+
 ## 0.24.0
 
 ### Patch Changes

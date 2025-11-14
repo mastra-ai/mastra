@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.18.0",
+  "version": "0.18.1-alpha.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
