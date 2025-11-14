@@ -1,7 +1,8 @@
-import { spawn } from 'child_process';
+import http from 'http';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
+import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
 
 interface StudioOptions {
@@ -17,43 +18,25 @@ export async function studio(options: StudioOptions = {}) {
   config({ path: [options.env || '.env.production', '.env'] });
 
   try {
-    const distPath = join(__dirname, 'dist', 'playground');
-    // eslint-disable-next-line no-console
-    console.log('Studio current path:', distPath);
+    const builtStudioPath = join(__dirname, 'playground');
+
+    logger.info(`Studio current path: ${builtStudioPath}`);
     const port = options.port || 3000;
 
     // Start the server using node
-    const server = spawn('npx', ['serve', distPath, '-s', '-n', '-p', port.toString()]);
+    const server = createServer(builtStudioPath);
 
-    let stderrBuffer = '';
-    server.stderr.on('data', data => {
-      stderrBuffer += data.toString();
-    });
-
-    server.on('spawn', () => {
+    server.listen(port, () => {
       logger.info(`Mastra Studio running on http://localhost:${port}`);
     });
 
-    server.on('exit', code => {
-      if (code !== 0 && stderrBuffer) {
-        logger.error(stderrBuffer.trim());
-
-        process.exit(code);
-      }
-    });
-
-    server.on('error', err => {
-      logger.error(`Failed to start server: ${err.message}`);
-      process.exit(1);
-    });
-
     process.on('SIGINT', () => {
-      server.kill('SIGINT');
+      server.close();
       process.exit(0);
     });
 
     process.on('SIGTERM', () => {
-      server.kill('SIGTERM');
+      server.close();
       process.exit(0);
     });
   } catch (error: any) {
@@ -61,3 +44,13 @@ export async function studio(options: StudioOptions = {}) {
     process.exit(1);
   }
 }
+
+const createServer = (builtStudioPath: string) => {
+  const server = http.createServer((request, response) => {
+    // You pass two more arguments for config and middleware
+    // More details here: https://github.com/vercel/serve-handler#options
+    return handler(request, response, { public: builtStudioPath });
+  });
+
+  return server;
+};

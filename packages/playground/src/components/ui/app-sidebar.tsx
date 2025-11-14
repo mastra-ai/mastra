@@ -4,7 +4,6 @@ import {
   GaugeIcon,
   EyeIcon,
   PackageIcon,
-  HomeIcon,
   GlobeIcon,
   BookIcon,
   EarthIcon,
@@ -29,7 +28,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from '@mastra/playground-ui';
-import { useMastraInstanceUrl } from '@/domains/setup/MastraInstanceUrlContext';
+import { useMastraInstanceConfig } from '@/domains/setup/MastraInstanceUrlContext';
 
 const mainNavigation: NavSection[] = [
   {
@@ -128,7 +127,7 @@ declare global {
 export function AppSidebar() {
   const navigate = useNavigate();
   const { state } = useMainSidebar();
-  const { url, setUrl } = useMastraInstanceUrl();
+  const { config, setConfig } = useMastraInstanceConfig();
   const location = useLocation();
   const pathname = location.pathname;
 
@@ -147,7 +146,7 @@ export function AppSidebar() {
               <TooltipTrigger asChild>
                 <button
                   onClick={() => {
-                    setUrl('');
+                    setConfig({ url: '', headers: [] });
                     navigate('/', { replace: true });
                   }}
                   className="text-icon3 hover:text-icon6 ml-auto"
@@ -157,7 +156,7 @@ export function AppSidebar() {
                   </Icon>
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Change Mastra URL: {url}</TooltipContent>
+              <TooltipContent>Change Mastra URL: {config.url}</TooltipContent>
             </Tooltip>
           </span>
         )}

@@ -30,8 +30,8 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
 import { MastraInstanceUrlForm } from './domains/setup/MastraInstanceUrlForm';
-import { useUrlState } from './domains/setup/useUrlState';
-import { MastraInstanceUrlProvider, useMastraInstanceUrl } from './domains/setup/MastraInstanceUrlContext';
+import { useInstanceConfig } from './domains/setup/use-instance-config';
+import { MastraInstanceUrlProvider, useMastraInstanceConfig } from './domains/setup/MastraInstanceUrlContext';
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
@@ -66,16 +66,16 @@ const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
 };
 
 function AppInner() {
-  const { url, isLoading, setUrl } = useMastraInstanceUrl();
+  const { config, isLoading, setConfig, formattedHeaders } = useMastraInstanceConfig();
 
   if (isLoading) return null;
 
-  if (!url) {
-    return <MastraInstanceUrlForm onSetUrl={setUrl} />;
+  if (!config.url) {
+    return <MastraInstanceUrlForm onSetInstanceConfig={setConfig} initialHeaders={config.headers} />;
   }
 
   return (
-    <MastraReactProvider>
+    <MastraReactProvider baseUrl={config.url} headers={formattedHeaders}>
       <PostHogProvider>
         <BrowserRouter>
           <LinkComponentWrapper>

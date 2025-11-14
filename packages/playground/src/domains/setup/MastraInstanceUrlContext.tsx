@@ -1,24 +1,38 @@
 import { createContext, useContext } from 'react';
-import { useUrlState } from './useUrlState';
+import { useInstanceConfig } from './use-instance-config';
+
+export type HeaderConfig = {
+  name: string;
+  value: string;
+};
+
+export type MastraInstanceConfig = {
+  url: string;
+  headers: HeaderConfig[];
+};
 
 export const MastraInstanceUrlContext = createContext<{
-  url: string;
-  setUrl: (url: string) => void;
+  config: MastraInstanceConfig;
+  setConfig: (config: MastraInstanceConfig) => void;
   isLoading: boolean;
+  formattedHeaders: Record<string, string>;
 }>({
-  url: '',
-  setUrl: () => {},
+  config: { url: '', headers: [] },
+  setConfig: () => {},
   isLoading: true,
+  formattedHeaders: {},
 });
 
 export const MastraInstanceUrlProvider = ({ children }: { children: React.ReactNode }) => {
-  const { url, setUrl, isLoading } = useUrlState();
+  const { config, setConfig, isLoading, formattedHeaders } = useInstanceConfig();
 
   return (
-    <MastraInstanceUrlContext.Provider value={{ url, setUrl, isLoading }}>{children}</MastraInstanceUrlContext.Provider>
+    <MastraInstanceUrlContext.Provider value={{ config, setConfig, isLoading, formattedHeaders }}>
+      {children}
+    </MastraInstanceUrlContext.Provider>
   );
 };
 
-export const useMastraInstanceUrl = () => {
+export const useMastraInstanceConfig = () => {
   return useContext(MastraInstanceUrlContext);
 };

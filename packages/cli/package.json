@@ -51,9 +51,9 @@
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "@expo/devcert": "^1.2.0",
+    "@internal/playground": "workspace:*",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
-    "@internal/playground": "workspace:*",
     "commander": "^14.0.2",
     "dotenv": "^17.2.3",
     "execa": "^9.6.0",
@@ -62,7 +62,7 @@
     "picocolors": "^1.1.1",
     "posthog-node": "4.18.0",
     "prettier": "^3.6.2",
-    "serve": "^14.2.5",
+    "serve-handler": "^6.1.6",
     "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
     "yocto-spinner": "^1.0.0"
@@ -75,6 +75,7 @@
     "@microsoft/api-extractor": "^7.55.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.13.17",
+    "@types/serve-handler": "^6.1.4",
     "@types/shell-quote": "^1.7.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

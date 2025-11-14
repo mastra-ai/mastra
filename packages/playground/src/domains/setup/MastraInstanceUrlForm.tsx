@@ -1,16 +1,19 @@
 import { Button, Icon, InputField, LogoWithoutText } from '@mastra/playground-ui';
 import { Link2 } from 'lucide-react';
+import { HeaderListForm } from './HeaderListForm';
+import { HeaderConfig, MastraInstanceConfig } from './MastraInstanceUrlContext';
 
 export interface MastraInstanceUrlFormProps {
-  onSetUrl: (url: string) => void;
+  onSetInstanceConfig: (config: MastraInstanceConfig) => void;
+  initialHeaders: HeaderConfig[];
 }
 
-export const MastraInstanceUrlForm = ({ onSetUrl }: MastraInstanceUrlFormProps) => {
+export const MastraInstanceUrlForm = ({ onSetInstanceConfig, initialHeaders }: MastraInstanceUrlFormProps) => {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     const url = formData.get('url') as string;
-    onSetUrl(url);
+    onSetInstanceConfig({ url, headers: [] });
   };
 
   return (
@@ -18,6 +21,8 @@ export const MastraInstanceUrlForm = ({ onSetUrl }: MastraInstanceUrlFormProps) 
       <LogoWithoutText className="size-32" />
       <form onSubmit={handleSubmit} className="max-w-md w-full mx-auto px-4 pt-4 space-y-4">
         <InputField name="url" label="Mastra instance URL" placeholder="e.g: http://localhost:4111" required />
+
+        <HeaderListForm headers={initialHeaders} />
 
         <Button type="submit" variant="light" className="w-full" size="lg">
           <Icon>
