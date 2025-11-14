@@ -268,6 +268,12 @@ export const createTimeTravelExecutionParams = (params: {
     });
   }
 
+  if (!executionPath.length) {
+    throw new Error(
+      `Time travel target step not found in execution graph: '${steps?.join('.')}'. Verify the step id/path.`,
+    );
+  }
+
   const timeTravelData: TimeTravelExecutionParams = {
     inputData,
     executionPath,
