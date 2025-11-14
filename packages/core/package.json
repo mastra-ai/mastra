@@ -197,7 +197,7 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.17.5",
-    "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.0",
+    "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.1",
     "@sindresorhus/slugify": "^2.2.1",
     "ai-v5": "npm:ai@5.0.76",
     "dotenv": "^16.6.1",

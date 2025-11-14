@@ -1690,8 +1690,8 @@ importers:
         specifier: ^1.17.5
         version: 1.20.1
       '@openrouter/ai-sdk-provider-v5':
-        specifier: npm:@openrouter/ai-sdk-provider@1.2.0
-        version: '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.76(zod@3.25.76))(zod@3.25.76)'
+        specifier: npm:@openrouter/ai-sdk-provider@1.2.1
+        version: '@openrouter/ai-sdk-provider@1.2.1(ai@5.0.76(zod@3.25.76))(zod@3.25.76)'
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -7653,6 +7653,13 @@ packages:
 
   '@openrouter/ai-sdk-provider@1.2.0':
     resolution: {integrity: sha512-stuIwq7Yb7DNmk3GuCtz+oS3nZOY4TXEV3V5KsknDGQN7Fpu3KRMQVWRc1J073xKdf0FC9EHOctSyzsACmp5Ag==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      ai: ^5.0.0
+      zod: ^3.24.1 || ^v4
+
+  '@openrouter/ai-sdk-provider@1.2.1':
+    resolution: {integrity: sha512-sDc+/tlEM9VTsYlZ3YMwD9AHinSNusdLFGQhtb50eo5r68U/yBixEHRsKEevqSspiX3V6J06hU7C25t4KE9iag==}
     engines: {node: '>=18'}
     peerDependencies:
       ai: ^5.0.0
@@ -20291,6 +20298,11 @@ snapshots:
       zod: 3.25.76
 
   '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.76(zod@3.25.76))(zod@3.25.76)':
+    dependencies:
+      ai: 5.0.76(zod@3.25.76)
+      zod: 3.25.76
+
+  '@openrouter/ai-sdk-provider@1.2.1(ai@5.0.76(zod@3.25.76))(zod@3.25.76)':
     dependencies:
       ai: 5.0.76(zod@3.25.76)
       zod: 3.25.76
