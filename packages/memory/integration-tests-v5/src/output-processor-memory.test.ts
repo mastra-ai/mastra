@@ -105,7 +105,7 @@ describe('Output Processor Memory Persistence Integration', () => {
   }
 
   it('should persist PII-redacted messages to memory using generate', async () => {
-    const memoryStore = storage.getStore('memory');
+    const memoryStore = await storage.getStore('memory');
 
     if (!memoryStore) {
       throw new Error('Memory store not found');
@@ -194,7 +194,7 @@ describe('Output Processor Memory Persistence Integration', () => {
   });
 
   it('should persist PII-redacted messages to memory using stream', async () => {
-    const memoryStore = storage.getStore('memory');
+    const memoryStore = await storage.getStore('memory');
 
     if (!memoryStore) {
       throw new Error('Memory store not found');
@@ -283,7 +283,7 @@ describe('Output Processor Memory Persistence Integration', () => {
   });
 
   it('should chain multiple output processors and persist the result', async () => {
-    const memoryStore = storage.getStore('memory');
+    const memoryStore = await storage.getStore('memory');
 
     if (!memoryStore) {
       throw new Error('Memory store not found');
@@ -453,7 +453,7 @@ describe('Output Processor Memory Persistence Integration', () => {
   });
 
   it('should persist processed messages when refreshing conversation', async () => {
-    const memoryStore = storage.getStore('memory');
+    const memoryStore = await storage.getStore('memory');
 
     if (!memoryStore) {
       throw new Error('Memory store not found');
