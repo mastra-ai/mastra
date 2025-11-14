@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
 
@@ -8,12 +9,17 @@ interface StudioOptions {
   port?: string;
 }
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 export async function studio(options: StudioOptions = {}) {
   // Load environment variables from .env files
   config({ path: [options.env || '.env.production', '.env'] });
 
   try {
-    const distPath = join(process.cwd(), 'dist', 'playground');
+    const distPath = join(__dirname, 'dist', 'playground');
+    // eslint-disable-next-line no-console
+    console.log('Studio current path:', distPath);
     const port = options.port || 3000;
 
     // Start the server using node
