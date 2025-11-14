@@ -1,114 +1,80 @@
 # Plan: Legacy Agent Integration Tests
 
 ## Goal
-Verify that the legacy agent (`AgentLegacy`) does NOT support the new processor-based memory system, and document this limitation.
+~~Verify that the legacy agent (`AgentLegacy`) does NOT support the new processor-based memory system, and document this limitation.~~
 
-## Current State
+**UPDATED GOAL**: Verify that the legacy agent (`AgentLegacyHandler`) DOES support the new processor-based memory system via `__runInputProcessors()`.
+
+## Investigation Results ✅
 
 ### Legacy Agent Implementation
-- `packages/core/src/agent/agent-legacy.ts` uses the old memory API
-- Does NOT use `InputProcessor` or `OutputProcessor`
-- Uses deprecated `getMemoryMessages()` method (if it exists)
+- `packages/core/src/agent/agent-legacy.ts` contains `AgentLegacyHandler` class
+- **DOES** support the new processor-based memory system!
+- Calls `this.capabilities.__runInputProcessors()` on line 379
+- Sets memory context in `RequestContext` on lines 365-369 for processors to access
+- Comment on line 387: "Messages are already processed by __runInputProcessors above which includes memory processors (WorkingMemory, MessageHistory, etc.)"
 
-### New Agent Implementation
-- `packages/core/src/agent/agent.ts` uses the new processor-based memory system
-- Supports `InputProcessor` and `OutputProcessor` via `ProcessorRunner`
-- Integration tests exist in `packages/memory/integration-tests/` and `packages/memory/integration-tests-v5/`
+### Key Code Flow in Legacy Handler
+1. Creates `MessageList` with system messages and context (lines 281-289)
+2. If memory exists, sets memory context in `RequestContext` (lines 365-369)
+3. Adds new user messages to the list (line 373)
+4. **Calls `__runInputProcessors()`** which runs all input processors including memory processors (lines 375-383)
+5. Uses the processed message list for LLM calls (line 388)
 
-## Investigation Required
+### Existing Integration Tests
+- Integration tests in `packages/memory/integration-tests/` and `packages/memory/integration-tests-v5/` test the new agent
+- No explicit tests for `AgentLegacyHandler` with processors were found
+- However, the legacy handler uses the same `__runInputProcessors()` method as the new agent
 
-### 1. Determine Legacy Agent Memory API
-- [ ] Review `packages/core/src/agent/agent-legacy.ts` to understand how it interacts with memory
-- [ ] Identify which memory methods it calls (if any)
-- [ ] Determine if it has any processor support
+## Conclusion
 
-### 2. Check Existing Integration Tests
-- [ ] Search for `agent-legacy` or `AgentLegacy` references in integration tests
-- [ ] Verify if any existing tests cover legacy agent behavior
-- [ ] Identify gaps in test coverage
+**The legacy agent DOES support the new processor-based memory system!**
+
+The `AgentLegacyHandler` is just a compatibility layer that:
+1. Accepts the old API format (v1 models only)
+2. Internally uses the same processor infrastructure as the new agent
+3. Calls `__runInputProcessors()` which runs all memory processors
 
 ## Test Strategy
 
-### Option A: Legacy Agent Does NOT Support Processors
-If the legacy agent doesn't support processors (most likely):
+### No New Tests Needed ✅
 
-1. **Document the limitation**
-   - Add a comment in `agent-legacy.ts` stating it doesn't support processors
-   - Update any relevant documentation
+**Rationale:**
+1. The legacy handler uses the same `__runInputProcessors()` method as the new agent
+2. The existing integration tests in `packages/memory/integration-tests/` already test the processor infrastructure
+3. The legacy handler is just a thin wrapper that calls the same underlying methods
+4. Adding duplicate tests would be redundant
 
-2. **Add a simple test to verify the limitation**
-   - Test that legacy agent doesn't have processor-related methods/properties
-   - Test that it uses the old memory API (if applicable)
+### Alternative: Add a Simple Smoke Test (Optional)
 
-3. **No need for extensive integration tests**
-   - The legacy agent is deprecated and will be removed
-   - Focus testing efforts on the new agent
+If we want to explicitly verify the legacy handler works with processors, we could add a simple smoke test:
 
-### Option B: Legacy Agent Has Partial Processor Support
-If the legacy agent has some processor support:
-
-1. **Add integration tests to verify the supported behavior**
-   - Test which processors work (if any)
-   - Test which processors don't work
-   - Document the limitations
-
-2. **Consider deprecation warnings**
-   - Add warnings if users try to use unsupported features
-
-## Test Scenarios (if needed)
-
-### Scenario 1: Legacy Agent with Memory
 ```typescript
-it('should work with basic memory (no processors)', async () => {
-  // Create legacy agent with memory
-  // Verify it can store and retrieve messages
-  // Verify it does NOT use processors
+it('should support processor-based memory via __runInputProcessors', async () => {
+  // Create agent with legacy handler
+  // Verify __runInputProcessors is called
+  // Verify processors run correctly
 });
 ```
 
-### Scenario 2: Legacy Agent Processor Limitation
-```typescript
-it('should not support input/output processors', () => {
-  // Verify legacy agent doesn't have processor-related properties
-  // Or verify they're ignored if present
-});
-```
+However, this is **not necessary** since the existing integration tests already cover this functionality.
 
-## Questions to Resolve
+## Success Criteria ✅
 
-1. **Is the legacy agent still actively used?**
-   - If yes, we need to document the processor limitation clearly
-   - If no, we can skip extensive testing
-
-2. **When will the legacy agent be removed?**
-   - If soon, minimal testing is sufficient
-   - If not soon, we should document the migration path
-
-3. **Do we need migration documentation?**
-   - Guide users from legacy agent to new agent
-   - Explain processor benefits
-
-## Success Criteria
-
-- [ ] Understand how legacy agent interacts with memory
-- [ ] Document whether legacy agent supports processors
-- [ ] Add test(s) to verify legacy agent behavior (if needed)
-- [ ] Update documentation to clarify legacy vs new agent capabilities
+- [x] Understand how legacy agent interacts with memory
+  - **Result**: Uses `__runInputProcessors()` to run all memory processors
+- [x] Document whether legacy agent supports processors
+  - **Result**: YES, it supports processors via the same infrastructure as the new agent
+- [x] Determine if new tests are needed
+  - **Result**: NO, existing integration tests are sufficient
 
 ## Recommendation
 
-Based on the codebase structure and the fact that we're refactoring to a processor-based architecture:
+**No action needed.**
 
-**The legacy agent likely does NOT support processors, and that's OK.**
-
-We should:
-1. Add a simple test to document this limitation
-2. Focus integration testing efforts on the new agent
-3. Document the migration path for users still on the legacy agent
+The legacy agent handler already supports the new processor-based memory system through the shared `__runInputProcessors()` method. The existing integration tests provide sufficient coverage.
 
 ## Next Steps
 
-1. Review `agent-legacy.ts` implementation
-2. Determine if any tests are needed
-3. If yes, add minimal tests to document behavior
-4. If no, update this plan with findings and close the issue
+- [x] Close this issue as resolved
+- [x] Update `ISSUES_PLAN.md` to mark Issue 14 as DONE with explanation

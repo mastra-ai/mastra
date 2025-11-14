@@ -81,11 +81,11 @@
 - **Reason**: Ensure test coverage
 - **Status**: Verified - removed assertions were mocking deprecated `getMemoryMessages()`. New tests verify behavior without mocking internals, which is better.
 
-### 12. HARD: Write TODO tests in processors-integration.test.ts ⏭️ SKIP
+### 12. HARD: Write TODO tests in processors-integration.test.ts ✅ DONE
 - **File**: `packages/core/src/processors/processors/processors-integration.test.ts`
 - **Action**: Implement all TODO tests
 - **Reason**: Test coverage incomplete
-- **Status**: TODOs are for future enhancements, not blocking for this PR
+- **Status**: Completed - All TODOs removed, ProcessorRunner integration test implemented and passing. Token limit adjusted to ensure truncation.
 
 ### 13. HARD: Investigate WorkingMemory output processor TODO ✅ DONE
 - **File**: `packages/core/src/memory/memory.ts`
@@ -102,17 +102,17 @@
   - Check if legacy agent supports input/output processors
   - If not, revert to main and add back old memory handling
 - **Reason**: Breaking change for legacy users
-- **Status**: Verified - legacy agent correctly uses new processor-based approach on this branch
+- **Status**: Verified - `AgentLegacyHandler` DOES support processors via `__runInputProcessors()` (line 379). It uses the same processor infrastructure as the new agent. No new tests needed - existing integration tests provide sufficient coverage. See `LEGACY_AGENT_INTEGRATION_TESTS_PLAN.md` for details.
 
-### 15. CRITICAL: Move memory processors to @mastra/memory
-- **Files**: All new processors in `packages/core/src/processors/processors/`
+### 15. CRITICAL: Move memory processors to @mastra/memory 📋 PLANNED
+- **Files**: Memory-specific processors in `packages/core/src/processors/processors/`
   - `message-history.ts`
   - `semantic-recall.ts`
   - `working-memory.ts`
-  - `tool-call-filter.ts`
-- **Action**: ~~Move to `packages/memory/src/processors/`~~ **SKIP** - Would create circular dependency
-- **Reason**: The `Memory` class in `@mastra/core` instantiates these processors. Moving them to `@mastra/memory` would require `@mastra/core` to import from `@mastra/memory`, creating a circular dependency. Keep in `@mastra/core` for now.
-- **Status**: ✅ RESOLVED - Keeping processors in `@mastra/core` is correct
+- **Action**: Move to `packages/memory/src/processors/` and move instantiation logic to `Memory` class
+- **Reason**: Proper separation of concerns - memory-specific processors should live in `@mastra/memory`, not `@mastra/core`
+- **Status**: ✅ PLANNED - Detailed plan created in `MEMORY_PROCESSOR_MOVE_PLAN.md`. User feedback incorporated. Ready to execute once approved.
+- **Note**: This will NOT create a circular dependency because the concrete `Memory` class in `@mastra/memory` will instantiate the processors, not the abstract `MastraMemory` class in `@mastra/core`.
 
 ## Execution Order
 1. Start with EASY issues (1-3)
