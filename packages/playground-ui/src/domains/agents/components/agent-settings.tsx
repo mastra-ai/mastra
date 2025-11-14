@@ -15,11 +15,13 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import clsx from 'clsx';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useAgent } from '../hooks/use-agent';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface AgentSettingsProps {
-  modelVersion: string;
-  hasMemory?: boolean;
-  hasSubAgents?: boolean;
+  agentId: string;
 }
 
 const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasSubAgents: boolean }) => {
@@ -59,8 +61,22 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
   );
 };
 
-export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = false }: AgentSettingsProps) => {
+export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
+  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings, resetAll } = useAgentSettings();
+
+  if (isLoading || isMemoryLoading) {
+    return <Skeleton className="h-full" />;
+  }
+
+  if (!agent) {
+    return <div>Agent not found</div>;
+  }
+
+  const hasMemory = Boolean(memory?.result);
+  const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
+  const modelVersion = agent.modelVersion;
 
   let radioValue;
 
@@ -68,10 +84,10 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
     if (settings?.modelSettings?.chatWithNetwork) {
       radioValue = 'network';
     } else {
-      radioValue = settings?.modelSettings?.chatWithGenerateVNext ? 'generateVNext' : 'streamVNext';
+      radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
     }
   } else {
-    radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
+    radioValue = settings?.modelSettings?.chatWithGenerateLegacy ? 'generateLegacy' : 'streamLegacy';
   }
 
   return (
@@ -86,9 +102,8 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
                 ...settings,
                 modelSettings: {
                   ...settings?.modelSettings,
+                  chatWithGenerateLegacy: value === 'generateLegacy',
                   chatWithGenerate: value === 'generate',
-                  chatWithGenerateVNext: value === 'generateVNext',
-                  chatWithStreamVNext: value === 'streamVNext',
                   chatWithNetwork: value === 'network',
                 },
               })
@@ -97,21 +112,29 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
           >
             {modelVersion !== 'v2' && (
               <div className="flex items-center gap-2">
+                <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="generateLegacy">
+                  Generate (Legacy)
+                </Label>
+              </div>
+            )}
+            {modelVersion === 'v2' && (
+              <div className="flex items-center gap-2">
                 <RadioGroupItem value="generate" id="generate" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generate">
                   Generate
                 </Label>
               </div>
             )}
-            {modelVersion === 'v2' && (
+            {modelVersion !== 'v2' && (
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="generateVNext" id="generateVNext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="generateVNext">
-                  Generate vNext
+                <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-icon6" />
+                <Label className="text-icon6 text-ui-md" htmlFor="streamLegacy">
+                  Stream (Legacy)
                 </Label>
               </div>
             )}
-            {modelVersion !== 'v2' && (
+            {modelVersion === 'v2' && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="stream" id="stream" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="stream">
@@ -119,16 +142,19 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
                 </Label>
               </div>
             )}
-            {modelVersion === 'v2' && (
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="streamVNext" id="streamVNext" className="text-icon6" />
-                <Label className="text-icon6 text-ui-md" htmlFor="streamVNext">
-                  Stream vNext
-                </Label>
-              </div>
-            )}
             {modelVersion === 'v2' && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
           </RadioGroup>
+        </Entry>
+        <Entry label="Require Tool Approval">
+          <Checkbox
+            checked={settings?.modelSettings?.requireToolApproval}
+            onCheckedChange={value =>
+              setSettings({
+                ...settings,
+                modelSettings: { ...settings?.modelSettings, requireToolApproval: value as boolean },
+              })
+            }
+          />
         </Entry>
 
         <div className="grid grid-cols-2 gap-8">

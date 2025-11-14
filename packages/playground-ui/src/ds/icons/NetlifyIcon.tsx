@@ -2,7 +2,7 @@ import React from 'react';
 
 export const NetlifyIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="128" height="113" viewBox="0 0 128 113">
-    <g clip-path="url(#clip0_236_138)" {...props}>
+    <g clipPath="url(#clip0_236_138)" {...props}>
       <path
         d="M34.593 94.0509H33.3844L27.3514 88.0179V86.8094L36.5743 77.5866H42.9639L43.8158 78.4385V84.8281L34.593 94.0509Z"
         fill={props.fill || '#05BDBA'}

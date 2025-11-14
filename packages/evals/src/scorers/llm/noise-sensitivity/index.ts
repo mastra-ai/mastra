@@ -1,5 +1,5 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import { NOISE_SENSITIVITY_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
@@ -57,7 +57,7 @@ export function createNoiseSensitivityScorerLLM({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options: NoiseSensitivityOptions;
 }) {
   if (!options.baselineResponse || !options.noisyQuery) {
@@ -65,6 +65,7 @@ export function createNoiseSensitivityScorerLLM({
   }
 
   return createScorer({
+    id: 'noise-sensitivity-scorer',
     name: 'Noise Sensitivity (LLM)',
     description: 'Evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information',
     judge: {

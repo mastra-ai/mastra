@@ -1,3 +1,8 @@
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { MastraModelGateway } from './base.js';
@@ -28,13 +33,13 @@ interface TokenData {
   token: string;
   url: string;
 }
+
 export class NetlifyGateway extends MastraModelGateway {
   readonly name = 'netlify';
   readonly prefix = 'netlify'; // All providers will be prefixed with "netlify/"
   private tokenCache = new InMemoryServerCache();
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    console.info('Fetching providers from Netlify AI Gateway...');
     const response = await fetch('https://api.netlify.com/api/v1/ai-gateway/providers');
     if (!response.ok) {
       throw new Error(`Failed to fetch from Netlify: ${response.statusText}`);
@@ -54,35 +59,20 @@ export class NetlifyGateway extends MastraModelGateway {
         netlify.models.push(`${providerId}/${model}`);
       }
     }
-    console.info(`Found ${Object.keys(data.providers).length} models via Netlify Gateway`);
     return { netlify };
   }
 
-  async buildUrl(modelId: string, envVars: Record<string, string>): Promise<string | false> {
-    // Check if this model ID is for our gateway
-    if (!modelId.startsWith(`${this.prefix}/`)) {
-      return false; // Not our prefix
-    }
-    // Parse the model ID: "netlify/openai/gpt-4o"
-    const parts = modelId.split('/');
-    if (parts.length < 3) {
-      return false; // Invalid format
-    }
-    const provider = parts[1];
-    if (!provider) {
-      return false;
-    }
-
+  async buildUrl(routerId: string, envVars?: typeof process.env): Promise<string> {
     // Check for Netlify site ID first (for token exchange)
-    const siteId = envVars['NETLIFY_SITE_ID'];
-    const netlifyToken = envVars['NETLIFY_TOKEN'];
+    const siteId = envVars?.['NETLIFY_SITE_ID'] || process.env['NETLIFY_SITE_ID'];
+    const netlifyToken = envVars?.['NETLIFY_TOKEN'] || process.env['NETLIFY_TOKEN'];
 
     if (!netlifyToken) {
       throw new MastraError({
         id: 'NETLIFY_GATEWAY_NO_TOKEN',
         domain: 'LLM',
         category: 'UNKNOWN',
-        text: `Missing NETLIFY_TOKEN environment variable required for model: ${modelId}`,
+        text: `Missing NETLIFY_TOKEN environment variable required for model: ${routerId}`,
       });
     }
 
@@ -91,19 +81,19 @@ export class NetlifyGateway extends MastraModelGateway {
         id: 'NETLIFY_GATEWAY_NO_SITE_ID',
         domain: 'LLM',
         category: 'UNKNOWN',
-        text: `Missing NETLIFY_SITE_ID environment variable required for model: ${modelId}`,
+        text: `Missing NETLIFY_SITE_ID environment variable required for model: ${routerId}`,
       });
     }
 
     try {
       const tokenData = await this.getOrFetchToken(siteId, netlifyToken);
-      return `${tokenData.url}chat/completions`;
+      return tokenData.url.endsWith(`/`) ? tokenData.url.substring(0, tokenData.url.length - 1) : tokenData.url;
     } catch (error) {
       throw new MastraError({
         id: 'NETLIFY_GATEWAY_TOKEN_ERROR',
         domain: 'LLM',
         category: 'UNKNOWN',
-        text: `Failed to get Netlify AI Gateway token for model ${modelId}: ${error instanceof Error ? error.message : String(error)}`,
+        text: `Failed to get Netlify AI Gateway token for model ${routerId}: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
   }
@@ -145,9 +135,13 @@ export class NetlifyGateway extends MastraModelGateway {
 
     return { token: tokenResponse.token, url: tokenResponse.url };
   }
-  async buildHeaders(modelId: string, envVars: Record<string, string>): Promise<Record<string, string>> {
-    const siteId = envVars['NETLIFY_SITE_ID'];
-    const netlifyToken = envVars['NETLIFY_TOKEN'];
+
+  /**
+   * Get cached token or fetch a new site-specific AI Gateway token from Netlify
+   */
+  async getApiKey(modelId: string): Promise<string> {
+    const siteId = process.env['NETLIFY_SITE_ID'];
+    const netlifyToken = process.env['NETLIFY_TOKEN'];
 
     if (!netlifyToken) {
       throw new MastraError({
@@ -168,10 +162,7 @@ export class NetlifyGateway extends MastraModelGateway {
     }
 
     try {
-      const tokenData = await this.getOrFetchToken(siteId, netlifyToken);
-      return {
-        Authorization: `Bearer ${tokenData.token}`,
-      };
+      return (await this.getOrFetchToken(siteId, netlifyToken)).token;
     } catch (error) {
       throw new MastraError({
         id: 'NETLIFY_GATEWAY_TOKEN_ERROR',
@@ -179,6 +170,44 @@ export class NetlifyGateway extends MastraModelGateway {
         category: 'UNKNOWN',
         text: `Failed to get Netlify AI Gateway token for model ${modelId}: ${error instanceof Error ? error.message : String(error)}`,
       });
+    }
+  }
+
+  async resolveLanguageModel({
+    modelId,
+    providerId,
+    apiKey,
+  }: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+  }): Promise<LanguageModelV2> {
+    const baseURL = await this.buildUrl(`${providerId}/${modelId}`);
+
+    switch (providerId) {
+      case 'openai':
+        return createOpenAI({ apiKey, baseURL }).responses(modelId);
+      case 'gemini':
+        return createGoogleGenerativeAI({
+          baseURL: `${baseURL}/v1beta/`,
+          apiKey,
+          headers: {
+            'user-agent': 'google-genai-sdk/',
+          },
+        }).chat(modelId);
+      case 'anthropic':
+        return createAnthropic({
+          apiKey,
+          baseURL: `${baseURL}/v1/`,
+          headers: {
+            'anthropic-version': '2023-06-01',
+            'user-agent': 'anthropic/',
+          },
+        })(modelId);
+      default:
+        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
+          modelId,
+        );
     }
   }
 }

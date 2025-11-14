@@ -17,7 +17,7 @@ type LinkComponentPaths = {
   agentLink: (agentId: string) => string;
   agentsLink: () => string;
   agentToolLink: (agentId: string, toolId: string) => string;
-  agentThreadLink: (agentId: string, threadId: string) => string;
+  agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;
 
   workflowsLink: () => string;
@@ -30,6 +30,10 @@ type LinkComponentPaths = {
   scorerLink: (scorerId: string) => string;
 
   toolLink: (toolId: string) => string;
+
+  mcpServerLink: (serverId: string) => string;
+  mcpServerToolLink: (serverId: string, toolId: string) => string;
+  workflowRunLink: (workflowId: string, runId: string) => string;
 };
 
 const LinkComponentContext = createContext<{
@@ -52,6 +56,9 @@ const LinkComponentContext = createContext<{
     networkThreadLink: () => '',
     scorerLink: () => '',
     toolLink: () => '',
+    mcpServerLink: () => '',
+    mcpServerToolLink: () => '',
+    workflowRunLink: () => '',
   },
 });
 

@@ -1,5 +1,5 @@
-import type { LanguageModel } from '@mastra/core/llm';
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
 
 import { z } from 'zod';
 import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput, roundToTwoDecimals } from '../../utils';
@@ -19,10 +19,11 @@ export function createHallucinationScorer({
   model,
   options,
 }: {
-  model: LanguageModel;
+  model: MastraModelConfig;
   options?: HallucinationMetricOptions;
 }) {
   return createScorer({
+    id: 'hallucination-scorer',
     name: 'Hallucination Scorer',
     description: 'A scorer that evaluates the hallucination of an LLM output to an input',
     judge: {

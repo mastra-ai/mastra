@@ -11,9 +11,11 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 // Create a memory instance with working memory configuration
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: "learning-memory-storage",
     url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }), // Storage for message history
   vector: new LibSQLVector({
+    id: "learning-memory-vector",
     connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }), // Vector database for semantic search
   embedder: openai.embedding("text-embedding-3-small"), // Embedder for message embeddings

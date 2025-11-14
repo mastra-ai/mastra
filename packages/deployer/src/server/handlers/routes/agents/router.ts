@@ -6,19 +6,16 @@ import { generateSystemPromptHandler } from '../../prompt';
 import { executeAgentToolHandler, getAgentToolHandler } from '../tools/handlers';
 import {
   generateHandler,
-  generateVNextHandler,
   getAgentByIdHandler,
-  getAgentsHandler,
+  listAgentsHandler,
   getProvidersHandler,
-  getEvalsByAgentIdHandler,
-  getLiveEvalsByAgentIdHandler,
   setAgentInstructionsHandler,
   streamGenerateHandler,
-  streamVNextGenerateHandler,
   updateAgentModelHandler,
+  resetAgentModelHandler,
   vNextBodyOptions,
   deprecatedStreamVNextHandler,
-  streamVNextUIMessageHandler,
+  streamUIMessageHandler,
   streamGenerateLegacyHandler,
   generateLegacyHandler,
   reorderAgentModelListHandler,
@@ -44,7 +41,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    getAgentsHandler,
+    listAgentsHandler,
   );
 
   router.get(
@@ -84,50 +81,6 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     getAgentByIdHandler,
-  );
-
-  router.get(
-    '/:agentId/evals/ci',
-    describeRoute({
-      description: 'Get CI evals by agent ID',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of evals',
-        },
-      },
-    }),
-    getEvalsByAgentIdHandler,
-  );
-
-  router.get(
-    '/:agentId/evals/live',
-    describeRoute({
-      description: 'Get live evals by agent ID',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'List of evals',
-        },
-      },
-    }),
-    getLiveEvalsByAgentIdHandler,
   );
 
   router.post(
@@ -226,7 +179,32 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                   deprecated: true,
                 },
                 runId: { type: 'string' },
-                output: { type: 'object' },
+                structuredOutput: {
+                  type: 'object',
+                  properties: {
+                    schema: { type: 'object', description: 'The schema to use for the structured output' },
+                    model: {
+                      type: 'string',
+                      description: 'Additional model to use for generating the structured output if provided',
+                    },
+                    instructions: {
+                      type: 'string',
+                      description:
+                        'Custom instructions to provide to the structuring agent. This will override the default instructions.',
+                    },
+                    errorStrategy: {
+                      type: 'string',
+                      enum: ['strict', 'warn', 'fallback'],
+                      description: 'The error strategy to use for the structured output',
+                    },
+                    fallbackValue: {
+                      type: 'object',
+                      description:
+                        "The fallback value to use for the structured output when using 'fallback' error strategy",
+                    },
+                  },
+                },
+                output: { type: 'object', deprecated: true },
                 tracingOptions: {
                   type: 'object',
                   description: 'Tracing options for the agent execution',
@@ -321,15 +299,16 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    generateVNextHandler,
+    generateHandler,
   );
 
   router.post(
     '/:agentId/stream/vnext',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Generate a response from an agent',
+      description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
       tags: ['agents'],
+      deprecated: true,
       parameters: [
         {
           name: 'agentId',
@@ -359,7 +338,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextGenerateHandler,
+    streamGenerateHandler,
   );
 
   router.post(
@@ -458,7 +437,32 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
                   deprecated: true,
                 },
                 runId: { type: 'string' },
-                output: { type: 'object' },
+                structuredOutput: {
+                  type: 'object',
+                  properties: {
+                    schema: { type: 'object', description: 'The schema to use for the structured output' },
+                    model: {
+                      type: 'string',
+                      description: 'Additional model to use for generating the structured output if provided',
+                    },
+                    instructions: {
+                      type: 'string',
+                      description:
+                        'Custom instructions to provide to the structuring agent. This will override the default instructions.',
+                    },
+                    errorStrategy: {
+                      type: 'string',
+                      enum: ['strict', 'warn', 'fallback'],
+                      description: 'The error strategy to use for the structured output',
+                    },
+                    fallbackValue: {
+                      type: 'object',
+                      description:
+                        "The fallback value to use for the structured output when using 'fallback' error strategy",
+                    },
+                  },
+                },
+                output: { type: 'object', deprecated: true },
                 tracingOptions: {
                   type: 'object',
                   description: 'Tracing options for the agent execution',
@@ -580,8 +584,10 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
     '/:agentId/stream/vnext/ui',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Stream a response from an agent',
+      description:
+        '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
       tags: ['agents'],
+      deprecated: true,
       parameters: [
         {
           name: 'agentId',
@@ -611,7 +617,47 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
         },
       },
     }),
-    streamVNextUIMessageHandler,
+    streamUIMessageHandler,
+  );
+
+  router.post(
+    '/:agentId/stream/ui',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description:
+        '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
+      tags: ['agents'],
+      deprecated: true,
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: vNextBodyOptions,
+              required: ['messages'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Streamed response',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    streamUIMessageHandler,
   );
 
   router.post(
@@ -660,6 +706,32 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
       },
     }),
     updateAgentModelHandler,
+  );
+
+  router.post(
+    '/:agentId/model/reset',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Reset the agent model to the original model set during construction',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Model reset to original successfully',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    resetAgentModelHandler,
   );
 
   router.post(
@@ -1253,7 +1325,7 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                requestContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -1294,10 +1366,11 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
-                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
+                requestContext: { type: 'object', description: 'Request Context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
-              required: ['runId'],
+              required: ['runId', 'toolCallId'],
             },
           },
         },
@@ -1336,10 +1409,11 @@ export function agentsRouter(bodyLimitOptions: BodyLimitOptions) {
               type: 'object',
               properties: {
                 runId: { type: 'string', description: 'The run ID for the execution' },
-                runtimeContext: { type: 'object', description: 'Runtime context for the execution' },
+                toolCallId: { type: 'string', description: 'The tool call ID for the execution' },
+                requestContext: { type: 'object', description: 'Request Context for the execution' },
                 format: { type: 'string', enum: ['aisdk', 'mastra'], description: 'Output format' },
               },
-              required: ['runId'],
+              required: ['runId', 'toolCallId'],
             },
           },
         },

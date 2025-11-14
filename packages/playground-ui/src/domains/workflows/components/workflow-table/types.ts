@@ -1,1 +1,3 @@
-export type WorkflowTableData = { id: string; name: string; stepsCount: number; link: string };
+import { GetWorkflowResponse } from '@mastra/client-js';
+
+export type WorkflowTableData = GetWorkflowResponse & { id: string };

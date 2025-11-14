@@ -3,6 +3,8 @@
  * Gateways fetch provider configurations and build URLs for model access
  */
 
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+
 export interface ProviderConfig {
   url?: string;
   apiKeyHeader?: string;
@@ -38,14 +40,13 @@ export abstract class MastraModelGateway {
    * @param envVars Environment variables available
    * @returns URL string if this gateway can handle the model, false otherwise
    */
-  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | false | Promise<string | false>;
+  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | undefined | Promise<string | undefined>;
 
-  /**
-   * Build headers for the request
-   * Optional - only needed if the gateway requires special headers
-   */
-  buildHeaders?(
-    modelId: string,
-    envVars: Record<string, string>,
-  ): Record<string, string> | Promise<Record<string, string>>;
+  abstract getApiKey(modelId: string): Promise<string>;
+
+  abstract resolveLanguageModel(args: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+  }): Promise<LanguageModelV2> | LanguageModelV2;
 }

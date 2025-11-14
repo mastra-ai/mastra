@@ -1,6 +1,9 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
+import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
+import { toAISdkV5Stream } from './convert-streams';
 
 export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT, 'aisdk'>;
@@ -120,6 +123,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
     handler: async c => {
       const { messages, ...rest } = await c.req.json();
       const mastra = c.get('mastra');
+      const requestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -135,6 +139,12 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
+      if (requestContext && defaultOptions?.requestContext) {
+        mastra
+          .getLogger()
+          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
+      }
+
       if (!agentToUse) {
         throw new Error('Agent ID is required');
       }
@@ -144,13 +154,29 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         throw new Error(`Agent ${agentToUse} not found`);
       }
 
-      const result = await agentObj.streamVNext<OUTPUT, 'aisdk'>(messages, {
+      const result = await agentObj.stream<OUTPUT>(messages, {
         ...defaultOptions,
         ...rest,
-        format: 'aisdk',
+        requestContext: requestContext || defaultOptions?.requestContext,
       });
 
-      return result.toUIMessageStreamResponse();
+      let lastMessageId: string | undefined;
+      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+        lastMessageId = messages[messages.length - 1].id;
+      }
+
+      const uiMessageStream = createUIMessageStream({
+        originalMessages: messages,
+        execute: async ({ writer }) => {
+          for await (const part of toAISdkV5Stream(result, { from: 'agent', lastMessageId })!) {
+            writer.write(part);
+          }
+        },
+      });
+
+      return createUIMessageStreamResponse({
+        stream: uiMessageStream,
+      });
     },
   });
 }

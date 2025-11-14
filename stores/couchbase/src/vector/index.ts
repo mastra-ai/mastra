@@ -42,24 +42,23 @@ export class CouchbaseVector extends MastraVector {
   private scope: Scope;
   private vector_dimension: number;
 
-  constructor({ connectionString, username, password, bucketName, scopeName, collectionName }: CouchbaseVectorParams) {
-    super();
+  constructor({
+    id,
+    connectionString,
+    username,
+    password,
+    bucketName,
+    scopeName,
+    collectionName,
+  }: CouchbaseVectorParams & { id: string }) {
+    super({ id });
 
     try {
-      const baseClusterPromise = connect(connectionString, {
+      this.clusterPromise = connect(connectionString, {
         username,
         password,
         configProfile: 'wanDevelopment',
       });
-
-      const telemetry = this.__getTelemetry();
-      this.clusterPromise =
-        telemetry?.traceClass(baseClusterPromise, {
-          spanNamePrefix: 'couchbase-vector',
-          attributes: {
-            'vector.type': 'couchbase',
-          },
-        }) ?? baseClusterPromise;
       this.cluster = null as unknown as Cluster;
       this.bucketName = bucketName;
       this.collectionName = collectionName;

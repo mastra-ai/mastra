@@ -1,6 +1,6 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "0.1.7",
+  "version": "0.2.0-beta.0",
   "description": "Mastra Google Cloud PubSub integration",
   "type": "module",
   "main": "dist/index.js",
@@ -30,26 +30,28 @@
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.2.0",
-    "@inngest/realtime": "^0.3.1",
+    "@inngest/realtime": "^0.4.4",
     "@opentelemetry/api": "^1.9.0",
-    "inngest": "^3.40.3",
+    "inngest": "^3.44.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "ai": "^4.3.16",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "ai": "^4.3.16",
+    "eslint": "^9.37.0",
+    "tsup": "^8.4.0",
     "typescript": "^5.8.3",
-    "eslint": "^9.35.0",
-    "vitest": "^3.2.4",
-    "tsup": "^8.4.0"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.20.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {
@@ -59,5 +61,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

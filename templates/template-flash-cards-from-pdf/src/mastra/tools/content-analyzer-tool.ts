@@ -48,13 +48,13 @@ export const contentAnalyzerTool = createTool({
     subjectArea: z.string().describe('Identified or confirmed subject area'),
     complexity: z.enum(['beginner', 'intermediate', 'advanced']).describe('Overall content complexity'),
   }),
-  execute: async ({ context, mastra }) => {
-    const { content, subjectArea, difficultyLevel, focusAreas = [] } = context;
+  execute: async (inputData, context) => {
+    const { content, subjectArea, difficultyLevel, focusAreas = [] } = inputData;
 
     console.log('🔍 Analyzing content for educational concepts...');
 
     try {
-      const contentAnalyzerAgent = mastra?.getAgent('contentAnalyzerAgent');
+      const contentAnalyzerAgent = context?.mastra?.getAgent('contentAnalyzerAgent');
       if (!contentAnalyzerAgent) {
         throw new Error('Content analyzer agent not found');
       }

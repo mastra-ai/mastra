@@ -1,9 +1,8 @@
 import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
-import nodeResolve from '@rollup/plugin-node-resolve';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
 import resolveFrom from 'resolve-from';
 import { esbuild } from '../plugins/esbuild';
@@ -14,7 +13,6 @@ import { getPackageName, getPackageRootPath, slash } from '../utils';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
-import { getPackageInfo } from 'local-pkg';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -81,6 +79,7 @@ async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
   projectRoot: string,
+  initialDepsToOptimize: Map<string, DependencyMetadata>,
   {
     logger,
   }: {
@@ -147,7 +146,6 @@ async function captureDependenciesToOptimize(
       try {
         // Absolute path to the dependency
         const resolvedPath = resolveFrom(projectRoot, dep);
-
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
           continue;
@@ -158,6 +156,7 @@ async function captureDependenciesToOptimize(
           projectRoot,
           logger: noopLogger,
           sourcemapEnabled: false,
+          initialDepsToOptimize: depsToOptimize,
         });
 
         if (!analysis?.dependencies) {
@@ -188,7 +187,7 @@ async function captureDependenciesToOptimize(
     }
   }
 
-  await checkTransitiveDependencies(new Map());
+  await checkTransitiveDependencies(initialDepsToOptimize);
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
@@ -230,11 +229,13 @@ export async function analyzeEntry(
     sourcemapEnabled,
     workspaceMap,
     projectRoot,
+    initialDepsToOptimize = new Map(), // used to avoid infinite recursion
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
+    initialDepsToOptimize?: Map<string, DependencyMetadata>;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -259,9 +260,15 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
-    logger,
-  });
+  const depsToOptimize = await captureDependenciesToOptimize(
+    output[0] as OutputChunk,
+    workspaceMap,
+    projectRoot,
+    initialDepsToOptimize,
+    {
+      logger,
+    },
+  );
 
   return {
     dependencies: depsToOptimize,

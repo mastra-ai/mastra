@@ -4,20 +4,20 @@ import { ColumnDef, Row } from '@tanstack/react-table';
 
 import { useLinkComponent } from '@/lib/framework';
 import { ScorerTableData } from './types';
-import { GaugeIcon } from 'lucide-react';
 
 const NameCell = ({ row }: { row: Row<ScorerTableData> }) => {
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
+
+  const scorer = row.original;
 
   return (
     <EntryCell
-      icon={<GaugeIcon />}
       name={
-        <Link className="w-full space-y-0" href={row.original.id}>
-          {row.original.name}
+        <Link className="w-full space-y-0" href={paths.scorerLink(scorer.id)}>
+          {scorer.scorer.config.name}
         </Link>
       }
-      description={row.original.description}
+      description={scorer.scorer.config.description}
     />
   );
 };
