@@ -1,5 +1,16 @@
 # @mastra/deployer-cloud
 
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- dependencies updates: ([#10111](https://github.com/mastra-ai/mastra/pull/10111))
+  - Updated dependency [`pino@^10.1.0` ↗︎](https://www.npmjs.com/package/pino/v/10.1.0) (from `^9.7.0`, in `dependencies`)
+- Updated dependencies [[`df9fdcd`](https://github.com/mastra-ai/mastra/commit/df9fdcd8403652c894cf4ac0503afea3b822588c), [`65591d2`](https://github.com/mastra-ai/mastra/commit/65591d2b7cecb83fff4ebc1d743e2f71859a2f7d), [`52e5984`](https://github.com/mastra-ai/mastra/commit/52e5984b067254e955646d09b217165b3f145292), [`d629361`](https://github.com/mastra-ai/mastra/commit/d629361a60f6565b5bfb11976fdaf7308af858e2), [`08c31c1`](https://github.com/mastra-ai/mastra/commit/08c31c188ebccd598acaf55e888b6397d01f7eae), [`fd3d338`](https://github.com/mastra-ai/mastra/commit/fd3d338a2c362174ed5b383f1f011ad9fb0302aa), [`01f8878`](https://github.com/mastra-ai/mastra/commit/01f88783de25e4de048c1c8aace43e26373c6ea5), [`23c10a1`](https://github.com/mastra-ai/mastra/commit/23c10a1efdd9a693c405511ab2dc8a1236603162), [`c10398d`](https://github.com/mastra-ai/mastra/commit/c10398d5b88f1d4af556f4267ff06f1d11e89179), [`00c2387`](https://github.com/mastra-ai/mastra/commit/00c2387f5f04a365316f851e58666ac43f8c4edf), [`e16d553`](https://github.com/mastra-ai/mastra/commit/e16d55338403c7553531cc568125c63d53653dff), [`4d59f58`](https://github.com/mastra-ai/mastra/commit/4d59f58de2d90d6e2810a19d4518e38ddddb9038), [`e1bb9c9`](https://github.com/mastra-ai/mastra/commit/e1bb9c94b4eb68b019ae275981be3feb769b5365)]:
+  - @mastra/deployer@1.0.0-beta.3
+  - @mastra/loggers@1.0.0-beta.1
+  - @mastra/core@1.0.0-beta.3
+
 ## 1.0.0-beta.2
 
 ### Patch Changes
