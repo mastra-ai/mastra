@@ -80,12 +80,24 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
 
     // Handle file parts
     if (part.type === 'file') {
-      return {
-        type: 'file',
-        mimeType: part.mediaType,
-        data: part.url, // Use URL as data source
-        metadata: message.metadata,
-      };
+      const type = part.mediaType.includes('image/') ? 'image' : 'file';
+
+      if (type === 'file') {
+        return {
+          type,
+          mimeType: part.mediaType,
+          data: part.url, // Use URL as data source
+          metadata: message.metadata,
+        };
+      }
+
+      if (type === 'image') {
+        return {
+          type,
+          image: part.url,
+          metadata: message.metadata,
+        };
+      }
     }
 
     // Handle dynamic-tool parts (tool calls)

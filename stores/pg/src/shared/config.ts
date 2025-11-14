@@ -1,4 +1,5 @@
 import type { ConnectionOptions } from 'tls';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import type { ClientConfig } from 'pg';
 import type * as pg from 'pg';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
@@ -8,10 +9,11 @@ import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
  * @template SSLType - The SSL configuration type (ISSLConfig for pg-promise, ConnectionOptions for pg)
  */
 export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
+  id: string;
   schemaName?: string;
   max?: number;
   idleTimeoutMillis?: number;
-  tableMap?: Partial<Record<string, string>>;
+  tableMap?: Partial<Record<TABLE_NAMES, string>>;
 } & (
   | {
       host: string;
@@ -67,6 +69,10 @@ export const isCloudSqlConfig = <SSLType>(
 };
 
 export const validateConfig = (name: string, config: PostgresConfig<ISSLConfig | ConnectionOptions>) => {
+  if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+    throw new Error(`${name}: id must be provided and cannot be empty.`);
+  }
+
   if (isConnectionStringConfig(config)) {
     if (
       !config.connectionString ||

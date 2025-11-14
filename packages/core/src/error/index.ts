@@ -1,4 +1,5 @@
 import { safeParseErrorObject } from './utils.js';
+export { getErrorFromUnknown } from './utils.js';
 
 export enum ErrorDomain {
   TOOL = 'TOOL',
@@ -6,7 +7,6 @@ export enum ErrorDomain {
   MCP = 'MCP',
   AGENT_NETWORK = 'AGENT_NETWORK',
   MASTRA_SERVER = 'MASTRA_SERVER',
-  MASTRA_TELEMETRY = 'MASTRA_TELEMETRY',
   MASTRA_OBSERVABILITY = 'MASTRA_OBSERVABILITY',
   MASTRA_WORKFLOW = 'MASTRA_WORKFLOW',
   MASTRA_VOICE = 'MASTRA_VOICE',

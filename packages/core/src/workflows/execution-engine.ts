@@ -1,11 +1,12 @@
-import type { Mastra, SerializedStepFlowEntry } from '..';
-import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
+import type { WritableStream } from 'stream/web';
 import { MastraBase } from '../base';
-import type { RuntimeContext } from '../di';
+import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
+import type { Span, SpanType, TracingPolicy } from '../observability';
 import type { ChunkType } from '../stream/types';
-import type { Emitter, StepResult, WorkflowRunStatus } from './types';
-import type { StepFlowEntry } from '.';
+import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
+import type { RestartExecutionParams, StepFlowEntry } from '.';
 
 /**
  * Represents an execution graph for a workflow
@@ -56,15 +57,18 @@ export abstract class ExecutionEngine extends MastraBase {
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     initialState?: TState;
+    restart?: RestartExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      forEachIndex?: number;
+      label?: string;
     };
     emitter: Emitter;
-    runtimeContext: RuntimeContext;
-    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
+    requestContext: RequestContext;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -74,6 +78,7 @@ export abstract class ExecutionEngine extends MastraBase {
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
+      includeResumeLabels?: boolean;
     };
   }): Promise<TOutput>;
 }

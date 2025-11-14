@@ -1,8 +1,8 @@
-import type { GenerateTextOnStepFinishCallback, TelemetrySettings, ToolSet } from 'ai';
+import type { GenerateTextOnStepFinishCallback, ToolSet } from '@internal/ai-sdk-v4';
+import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
-import type { AISpan, AISpanType, TracingContext, TracingOptions, TracingPolicy } from '../ai-tracing';
-import type { Metric } from '../eval';
+import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -24,9 +24,9 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
+import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
-import type { RuntimeContext } from '../runtime-context';
-import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../scores';
+import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
@@ -39,11 +39,15 @@ import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
 
-export type { MastraMessageV2, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
-export type { Message as AiMessageType } from 'ai';
+export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
 
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5>;
+/**
+ * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
+ * (e.g., google.tools.googleSearch()).
+ */
+export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
 
 export type AgentInstructions = SystemMessage;
 export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
@@ -88,10 +92,10 @@ export interface AgentCreateOptions {
 // This is used in place of DynamicArgument so that model router IDE autocomplete works.
 // Without this TS doesn't understand the function/string union type from DynamicArgument
 type DynamicModel = ({
-  runtimeContext,
+  requestContext,
   mastra,
 }: {
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   mastra?: Mastra;
 }) => Promise<MastraModelConfig> | MastraModelConfig;
 
@@ -102,11 +106,7 @@ type ModelWithRetries = {
   enabled?: boolean; //defaults to true
 };
 
-export interface AgentConfig<
-  TAgentId extends string = string,
-  TTools extends ToolsInput = ToolsInput,
-  TMetrics extends Record<string, Metric> = Record<string, Metric>,
-> {
+export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
   /**
    * Identifier for the agent.
    * @defaultValue Uses `name` if not provided.
@@ -145,15 +145,15 @@ export interface AgentConfig<
   /**
    * Default options used when calling `generate()`.
    */
-  defaultGenerateOptions?: DynamicArgument<AgentGenerateOptions>;
+  defaultGenerateOptionsLegacy?: DynamicArgument<AgentGenerateOptions>;
   /**
    * Default options used when calling `stream()`.
    */
-  defaultStreamOptions?: DynamicArgument<AgentStreamOptions>;
+  defaultStreamOptionsLegacy?: DynamicArgument<AgentStreamOptions>;
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultVNextStreamOptions?: DynamicArgument<AgentExecutionOptions>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
@@ -163,13 +163,10 @@ export interface AgentConfig<
    */
   agents?: DynamicArgument<Record<string, Agent>>;
   /**
-   * Scoring configuration for runtime evaluation and telemetry. Can be static or dynamically provided.
+   * Scoring configuration for runtime evaluation and observability. Can be static or dynamically provided.
    */
   scorers?: DynamicArgument<MastraScorers>;
-  /**
-   * Evaluation metrics for scoring agent responses.
-   */
-  evals?: TMetrics;
+
   /**
    * Memory module used for storing and retrieving stateful context.
    */
@@ -215,10 +212,6 @@ export type AgentGenerateOptions<
   clientTools?: ToolsInput;
   /** Additional context messages to include */
   context?: CoreMessage[];
-  /**
-   * @deprecated Use the `memory` property instead for all memory-related options.
-   */
-  memoryOptions?: MemoryConfig;
   /** New memory options (preferred) */
   memory?: AgentMemoryOption;
   /** Unique ID for this generation run */
@@ -233,10 +226,8 @@ export type AgentGenerateOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** Controls how tools are selected during generation */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
-  /** Telemetry settings */
-  telemetry?: TelemetrySettings;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return the input required to run scorers for agents, defaults to false */
@@ -250,9 +241,9 @@ export type AgentGenerateOptions<
   inputProcessors?: InputProcessor[];
   /** Output processors to use for this generation call (overrides agent's default) */
   outputProcessors?: OutputProcessor[];
-  /** AI tracing context for span hierarchy and metadata */
+  /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
-  /** AI tracing options for starting new traces */
+  /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
@@ -318,10 +309,8 @@ export type AgentStreamOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Experimental schema for structured output */
   experimental_output?: EXPERIMENTAL_OUTPUT;
-  /** Telemetry settings */
-  telemetry?: TelemetrySettings;
-  /** RuntimeContext for dependency injection */
-  runtimeContext?: RuntimeContext;
+  /** RequestContext for dependency injection */
+  requestContext?: RequestContext;
   /**
    * Whether to save messages incrementally on step finish
    * @default false
@@ -329,9 +318,9 @@ export type AgentStreamOptions<
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessor[];
-  /** AI tracing context for span hierarchy and metadata */
+  /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
-  /** AI tracing options for starting new traces */
+  /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
@@ -364,15 +353,14 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
-  instructions: SystemMessage;
   runId: string;
   result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan?: AISpan<AISpanType.AGENT_RUN>;
+  requestContext: RequestContext;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
   memoryConfig: MemoryConfig | undefined;
   outputText: string;
   messageList: MessageList;

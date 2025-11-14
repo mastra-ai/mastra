@@ -5,9 +5,8 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_TRACES,
-  TABLE_EVALS,
   TABLE_SCORERS,
-  TABLE_AI_SPANS,
+  TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
@@ -85,8 +84,9 @@ export class StoreOperationsPG extends StoreOperations {
       const schema = TABLE_SCHEMAS[tableName];
       const columnSchema = schema?.[key];
 
-      // If the column is JSONB and the value is an object/array, stringify it
-      if (columnSchema?.type === 'jsonb' && value !== null && typeof value === 'object') {
+      // If the column is JSONB, stringify the value (unless it's null/undefined)
+      // PostgreSQL JSONB columns require valid JSON, so even primitives need to be stringified
+      if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined) {
         return JSON.stringify(value);
       }
       return value;
@@ -110,15 +110,33 @@ export class StoreOperationsPG extends StoreOperations {
 
   /**
    * Prepares a value for database operations, handling Date objects and JSON serialization
+   * This is schema-aware and only stringifies objects for JSONB columns
    */
-  private prepareValue(value: any): any {
-    if (value instanceof Date) {
-      return value.toISOString();
-    } else if (typeof value === 'object' && value !== null) {
-      return JSON.stringify(value);
-    } else {
+  private prepareValue(value: any, columnName: string, tableName: TABLE_NAMES): any {
+    if (value === null || value === undefined) {
       return value;
     }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    // Get the schema for this table to determine column types
+    const schema = TABLE_SCHEMAS[tableName];
+    const columnSchema = schema?.[columnName];
+
+    // If the column is JSONB, stringify the value
+    // PostgreSQL JSONB columns require valid JSON, so all non-null values need to be stringified
+    if (columnSchema?.type === 'jsonb') {
+      return JSON.stringify(value);
+    }
+
+    // For non-JSONB columns with object values, stringify them (for backwards compatibility)
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return value;
   }
 
   private async setupSchema() {
@@ -296,8 +314,8 @@ export class StoreOperationsPG extends StoreOperations {
         ifNotExists: timeZColumnNames,
       });
 
-      // Set up timestamp triggers for AI spans table
-      if (tableName === TABLE_AI_SPANS) {
+      // Set up timestamp triggers for Spans table
+      if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
       }
     } catch (error) {
@@ -742,37 +760,31 @@ export class StoreOperationsPG extends StoreOperations {
         table: this.resolveTableName(TABLE_TRACES),
         columns: ['name', 'startTime DESC'],
       },
-      // Composite index for evals (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
-        table: this.resolveTableName(TABLE_EVALS),
-        columns: ['agent_name', 'created_at DESC'],
-      },
       // Composite index for scores (filter + sort)
       {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
         table: this.resolveTableName(TABLE_SCORERS),
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       },
-      // AI Spans indexes for optimal trace querying
+      // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: this.resolveTableName(TABLE_AI_SPANS),
+        table: this.resolveTableName(TABLE_SPANS),
         columns: ['traceId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: this.resolveTableName(TABLE_AI_SPANS),
+        table: this.resolveTableName(TABLE_SPANS),
         columns: ['parentSpanId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: this.resolveTableName(TABLE_AI_SPANS),
+        table: this.resolveTableName(TABLE_SPANS),
         columns: ['name'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: this.resolveTableName(TABLE_AI_SPANS),
+        table: this.resolveTableName(TABLE_SPANS),
         columns: ['spanType', 'startedAt DESC'],
       },
     ];
@@ -900,7 +912,7 @@ export class StoreOperationsPG extends StoreOperations {
       Object.entries(data).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
-        setValues.push(this.prepareValue(value));
+        setValues.push(this.prepareValue(value, key, tableName));
       });
 
       // Build WHERE clause
@@ -910,7 +922,7 @@ export class StoreOperationsPG extends StoreOperations {
       Object.entries(keys).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
-        whereValues.push(this.prepareValue(value));
+        whereValues.push(this.prepareValue(value, key, tableName));
       });
 
       const tableName_ = this.getQualifiedTableName(tableName);

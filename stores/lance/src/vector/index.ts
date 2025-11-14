@@ -64,8 +64,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * const store = await LanceVectorStore.create('s3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
    */
-  public static async create(uri: string, options?: ConnectionOptions): Promise<LanceVectorStore> {
-    const instance = new LanceVectorStore();
+  public static async create(uri: string, options?: ConnectionOptions & { id: string }): Promise<LanceVectorStore> {
+    const instance = new LanceVectorStore(options?.id || crypto.randomUUID());
     try {
       instance.lanceClient = await connect(uri, options);
       return instance;
@@ -86,8 +86,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * @internal
    * Private constructor to enforce using the create factory method
    */
-  private constructor() {
-    super();
+  private constructor(id: string) {
+    super({ id });
   }
 
   close() {

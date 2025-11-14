@@ -20,6 +20,6 @@ export function errorHandler(err: Error, c: Context, isDev?: boolean): Response 
     return c.json({ error: err.message }, err.status);
   }
 
-  console.error(err);
+  c.get('mastra').getLogger().error(err);
   return c.json({ error: 'Internal Server Error' }, 500);
 }

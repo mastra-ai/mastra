@@ -172,6 +172,7 @@ describe('Unit Testing CouchbaseVector', () => {
         bucketName: test_bucketName,
         scopeName: test_scopeName,
         collectionName: test_collectionName,
+        id: 'couchbase-unit-test',
       });
       expect(mockCouchbaseConnectFn).toHaveBeenCalledTimes(1);
       expect(mockCouchbaseConnectFn).toHaveBeenCalledWith('COUCHBASE_CONNECTION_STRING', {
@@ -207,6 +208,7 @@ describe('Unit Testing CouchbaseVector', () => {
         bucketName: test_bucketName,
         scopeName: test_scopeName,
         collectionName: test_collectionName,
+        id: 'couchbase-unit-test',
       });
       await couchbase_client.getCollection();
     });
@@ -350,6 +352,7 @@ describe('Unit Testing CouchbaseVector', () => {
         bucketName: test_bucketName,
         scopeName: test_scopeName,
         collectionName: test_collectionName,
+        id: 'couchbase-unit-test',
       });
 
       await couchbase_client.getCollection();
@@ -517,6 +520,7 @@ describe('Unit Testing CouchbaseVector', () => {
         bucketName: test_bucketName,
         scopeName: test_scopeName,
         collectionName: test_collectionName,
+        id: 'couchbase-unit-test',
       });
       await couchbase_client.getCollection();
     });
@@ -584,6 +588,7 @@ describe('Unit Testing CouchbaseVector', () => {
         bucketName: test_bucketName,
         scopeName: test_scopeName,
         collectionName: test_collectionName,
+        id: 'couchbase-unit-test',
       });
       await couchbase_client.getCollection();
     });
@@ -654,6 +659,7 @@ describe('Unit Testing CouchbaseVector', () => {
         bucketName: test_bucketName,
         scopeName: test_scopeName,
         collectionName: test_collectionName,
+        id: 'couchbase-unit-test',
       });
       await couchbase_client.getCollection();
     });

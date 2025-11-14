@@ -72,10 +72,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor(config: PgVectorConfig) {
+  constructor(config: PgVectorConfig & { id: string }) {
     try {
       validateConfig('PgVector', config);
-      super();
+      super({ id: config.id });
 
       this.schema = config.schemaName;
       // Accept shared tableMap to allow logical->physical mapping for index tables
@@ -118,17 +118,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         throw new Error('PgVector: invalid configuration provided');
       }
 
-      const basePool = new pg.Pool(poolConfig);
-
-      const telemetry = this.__getTelemetry();
-
-      this.pool =
-        telemetry?.traceClass(basePool, {
-          spanNamePrefix: 'pg-vector',
-          attributes: {
-            'vector.type': 'postgres',
-          },
-        }) ?? basePool;
+      this.pool = new pg.Pool(poolConfig);
 
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
@@ -467,7 +457,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           const schemaCheck = await client.query(
             `
             SELECT EXISTS (
-              SELECT 1 FROM information_schema.schemata 
+              SELECT 1 FROM information_schema.schemata
               WHERE schema_name = $1
             )
           `,
@@ -725,8 +715,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 
         indexSQL = `
-          CREATE INDEX IF NOT EXISTS ${vectorIndexName} 
-          ON ${tableName} 
+          CREATE INDEX IF NOT EXISTS ${vectorIndexName}
+          ON ${tableName}
           USING hnsw (embedding ${metricOp})
           WITH (
             m = ${m},

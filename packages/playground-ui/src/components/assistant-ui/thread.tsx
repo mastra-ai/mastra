@@ -63,7 +63,9 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
 
 const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
-    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto">{children}</ThreadPrimitive.Root>
+    <ThreadPrimitive.Root className="grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+      {children}
+    </ThreadPrimitive.Root>
   );
 };
 
