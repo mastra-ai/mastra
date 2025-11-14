@@ -3,6 +3,8 @@ title: "Reference: LanceDB Storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 import StorageDomainsNoObservability from "./_storage-domains-no-observability.mdx";
 import SchemaManagementNoObservability from "./_schema-management-no-observability.mdx";
 
@@ -12,9 +14,36 @@ The LanceDB storage implementation provides a high-performance storage solution 
 
 ## Installation
 
-```bash
+<Tabs>
+<TabItem value="npm" label="npm">
+
+```bash copy
 npm install @mastra/lance@beta
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @mastra/lance@beta
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @mastra/lance@beta
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add @mastra/lance@beta
+```
+
+</TabItem>
+</Tabs>
 
 ## Usage
 
