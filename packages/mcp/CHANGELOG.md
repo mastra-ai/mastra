@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 0.14.3-alpha.0
+
+### Patch Changes
+
+- Add timeout configuration to mcp server config ([#10124](https://github.com/mastra-ai/mastra/pull/10124))
+
 ## 0.14.2
 
 ### Patch Changes
