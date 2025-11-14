@@ -851,7 +851,7 @@ export async function cancelWorkflowRunHandler({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const LIST_WORKFLOWS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_WORKFLOWS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workflows',
   responseType: 'json',
@@ -862,7 +862,7 @@ export const LIST_WORKFLOWS_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await listWorkflowsHandler(ctx),
 });
 
-export const GET_WORKFLOW_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workflows/:workflowId',
   responseType: 'json',
@@ -874,7 +874,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await getWorkflowByIdHandler(ctx),
 });
 
-export const LIST_WORKFLOW_RUNS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workflows/:workflowId/runs',
   responseType: 'json',
@@ -887,7 +887,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await listWorkflowRunsHandler(ctx),
 });
 
-export const GET_WORKFLOW_RUN_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workflows/:workflowId/runs/:runId',
   responseType: 'json',
@@ -899,7 +899,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await getWorkflowRunByIdHandler(ctx),
 });
 
-export const CREATE_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/create-run',
   responseType: 'json',
@@ -912,7 +912,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await createWorkflowRunHandler(ctx),
 });
 
-export const STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/stream',
   responseType: 'stream',
@@ -925,7 +925,7 @@ export const STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await streamWorkflowHandler(ctx),
 });
 
-export const STREAM_VNEXT_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_VNEXT_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/streamVNext',
   responseType: 'stream',
@@ -938,7 +938,7 @@ export const STREAM_VNEXT_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await streamWorkflowHandler(ctx),
 });
 
-export const RESUME_STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/resume-stream',
   responseType: 'stream',
@@ -951,7 +951,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await resumeStreamWorkflowHandler(ctx as any),
 });
 
-export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workflows/:workflowId/runs/:runId/execution-result',
   responseType: 'json',
@@ -963,7 +963,7 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE: ServerRoute<any, any> = cr
   handler: async ctx => await getWorkflowRunExecutionResultHandler(ctx),
 });
 
-export const START_ASYNC_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/start-async',
   responseType: 'json',
@@ -977,7 +977,7 @@ export const START_ASYNC_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await startAsyncWorkflowHandler(ctx),
 });
 
-export const START_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+export const START_WORKFLOW_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/start',
   responseType: 'json',
@@ -991,7 +991,7 @@ export const START_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await startWorkflowRunHandler(ctx),
 });
 
-export const OBSERVE_STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/observe',
   responseType: 'stream',
@@ -1003,7 +1003,7 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute(
   handler: async ctx => await observeStreamWorkflowHandler(ctx),
 });
 
-export const OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/observe-streamVNext',
   responseType: 'stream',
@@ -1015,7 +1015,7 @@ export const OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE: ServerRoute<any, any> = create
   handler: async ctx => await observeStreamVNextWorkflowHandler(ctx),
 });
 
-export const RESUME_ASYNC_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/resume-async',
   responseType: 'json',
@@ -1029,7 +1029,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await resumeAsyncWorkflowHandler(ctx as any),
 });
 
-export const RESUME_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const RESUME_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/resume',
   responseType: 'json',
@@ -1043,7 +1043,7 @@ export const RESUME_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await resumeWorkflowHandler(ctx as any),
 });
 
-export const CANCEL_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/runs/:runId/cancel',
   responseType: 'json',
@@ -1056,7 +1056,7 @@ export const CANCEL_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
 });
 
 // Legacy routes (deprecated)
-export const STREAM_LEGACY_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/stream-legacy',
   responseType: 'stream',
@@ -1069,7 +1069,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await streamLegacyWorkflowHandler(ctx as any),
 });
 
-export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/observe-stream-legacy',
   responseType: 'stream',

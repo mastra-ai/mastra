@@ -213,7 +213,7 @@ export const cancelAgentBuilderActionRunHandler = createAgentBuilderWorkflowHand
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const LIST_AGENT_BUILDER_ACTIONS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agent-builder',
   responseType: 'json',
@@ -224,7 +224,7 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE: ServerRoute<any, any> = createRou
   handler: async ctx => await getAgentBuilderActionsHandler(ctx),
 });
 
-export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agent-builder/:actionId',
   responseType: 'json',
@@ -236,7 +236,7 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE: ServerRoute<any, any> = creat
   handler: async ctx => await getAgentBuilderActionByIdHandler(ctx),
 });
 
-export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agent-builder/:actionId/runs',
   responseType: 'json',
@@ -249,7 +249,7 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE: ServerRoute<any, any> = creat
   handler: async ctx => await getAgentBuilderActionRunsHandler(ctx),
 });
 
-export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agent-builder/:actionId/runs/:runId',
   responseType: 'json',
@@ -261,7 +261,7 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE: ServerRoute<any, any> = c
   handler: async ctx => await getAgentBuilderActionRunByIdHandler(ctx),
 });
 
-export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agent-builder/:actionId/runs/:runId/execution-result',
   responseType: 'json',
@@ -273,7 +273,7 @@ export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE: ServerRoute<an
   handler: async ctx => await getAgentBuilderActionRunExecutionResultHandler(ctx),
 });
 
-export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/create-run',
   responseType: 'json',
@@ -286,7 +286,7 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = crea
   handler: async ctx => await createAgentBuilderActionRunHandler(ctx),
 });
 
-export const STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/stream',
   responseType: 'stream',
@@ -299,7 +299,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRo
   handler: async ctx => await streamAgentBuilderActionHandler(ctx),
 });
 
-export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/streamVNext',
   responseType: 'stream',
@@ -312,7 +312,7 @@ export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = cr
   handler: async ctx => await streamVNextAgentBuilderActionHandler(ctx),
 });
 
-export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/start-async',
   responseType: 'json',
@@ -326,7 +326,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = cre
   handler: async ctx => await startAsyncAgentBuilderActionHandler(ctx),
 });
 
-export const START_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/start',
   responseType: 'json',
@@ -340,7 +340,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = creat
   handler: async ctx => await startAgentBuilderActionRunHandler(ctx),
 });
 
-export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/observe',
   responseType: 'stream',
@@ -352,7 +352,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = 
   handler: async ctx => await observeStreamAgentBuilderActionHandler(ctx),
 });
 
-export const OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/observe-streamVNext',
   responseType: 'stream',
@@ -364,7 +364,7 @@ export const OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, a
   handler: async ctx => await observeStreamVNextAgentBuilderActionHandler(ctx),
 });
 
-export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/resume-async',
   responseType: 'json',
@@ -378,7 +378,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = cr
   handler: async ctx => await resumeAsyncAgentBuilderActionHandler(ctx as any),
 });
 
-export const RESUME_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/resume',
   responseType: 'json',
@@ -392,7 +392,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRo
   handler: async ctx => await resumeAgentBuilderActionHandler(ctx as any),
 });
 
-export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/resume-stream',
   responseType: 'stream',
@@ -405,7 +405,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = c
   handler: async ctx => await resumeStreamAgentBuilderActionHandler(ctx as any),
 });
 
-export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/runs/:runId/cancel',
   responseType: 'json',
@@ -418,7 +418,7 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = crea
 });
 
 // Legacy routes (deprecated)
-export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/stream-legacy',
   responseType: 'stream',
@@ -432,7 +432,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = c
   handler: async ctx => await streamLegacyAgentBuilderActionHandler(ctx as any),
 });
 
-export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/observe-stream-legacy',
   responseType: 'stream',

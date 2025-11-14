@@ -423,7 +423,7 @@ export async function getAgentExecutionHandler({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const GET_AGENT_CARD_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_AGENT_CARD_ROUTE = createRoute({
   method: 'GET',
   path: '/a2a/:agentId/card',
   responseType: 'json',
@@ -476,7 +476,7 @@ export const GET_AGENT_CARD_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const AGENT_EXECUTION_ROUTE: ServerRoute<any, any> = createRoute({
+export const AGENT_EXECUTION_ROUTE = createRoute({
   method: 'POST',
   path: '/a2a/:agentId/execute',
   responseType: 'json',

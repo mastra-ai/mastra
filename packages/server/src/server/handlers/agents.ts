@@ -6,6 +6,7 @@ import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
+import type { z } from 'zod';
 
 import type {
   StreamTextOnFinishCallback,
@@ -1030,7 +1031,10 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   },
 });
 
-export const GENERATE_AGENT_ROUTE: ServerRoute<any, any> = createRoute({
+export const GENERATE_AGENT_ROUTE: ServerRoute<
+  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
+  unknown
+> = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/generate',
   responseType: 'json',
@@ -1071,7 +1075,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<any, any> = createRoute({
 });
 
 // Legacy routes (deprecated)
-export const GENERATE_LEGACY_ROUTE: ServerRoute<any, any> = createRoute({
+export const GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/generate-legacy',
   responseType: 'stream',
@@ -1084,7 +1088,7 @@ export const GENERATE_LEGACY_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await generateLegacyHandler(ctx as any),
 });
 
-export const STREAM_GENERATE_LEGACY_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream-legacy',
   responseType: 'stream',
@@ -1097,7 +1101,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await streamGenerateLegacyHandler(ctx as any),
 });
 
-export const GET_PROVIDERS_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_PROVIDERS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents/providers',
   responseType: 'json',
@@ -1105,10 +1109,23 @@ export const GET_PROVIDERS_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'List AI providers',
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
-  handler: async () => await getProvidersHandler(),
+  handler: async () => {
+    const providers = Object.entries(PROVIDER_REGISTRY).map(([key, provider]) => {
+      return {
+        id: key,
+        name: provider.name,
+        label: (provider as any).label || provider.name,
+        description: (provider as any).description || '',
+      };
+    });
+    return { providers };
+  },
 });
 
-export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<any, any> = createRoute({
+export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
+  z.infer<typeof agentIdPathParams> & z.infer<typeof agentExecutionBodySchema>,
+  unknown
+> = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/generate/vnext',
   responseType: 'json',
@@ -1121,7 +1138,7 @@ export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<any, any> = createRoute({
   handler: GENERATE_AGENT_ROUTE.handler,
 });
 
-export const STREAM_GENERATE_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_GENERATE_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream',
   responseType: 'stream',
@@ -1131,10 +1148,36 @@ export const STREAM_GENERATE_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Stream agent response',
   description: 'Executes an agent with the provided messages and streams the response in real-time',
   tags: ['Agents'],
-  handler: async ctx => await streamGenerateHandler(ctx as any),
+  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, agentRequestContext, ...rest } = params as any;
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext.entries()),
+        ...Array.from(Object.entries(agentRequestContext ?? {})),
+      ]);
+
+      validateBody({ messages });
+
+      const streamResult = agent.stream(messages, {
+        ...rest,
+        requestContext: finalRequestContext,
+        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error streaming agent response');
+    }
+  },
 });
 
-export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream/vnext',
   responseType: 'stream',
@@ -1144,10 +1187,10 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = cre
   summary: 'Stream a response from an agent',
   description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
   tags: ['Agents'],
-  handler: async ctx => await streamGenerateHandler(ctx as any),
+  handler: STREAM_GENERATE_ROUTE.handler,
 });
 
-export const APPROVE_TOOL_CALL_ROUTE: ServerRoute<any, any> = createRoute({
+export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/approve-tool-call',
   responseType: 'stream',
@@ -1157,10 +1200,44 @@ export const APPROVE_TOOL_CALL_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Approve tool call',
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
-  handler: async ctx => await approveToolCallHandler(ctx as any),
+  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { runId, agentRequestContext, ...rest } = params as any;
+
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext.entries()),
+        ...Array.from(Object.entries(agentRequestContext ?? {})),
+      ]);
+
+      const streamResult = agent.approveToolCall({
+        ...rest,
+        runId,
+        requestContext: finalRequestContext,
+        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error approving tool call');
+    }
+  },
 });
 
-export const DECLINE_TOOL_CALL_ROUTE: ServerRoute<any, any> = createRoute({
+export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/decline-tool-call',
   responseType: 'stream',
@@ -1170,10 +1247,44 @@ export const DECLINE_TOOL_CALL_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Decline tool call',
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
-  handler: async ctx => await declineToolCallHandler(ctx as any),
+  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      if (!params.runId) {
+        throw new HTTPException(400, { message: 'Run id is required' });
+      }
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { runId, agentRequestContext, ...rest } = params as any;
+
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext.entries()),
+        ...Array.from(Object.entries(agentRequestContext ?? {})),
+      ]);
+
+      const streamResult = agent.declineToolCall({
+        ...rest,
+        runId,
+        requestContext: finalRequestContext,
+        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error declining tool call');
+    }
+  },
 });
 
-export const STREAM_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_NETWORK_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/network',
   responseType: 'stream',
@@ -1183,10 +1294,40 @@ export const STREAM_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Stream agent network',
   description: 'Executes an agent network with multiple agents and streams the response',
   tags: ['Agents'],
-  handler: async ctx => await streamNetworkHandler(ctx as any),
+  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, agentRequestContext, ...rest } = params as any;
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext.entries()),
+        ...Array.from(Object.entries(agentRequestContext ?? {})),
+      ]);
+
+      validateBody({ messages });
+
+      const streamResult = agent.network(messages, {
+        ...rest,
+        memory: {
+          thread: rest.thread ?? '',
+          resource: rest.resourceId ?? '',
+          options: rest.memory?.options ?? {},
+        },
+        requestContext: finalRequestContext,
+      });
+
+      return streamResult;
+    } catch (error) {
+      return handleError(error, 'error streaming agent loop response');
+    }
+  },
 });
 
-export const UPDATE_AGENT_MODEL_ROUTE: ServerRoute<any, any> = createRoute({
+export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/model',
   responseType: 'json',
@@ -1196,10 +1337,23 @@ export const UPDATE_AGENT_MODEL_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Update agent model',
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
-  handler: async ctx => await updateAgentModelHandler(ctx as any),
+  handler: async ({ mastra, agentId, modelId, provider }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // Use the universal Mastra router format: provider/model
+      const newModel = `${provider}/${modelId}`;
+
+      agent.__updateModel({ model: newModel });
+
+      return { message: 'Agent model updated' };
+    } catch (error) {
+      return handleError(error, 'error updating agent model');
+    }
+  },
 });
 
-export const RESET_AGENT_MODEL_ROUTE: ServerRoute<any, any> = createRoute({
+export const RESET_AGENT_MODEL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/model/reset',
   responseType: 'json',
@@ -1208,10 +1362,20 @@ export const RESET_AGENT_MODEL_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Reset agent model',
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
-  handler: async ctx => await resetAgentModelHandler(ctx as any),
+  handler: async ({ mastra, agentId }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      agent.__resetToOriginalModel();
+
+      return { message: 'Agent model reset to original' };
+    } catch (error) {
+      return handleError(error, 'error resetting agent model');
+    }
+  },
 });
 
-export const REORDER_AGENT_MODEL_LIST_ROUTE: ServerRoute<any, any> = createRoute({
+export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/models/reorder',
   responseType: 'json',
@@ -1221,10 +1385,25 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE: ServerRoute<any, any> = createRoute
   summary: 'Reorder agent model list',
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
-  handler: async ctx => await reorderAgentModelListHandler(ctx as any),
+  handler: async ({ mastra, agentId, reorderedModelIds }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      const modelList = await agent.getModelList();
+      if (!modelList || modelList.length === 0) {
+        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+      }
+
+      agent.reorderModels(reorderedModelIds);
+
+      return { message: 'Model list reordered' };
+    } catch (error) {
+      return handleError(error, 'error reordering model list');
+    }
+  },
 });
 
-export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE: ServerRoute<any, any> = createRoute({
+export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/models/:modelConfigId',
   responseType: 'json',
@@ -1234,10 +1413,40 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE: ServerRoute<any, any> = cre
   summary: 'Update model in model list',
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
-  handler: async ctx => await updateAgentModelInModelListHandler(ctx as any),
+  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      const modelList = await agent.getModelList();
+      if (!modelList || modelList.length === 0) {
+        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+      }
+
+      const modelConfig = modelList.find(config => config.id === modelConfigId);
+      if (!modelConfig) {
+        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
+
+      const newModel =
+        bodyModel?.modelId && bodyModel?.provider ? `${bodyModel.provider}/${bodyModel.modelId}` : modelConfig.model;
+
+      const updated = {
+        ...modelConfig,
+        model: newModel as any,
+        ...(maxRetries !== undefined ? { maxRetries } : {}),
+        ...(enabled !== undefined ? { enabled } : {}),
+      };
+
+      agent.updateModelInModelList(updated as any);
+
+      return { message: 'Model updated in model list' };
+    } catch (error) {
+      return handleError(error, 'error updating model in model list');
+    }
+  },
 });
 
-export const STREAM_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/streamVNext',
   responseType: 'stream',
@@ -1252,7 +1461,7 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute(
   },
 });
 
-export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream/vnext/ui',
   responseType: 'stream',
@@ -1263,10 +1472,21 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = c
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
-  handler: async ctx => await streamUIMessageHandler(ctx as any),
+  handler: async () => {
+    try {
+      throw new MastraError({
+        category: ErrorCategory.USER,
+        domain: ErrorDomain.MASTRA_SERVER,
+        id: 'DEPRECATED_ENDPOINT',
+        text: 'This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
+      });
+    } catch (error) {
+      return handleError(error, 'error streaming agent response');
+    }
+  },
 });
 
-export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream/ui',
   responseType: 'stream',
@@ -1277,5 +1497,5 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE: ServerRoute<any, any> = createR
   description:
     '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
   tags: ['Agents'],
-  handler: async ctx => await streamUIMessageHandler(ctx as any),
+  handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
 });

@@ -248,7 +248,7 @@ export async function saveScoreHandler({ mastra, score }: Context & { score: Sco
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const LIST_SCORERS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_SCORERS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/scores/scorers',
   responseType: 'json',
@@ -265,7 +265,7 @@ export const LIST_SCORERS_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const GET_SCORER_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_SCORER_ROUTE = createRoute({
   method: 'GET',
   path: '/api/scores/scorers/:scorerId',
   responseType: 'json',
@@ -290,7 +290,7 @@ export const GET_SCORER_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const LIST_SCORES_BY_RUN_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/scores/run/:runId',
   responseType: 'json',
@@ -321,7 +321,7 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const LIST_SCORES_BY_SCORER_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/scores/scorer/:scorerId',
   responseType: 'json',
@@ -355,7 +355,7 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE: ServerRoute<any, any> = createRoute
   },
 });
 
-export const LIST_SCORES_BY_ENTITY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/scores/entity/:entityType/:entityId',
   responseType: 'json',
@@ -399,7 +399,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE: ServerRoute<any, any> = createRoute
   },
 });
 
-export const SAVE_SCORE_ROUTE: ServerRoute<any, any> = createRoute({
+export const SAVE_SCORE_ROUTE = createRoute({
   method: 'POST',
   path: '/api/scores',
   responseType: 'json',

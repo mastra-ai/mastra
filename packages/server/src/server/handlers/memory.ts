@@ -725,7 +725,7 @@ export async function searchMemoryHandler({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const GET_MEMORY_STATUS_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_MEMORY_STATUS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/status',
   responseType: 'json',
@@ -737,7 +737,7 @@ export const GET_MEMORY_STATUS_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await getMemoryStatusHandler(ctx),
 });
 
-export const GET_MEMORY_CONFIG_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/config',
   responseType: 'json',
@@ -749,7 +749,7 @@ export const GET_MEMORY_CONFIG_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await getMemoryConfigHandler(ctx),
 });
 
-export const LIST_THREADS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_THREADS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/threads',
   responseType: 'json',
@@ -761,7 +761,7 @@ export const LIST_THREADS_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await listThreadsHandler(ctx as any),
 });
 
-export const GET_THREAD_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_THREAD_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/threads/:threadId',
   responseType: 'json',
@@ -774,7 +774,7 @@ export const GET_THREAD_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await getThreadByIdHandler(ctx),
 });
 
-export const LIST_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_MESSAGES_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/threads/:threadId/messages',
   responseType: 'json',
@@ -787,7 +787,7 @@ export const LIST_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await listMessagesHandler(ctx as any),
 });
 
-export const GET_WORKING_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_WORKING_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/threads/:threadId/working-memory',
   responseType: 'json',
@@ -800,7 +800,7 @@ export const GET_WORKING_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await getWorkingMemoryHandler(ctx),
 });
 
-export const SAVE_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
+export const SAVE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
   path: '/api/memory/save-messages',
   responseType: 'json',
@@ -812,7 +812,7 @@ export const SAVE_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await saveMessagesHandler(ctx as any),
 });
 
-export const CREATE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
+export const CREATE_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/api/memory/threads',
   responseType: 'json',
@@ -824,7 +824,7 @@ export const CREATE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await createThreadHandler(ctx),
 });
 
-export const UPDATE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
+export const UPDATE_THREAD_ROUTE = createRoute({
   method: 'PATCH',
   path: '/api/memory/threads/:threadId',
   responseType: 'json',
@@ -837,7 +837,7 @@ export const UPDATE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await updateThreadHandler(ctx),
 });
 
-export const DELETE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
+export const DELETE_THREAD_ROUTE = createRoute({
   method: 'DELETE',
   path: '/api/memory/threads/:threadId',
   responseType: 'json',
@@ -849,7 +849,7 @@ export const DELETE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await deleteThreadHandler(ctx),
 });
 
-export const UPDATE_WORKING_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
+export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   method: 'POST',
   path: '/api/memory/threads/:threadId/working-memory',
   responseType: 'json',
@@ -862,7 +862,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await updateWorkingMemoryHandler(ctx),
 });
 
-export const DELETE_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
+export const DELETE_MESSAGES_ROUTE = createRoute({
   method: 'POST',
   path: '/api/memory/messages/delete',
   responseType: 'json',
@@ -874,7 +874,7 @@ export const DELETE_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await deleteMessagesHandler(ctx),
 });
 
-export const SEARCH_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
+export const SEARCH_MEMORY_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/search',
   responseType: 'json',
@@ -887,7 +887,7 @@ export const SEARCH_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
 });
 
 // Network routes (same handlers with /network/ prefix)
-export const GET_MEMORY_STATUS_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_MEMORY_STATUS_NETWORK_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/network/status',
   responseType: 'json',
@@ -899,7 +899,7 @@ export const GET_MEMORY_STATUS_NETWORK_ROUTE: ServerRoute<any, any> = createRout
   handler: async ctx => await getMemoryStatusHandler(ctx),
 });
 
-export const LIST_THREADS_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_THREADS_NETWORK_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/network/threads',
   responseType: 'json',
@@ -911,7 +911,7 @@ export const LIST_THREADS_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await listThreadsHandler(ctx as any),
 });
 
-export const GET_THREAD_BY_ID_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_THREAD_BY_ID_NETWORK_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/network/threads/:threadId',
   responseType: 'json',
@@ -924,7 +924,7 @@ export const GET_THREAD_BY_ID_NETWORK_ROUTE: ServerRoute<any, any> = createRoute
   handler: async ctx => await getThreadByIdHandler(ctx),
 });
 
-export const LIST_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_MESSAGES_NETWORK_ROUTE = createRoute({
   method: 'GET',
   path: '/api/memory/network/threads/:threadId/messages',
   responseType: 'json',
@@ -937,7 +937,7 @@ export const LIST_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await listMessagesHandler(ctx as any),
 });
 
-export const SAVE_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const SAVE_MESSAGES_NETWORK_ROUTE = createRoute({
   method: 'POST',
   path: '/api/memory/network/save-messages',
   responseType: 'json',
@@ -950,7 +950,7 @@ export const SAVE_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await saveMessagesHandler(ctx as any),
 });
 
-export const CREATE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const CREATE_THREAD_NETWORK_ROUTE = createRoute({
   method: 'POST',
   path: '/api/memory/network/threads',
   responseType: 'json',
@@ -963,7 +963,7 @@ export const CREATE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await createThreadHandler(ctx),
 });
 
-export const UPDATE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const UPDATE_THREAD_NETWORK_ROUTE = createRoute({
   method: 'PATCH',
   path: '/api/memory/network/threads/:threadId',
   responseType: 'json',
@@ -977,7 +977,7 @@ export const UPDATE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await updateThreadHandler(ctx),
 });
 
-export const DELETE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const DELETE_THREAD_NETWORK_ROUTE = createRoute({
   method: 'DELETE',
   path: '/api/memory/network/threads/:threadId',
   responseType: 'json',
@@ -990,7 +990,7 @@ export const DELETE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
   handler: async ctx => await deleteThreadHandler(ctx),
 });
 
-export const DELETE_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+export const DELETE_MESSAGES_NETWORK_ROUTE = createRoute({
   method: 'POST',
   path: '/api/memory/network/messages/delete',
   responseType: 'json',

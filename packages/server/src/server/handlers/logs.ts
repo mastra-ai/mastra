@@ -115,7 +115,7 @@ export async function listLogTransports({ mastra }: Pick<LogsContext, 'mastra'>)
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const LIST_LOG_TRANSPORTS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/logs/transports',
   responseType: 'json',
@@ -137,7 +137,7 @@ export const LIST_LOG_TRANSPORTS_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const LIST_LOGS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_LOGS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/logs',
   responseType: 'json',
@@ -178,7 +178,7 @@ export const LIST_LOGS_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const LIST_LOGS_BY_RUN_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/logs/:runId',
   responseType: 'json',

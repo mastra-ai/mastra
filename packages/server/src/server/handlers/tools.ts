@@ -226,7 +226,7 @@ export async function executeAgentToolHandler({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const LIST_TOOLS_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_TOOLS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/tools',
   responseType: 'json',
@@ -260,7 +260,7 @@ export const LIST_TOOLS_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const GET_TOOL_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_TOOL_BY_ID_ROUTE = createRoute({
   method: 'GET',
   path: '/api/tools/:toolId',
   responseType: 'json',
@@ -290,7 +290,7 @@ export const GET_TOOL_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const EXECUTE_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
+export const EXECUTE_TOOL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/tools/:toolId/execute',
   responseType: 'json',
@@ -360,7 +360,7 @@ export const EXECUTE_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
 // Agent Tool Routes
 // ============================================================================
 
-export const GET_AGENT_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_AGENT_TOOL_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents/:agentId/tools/:toolId',
   responseType: 'json',
@@ -369,10 +369,35 @@ export const GET_AGENT_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Get agent tool',
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
-  handler: async ctx => await getAgentToolHandler(ctx as any),
+  handler: async ({ mastra, agentId, toolId, requestContext }) => {
+    try {
+      const agent = agentId ? mastra.getAgentById(agentId) : null;
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      const agentTools = await agent.listTools({ requestContext });
+
+      const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
+
+      if (!tool) {
+        throw new HTTPException(404, { message: 'Tool not found' });
+      }
+
+      const serializedTool = {
+        ...tool,
+        inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+        outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+      };
+
+      return serializedTool;
+    } catch (error) {
+      return handleError(error, 'Error getting agent tool');
+    }
+  },
 });
 
-export const EXECUTE_AGENT_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
+export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/tools/:toolId/execute',
   responseType: 'json',
@@ -382,5 +407,35 @@ export const EXECUTE_AGENT_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Execute agent tool',
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
-  handler: async ctx => await executeAgentToolHandler(ctx as any),
+  handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
+    try {
+      const agent = agentId ? mastra.getAgentById(agentId) : null;
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Tool not found' });
+      }
+
+      const agentTools = await agent.listTools({ requestContext });
+
+      const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
+
+      if (!tool) {
+        throw new HTTPException(404, { message: 'Tool not found' });
+      }
+
+      if (!tool?.execute) {
+        throw new HTTPException(400, { message: 'Tool is not executable' });
+      }
+
+      const result = await tool.execute(data, {
+        mastra,
+        requestContext,
+        // TODO: Pass proper tracing context when server API supports tracing
+        tracingContext: { currentSpan: undefined },
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error executing agent tool');
+    }
+  },
 });

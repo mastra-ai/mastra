@@ -183,7 +183,7 @@ export async function getListenerHandler({ mastra, agentId, requestContext }: Vo
 // Route Objects
 // ============================================================================
 
-export const GET_SPEAKERS_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_SPEAKERS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents/:agentId/voice/speakers',
   responseType: 'json',
@@ -192,10 +192,33 @@ export const GET_SPEAKERS_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Get voice speakers',
   description: 'Returns available voice speakers for the specified agent',
   tags: ['Agents', 'Voice'],
-  handler: async ctx => await getSpeakersHandler(ctx as any),
+  handler: async ({ mastra, agentId, requestContext }) => {
+    try {
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
+      }
+
+      const agent = mastra.getAgentById(agentId);
+
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      const voice = await agent.getVoice({ requestContext });
+
+      if (!voice) {
+        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+      }
+
+      const speakers = await voice.getSpeakers();
+      return speakers;
+    } catch (error) {
+      return handleError(error, 'Error getting speakers');
+    }
+  },
 });
 
-export const GET_SPEAKERS_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents/:agentId/speakers',
   responseType: 'json',
@@ -204,10 +227,10 @@ export const GET_SPEAKERS_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute(
   summary: 'Get available speakers for an agent',
   description: '[DEPRECATED] Use /api/agents/:agentId/voice/speakers instead. Get available speakers for an agent',
   tags: ['Agents', 'Voice'],
-  handler: async ctx => await getSpeakersHandler(ctx as any),
+  handler: GET_SPEAKERS_ROUTE.handler,
 });
 
-export const GENERATE_SPEECH_ROUTE: ServerRoute<any, any> = createRoute({
+export const GENERATE_SPEECH_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/voice/speak',
   responseType: 'stream',
@@ -217,10 +240,48 @@ export const GENERATE_SPEECH_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Generate speech',
   description: 'Generates speech audio from text using the agent voice configuration',
   tags: ['Agents', 'Voice'],
-  handler: async ctx => await generateSpeechHandler(ctx as any),
+  handler: async ({ mastra, agentId, text, speakerId, requestContext }) => {
+    try {
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
+      }
+
+      validateBody({ text });
+
+      const agent = mastra.getAgentById(agentId);
+
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      const voice = await agent.getVoice({ requestContext });
+
+      if (!voice) {
+        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+      }
+
+      const audioStream = await Promise.resolve()
+        .then(() => voice.speak(text!, { speaker: speakerId! }))
+        .catch(err => {
+          if (err instanceof MastraError) {
+            throw new HTTPException(400, { message: err.message });
+          }
+
+          throw err;
+        });
+
+      if (!audioStream) {
+        throw new HTTPException(500, { message: 'Failed to generate speech' });
+      }
+
+      return audioStream;
+    } catch (error) {
+      return handleError(error, 'Error generating speech');
+    }
+  },
 });
 
-export const GENERATE_SPEECH_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/speak',
   responseType: 'stream',
@@ -231,10 +292,10 @@ export const GENERATE_SPEECH_DEPRECATED_ROUTE: ServerRoute<any, any> = createRou
   description:
     "[DEPRECATED] Use /api/agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
   tags: ['Agents', 'Voice'],
-  handler: async ctx => await generateSpeechHandler(ctx as any),
+  handler: GENERATE_SPEECH_ROUTE.handler,
 });
 
-export const TRANSCRIBE_SPEECH_ROUTE: ServerRoute<any, any> = createRoute({
+export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/voice/listen',
   responseType: 'json',
@@ -244,10 +305,41 @@ export const TRANSCRIBE_SPEECH_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Transcribe speech',
   description: 'Transcribes speech audio to text using the agent voice configuration',
   tags: ['Agents', 'Voice'],
-  handler: async ctx => await transcribeSpeechHandler(ctx as any),
+  handler: async ({ mastra, agentId, audioData, options, requestContext }) => {
+    try {
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
+      }
+
+      if (!audioData) {
+        throw new HTTPException(400, { message: 'Audio data is required' });
+      }
+
+      const agent = mastra.getAgentById(agentId);
+
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      const voice = await agent.getVoice({ requestContext });
+
+      if (!voice) {
+        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+      }
+
+      const audioStream = new Readable();
+      audioStream.push(audioData);
+      audioStream.push(null);
+
+      const text = await voice.listen(audioStream, options);
+      return { text };
+    } catch (error) {
+      return handleError(error, 'Error transcribing speech');
+    }
+  },
 });
 
-export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/listen',
   responseType: 'json',
@@ -258,10 +350,10 @@ export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE: ServerRoute<any, any> = createR
   description:
     "[DEPRECATED] Use /api/agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
   tags: ['Agents', 'Voice'],
-  handler: async ctx => await transcribeSpeechHandler(ctx as any),
+  handler: TRANSCRIBE_SPEECH_ROUTE.handler,
 });
 
-export const GET_LISTENER_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_LISTENER_ROUTE = createRoute({
   method: 'GET',
   path: '/api/agents/:agentId/voice/listener',
   responseType: 'json',
@@ -270,5 +362,28 @@ export const GET_LISTENER_ROUTE: ServerRoute<any, any> = createRoute({
   summary: 'Get voice listener',
   description: 'Returns the voice listener configuration for the agent',
   tags: ['Agents', 'Voice'],
-  handler: async ctx => await getListenerHandler(ctx as any),
+  handler: async ({ mastra, agentId, requestContext }) => {
+    try {
+      if (!agentId) {
+        throw new HTTPException(400, { message: 'Agent ID is required' });
+      }
+
+      const agent = mastra.getAgentById(agentId);
+
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      const voice = await agent.getVoice({ requestContext });
+
+      if (!voice) {
+        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+      }
+
+      const listeners = await voice.getListener();
+      return listeners;
+    } catch (error) {
+      return handleError(error, 'Error getting listeners');
+    }
+  },
 });

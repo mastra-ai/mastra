@@ -176,7 +176,7 @@ export async function listScoresBySpan({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const GET_TRACES_PAGINATED_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_TRACES_PAGINATED_ROUTE = createRoute({
   method: 'GET',
   path: '/api/observability/traces',
   responseType: 'json',
@@ -232,7 +232,7 @@ export const GET_TRACES_PAGINATED_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const GET_TRACE_ROUTE: ServerRoute<any, any> = createRoute({
+export const GET_TRACE_ROUTE = createRoute({
   method: 'GET',
   path: '/api/observability/traces/:traceId',
   responseType: 'json',
@@ -265,7 +265,7 @@ export const GET_TRACE_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const SCORE_TRACES_ROUTE: ServerRoute<any, any> = createRoute({
+export const SCORE_TRACES_ROUTE = createRoute({
   method: 'POST',
   path: '/api/observability/traces/score',
   responseType: 'json',
@@ -317,7 +317,7 @@ export const SCORE_TRACES_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const LIST_SCORES_BY_SPAN_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   method: 'GET',
   path: '/api/observability/traces/:traceId/:spanId/scores',
   responseType: 'json',

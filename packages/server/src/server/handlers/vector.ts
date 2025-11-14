@@ -188,7 +188,7 @@ export async function deleteIndex({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
-export const UPSERT_VECTORS_ROUTE: ServerRoute<any, any> = createRoute({
+export const UPSERT_VECTORS_ROUTE = createRoute({
   method: 'POST',
   path: '/api/vector/:vectorName/upsert',
   responseType: 'json',
@@ -220,7 +220,7 @@ export const UPSERT_VECTORS_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const CREATE_INDEX_ROUTE: ServerRoute<any, any> = createRoute({
+export const CREATE_INDEX_ROUTE = createRoute({
   method: 'POST',
   path: '/api/vector/:vectorName/create-index',
   responseType: 'json',
@@ -257,7 +257,7 @@ export const CREATE_INDEX_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const QUERY_VECTORS_ROUTE: ServerRoute<any, any> = createRoute({
+export const QUERY_VECTORS_ROUTE = createRoute({
   method: 'POST',
   path: '/api/vector/:vectorName/query',
   responseType: 'json',
@@ -292,7 +292,7 @@ export const QUERY_VECTORS_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const LIST_INDEXES_ROUTE: ServerRoute<any, any> = createRoute({
+export const LIST_INDEXES_ROUTE = createRoute({
   method: 'GET',
   path: '/api/vector/:vectorName/indexes',
   responseType: 'json',
@@ -312,7 +312,7 @@ export const LIST_INDEXES_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const DESCRIBE_INDEX_ROUTE: ServerRoute<any, any> = createRoute({
+export const DESCRIBE_INDEX_ROUTE = createRoute({
   method: 'GET',
   path: '/api/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
@@ -341,7 +341,7 @@ export const DESCRIBE_INDEX_ROUTE: ServerRoute<any, any> = createRoute({
   },
 });
 
-export const DELETE_INDEX_ROUTE: ServerRoute<any, any> = createRoute({
+export const DELETE_INDEX_ROUTE = createRoute({
   method: 'DELETE',
   path: '/api/vector/:vectorName/indexes/:indexName',
   responseType: 'json',
