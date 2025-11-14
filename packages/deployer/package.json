@@ -134,7 +134,7 @@
     "fetch-to-node": "^2.1.0",
     "hono-openapi": "^0.4.8",
     "tsup": "^8.5.0",
-    "type-fest": "^4.41.0",
+    "type-fest": "^5.2.0",
     "typescript": "^5.8.3",
     "vitest": "catalog:",
     "zod": "^3.25.76"
