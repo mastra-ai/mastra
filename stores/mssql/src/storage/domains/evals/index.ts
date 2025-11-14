@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  StoragePagination,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
+} from '@mastra/core/storage';
 import {
   EvalsStorageBase,
   TABLE_SCORERS,
@@ -15,6 +21,8 @@ import { MSSQLDomainBase } from '../base';
 import type { MSSQLDomainConfig } from '../base';
 import { IndexManagementMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
+
+type EvalsTableNames = typeof TABLE_SCORERS;
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return {
@@ -36,26 +44,61 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 export class EvalsStorageMSSQL extends EvalsStorageBase {
   private domainBase: MSSQLDomainBase;
   indexManagement?: IndexManagementMSSQL;
+  schemaPrefix?: string;
 
   constructor(opts: MSSQLDomainConfig) {
     super();
     this.domainBase = new MSSQLDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementMSSQL({
+        pool: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends EvalsTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends EvalsTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
   }
 
   async createIndexes(): Promise<void> {
-    // Create indexes for evals domain
-    const indexManagement = new IndexManagementMSSQL({
-      pool: this.domainBase.getClient(),
-      schemaName: this.domainBase.getSchema(),
-    });
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
-    this.indexManagement = indexManagement;
-
     // Create scores index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,
+      await this.createIndex({
+        name: 'mastra_scores_trace_id_span_id_seqid_idx',
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'seq_id DESC'],
       });
@@ -66,15 +109,7 @@ export class EvalsStorageMSSQL extends EvalsStorageBase {
   }
 
   async dropIndexes(): Promise<void> {
-    if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementMSSQL({
-        pool: this.domainBase.getClient(),
-        schemaName: this.domainBase.getSchema(),
-      });
-    }
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`);
+    await this.dropIndex('mastra_scores_trace_id_span_id_seqid_idx');
   }
 
   async init(): Promise<void> {

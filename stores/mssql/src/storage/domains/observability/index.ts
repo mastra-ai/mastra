@@ -8,35 +8,75 @@ import type {
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '@mastra/core/storage';
 import { MSSQLDomainBase } from '../base';
 import type { MSSQLDomainConfig } from '../base';
 import { IndexManagementMSSQL } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
+type ObservabilityTableNames = typeof TABLE_SPANS;
+
 export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
   private domainBase: MSSQLDomainBase;
   indexManagement?: IndexManagementMSSQL;
+  schemaPrefix?: string;
 
   constructor(opts: MSSQLDomainConfig) {
     super();
     this.domainBase = new MSSQLDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementMSSQL({
+        pool: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends ObservabilityTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends ObservabilityTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
   }
 
   async createIndexes(): Promise<void> {
-    // Create indexes for observability domain
-    const indexManagement = new IndexManagementMSSQL({
-      pool: this.domainBase.getClient(),
-      schemaName: this.domainBase.getSchema(),
-    });
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
-    this.indexManagement = indexManagement;
-
     // Create traceId + startedAt index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_traceid_startedat_idx',
         table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       });
@@ -47,8 +87,8 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
 
     // Create parentSpanId + startedAt index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_parentspanid_startedat_idx',
         table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       });
@@ -59,8 +99,8 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
 
     // Create name index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_name_idx',
         table: TABLE_SPANS,
         columns: ['name'],
       });
@@ -71,8 +111,8 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
 
     // Create spanType + startedAt index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_spantype_startedat_idx',
         table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       });
@@ -83,18 +123,10 @@ export class ObservabilityStorageMSSQL extends ObservabilityStorageBase {
   }
 
   async dropIndexes(): Promise<void> {
-    if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementMSSQL({
-        pool: this.domainBase.getClient(),
-        schemaName: this.domainBase.getSchema(),
-      });
-    }
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_name_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`);
+    await this.dropIndex('mastra_ai_spans_traceid_startedat_idx');
+    await this.dropIndex('mastra_ai_spans_parentspanid_startedat_idx');
+    await this.dropIndex('mastra_ai_spans_name_idx');
+    await this.dropIndex('mastra_ai_spans_spantype_startedat_idx');
   }
 
   async init(): Promise<void> {

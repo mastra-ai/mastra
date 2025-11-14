@@ -5,6 +5,11 @@ description: Documentation for the MSSQL storage implementation in Mastra.
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import SchemaManagement from "./_schema-management.mdx";
+import UsingStorageDomains from "./_using-storage-domains.mdx";
+import IndexesByDomainIntro from "./_indexes-by-domain-intro.mdx";
+import IndexesByDomainFooter from "./_indexes-by-domain-footer.mdx";
+import IndexSchemaPrefixNote from "./_index-schema-prefix-note.mdx";
 
 # MSSQL Storage
 
@@ -59,23 +64,65 @@ const storage = new MSSQLStore({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance.",
+      isOptional: false,
+    },
+    {
       name: "connectionString",
       type: "string",
       description:
-        "MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)",
-      isOptional: false,
+        "MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true). Required when using connection string method. Must not be empty.",
+      isOptional: true,
+    },
+    {
+      name: "server",
+      type: "string",
+      description: "SQL Server hostname or IP address. Required when using individual parameters method. Must not be empty.",
+      isOptional: true,
+    },
+    {
+      name: "port",
+      type: "number",
+      description: "SQL Server port number. Required when using individual parameters method.",
+      isOptional: true,
+    },
+    {
+      name: "database",
+      type: "string",
+      description: "Database name. Required when using individual parameters method. Must not be empty.",
+      isOptional: true,
+    },
+    {
+      name: "user",
+      type: "string",
+      description: "Database username. Required when using individual parameters method. Must not be empty.",
+      isOptional: true,
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "Database password. Required when using individual parameters method. Must not be empty.",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "sql.IOptions",
+      description: "Additional MSSQL connection options (encrypt, trustServerCertificate, connection pooling, etc.). Defaults to { encrypt: true, trustServerCertificate: true }.",
+      isOptional: true,
     },
     {
       name: "schemaName",
       type: "string",
       description:
-        "The name of the schema you want the storage to use. Will use the default schema if not provided.",
+        "The name of the schema you want the storage to use. Defaults to 'dbo' if not provided.",
       isOptional: true,
     },
   ]}
 />
 
-## Constructor Examples
+## Instantiation
 
 You can instantiate `MSSQLStore` in the following ways:
 
@@ -117,38 +164,11 @@ const store5 = new MSSQLStore({
 });
 ```
 
-## Additional Notes
+<UsingStorageDomains />
 
-### Using Storage Domains
+<SchemaManagement />
 
-MSSQLStore implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
-
-```typescript copy
-const storage = new MSSQLStore({
-  id: 'mssql-storage',
-  connectionString: process.env.DATABASE_URL,
-});
-
-// Access domain stores
-const memoryStore = await storage.getStore('memory');
-const workflowsStore = await storage.getStore('workflows');
-```
-
-See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
-
-### Schema Management
-
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
-
-- `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata
-- `mastra_threads`: Stores conversation threads
-- `mastra_messages`: Stores individual messages
-- `mastra_traces`: Stores telemetry and tracing data
-- `mastra_scorers`: Stores scoring and evaluation data
-- `mastra_resources`: Stores resource working memory data
-
-### Direct Database and Pool Access
+## Direct Database and Pool Access
 
 `MSSQLStore` exposes the mssql connection pool as public fields:
 
@@ -163,3 +183,196 @@ This enables direct queries and custom transaction management. When using these 
 - Direct access bypasses any additional logic or validation provided by MSSQLStore methods.
 
 This approach is intended for advanced scenarios where low-level access is required.
+
+
+
+## Index Management
+
+MSSQL storage provides comprehensive index management capabilities to optimize query performance. Indexes are created automatically by each domain during initialization through their `createIndexes()` method.
+
+### Indexes by Domain
+
+<IndexesByDomainIntro />
+
+**Memory Domain** (`memory`):
+- `mastra_threads_resourceid_seqid_idx`: (resourceId, seq_id DESC) - Optimizes thread listing by resource
+- `mastra_messages_thread_id_seqid_idx`: (thread_id, seq_id DESC) - Optimizes message retrieval by thread
+
+**Evals Domain** (`evals`):
+- `mastra_scores_trace_id_span_id_seqid_idx`: (traceId, spanId, seq_id DESC) - Optimizes score queries by trace and span
+
+**Observability Domain** (`observability`):
+- `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt DESC) - Optimizes span queries by trace
+- `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt DESC) - Optimizes child span queries
+- `mastra_ai_spans_name_idx`: (name) - Optimizes span queries by operation name
+- `mastra_ai_spans_spantype_startedat_idx`: (spanType, startedAt DESC) - Optimizes span queries by type
+
+**Workflows Domain** (`workflows`):
+- No automatic indexes created (workflow snapshots use primary key lookups)
+
+<IndexesByDomainFooter />
+
+### Creating Custom Indexes
+
+Create additional indexes to optimize specific query patterns. The `createIndex` method is available on each domain store.
+
+```typescript copy
+import { MSSQLStore } from "@mastra/mssql";
+import { 
+  TABLE_THREADS, 
+  TABLE_MESSAGES, 
+  TABLE_SPANS,
+  TABLE_SCORERS,
+  TABLE_WORKFLOW_SNAPSHOT 
+} from "@mastra/core/storage";
+
+const storage = new MSSQLStore({
+  id: 'mssql-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const observabilityStore = await storage.getStore('observability');
+
+// Memory domain: Basic index for threads
+await memoryStore.createIndex({
+  name: "idx_threads_resource",
+  table: TABLE_THREADS,
+  columns: ["resourceId"],
+});
+
+// Memory domain: Composite index with sort order for messages
+await memoryStore.createIndex({
+  name: "idx_messages_composite",
+  table: TABLE_MESSAGES,
+  columns: ["thread_id", "seq_id DESC"],
+});
+
+// Observability domain: Index for spans
+await observabilityStore.createIndex({
+  name: "idx_spans_attributes",
+  table: TABLE_SPANS,
+  columns: ["attributes"],
+});
+```
+
+For more advanced use cases, you can also use:
+
+- `unique: true` for unique constraints
+- `where: 'condition'` for filtered indexes (partial indexes)
+
+When using custom schemas, indexes are automatically prefixed with the schema name:
+
+```typescript copy
+import { TABLE_THREADS } from "@mastra/core/storage";
+
+const storage = new MSSQLStore({
+  id: 'mssql-storage',
+  connectionString: process.env.DATABASE_URL,
+  schemaName: "custom_schema",
+});
+
+const memoryStore = await storage.getStore('memory');
+
+// Creates index as: custom_schema_idx_threads_resource
+await memoryStore.createIndex({
+  name: "idx_threads_resource",
+  table: TABLE_THREADS,
+  columns: ["resourceId"],
+});
+```
+
+### Index Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Unique name for the index",
+      isOptional: false,
+    },
+    {
+      name: "table",
+      type: "TABLE_THREADS | TABLE_MESSAGES | TABLE_RESOURCES | ...",
+      description: "Table constant from @mastra/core/storage (e.g., TABLE_THREADS). Type-safe and domain-specific.",
+      isOptional: false,
+    },
+    {
+      name: "columns",
+      type: "string[]",
+      description:
+        "Array of column names with optional sort order (e.g., ['id', 'seq_id DESC'])",
+      isOptional: false,
+    },
+    {
+      name: "unique",
+      type: "boolean",
+      description: "Creates a unique constraint index",
+      isOptional: true,
+    },
+    {
+      name: "where",
+      type: "string",
+      description: "Filtered index condition (MSSQL specific)",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Managing Indexes
+
+List and monitor existing indexes using domain-specific methods:
+
+```typescript copy
+import { MSSQLStore } from "@mastra/mssql";
+import { TABLE_THREADS, TABLE_MESSAGES } from "@mastra/core/storage";
+
+const storage = new MSSQLStore({
+  id: 'mssql-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+
+// List indexes for a specific table (table parameter is required)
+const threadIndexes = await memoryStore.listIndexes(TABLE_THREADS);
+console.log(threadIndexes);
+// [
+//   {
+//     name: 'mastra_threads_pkey',
+//     table: 'mastra_threads',
+//     columns: ['id'],
+//     unique: true,
+//     size: '16 KB',
+//     definition: ''
+//   },
+//   ...
+// ]
+
+// List indexes for messages table
+const messageIndexes = await memoryStore.listIndexes(TABLE_MESSAGES);
+
+// Get detailed statistics for an index
+const stats = await memoryStore.describeIndex("idx_threads_resource");
+console.log(stats);
+// {
+//   name: 'idx_threads_resource',
+//   table: 'mastra_threads',
+//   columns: ['resourceId', 'seq_id'],
+//   unique: false,
+//   size: '128 KB',
+//   definition: '',
+//   method: 'nonclustered',
+//   scans: 1542,           // Number of index scans
+//   tuples_read: 45230,    // Tuples read via index
+//   tuples_fetched: 12050  // Tuples fetched via index
+// }
+
+// Drop an index
+await memoryStore.dropIndex("idx_threads_resource");
+```
+
+<IndexSchemaPrefixNote />

@@ -17,6 +17,9 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '@mastra/core/storage';
 import sql from 'mssql';
 import { MSSQLDomainBase } from '../base';
@@ -24,9 +27,12 @@ import type { MSSQLDomainConfig } from '../base';
 import { IndexManagementMSSQL } from '../operations';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
+type MemoryTableNames = typeof TABLE_MESSAGES | typeof TABLE_THREADS | typeof TABLE_RESOURCES;
+
 export class MemoryStorageMSSQL extends MemoryStorageBase {
   private domainBase: MSSQLDomainBase;
   indexManagement?: IndexManagementMSSQL;
+  schemaPrefix?: string;
 
   private _parseAndFormatMessages(messages: any[]) {
     // Parse content back to objects if they were stringified during storage
@@ -53,22 +59,56 @@ export class MemoryStorageMSSQL extends MemoryStorageBase {
   constructor(opts: MSSQLDomainConfig) {
     super();
     this.domainBase = new MSSQLDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementMSSQL({
+        pool: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends MemoryTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends MemoryTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
   }
 
   async createIndexes(): Promise<void> {
-    // Create indexes for memory domain
-    const indexManagement = new IndexManagementMSSQL({
-      pool: this.domainBase.getClient(),
-      schemaName: this.domainBase.getSchema(),
-    });
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
-    this.indexManagement = indexManagement;
-
     // Create threads index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_threads_resourceid_seqid_idx`,
+      await this.createIndex({
+        name: 'mastra_threads_resourceid_seqid_idx',
         table: TABLE_THREADS,
         columns: ['resourceId', 'seq_id DESC'],
       });
@@ -79,8 +119,8 @@ export class MemoryStorageMSSQL extends MemoryStorageBase {
 
     // Create messages index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_messages_thread_id_seqid_idx`,
+      await this.createIndex({
+        name: 'mastra_messages_thread_id_seqid_idx',
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'seq_id DESC'],
       });
@@ -91,16 +131,8 @@ export class MemoryStorageMSSQL extends MemoryStorageBase {
   }
 
   async dropIndexes(): Promise<void> {
-    if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementMSSQL({
-        pool: this.domainBase.getClient(),
-        schemaName: this.domainBase.getSchema(),
-      });
-    }
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_threads_resourceid_seqid_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_messages_thread_id_seqid_idx`);
+    await this.dropIndex('mastra_threads_resourceid_seqid_idx');
+    await this.dropIndex('mastra_messages_thread_id_seqid_idx');
   }
 
   async init(): Promise<void> {

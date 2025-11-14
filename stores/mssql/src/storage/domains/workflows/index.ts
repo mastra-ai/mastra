@@ -1,18 +1,73 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { WorkflowsStorageBase, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, normalizePerPage } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
 import { MSSQLDomainBase } from '../base';
 import type { MSSQLDomainConfig } from '../base';
+import { IndexManagementMSSQL } from '../operations';
 import { getSchemaName, getTableName } from '../utils';
+
+type WorkflowsTableNames = typeof TABLE_WORKFLOW_SNAPSHOT;
 
 export class WorkflowsStorageMSSQL extends WorkflowsStorageBase {
   private domainBase: MSSQLDomainBase;
+  indexManagement?: IndexManagementMSSQL;
+  schemaPrefix?: string;
 
   constructor(opts: MSSQLDomainConfig) {
     super();
     this.domainBase = new MSSQLDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'dbo' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementMSSQL({
+        pool: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends WorkflowsTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends WorkflowsTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
   }
 
   async init(): Promise<void> {

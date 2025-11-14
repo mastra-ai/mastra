@@ -7,6 +7,9 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 import SchemaManagement from "./_schema-management.mdx";
 import UsingStorageDomains from "./_using-storage-domains.mdx";
+import IndexesByDomainIntro from "./_indexes-by-domain-intro.mdx";
+import IndexesByDomainFooter from "./_indexes-by-domain-footer.mdx";
+import IndexSchemaPrefixNote from "./_index-schema-prefix-note.mdx";
 
 # PostgreSQL Storage
 
@@ -123,13 +126,32 @@ const store5 = new PostgresStore({
 
 <SchemaManagement />
 
+
+## Direct Database and Pool Access
+
+`PostgresStore` exposes both the underlying database object and the pg-promise instance as public fields:
+
+```typescript
+store.db; // pg-promise database instance
+store.pgp; // pg-promise main instance
+```
+
+This enables direct queries and custom transaction management. When using these fields:
+
+- You are responsible for proper connection and transaction handling.
+- Closing the store (`store.close()`) will destroy the associated connection pool.
+- Direct access bypasses any additional logic or validation provided by PostgresStore methods.
+
+This approach is intended for advanced scenarios where low-level access is required.
+
+
 ## Index Management
 
 PostgreSQL storage provides comprehensive index management capabilities to optimize query performance. Indexes are created automatically by each domain during initialization through their `createIndexes()` method.
 
-### Automatic Performance Indexes by Domain
+### Indexes by Domain
 
-Each domain creates its own indexes when initialized:
+<IndexesByDomainIntro />
 
 **Memory Domain** (`memory`):
 - `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC) - Optimizes thread listing by resource
@@ -147,25 +169,7 @@ Each domain creates its own indexes when initialized:
 **Workflows Domain** (`workflows`):
 - No automatic indexes created (workflow snapshots use primary key lookups)
 
-These indexes are created automatically when each domain's `init()` method is called. Index creation failures are logged but don't prevent domain initialization, as indexes are performance optimizations.
-
-### Direct Database and Pool Access
-
-`PostgresStore` exposes both the underlying database object and the pg-promise instance as public fields:
-
-```typescript
-store.db; // pg-promise database instance
-store.pgp; // pg-promise main instance
-```
-
-This enables direct queries and custom transaction management. When using these fields:
-
-- You are responsible for proper connection and transaction handling.
-- Closing the store (`store.close()`) will destroy the associated connection pool.
-- Direct access bypasses any additional logic or validation provided by PostgresStore methods.
-
-This approach is intended for advanced scenarios where low-level access is required.
-
+<IndexesByDomainFooter />
 
 ### Creating Custom Indexes
 
@@ -364,7 +368,7 @@ console.log(stats);
 await memoryStore.dropIndex("idx_threads_resource");
 ```
 
-**Note**: When using custom schemas, index names are automatically prefixed with the schema name. Pass the index name without the schema prefix (e.g., `"idx_threads_resource"` instead of `"custom_schema_idx_threads_resource"`).
+<IndexSchemaPrefixNote />
 
 ### Index Types and Use Cases
 
