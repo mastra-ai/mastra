@@ -3000,8 +3000,8 @@ importers:
         specifier: ^5.2.0
         version: 5.2.0
       '@inngest/realtime':
-        specifier: ^0.4.4
-        version: 0.4.4(encoding@0.1.13)(express@5.1.0)(hono@4.10.3)(react@19.2.0)(typescript@5.9.3)
+        specifier: ^0.4.5
+        version: 0.4.5(encoding@0.1.13)(express@5.1.0)(hono@4.10.3)(react@19.2.0)(typescript@5.9.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -4520,8 +4520,8 @@ importers:
   workflows/inngest:
     dependencies:
       '@inngest/realtime':
-        specifier: ^0.4.4
-        version: 0.4.4(encoding@0.1.13)(express@5.1.0)(hono@4.10.3)(react@19.2.0)(typescript@5.9.3)
+        specifier: ^0.4.5
+        version: 0.4.5(encoding@0.1.13)(express@5.1.0)(hono@4.10.3)(react@19.2.0)(typescript@5.9.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -6854,8 +6854,8 @@ packages:
   '@inngest/ai@0.1.7':
     resolution: {integrity: sha512-5xWatW441jacGf9czKEZdgAmkvoy7GS2tp7X8GSbdGeRXzjisHR6vM+q8DQbv6rqRsmQoCQ5iShh34MguELvUQ==}
 
-  '@inngest/realtime@0.4.4':
-    resolution: {integrity: sha512-8s/JTZ19trHYX3c5Fo+J+2mdJtjUv4Ogr8dngOukqKzeSub9Uaxi7aP6Ci7e/f2pp+IxbFZMvr66voReiIf1iQ==}
+  '@inngest/realtime@0.4.5':
+    resolution: {integrity: sha512-idT9MPazztBoTkxHIJMJ5oQUhY5P8/RLYtFZighmsTNRLJ/xTP7uAzh899nuorQeCVc+57yecjQ/52UZoIdrPQ==}
     peerDependencies:
       react: '>=18.0.0'
 
@@ -19392,7 +19392,7 @@ snapshots:
       '@types/node': 22.13.17
       typescript: 5.9.3
 
-  '@inngest/realtime@0.4.4(encoding@0.1.13)(express@5.1.0)(hono@4.10.3)(react@19.2.0)(typescript@5.9.3)':
+  '@inngest/realtime@0.4.5(encoding@0.1.13)(express@5.1.0)(hono@4.10.3)(react@19.2.0)(typescript@5.9.3)':
     dependencies:
       '@standard-schema/spec': 1.0.0
       debug: 4.4.3
