@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 
 export const textNaturalizerAgent = new Agent({
@@ -48,7 +47,7 @@ Prepare scripts that:
 
 The prepared script should be optimized for voice synthesis systems to generate natural and professional audio output.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   voice: new OpenAIVoice({
     speechModel: {
       name: 'tts-1-hd',

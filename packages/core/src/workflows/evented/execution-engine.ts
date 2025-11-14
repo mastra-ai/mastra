@@ -3,7 +3,13 @@ import type { Event } from '../../events/types';
 import type { Mastra } from '../../mastra';
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
-import type { Emitter, SerializedStepFlowEntry, StepResult } from '../types';
+import type {
+  Emitter,
+  SerializedStepFlowEntry,
+  StepResult,
+  RestartExecutionParams,
+  TimeTravelExecutionParams,
+} from '../types';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -40,6 +46,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
     graph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
+    restart?: RestartExecutionParams;
+    timeTravel?: TimeTravelExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -75,6 +83,23 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resumeSteps: params.resume.steps,
           prevResult: { status: 'success', output: prevResult?.payload },
           resumeData: params.resume.resumePayload,
+          requestContext: Object.fromEntries(params.requestContext.entries()),
+          format: params.format,
+        },
+      });
+    } else if (params.timeTravel) {
+      const prevStep = getStep(this.mastra!.getWorkflow(params.workflowId), params.timeTravel.executionPath);
+      const prevResult = params.timeTravel.stepResults[prevStep?.id ?? 'input'];
+      await pubsub.publish('workflows', {
+        type: 'workflow.start',
+        runId: params.runId,
+        data: {
+          workflowId: params.workflowId,
+          runId: params.runId,
+          executionPath: params.timeTravel.executionPath,
+          stepResults: params.timeTravel.stepResults,
+          timeTravel: params.timeTravel,
+          prevResult: { status: 'success', output: prevResult?.payload },
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
         },

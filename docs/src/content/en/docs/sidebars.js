@@ -64,6 +64,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/human-in-the-loop-with-tools",
+          label: "Human in the Loop with Tools",
+        },
+        {
+          type: "doc",
           id: "agents/agent-memory",
           label: "Memory",
         },
@@ -110,11 +115,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/error-handling",
-          label: "Error Handling",
-        },
-        {
-          type: "doc",
           id: "workflows/human-in-the-loop",
           label: "Human-in-the-loop",
         },
@@ -122,6 +122,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/snapshots",
           label: "Snapshots",
+        },
+        {
+          type: "doc",
+          id: "workflows/error-handling",
+          label: "Error Handling",
         },
         {
           type: "doc",
@@ -224,6 +229,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "memory/storage/memory-with-mongodb",
+              label: "Memory with MongoDB",
+            },
+            {
+              type: "doc",
               id: "memory/storage/memory-with-pg",
               label: "Memory with PostgreSQL",
             },
@@ -268,8 +278,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "server-db/production-server",
-          label: "Production Server",
+          id: "server-db/mastra-server",
+          label: "Mastra Server",
         },
         {
           type: "doc",
@@ -309,8 +319,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/server-deployment",
-          label: "Server deployment",
+          id: "deployment/building-mastra",
+          label: "Building Mastra",
         },
         {
           type: "doc",
@@ -324,27 +334,27 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Serverless Platforms",
+          label: "Mastra Cloud",
           items: [
             {
               type: "doc",
-              id: "deployment/serverless-platforms/index",
+              id: "deployment/mastra-cloud/overview",
               label: "Overview",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/cloudflare-deployer",
-              label: "Cloudflare",
+              id: "deployment/mastra-cloud/setting-up",
+              label: "Setup & Deploy",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/netlify-deployer",
-              label: "Netlify",
+              id: "deployment/mastra-cloud/dashboard",
+              label: "Dashboard",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/vercel-deployer",
-              label: "Vercel",
+              id: "deployment/mastra-cloud/observability",
+              label: "Observability",
             },
           ],
         },
@@ -369,41 +379,30 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "deployment/cloud-providers/azure-app-services",
+              label: "Azure App Services",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/cloudflare-deployer",
+              label: "Cloudflare",
+            },
+            {
+              type: "doc",
               id: "deployment/cloud-providers/digital-ocean",
               label: "Digital Ocean",
             },
             {
               type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
+              id: "deployment/cloud-providers/netlify-deployer",
+              label: "Netlify",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/vercel-deployer",
+              label: "Vercel",
             },
           ],
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Mastra Cloud",
-      items: [
-        {
-          type: "doc",
-          id: "mastra-cloud/overview",
-          label: "Overview",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/setting-up",
-          label: "Setup & Deploy",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/dashboard",
-          label: "Dashboard",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/observability",
-          label: "Observability",
         },
       ],
     },

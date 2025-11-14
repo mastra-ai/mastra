@@ -1,5 +1,36 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.2
+
+### Patch Changes
+
+- Make suspendPayload optional when calling `suspend()` ([#9926](https://github.com/mastra-ai/mastra/pull/9926))
+  Save value returned as `suspendOutput` if user returns data still after calling `suspend()`
+  Automatically call `commit()` on uncommitted workflows when registering in Mastra instance
+  Show actual suspendPayload on Studio in suspend/resume flow
+- Updated dependencies [[`627067b`](https://github.com/mastra-ai/mastra/commit/627067b22eeb26601f65fee3646ba17fc0c91501), [`465ac05`](https://github.com/mastra-ai/mastra/commit/465ac0526a91d175542091c675181f1a96c98c46)]:
+  - @mastra/ai-sdk@1.0.0-beta.1
+  - @mastra/core@1.0.0-beta.2
+  - @mastra/client-js@1.0.0-beta.2
+  - @mastra/react@0.1.0-beta.2
+
+## 7.0.0-beta.1
+
+### Patch Changes
+
+- Make MainSidebar toggle button sticky to bottom, always visible ([#9682](https://github.com/mastra-ai/mastra/pull/9682))
+
+- Removing uneeded files ([#9877](https://github.com/mastra-ai/mastra/pull/9877))
+
+- Explicitly set color of line number in CodeMirror ([#9878](https://github.com/mastra-ai/mastra/pull/9878))
+
+- Add visual styles and labels for more workflow node types ([#9777](https://github.com/mastra-ai/mastra/pull/9777))
+
+- Updated dependencies [[`910db9e`](https://github.com/mastra-ai/mastra/commit/910db9e0312888495eb5617b567f247d03303814), [`dbd9db0`](https://github.com/mastra-ai/mastra/commit/dbd9db0d5c2797a210b9098e7e3e613718e5442f), [`e7266a2`](https://github.com/mastra-ai/mastra/commit/e7266a278db02035c97a5e9cd9d1669a6b7a535d)]:
+  - @mastra/core@1.0.0-beta.1
+  - @mastra/client-js@1.0.0-beta.1
+  - @mastra/react@0.1.0-beta.1
+
 ## 7.0.0-beta.0
 
 ### Major Changes

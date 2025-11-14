@@ -27,23 +27,28 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "example:basic": "tsx examples/basic.ts",
+    "example:traced": "tsx examples/with-logger-traced.ts",
+    "example:eval": "tsx examples/with-eval.ts"
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "braintrust": "^0.4.3",
-    "@mastra/observability": "workspace:*"
+    "@mastra/observability": "workspace:*",
+    "braintrust": "^0.4.9"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

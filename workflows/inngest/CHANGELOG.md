@@ -1,5 +1,16 @@
 # @mastra/inngest
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Make suspendPayload optional when calling `suspend()` ([#9926](https://github.com/mastra-ai/mastra/pull/9926))
+  Save value returned as `suspendOutput` if user returns data still after calling `suspend()`
+  Automatically call `commit()` on uncommitted workflows when registering in Mastra instance
+  Show actual suspendPayload on Studio in suspend/resume flow
+- Updated dependencies [[`465ac05`](https://github.com/mastra-ai/mastra/commit/465ac0526a91d175542091c675181f1a96c98c46)]:
+  - @mastra/core@1.0.0-beta.2
+
 ## 1.0.0-beta.0
 
 ### Major Changes

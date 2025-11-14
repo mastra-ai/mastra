@@ -1,3 +1,4 @@
+import type { WritableStream } from 'stream/web';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';

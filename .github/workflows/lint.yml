@@ -99,14 +99,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
 
-      - name: Setup Node.js 22.x
-        uses: actions/setup-node@v5
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          node-version: 22.13.0
           package-manager-cache: false
+          install-dependencies: false
 
       - name: Install dependencies
-        run: npm install globby --no-package-lock
+        run: pnpm add -w --no-lockfile globby
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
@@ -127,14 +127,14 @@ jobs:
           # with the correct commits
           fetch-depth: 0
 
-      - name: Setup Node.js 22.x
-        uses: actions/setup-node@v4
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          node-version: 22.13.0
           package-manager-cache: false
+          install-dependencies: false
 
       - name: Install dependencies
-        run: npm install semver --no-package-lock
+        run: pnpm add -w --no-lockfile semver
 
       - name: bump versions
         run: npx changeset version

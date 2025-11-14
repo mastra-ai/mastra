@@ -1,5 +1,5 @@
 ---
-title: "Reference: PII Detector | Processors | Mastra Docs"
+title: "Reference: PII Detector | Processors"
 description: "Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses."
 ---
 
@@ -100,10 +100,16 @@ const processor = new PIIDetector({
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Processor identifier set to 'pii-detector'",
+      isOptional: false,
+    },
+    {
       name: "name",
       type: "string",
-      description: "Processor name set to 'pii-detector'",
-      isOptional: false,
+      description: "Optional processor display name",
+      isOptional: true,
     },
     {
       name: "processInput",

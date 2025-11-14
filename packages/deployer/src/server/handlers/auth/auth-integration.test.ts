@@ -44,20 +44,16 @@ describe('auth middleware integration tests', () => {
   describe('Public Routes', () => {
     it('should allow access to explicitly public routes without authentication', async () => {
       const routes = [
-        {
-          ...registerApiRoute('/webhooks/github', {
-            method: 'POST',
-            handler: c => c.json({ received: true }),
-          }),
+        registerApiRoute('/webhooks/github', {
+          method: 'POST',
+          handler: c => c.json({ received: true }),
           requiresAuth: false,
-        },
-        {
-          ...registerApiRoute('/public/status', {
-            method: 'GET',
-            handler: c => c.json({ status: 'public' }),
-          }),
+        }),
+        registerApiRoute('/public/status', {
+          method: 'GET',
+          handler: c => c.json({ status: 'public' }),
           requiresAuth: false,
-        },
+        }),
       ];
 
       const mastra = createMastraWithRoutes(routes);
@@ -109,20 +105,14 @@ describe('auth middleware integration tests', () => {
   describe('Protected Routes', () => {
     it('should deny access to explicitly protected routes without authentication', async () => {
       const routes = [
-        {
-          ...registerApiRoute('/data/sensitive', {
-            method: 'GET',
-            handler: c => c.json({ data: 'sensitive information' }),
-          }),
-          requiresAuth: true,
-        },
-        {
-          ...registerApiRoute('/user/profile', {
-            method: 'GET',
-            handler: c => c.json({ profile: 'user data' }),
-          }),
-          requiresAuth: true,
-        },
+        registerApiRoute('/data/sensitive', {
+          method: 'GET',
+          handler: c => c.json({ data: 'sensitive information' }),
+        }),
+        registerApiRoute('/user/profile', {
+          method: 'GET',
+          handler: c => c.json({ profile: 'user data' }),
+        }),
       ];
 
       const mastra = createMastraWithRoutes(routes);
@@ -141,20 +131,14 @@ describe('auth middleware integration tests', () => {
 
     it('should allow access to protected routes with valid authentication', async () => {
       const routes = [
-        {
-          ...registerApiRoute('/data/sensitive', {
-            method: 'GET',
-            handler: c => c.json({ data: 'sensitive information' }),
-          }),
-          requiresAuth: true,
-        },
-        {
-          ...registerApiRoute('/user/profile', {
-            method: 'POST',
-            handler: c => c.json({ updated: true }),
-          }),
-          requiresAuth: true,
-        },
+        registerApiRoute('/data/sensitive', {
+          method: 'GET',
+          handler: c => c.json({ data: 'sensitive information' }),
+        }),
+        registerApiRoute('/user/profile', {
+          method: 'POST',
+          handler: c => c.json({ updated: true }),
+        }),
       ];
 
       const mastra = createMastraWithRoutes(routes);
@@ -186,13 +170,10 @@ describe('auth middleware integration tests', () => {
 
     it('should deny access with invalid authentication tokens', async () => {
       const routes = [
-        {
-          ...registerApiRoute('/data/sensitive', {
-            method: 'GET',
-            handler: c => c.json({ data: 'sensitive information' }),
-          }),
-          requiresAuth: true,
-        },
+        registerApiRoute('/data/sensitive', {
+          method: 'GET',
+          handler: c => c.json({ data: 'sensitive information' }),
+        }),
       ];
 
       const mastra = createMastraWithRoutes(routes);
@@ -215,22 +196,16 @@ describe('auth middleware integration tests', () => {
   });
 
   describe('Default Behavior', () => {
-    it('should default to requiring authentication when requiresAuth is not specified', async () => {
+    it('should default to requiring authentication when auth is not specified', async () => {
       const routes = [
-        {
-          ...registerApiRoute('/default/behavior', {
-            method: 'GET',
-            handler: c => c.json({ message: 'default behavior' }),
-          }),
-          // No requiresAuth specified - should default to true
-        },
-        {
-          ...registerApiRoute('/another/default', {
-            method: 'POST',
-            handler: c => c.json({ created: true }),
-          }),
-          // No requiresAuth specified - should default to true
-        },
+        registerApiRoute('/default/behavior', {
+          method: 'GET',
+          handler: c => c.json({ message: 'default behavior' }),
+        }),
+        registerApiRoute('/another/default', {
+          method: 'POST',
+          handler: c => c.json({ created: true }),
+        }),
       ];
 
       const mastra = createMastraWithRoutes(routes);
@@ -301,13 +276,11 @@ describe('auth middleware integration tests', () => {
 
     it('should override pattern protection with explicit route configuration', async () => {
       const routes = [
-        {
-          ...registerApiRoute('/custom/public-override', {
-            method: 'GET',
-            handler: c => c.json({ message: 'public override' }),
-          }),
+        registerApiRoute('/custom/public-override', {
+          method: 'GET',
+          handler: c => c.json({ message: 'public override' }),
           requiresAuth: false,
-        },
+        }),
       ];
 
       const mastra = createMastraWithRoutes(routes);
@@ -349,27 +322,19 @@ describe('auth middleware integration tests', () => {
   describe('HTTP Method Handling', () => {
     it('should handle different auth requirements for same path with different methods', async () => {
       const routes = [
-        {
-          ...registerApiRoute('/multi/endpoint', {
-            method: 'GET',
-            handler: c => c.json({ method: 'GET', data: 'public' }),
-          }),
+        registerApiRoute('/multi/endpoint', {
+          method: 'GET',
+          handler: c => c.json({ method: 'GET', data: 'public' }),
           requiresAuth: false,
-        },
-        {
-          ...registerApiRoute('/multi/endpoint', {
-            method: 'POST',
-            handler: c => c.json({ method: 'POST', data: 'protected' }),
-          }),
-          requiresAuth: true,
-        },
-        {
-          ...registerApiRoute('/multi/endpoint', {
-            method: 'PUT',
-            handler: c => c.json({ method: 'PUT', data: 'default' }),
-          }),
-          // No requiresAuth - should default to true
-        },
+        }),
+        registerApiRoute('/multi/endpoint', {
+          method: 'POST',
+          handler: c => c.json({ method: 'POST', data: 'protected' }),
+        }),
+        registerApiRoute('/multi/endpoint', {
+          method: 'PUT',
+          handler: c => c.json({ method: 'PUT', data: 'default' }),
+        }),
       ];
 
       const mastra = createMastraWithRoutes(routes);
@@ -419,6 +384,29 @@ describe('auth middleware integration tests', () => {
       });
       const putAuthRes = await app.request(putAuthReq);
       expect(putAuthRes.status).toBe(200);
+    });
+  });
+
+  describe('Legacy Compatibility', () => {
+    it('should still honor routes that manually set requiresAuth', async () => {
+      const routes = [
+        {
+          ...registerApiRoute('/legacy/public', {
+            method: 'GET',
+            handler: c => c.json({ ok: true }),
+          }),
+          requiresAuth: false,
+        },
+      ];
+
+      const mastra = createMastraWithRoutes(routes);
+      const app = await createHonoServer(mastra, { tools: {} });
+
+      const req = new Request('http://localhost/legacy/public');
+      const res = await app.request(req);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
     });
   });
 });

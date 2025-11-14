@@ -40,8 +40,8 @@ const EXPORT_TO_SUBPATH: Record<string, string> = {
   CompositeVoice: '@mastra/core/voice',
 
   // Scorers/Evals
-  runEvals: '@mastra/core/scores',
-  createScorer: '@mastra/core/scores',
+  runEvals: '@mastra/core/evals',
+  createScorer: '@mastra/core/evals',
 
   // Server
   registerApiRoute: '@mastra/core/server',

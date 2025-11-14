@@ -15,6 +15,7 @@ interface AgentMemoryProps {
 
 export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const { threadInput: chatInputValue } = useThreadInput();
+
   const { paths, navigate } = useLinkComponent();
 
   // Get memory config to check if semantic recall is enabled
