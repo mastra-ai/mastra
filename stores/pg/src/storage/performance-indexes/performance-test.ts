@@ -130,12 +130,19 @@ export class PostgresPerformanceTest {
 
   async createAutomaticIndexes(): Promise<void> {
     console.info('Creating indexes...');
-    // Each domain manages its own indexes
-    await this.store.stores.memory.createIndexes();
-    if (this.store.stores.observability) {
-      await this.store.stores.observability.createIndexes();
+    const memoryStore = await this.store.getStore('memory');
+    if (memoryStore) {
+      await memoryStore.createIndexes();
     }
-    await this.store.stores.evals.createIndexes();
+    // Each domain manages its own indexes
+    const observabilityStore = await this.store.getStore('observability');
+    if (observabilityStore) {
+      await observabilityStore.createIndexes();
+    }
+    const evalsStore = await this.store.getStore('evals');
+    if (evalsStore) {
+      await evalsStore.createIndexes();
+    }
   }
 
   async seedTestData(): Promise<void> {

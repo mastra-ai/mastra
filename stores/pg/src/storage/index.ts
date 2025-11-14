@@ -5,14 +5,14 @@ import pgPromise from 'pg-promise';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { EvalsStoragePG } from './domains/evals';
-import { MemoryPG } from './domains/memory';
+import { MemoryStoragePG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
-import { WorkflowsPG } from './domains/workflows';
+import { WorkflowsStoragePG } from './domains/workflows';
 
-export { EvalsStoragePG } from './domains/evals';
-export { MemoryPG } from './domains/memory';
-export { ObservabilityPG } from './domains/observability';
-export { WorkflowsPG } from './domains/workflows';
+export { EvalsStoragePG as EvalsStorage } from './domains/evals';
+export { MemoryStoragePG as MemoryStorage } from './domains/memory';
+export { ObservabilityPG as ObservabilityStorage } from './domains/observability';
+export { WorkflowsStoragePG as WorkflowsStorage } from './domains/workflows';
 
 export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 export class PostgresStore extends MastraStorage {
@@ -70,8 +70,8 @@ export class PostgresStore extends MastraStorage {
       this.#db = this.#pgp(this.#config as any);
 
       const scores = new EvalsStoragePG({ client: this.#db, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.#db, schema: this.schema });
-      const memory = new MemoryPG({ client: this.#db, schema: this.schema });
+      const workflows = new WorkflowsStoragePG({ client: this.#db, schema: this.schema });
+      const memory = new MemoryStoragePG({ client: this.#db, schema: this.schema });
       const observability = new ObservabilityPG({ client: this.#db, schema: this.schema });
 
       this.stores = {

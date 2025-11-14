@@ -35,7 +35,7 @@ type MessageRowFromDB = {
   resourceId: string;
 };
 
-export class MemoryPG extends MemoryStorageBase {
+export class MemoryStoragePG extends MemoryStorageBase {
   private domainBase: PGDomainBase;
   indexManagement?: IndexManagementPG;
 

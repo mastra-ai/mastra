@@ -26,7 +26,7 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   };
 }
 
-export class WorkflowsPG extends WorkflowsStorageBase {
+export class WorkflowsStoragePG extends WorkflowsStorageBase {
   private domainBase: PGDomainBase;
 
   constructor(opts: PGDomainConfig) {
