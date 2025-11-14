@@ -1834,7 +1834,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           id: `workflow-${workflowName}`,
           description: workflow.description || `Workflow: ${workflowName}`,
           inputSchema: workflow.inputSchema,
-          outputSchema: workflow.outputSchema,
+          outputSchema: z.object({ result: workflow.outputSchema, runId: z.string() }),
           mastra: this.#mastra,
           // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
           // manually wrap workflow tools with tracing, so that we can pass the
@@ -1890,7 +1890,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 result = await streamResult.result;
               }
 
-              return result;
+              return { result, runId: run.runId };
             } catch (err) {
               const mastraError = new MastraError(
                 {
