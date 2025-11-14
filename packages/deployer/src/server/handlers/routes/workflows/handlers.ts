@@ -3,6 +3,7 @@ import {
   listWorkflowsHandler as getOriginalWorkflowsHandler,
   getWorkflowByIdHandler as getOriginalWorkflowByIdHandler,
   startAsyncWorkflowHandler as getOriginalStartAsyncWorkflowHandler,
+  executeWorkflowHandler as getOriginalExecuteWorkflowHandler,
   createWorkflowRunHandler as getOriginalCreateWorkflowRunHandler,
   startWorkflowRunHandler as getOriginalStartWorkflowRunHandler,
   streamLegacyWorkflowHandler as getOriginalStreamLegacyWorkflowHandler,
@@ -81,6 +82,29 @@ export async function startAsyncWorkflowHandler(c: Context) {
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
+      mastra,
+      requestContext,
+      workflowId,
+      runId,
+      inputData,
+      tracingOptions,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error executing workflow');
+  }
+}
+
+export async function executeWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const requestContext = c.get('requestContext');
+    const workflowId = c.req.param('workflowId');
+    const { inputData, tracingOptions } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    const result = await getOriginalExecuteWorkflowHandler({
       mastra,
       requestContext,
       workflowId,

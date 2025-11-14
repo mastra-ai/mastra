@@ -6,6 +6,7 @@ import type {
   ListWorkflowRunsResponse,
   ListWorkflowRunsParams,
   WorkflowRunResult,
+  WorkflowExecutionResult,
   GetWorkflowRunByIdResponse,
   GetWorkflowRunExecutionResultResponse,
   StreamVNextChunkType,
@@ -308,6 +309,35 @@ export class Workflow extends BaseResource {
     return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
       body: { inputData: params.inputData, requestContext, tracingOptions: params.tracingOptions },
+    });
+  }
+
+  /**
+   * Executes a workflow and returns the complete result in a single call
+   * @param params - Object containing the optional runId, inputData, requestContext and tracingOptions
+   * @returns Promise containing the workflow execution result with status, result, runId, and steps
+   */
+  execute(params: {
+    inputData: Record<string, any>;
+    requestContext?: RequestContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+    runId?: string;
+  }): Promise<WorkflowExecutionResult> {
+    const searchParams = new URLSearchParams();
+
+    if (params.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const requestContext = parseClientRequestContext(params.requestContext);
+
+    return this.request(`/api/workflows/${this.workflowId}/execute?${searchParams.toString()}`, {
+      method: 'POST',
+      body: {
+        inputData: params.inputData,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+      },
     });
   }
 

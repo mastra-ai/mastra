@@ -136,6 +136,48 @@ try {
 
 This is useful when dealing with long running workflows. You can use this to poll the result of the workflow run.
 
+### Execute Workflow
+
+Execute a workflow and return the final result in a single call. This method simplifies workflow execution by combining run creation and execution into a single API call, reducing network latency:
+
+```typescript
+const result = await workflow.execute({
+  inputData: {
+    city: "New York",
+  },
+});
+
+console.log(result.status); // 'success' | 'failed' | 'suspended'
+console.log(result.result); // Final workflow output
+console.log(result.steps);  // All step execution details
+```
+
+**With custom runId:**
+
+```typescript
+const result = await workflow.execute({
+  inputData: {
+    city: "New York",
+  },
+  runId: "custom-run-id",
+});
+```
+
+**With tracing options:**
+
+```typescript
+const result = await workflow.execute({
+  inputData: {
+    city: "New York",
+  },
+  tracingOptions: {
+    metadata: { source: "api" },
+  },
+});
+```
+
+This method combines workflow run creation and execution in a single call, returning the complete workflow result including status, output, and step details.
+
 ### Workflow run result
 
 A workflow run result yields the following:
