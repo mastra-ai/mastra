@@ -19,7 +19,7 @@ function createTestMessage(
     id,
     role,
     content: {
-          format: 2,
+      format: 2,
       parts: content ? [{ type: 'text', text: content }] : [],
       content,
     },
@@ -44,6 +44,7 @@ describe('SemanticRecall', () => {
       query: vi.fn(),
       listIndexes: vi.fn(),
       createIndex: vi.fn(),
+      upsert: vi.fn(),
     } as any;
 
     // Mock embedder
@@ -99,9 +100,7 @@ describe('SemanticRecall', () => {
       });
 
       // Mock vector query
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       vi.mocked(mockVector.query).mockResolvedValue([
         {
@@ -190,9 +189,7 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       vi.mocked(mockVector.query).mockResolvedValue([
         { id: 'vec-1', score: 0.95, metadata: { message_id: 'msg-1', thread_id: 'thread-1' } },
@@ -252,9 +249,7 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       // Return results with varying scores
       vi.mocked(mockVector.query).mockResolvedValue([
@@ -308,12 +303,10 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       vi.mocked(mockVector.query).mockResolvedValue([]);
-      vi.mocked(mockStorage.listMessages).mockResolvedValue({ 
+      vi.mocked(mockStorage.listMessages).mockResolvedValue({
         messages: [],
         total: 0,
         page: 1,
@@ -353,12 +346,10 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       vi.mocked(mockVector.query).mockResolvedValue([]);
-      vi.mocked(mockStorage.listMessages).mockResolvedValue({ 
+      vi.mocked(mockStorage.listMessages).mockResolvedValue({
         messages: [],
         total: 0,
         page: 1,
@@ -397,9 +388,7 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       // No results from vector search
       vi.mocked(mockVector.query).mockResolvedValue([]);
@@ -434,9 +423,7 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       // Simulate vector query error
       vi.mocked(mockVector.query).mockRejectedValue(new Error('Vector query failed'));
@@ -551,9 +538,7 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       vi.mocked(mockVector.query).mockResolvedValue([]);
 
@@ -607,9 +592,7 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       vi.mocked(mockVector.query).mockResolvedValue([
         { id: 'vec-1', score: 0.95, metadata: { message_id: 'msg-1', thread_id: 'thread-1' } },
@@ -618,8 +601,18 @@ describe('SemanticRecall', () => {
 
       vi.mocked(mockStorage.listMessages).mockResolvedValue({
         messages: [
-          { id: 'msg-1', role: 'user', content: { format: 2, content: 'Existing message', parts: [{ type: 'text', text: 'Existing message' }] }, createdAt: new Date() },
-          { id: 'msg-2', role: 'assistant', content: { format: 2, content: 'Similar message', parts: [{ type: 'text', text: 'Similar message' }] }, createdAt: new Date() },
+          {
+            id: 'msg-1',
+            role: 'user',
+            content: { format: 2, content: 'Existing message', parts: [{ type: 'text', text: 'Existing message' }] },
+            createdAt: new Date(),
+          },
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            content: { format: 2, content: 'Similar message', parts: [{ type: 'text', text: 'Similar message' }] },
+            createdAt: new Date(),
+          },
         ],
         total: 2,
         page: 1,
@@ -657,9 +650,7 @@ describe('SemanticRecall', () => {
         embeddings: [[0.1, 0.2, 0.3]],
       });
 
-      vi.mocked(mockVector.listIndexes).mockResolvedValue([
-        "mastra_memory_text_embedding_3_small",
-      ]);
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
 
       vi.mocked(mockVector.query).mockResolvedValue([
         { id: 'vec-1', score: 0.95, metadata: { message_id: 'msg-1', thread_id: 'thread-1' } },
@@ -782,7 +773,7 @@ describe('SemanticRecall', () => {
           id: 'msg-new',
           role: 'user',
           content: {
-          format: 2,
+            format: 2,
             content: 'What did we discuss before?',
             parts: [{ type: 'text', text: 'What did we discuss before?' }],
           },
@@ -869,15 +860,15 @@ describe('SemanticRecall', () => {
 
       // Second message should be the same-thread message
       expect(promptMessages[1]!.role).toBe(sameThreadMessage.role);
-      const msg1Content = Array.isArray(promptMessages[1]!.content) 
-        ? (promptMessages[1]!.content.find((p: any) => p.type === 'text') as any)?.text 
+      const msg1Content = Array.isArray(promptMessages[1]!.content)
+        ? (promptMessages[1]!.content.find((p: any) => p.type === 'text') as any)?.text
         : promptMessages[1]!.content;
       expect(msg1Content).toContain(sameThreadMessage.content.content);
 
       // Third message should be the original input
       expect(promptMessages[2]!.role).toBe(inputMessages[0]!.role);
-      const msg2Content = Array.isArray(promptMessages[2]!.content) 
-        ? (promptMessages[2]!.content.find((p: any) => p.type === 'text') as any)?.text 
+      const msg2Content = Array.isArray(promptMessages[2]!.content)
+        ? (promptMessages[2]!.content.find((p: any) => p.type === 'text') as any)?.text
         : promptMessages[2]!.content;
       expect(msg2Content).toContain(inputMessages[0]!.content.content);
     });
@@ -1529,6 +1520,172 @@ describe('SemanticRecall', () => {
 
       // Should have attempted to upsert
       expect(mockVector.upsert).toHaveBeenCalled();
+    });
+  });
+
+  describe('Embedding Caching', () => {
+    it('should cache embeddings and reuse them for identical content', async () => {
+      const mockEmbeddings = [[0.1, 0.2, 0.3]];
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: mockEmbeddings,
+      });
+
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+      });
+
+      const runtimeContext = new RequestContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const message1: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello world',
+          parts: [{ type: 'text', text: 'Hello world' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const message2: MastraDBMessage = {
+        id: 'msg-2',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello world', // Same content as message1
+          parts: [{ type: 'text', text: 'Hello world' }],
+        },
+        createdAt: new Date('2024-01-01T10:01:00Z'),
+      };
+
+      const message3: MastraDBMessage = {
+        id: 'msg-3',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Different content',
+          parts: [{ type: 'text', text: 'Different content' }],
+        },
+        createdAt: new Date('2024-01-01T10:02:00Z'),
+      };
+
+      vi.mocked(mockVector.listIndexes).mockResolvedValue([]);
+      vi.mocked(mockVector.createIndex).mockResolvedValue(undefined);
+      vi.mocked(mockVector.upsert).mockResolvedValue([]);
+
+      const messageList1 = new MessageList();
+      messageList1.add([message1], 'input');
+
+      // First call - should call embedder
+      await processor.processOutputResult({
+        messages: [message1],
+        messageList: messageList1,
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Hello world'],
+      });
+
+      const messageList2 = new MessageList();
+      messageList2.add([message2], 'input');
+
+      // Second call with same content - should use cache, not call embedder again
+      await processor.processOutputResult({
+        messages: [message2],
+        messageList: messageList2,
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should still be 1 call (cached)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+
+      const messageList3 = new MessageList();
+      messageList3.add([message3], 'input');
+
+      // Third call with different content - should call embedder again
+      await processor.processOutputResult({
+        messages: [message3],
+        messageList: messageList3,
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should now be 2 calls (new content)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
+      expect(mockEmbedder.doEmbed).toHaveBeenLastCalledWith({
+        values: ['Different content'],
+      });
+    });
+
+    it('should cache embeddings for processInput queries', async () => {
+      const mockEmbeddings = [[0.1, 0.2, 0.3]];
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: mockEmbeddings,
+      });
+
+      vi.mocked(mockVector.query).mockResolvedValue([]);
+
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+      });
+
+      const runtimeContext = new RequestContext();
+      runtimeContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const message: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'What is the weather?',
+          parts: [{ type: 'text', text: 'What is the weather?' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const messageList1 = new MessageList();
+      messageList1.add([message], 'input');
+
+      // First query
+      await processor.processInput({
+        messages: [message],
+        messageList: messageList1,
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+
+      const messageList2 = new MessageList();
+      messageList2.add([message], 'input');
+
+      // Second query with same content - should use cache
+      await processor.processInput({
+        messages: [message],
+        messageList: messageList2,
+        abort: vi.fn() as any,
+        runtimeContext,
+      });
+
+      // Should still be 1 call (cached)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
   });
 });

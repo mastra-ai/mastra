@@ -1,4 +1,6 @@
 import type { SystemModelMessage } from 'ai-v5';
+import { LRUCache } from 'lru-cache';
+import XXH from 'xxhashjs';
 import type { MessageList } from '../../agent/message-list';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRuntimeContext } from '../../memory/types';
@@ -11,6 +13,7 @@ import type { Processor } from '../index';
 
 const DEFAULT_TOP_K = 5;
 const DEFAULT_MESSAGE_RANGE = 2;
+const DEFAULT_CACHE_MAX_SIZE = 1000; // Maximum number of cached embeddings
 
 export interface SemanticRecallOptions {
   /**
@@ -107,6 +110,9 @@ export class SemanticRecall implements Processor {
   private indexName?: string;
   private logger?: IMastraLogger;
 
+  // LRU cache for embeddings: contentHash -> embedding vector
+  private embeddingCache: LRUCache<string, number[]>;
+
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
     this.vector = options.vector;
@@ -116,6 +122,11 @@ export class SemanticRecall implements Processor {
     this.threshold = options.threshold;
     this.indexName = options.indexName;
     this.logger = options.logger;
+
+    // Initialize LRU cache for embeddings
+    this.embeddingCache = new LRUCache<string, number[]>({
+      max: DEFAULT_CACHE_MAX_SIZE,
+    });
 
     // Normalize messageRange to object format
     if (typeof options.messageRange === 'number') {
@@ -356,13 +367,37 @@ ${formattedSections.join('\n')}
   /**
    * Generate embeddings for message content
    */
+  /**
+   * Hash content using xxhash for fast cache key generation
+   */
+  private hashContent(content: string): string {
+    return XXH.h64(content, 0).toString(16);
+  }
+
   private async embedMessageContent(content: string): Promise<{
     embeddings: number[][];
     dimension: number;
   }> {
+    // Check cache first
+    const contentHash = this.hashContent(content);
+    const cachedEmbedding = this.embeddingCache.get(contentHash);
+
+    if (cachedEmbedding) {
+      return {
+        embeddings: [cachedEmbedding],
+        dimension: cachedEmbedding.length,
+      };
+    }
+
+    // Generate embedding if not cached
     const result = await this.embedder.doEmbed({
       values: [content],
     });
+
+    // Cache the first embedding
+    if (result.embeddings[0]) {
+      this.embeddingCache.set(contentHash, result.embeddings[0]);
+    }
 
     return {
       embeddings: result.embeddings,
