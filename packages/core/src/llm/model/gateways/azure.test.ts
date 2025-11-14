@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { AzureGateway } from './azure';
+import { MastraError } from '../../../error/index.js';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
@@ -98,7 +99,7 @@ describe('AzureGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // Verify token endpoint was called
+      // Verify token endpoint was called with correct URL and headers
       expect(mockFetch).toHaveBeenCalledWith(
         'https://login.microsoftonline.com/tenant-123/oauth2/v2.0/token',
         expect.objectContaining({
@@ -108,6 +109,14 @@ describe('AzureGateway', () => {
           },
         }),
       );
+
+      // Verify the body contains all required OAuth2 parameters (URL-encoded)
+      const tokenCallArgs = mockFetch.mock.calls.find(call => call[0].includes('login.microsoftonline.com'));
+      const requestBody = tokenCallArgs?.[1]?.body as string;
+      expect(requestBody).toContain('grant_type=client_credentials');
+      expect(requestBody).toContain('client_id=client-456');
+      expect(requestBody).toContain('client_secret=secret-789');
+      expect(requestBody).toContain('scope=https%3A%2F%2Fmanagement.azure.com%2F.default'); // URL-encoded
 
       // Verify deployments endpoint was called
       expect(mockFetch).toHaveBeenCalledWith(
@@ -178,32 +187,76 @@ describe('AzureGateway', () => {
       expect(tokenCalls.length).toBe(1);
     });
 
-    it('should handle missing Management API credentials gracefully', async () => {
+    it('should refetch token when cached token is about to expire', async () => {
+      // First call - fetch token that expires soon (expires in 50 seconds)
+      const expiringTokenResponse = {
+        token_type: 'Bearer',
+        expires_in: 50, // Less than 60-second safety buffer
+        access_token: 'expiring-token',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => expiringTokenResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockDeploymentsResponse,
+        });
+
+      await gateway.fetchProviders();
+
+      // Second call - should fetch NEW token because cached one expires in <60s
+      const freshTokenResponse = {
+        token_type: 'Bearer',
+        expires_in: 3600,
+        access_token: 'fresh-token',
+      };
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => freshTokenResponse,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockDeploymentsResponse,
+        });
+
+      await gateway.fetchProviders();
+
+      // Token endpoint should be called TWICE (not cached because expiring)
+      const tokenCalls = mockFetch.mock.calls.filter(call => call[0].includes('login.microsoftonline.com'));
+      expect(tokenCalls.length).toBe(2);
+    });
+
+    it('should throw MastraError when Management API credentials are missing', async () => {
       // Remove credentials
       delete process.env.AZURE_TENANT_ID;
 
-      const providers = await gateway.fetchProviders();
-
-      // Should return empty models list but not throw
-      expect(providers['azure']).toBeDefined();
-      expect(providers['azure'].models).toEqual([]);
+      // Should throw MastraError with specific ID and message
+      await expect(gateway.fetchProviders()).rejects.toMatchObject({
+        id: 'AZURE_MANAGEMENT_CREDENTIALS_MISSING',
+        message: expect.stringContaining('AZURE_TENANT_ID'),
+      });
     });
 
-    it('should handle Azure AD authentication failure gracefully', async () => {
+    it('should throw MastraError on Azure AD authentication failure', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
         text: async () => 'Unauthorized',
       });
 
-      const providers = await gateway.fetchProviders();
-
-      // Should return empty models list but not throw
-      expect(providers['azure']).toBeDefined();
-      expect(providers['azure'].models).toEqual([]);
+      // Should throw MastraError with specific ID and status code
+      await expect(gateway.fetchProviders()).rejects.toMatchObject({
+        id: 'AZURE_AD_TOKEN_ERROR',
+        message: expect.stringContaining('401'),
+      });
     });
 
-    it('should handle Management API fetch failure gracefully', async () => {
+    it('should throw MastraError on Management API fetch failure', async () => {
       // Token succeeds
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -217,11 +270,11 @@ describe('AzureGateway', () => {
         text: async () => 'Forbidden',
       });
 
-      const providers = await gateway.fetchProviders();
-
-      // Should return empty models list but not throw
-      expect(providers['azure']).toBeDefined();
-      expect(providers['azure'].models).toEqual([]);
+      // Should throw MastraError with specific ID and status code
+      await expect(gateway.fetchProviders()).rejects.toMatchObject({
+        id: 'AZURE_DEPLOYMENTS_FETCH_ERROR',
+        message: expect.stringContaining('403'),
+      });
     });
   });
 

@@ -42,55 +42,34 @@ export class AzureGateway extends MastraModelGateway {
    * Fetch Azure OpenAI deployments from Management API
    */
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    try {
-      // Step 1: Get Management API credentials
-      const credentials = this.getManagementCredentials();
+    // Step 1: Get Management API credentials
+    const credentials = this.getManagementCredentials();
 
-      // Step 2: Get Azure AD access token (cached)
-      const token = await this.getAzureADToken({
-        tenantId: credentials.tenantId,
-        clientId: credentials.clientId,
-        clientSecret: credentials.clientSecret,
-      });
+    // Step 2: Get Azure AD access token (cached)
+    const token = await this.getAzureADToken({
+      tenantId: credentials.tenantId,
+      clientId: credentials.clientId,
+      clientSecret: credentials.clientSecret,
+    });
 
-      // Step 3: Fetch deployments from Management API
-      const deployments = await this.fetchDeployments(token, {
-        subscriptionId: credentials.subscriptionId,
-        resourceGroup: credentials.resourceGroup,
-        resourceName: credentials.resourceName,
-      });
+    // Step 3: Fetch deployments from Management API
+    const deployments = await this.fetchDeployments(token, {
+      subscriptionId: credentials.subscriptionId,
+      resourceGroup: credentials.resourceGroup,
+      resourceName: credentials.resourceName,
+    });
 
-      // Step 4: Transform to ProviderConfig format
-      return {
-        azure: {
-          apiKeyEnvVar: 'AZURE_API_KEY',
-          apiKeyHeader: 'api-key',
-          name: 'Azure OpenAI',
-          models: deployments.map(d => d.name),
-          docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azure',
-        },
-      };
-    } catch (error) {
-      // Graceful degradation: log warning but don't fail startup
-      console.warn(
-        '[AzureGateway] Failed to fetch deployments:',
-        error instanceof Error ? error.message : String(error),
-      );
-      console.info('[AzureGateway] You can still use Azure OpenAI by specifying deployment names manually.');
-
-      // Return empty config - user can still manually specify deployment names
-      return {
-        azure: {
-          apiKeyEnvVar: 'AZURE_API_KEY',
-          apiKeyHeader: 'api-key',
-          name: 'Azure OpenAI',
-          models: [],
-          docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-          gateway: 'azure',
-        },
-      };
-    }
+    // Step 4: Transform to ProviderConfig format
+    return {
+      azure: {
+        apiKeyEnvVar: 'AZURE_API_KEY',
+        apiKeyHeader: 'api-key',
+        name: 'Azure OpenAI',
+        models: deployments.map(d => d.name),
+        docUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
+        gateway: 'azure',
+      },
+    };
   }
 
   /**
@@ -291,10 +270,12 @@ export class AzureGateway extends MastraModelGateway {
 
     // Create Azure provider with resource name
     // modelId is the deployment name (e.g., "my-gpt4-deployment")
+    // useDeploymentBasedUrls: true is required for Azure deployment URLs
     return createAzure({
       resourceName,
       apiKey,
       apiVersion,
+      useDeploymentBasedUrls: true,
     })(modelId);
   }
 }
