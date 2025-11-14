@@ -88,16 +88,17 @@ export type StepResult<P, R, S, T> =
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>;
 
-type SerializedStepFailure<P, R, S> = Omit<StepFailure<P, R, S>, 'error'> & {
+type SerializedStepFailure<P, R, S, T> = Omit<StepFailure<P, R, S, T>, 'error'> & {
   error: SerializedError;
 };
 
 export type SerializedStepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
-  | SerializedStepFailure<P, R, S>
-  | StepSuspended<P, S>
-  | StepRunning<P, R, S>
-  | StepWaiting<P, R, S>;
+  | SerializedStepFailure<P, R, S, T>
+  | StepFailure<P, R, S, T>
+  | StepSuspended<P, S, T>
+  | StepRunning<P, R, S, T>
+  | StepWaiting<P, R, S, T>;
 
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
