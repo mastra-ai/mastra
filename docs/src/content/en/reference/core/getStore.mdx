@@ -189,7 +189,18 @@ const memoryStore = await mastra.getStore('memory');
 await memoryStore?.createThread({ ... });
 ```
 
+## Domain Reference Documentation
+
+For detailed API documentation on each domain's methods:
+
+- [Memory Storage Domain](/reference/v1/storage-domains/memory) - Threads, messages, and resources
+- [Workflows Storage Domain](/reference/v1/storage-domains/workflows) - Workflow snapshots and runs
+- [Evals Storage Domain](/reference/v1/storage-domains/evals) - Evaluation scores
+- [Observability Storage Domain](/reference/v1/storage-domains/observability) - Traces and spans
+
 ## Related
+
 - [Storage overview](/docs/v1/server-db/storage)
 - [Mastra.getStorage()](/reference/v1/core/getStorage)
+- [Storage reference](/reference/v1/storage/libsql)
 

@@ -1,0 +1,469 @@
+---
+title: "Reference: Observability Domain | Storage"
+description: "API reference for the Observability storage domain, which provides access to traces and spans."
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Observability
+
+The Observability domain provides access to traces and spans. 
+
+Access it using `getStore('observability')`:
+
+```typescript copy
+const observabilityStore = await mastra.getStore('observability');
+// or 
+const observabilityStore = await storage.getStore('observability');
+```
+
+**Note:** Not all storage adapters support the observability domain. Check your storage adapter's documentation to confirm support.
+
+## Methods
+
+### init()
+
+Initializes the observability domain storage, creating necessary tables and indexes.
+
+```typescript copy
+await observabilityStore.init();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+### createSpan()
+
+Creates a single span record.
+
+```typescript copy
+await observabilityStore.createSpan({
+  traceId: 'trace-123',
+  spanId: 'span-123',
+  parentSpanId: null,
+  name: 'workflow.execute',
+  spanType: 'WORKFLOW_RUN',
+  scope: { 'core-version': '0.1.0' },
+  attributes: { workflowId: 'my-workflow' },
+  metadata: null,
+  links: null,
+  startedAt: new Date(),
+  endedAt: null,
+  input: { workflowId: 'my-workflow' },
+  output: null,
+  error: null,
+  isEvent: false,
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "traceId",
+      type: "string",
+      description: "Root trace identifier that groups related spans",
+      isOptional: false,
+    },
+    {
+      name: "spanId",
+      type: "string",
+      description: "Unique identifier for this span within the trace",
+      isOptional: false,
+    },
+    {
+      name: "parentSpanId",
+      type: "string | null",
+      description: "ID of the parent span. Null if span is top level",
+      isOptional: false,
+    },
+    {
+      name: "name",
+      type: "string",
+      description: "Hierarchical operation name",
+      isOptional: false,
+    },
+    {
+      name: "spanType",
+      type: "SpanType",
+      description: "Type of span (e.g., 'WORKFLOW_RUN', 'AGENT_RUN')",
+      isOptional: false,
+    },
+    {
+      name: "scope",
+      type: "Record<string, any> | null",
+      description: "Mastra package info",
+      isOptional: false,
+    },
+    {
+      name: "attributes",
+      type: "Record<string, any> | null",
+      description: "User defined key-value pairs",
+      isOptional: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any> | null",
+      description: "Additional span metadata",
+      isOptional: false,
+    },
+    {
+      name: "links",
+      type: "any",
+      description: "Links to other related spans",
+      isOptional: false,
+    },
+    {
+      name: "startedAt",
+      type: "Date",
+      description: "When the span started",
+      isOptional: false,
+    },
+    {
+      name: "endedAt",
+      type: "Date | null",
+      description: "When the span ended. Null if span is still active",
+      isOptional: false,
+    },
+    {
+      name: "input",
+      type: "any",
+      description: "Input data for the span operation",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "any",
+      description: "Output data from the span operation",
+      isOptional: false,
+    },
+    {
+      name: "error",
+      type: "any",
+      description: "Error information if the span operation failed",
+      isOptional: false,
+    },
+    {
+      name: "isEvent",
+      type: "boolean",
+      description: "Whether this span represents an event",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### updateSpan()
+
+Updates a single span with partial data. Primarily used for realtime trace creation.
+
+```typescript copy
+await observabilityStore.updateSpan({
+  spanId: 'span-123',
+  traceId: 'trace-123',
+  updates: {
+    endedAt: new Date(),
+    output: { result: 'success' },
+  },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "spanId",
+      type: "string",
+      description: "The span ID",
+      isOptional: false,
+    },
+    {
+      name: "traceId",
+      type: "string",
+      description: "The trace ID",
+      isOptional: false,
+    },
+    {
+      name: "updates",
+      type: "Partial<UpdateSpanRecord>",
+      description: "Partial span data to update",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### getTrace()
+
+Retrieves a single trace with all its associated spans.
+
+```typescript copy
+const trace = await observabilityStore.getTrace('trace-123');
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "traceId",
+      type: "string",
+      description: "The trace ID",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<TraceRecord | null>` - Object containing `traceId` and `spans` array.
+
+---
+
+### listTraces()
+
+Retrieves a paginated list of traces with optional filtering. Returns root spans (spans with `parentSpanId: null`).
+
+```typescript copy
+const result = await observabilityStore.listTraces({
+  pagination: {
+    page: 0,
+    perPage: 50,
+    dateRange: {
+      start: new Date('2024-01-01'),
+      end: new Date('2024-01-31'),
+    },
+  },
+  filters: {
+    spanType: 'WORKFLOW_RUN',
+    entityType: 'workflow',
+    entityId: 'my-workflow-id',
+    name: 'workflow.execute',
+  },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "pagination",
+      type: "PaginationArgs",
+      description: "Optional pagination configuration",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "page",
+              type: "number",
+              description: "Zero-indexed page number",
+              isOptional: true,
+            },
+            {
+              name: "perPage",
+              type: "number",
+              description: "Number of items per page",
+              isOptional: true,
+            },
+            {
+              name: "dateRange",
+              type: "{ start?: Date; end?: Date }",
+              description: "Optional date range filter",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "filters",
+      type: "{ name?: string; spanType?: SpanType; entityId?: string; entityType?: 'agent' | 'workflow' }",
+      description: "Optional filters",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "name",
+              type: "string",
+              description: "Filter by span name",
+              isOptional: true,
+            },
+            {
+              name: "spanType",
+              type: "SpanType",
+              description: "Filter by span type",
+              isOptional: true,
+            },
+            {
+              name: "entityId",
+              type: "string",
+              description: "Filter by entity ID (requires entityType)",
+              isOptional: true,
+            },
+            {
+              name: "entityType",
+              type: "'agent' | 'workflow'",
+              description: "Filter by entity type (requires entityId)",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }>` - Returns root spans representing traces.
+
+---
+
+### batchCreateSpans()
+
+Creates multiple spans in a single batch operation.
+
+```typescript copy
+await observabilityStore.batchCreateSpans({
+  records: [
+    {
+      traceId: 'trace-123',
+      spanId: 'span-1',
+      parentSpanId: null,
+      name: 'workflow.execute',
+      spanType: 'WORKFLOW_RUN',
+      // ... other span fields
+    },
+    {
+      traceId: 'trace-123',
+      spanId: 'span-2',
+      parentSpanId: 'span-1',
+      name: 'workflow.step',
+      spanType: 'WORKFLOW_STEP',
+      // ... other span fields
+    },
+  ],
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "records",
+      type: "CreateSpanRecord[]",
+      description: "Array of span records to create",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### batchUpdateSpans()
+
+Updates multiple spans in a single batch operation.
+
+```typescript copy
+await observabilityStore.batchUpdateSpans({
+  records: [
+    {
+      traceId: 'trace-123',
+      spanId: 'span-1',
+      updates: {
+        endedAt: new Date(),
+        output: { result: 'success' },
+      },
+    },
+  ],
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "records",
+      type: "Array<{ traceId: string; spanId: string; updates: Partial<UpdateSpanRecord> }>",
+      description: "Array of span updates",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### batchDeleteTraces()
+
+Deletes multiple traces and all their associated spans in a single batch operation.
+
+```typescript copy
+await observabilityStore.batchDeleteTraces({
+  traceIds: ['trace-123', 'trace-456'],
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "traceIds",
+      type: "string[]",
+      description: "Array of trace IDs to delete",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### dropData()
+
+Drops all data in the observability domain (traces and spans). **Use with caution!**
+
+```typescript copy
+await observabilityStore.dropData();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+## Tracing Strategy
+
+The `tracingStrategy` property provides hints for tracing strategy selection:
+
+```typescript copy
+const strategy = observabilityStore.tracingStrategy;
+// {
+//   preferred: 'batch-with-updates',
+//   supported: ['realtime', 'batch-with-updates', 'insert-only']
+// }
+```
+
+---
+
+## Index Management
+
+The following methods are available for index management (if supported by the storage adapter):
+
+- `createIndex()` - Create a custom index
+- `listIndexes()` - List indexes for a table
+- `describeIndex()` - Get detailed statistics for an index
+- `dropIndex()` - Drop an index
+- `createIndexes()` - Create default indexes
+- `dropIndexes()` - Drop all indexes
+
+See the [PostgreSQL Storage](/reference/v1/storage/postgresql#index-management) or [MSSQL Storage](/reference/v1/storage/mssql#index-management) documentation for detailed examples.
+
+## Related
+
+- [Mastra.getStore()](/reference/v1/core/getStore) - How to access storage domains
+- [Storage overview](/docs/v1/server-db/storage) - General storage documentation
+- [PostgreSQL Storage](/reference/v1/storage/postgresql) - PostgreSQL adapter reference
+
