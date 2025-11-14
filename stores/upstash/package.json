@@ -28,7 +28,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.5",
+    "@upstash/redis": "^1.35.6",
     "@upstash/vector": "^1.2.2"
   },
   "devDependencies": {
