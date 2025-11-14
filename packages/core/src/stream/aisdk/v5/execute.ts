@@ -57,7 +57,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   structuredOutput,
   headers,
   shouldThrowError,
-  methodType,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
