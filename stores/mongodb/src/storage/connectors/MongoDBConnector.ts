@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import type { Db } from 'mongodb';
+import packageJson from '../../../package.json';
 import type { DatabaseConfig } from '../types';
 import type { ConnectorHandler } from './base';
 
@@ -42,8 +43,15 @@ export class MongoDBConnector {
       );
     }
 
+    const client = new MongoClient(config.url, {
+      ...config.options,
+      driverInfo: {
+        name: 'mastra-storage',
+        version: packageJson.version || '0.0.0',
+      },
+    });
     return new MongoDBConnector({
-      client: new MongoClient(config.url, config.options),
+      client,
       dbName: config.dbName,
       handler: undefined,
     });

@@ -43,10 +43,6 @@ export type ExtractParams = {
 };
 
 export type BaseChunkOptions = {
-  /**
-   * @deprecated Use `maxSize` instead. Will be removed in next major version.
-   */
-  size?: number;
   maxSize?: number;
   overlap?: number;
   lengthFunction?: (text: string) => number;

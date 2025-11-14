@@ -35,7 +35,7 @@ const mastra = new Mastra({
 
 ## Features
 
-### AI Tracing
+### Tracing
 
 - **Automatic span mapping**: Root spans become LangSmith traces
 - **Type-specific metadata**: Extracts relevant metadata for each span type (agents, tools, workflows)

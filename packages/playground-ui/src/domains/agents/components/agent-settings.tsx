@@ -15,11 +15,13 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import clsx from 'clsx';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useAgent } from '../hooks/use-agent';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface AgentSettingsProps {
-  modelVersion: string;
-  hasMemory?: boolean;
-  hasSubAgents?: boolean;
+  agentId: string;
 }
 
 const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasSubAgents: boolean }) => {
@@ -59,8 +61,22 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
   );
 };
 
-export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = false }: AgentSettingsProps) => {
+export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
+  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings, resetAll } = useAgentSettings();
+
+  if (isLoading || isMemoryLoading) {
+    return <Skeleton className="h-full" />;
+  }
+
+  if (!agent) {
+    return <div>Agent not found</div>;
+  }
+
+  const hasMemory = Boolean(memory?.result);
+  const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
+  const modelVersion = agent.modelVersion;
 
   let radioValue;
 
@@ -98,7 +114,7 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generateLegacy">
-                  Generate
+                  Generate (Legacy)
                 </Label>
               </div>
             )}
@@ -114,7 +130,7 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="streamLegacy">
-                  Stream
+                  Stream (Legacy)
                 </Label>
               </div>
             )}
@@ -128,6 +144,17 @@ export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = 
             )}
             {modelVersion === 'v2' && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
           </RadioGroup>
+        </Entry>
+        <Entry label="Require Tool Approval">
+          <Checkbox
+            checked={settings?.modelSettings?.requireToolApproval}
+            onCheckedChange={value =>
+              setSettings({
+                ...settings,
+                modelSettings: { ...settings?.modelSettings, requireToolApproval: value as boolean },
+              })
+            }
+          />
         </Entry>
 
         <div className="grid grid-cols-2 gap-8">

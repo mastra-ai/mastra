@@ -10,7 +10,7 @@ export interface IMastraLogger {
   trackException(error: MastraError): void;
 
   getTransports(): Map<string, LoggerTransport>;
-  getLogs(
+  listLogs(
     _transportId: string,
     _params?: {
       fromDate?: Date;
@@ -21,7 +21,7 @@ export interface IMastraLogger {
       perPage?: number;
     },
   ): Promise<{ logs: BaseLogMessage[]; total: number; page: number; perPage: number; hasMore: boolean }>;
-  getLogsByRunId(_args: {
+  listLogsByRunId(_args: {
     transportId: string;
     runId: string;
     fromDate?: Date;
@@ -61,7 +61,7 @@ export abstract class MastraLogger implements IMastraLogger {
 
   trackException(_error: MastraError) {}
 
-  async getLogs(
+  async listLogs(
     transportId: string,
     params?: {
       fromDate?: Date;
@@ -77,7 +77,7 @@ export abstract class MastraLogger implements IMastraLogger {
     }
 
     return (
-      this.transports.get(transportId)!.getLogs(params) ?? {
+      this.transports.get(transportId)!.listLogs(params) ?? {
         logs: [],
         total: 0,
         page: params?.page ?? 1,
@@ -87,7 +87,7 @@ export abstract class MastraLogger implements IMastraLogger {
     );
   }
 
-  async getLogsByRunId({
+  async listLogsByRunId({
     transportId,
     runId,
     fromDate,
@@ -113,7 +113,7 @@ export abstract class MastraLogger implements IMastraLogger {
     return (
       this.transports
         .get(transportId)!
-        .getLogsByRunId({ runId, fromDate, toDate, logLevel, filters, page, perPage }) ?? {
+        .listLogsByRunId({ runId, fromDate, toDate, logLevel, filters, page, perPage }) ?? {
         logs: [],
         total: 0,
         page: page ?? 1,

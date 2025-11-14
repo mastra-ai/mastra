@@ -1,15 +1,14 @@
 import type { ChildProcess } from 'child_process';
 import process from 'node:process';
-import { join, posix } from 'path';
+import { join } from 'path';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
-import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
-import { logger } from '../../utils/logger.js';
+import { createLogger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
@@ -24,11 +23,30 @@ interface HTTPSOptions {
 }
 
 interface StartOptions {
-  inspect?: boolean;
-  inspectBrk?: boolean;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
 }
+
+const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
+  try {
+    await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    devLogger.error(`Failed to restart all active workflow runs: ${error}`);
+    // Retry after another second
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+        method: 'POST',
+      });
+    } catch {
+      // Ignore retry errors
+    }
+  }
+};
 
 const startServer = async (
   dotMastraPath: string,
@@ -51,26 +69,23 @@ const startServer = async (
 
     const commands = [];
 
-    if (startOptions.inspect) {
-      commands.push('--inspect');
+    const inspect = startOptions.inspect === '' ? true : startOptions.inspect;
+    const inspectBrk = startOptions.inspectBrk === '' ? true : startOptions.inspectBrk;
+
+    if (inspect) {
+      const inspectFlag = typeof inspect === 'string' ? `--inspect=${inspect}` : '--inspect';
+      commands.push(inspectFlag);
     }
 
-    if (startOptions.inspectBrk) {
-      commands.push('--inspect-brk'); //stops at beginning of script
+    if (inspectBrk) {
+      const inspectBrkFlag = typeof inspectBrk === 'string' ? `--inspect-brk=${inspectBrk}` : '--inspect-brk';
+      commands.push(inspectBrkFlag);
     }
 
     if (startOptions.customArgs) {
       commands.push(...startOptions.customArgs);
     }
 
-    if (!isWebContainer()) {
-      const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
-      commands.push(
-        `--import=${import.meta.resolve('mastra/telemetry-loader')}`,
-        '--import=./instrumentation.mjs',
-        `--import=${instrumentation}`,
-      );
-    }
     commands.push('index.mjs');
 
     currentServerProcess = execa(process.execPath, commands, {
@@ -90,7 +105,6 @@ const startServer = async (
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
-      shell: process.platform !== 'win32',
     }) as any as ChildProcess;
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
@@ -141,6 +155,8 @@ const startServer = async (
         serverIsReady = true;
         devLogger.ready(host, port, serverStartTime, startOptions.https);
         devLogger.watching();
+
+        await restartAllActiveWorkflowRuns({ host, port });
 
         // Send refresh signal
         try {
@@ -288,7 +304,6 @@ async function rebundleAndRestart(
 }
 
 export async function dev({
-  port,
   dir,
   root,
   tools,
@@ -297,37 +312,30 @@ export async function dev({
   inspectBrk,
   customArgs,
   https,
+  debug,
 }: {
   dir?: string;
   root?: string;
-  port: number | null;
   tools?: string[];
   env?: string;
-  inspect?: boolean;
-  inspectBrk?: boolean;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: boolean;
+  debug: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  // You cannot express an "include all js/ts except these" in one single string glob pattern so by default an array is passed to negate test files.
-  const normalizedMastraDir = mastraDir.replaceAll('\\', '/');
-  const defaultToolsPath = posix.join(normalizedMastraDir, 'tools/**/*.{js,ts}');
-  const defaultToolsIgnorePaths = [
-    `!${posix.join(normalizedMastraDir, 'tools/**/*.{test,spec}.{js,ts}')}`,
-    `!${posix.join(normalizedMastraDir, 'tools/**/__tests__/**')}`,
-  ];
-  // We pass an array to tinyglobby to allow for the aforementioned negations
-  const defaultTools = [defaultToolsPath, ...defaultToolsIgnorePaths];
-  const discoveredTools = [defaultTools, ...(tools ?? [])];
-
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
-  bundler.__setLogger(logger); // Keep Pino logger for internal bundler operations
+  bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
+
+  // Use the bundler's getAllToolPaths method to prepare tools paths
+  const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ?? []);
 
   const loadedEnv = await bundler.loadEnvVars();
 
@@ -337,7 +345,7 @@ export async function dev({
   }
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
-  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   if (!portToUse || isNaN(Number(portToUse))) {
     const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);

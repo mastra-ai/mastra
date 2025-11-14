@@ -29,9 +29,11 @@ export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) =
     serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
+    resumeLabels: {},
     waitingPaths: {},
     runId,
     timestamp: timestamp.getTime(),
+    activeStepsPath: {},
     status: status as WorkflowRunState['status'],
   } as WorkflowRunState;
   return { snapshot, runId, stepId };

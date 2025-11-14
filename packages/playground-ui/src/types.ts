@@ -1,6 +1,7 @@
 import { GetAgentResponse } from '@mastra/client-js';
 import type { AiMessageType } from '@mastra/core/memory';
 import type { LLMStepResult } from '@mastra/core/agent';
+import { MastraUIMessage } from '@mastra/react';
 
 export type Message = AiMessageType;
 
@@ -39,11 +40,11 @@ export interface ModelSettings {
   temperature?: number;
   topK?: number;
   topP?: number;
-  instructions?: string;
   providerOptions?: LLMStepResult['providerMetadata'];
   chatWithGenerateLegacy?: boolean;
   chatWithGenerate?: boolean;
   chatWithNetwork?: boolean;
+  requireToolApproval?: boolean;
 }
 
 export interface AgentSettingsType {
@@ -55,11 +56,12 @@ export interface ChatProps {
   agentName?: string;
   modelVersion?: string;
   threadId?: string;
-  initialMessages?: Message[];
+  initialMessages?: MastraUIMessage[];
+  initialLegacyMessages?: Message[];
   memory?: boolean;
   refreshThreadList?: () => void;
   settings?: AgentSettingsType;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   onInputChange?: (value: string) => void;
   modelList?: GetAgentResponse['modelList'];
 }
@@ -115,5 +117,3 @@ export type StreamChunk = {
   runId: string;
   from: 'AGENT' | 'WORKFLOW';
 };
-
-export * from './domains/traces/types';

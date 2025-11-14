@@ -111,6 +111,7 @@ describe('PostgresStore Performance Indexes', () => {
     it('should create indexes during init without failing on index errors', async () => {
       // Create a fresh store instance
       const testStore = new PostgresStore({
+        id: 'index-error-test-store',
         connectionString: 'postgresql://test:test@localhost:5432/test',
       });
 

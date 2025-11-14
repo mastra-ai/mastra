@@ -131,4 +131,13 @@ export abstract class StoreOperations extends MastraBase {
       text: `Index management is not supported by this storage adapter`,
     });
   }
+
+  /**
+   * Returns definitions for automatic performance indexes
+   * Storage adapters can override this to define indexes that should be created during initialization
+   * @returns Array of index definitions to create automatically
+   */
+  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
 }

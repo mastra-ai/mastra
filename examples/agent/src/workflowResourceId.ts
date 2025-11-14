@@ -6,7 +6,7 @@ const workflow = mastra.getWorkflow('myWorkflow');
 async function main() {
   const resourceId = randomUUID();
 
-  const result = await workflow.createRunAsync({
+  const result = await workflow.createRun({
     resourceId: resourceId,
   });
 

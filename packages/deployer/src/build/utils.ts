@@ -93,3 +93,52 @@ export function rollupSafeName(name: string, rootDir: string) {
   }
   return entry;
 }
+
+/**
+ * Native binding loaders and infrastructure packages that should be ignored when identifying the actual package that requires native bindings
+ */
+const NATIVE_BINDING_LOADERS = [
+  'node-gyp-build',
+  'prebuild-install',
+  'bindings',
+  'node-addon-api',
+  'node-pre-gyp',
+  'nan', // Native Abstractions for Node.js
+] as const;
+
+/**
+ * Finds the first real package from node_modules that likely contains native bindings, filtering out virtual modules and native binding loader infrastructure.
+ *
+ * @param moduleIds - Array of module IDs from a Rollup chunk
+ * @returns The module ID of the actual native package, or undefined if not found
+ *
+ * @example
+ * const moduleIds = [
+ *   '\x00/path/node_modules/bcrypt/bcrypt.js?commonjs-module',
+ *   '/path/node_modules/node-gyp-build/index.js',
+ *   '/path/node_modules/bcrypt/bcrypt.js',
+ * ];
+ * findNativePackageModule(moduleIds); // Returns '/path/node_modules/bcrypt/bcrypt.js'
+ */
+export function findNativePackageModule(moduleIds: string[]): string | undefined {
+  return moduleIds.find(id => {
+    // Skip virtual modules (Rollup plugin-generated)
+    if (id.startsWith('\x00')) {
+      return false;
+    }
+
+    // Must be from node_modules
+    if (!id.includes('/node_modules/')) {
+      return false;
+    }
+
+    // Skip native binding loader infrastructure
+    for (const loader of NATIVE_BINDING_LOADERS) {
+      if (id.includes(`/${loader}/`) || id.includes(`/${loader}@`)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}

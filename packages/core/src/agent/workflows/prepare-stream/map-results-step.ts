@@ -1,10 +1,9 @@
-import type { AISpan, AISpanType, TracingContext } from '../../../ai-tracing';
-import type { SystemMessage } from '../../../llm';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
+import type { Span, SpanType, TracingContext } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
-import type { RuntimeContext } from '../../../runtime-context';
+import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -19,12 +18,12 @@ interface MapResultsStepOptions<
   options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   memory?: MastraMemory;
   memoryConfig?: MemoryConfig;
   saveQueueManager: SaveQueueManager;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  instructions: SystemMessage;
+  agentSpan: Span<SpanType.AGENT_RUN>;
+  agentId: string;
 }
 
 export function createMapResultsStep<
@@ -35,12 +34,12 @@ export function createMapResultsStep<
   options,
   resourceId,
   runId,
-  runtimeContext,
+  requestContext,
   memory,
   memoryConfig,
   saveQueueManager,
-  agentAISpan,
-  instructions,
+  agentSpan,
+  agentId,
 }: MapResultsStepOptions<OUTPUT, FORMAT>) {
   return async ({
     inputData,
@@ -59,6 +58,7 @@ export function createMapResultsStep<
 
     const result = {
       ...options,
+      agentId,
       tools: toolsData.convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -66,7 +66,7 @@ export function createMapResultsStep<
       thread: memoryData.thread,
       threadId: memoryData.thread?.id,
       resourceId,
-      runtimeContext,
+      requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
         if (options.savePerStep) {
@@ -102,7 +102,7 @@ export function createMapResultsStep<
 
     // Check for tripwire and return early if triggered
     if (result.tripwire) {
-      const agentModel = await capabilities.getModel({ runtimeContext: result.runtimeContext! });
+      const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
       const modelOutput = await getModelOutputForTripwire({
         tripwireReason: result.tripwireReason!,
@@ -121,15 +121,15 @@ export function createMapResultsStep<
       (capabilities.outputProcessors
         ? typeof capabilities.outputProcessors === 'function'
           ? await capabilities.outputProcessors({
-              runtimeContext: result.runtimeContext!,
+              requestContext: result.requestContext!,
             })
           : capabilities.outputProcessors
         : []);
 
     // Handle structuredOutput option by creating an StructuredOutputProcessor
-    if (options.structuredOutput) {
-      const agentModel = await capabilities.getModel({ runtimeContext: result.runtimeContext! });
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput, agentModel);
+    // Only create the processor if a model is explicitly provided
+    if (options.structuredOutput?.model) {
+      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -138,14 +138,14 @@ export function createMapResultsStep<
     const messageList = memoryData.messageList!;
 
     const loopOptions: ModelLoopStreamArgs<any, OUTPUT> = {
-      runtimeContext: result.runtimeContext!,
-      tracingContext: { currentSpan: agentAISpan },
+      agentId,
+      requestContext: result.requestContext!,
+      tracingContext: { currentSpan: agentSpan },
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
       resourceId: result.resourceId,
       threadId: result.threadId,
-      structuredOutput: result.structuredOutput as any,
       stopWhen: result.stopWhen,
       maxSteps: result.maxSteps,
       providerOptions: result.providerOptions,
@@ -169,18 +169,17 @@ export function createMapResultsStep<
             await capabilities.executeOnFinish({
               result: payload,
               outputText,
-              instructions,
               thread: result.thread,
               threadId: result.threadId,
               readOnlyMemory: options.memory?.readOnly,
               resourceId,
               memoryConfig,
-              runtimeContext,
-              agentAISpan: agentAISpan,
+              requestContext,
+              agentSpan: agentSpan,
               runId,
               messageList,
               threadExists: memoryData.threadExists,
-              structuredOutput: !!options.output,
+              structuredOutput: !!options.structuredOutput?.schema,
               saveQueueManager,
               overrideScorers: options.scorers,
             });
@@ -206,7 +205,7 @@ export function createMapResultsStep<
         activeTools: options.activeTools,
         abortSignal: options.abortSignal,
       },
-      output: options.output,
+      structuredOutput: options.structuredOutput,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
         temperature: 0,

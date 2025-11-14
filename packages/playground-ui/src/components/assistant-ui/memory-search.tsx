@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+import { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
 
 // Simple relative time formatter
 const formatRelativeTime = (date: Date): string => {
@@ -16,8 +17,6 @@ const formatRelativeTime = (date: Date): string => {
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
   return date.toLocaleDateString();
 };
-
-import type { MemorySearchResult, MemorySearchResponse } from '@/types/memory';
 
 interface MemorySearchProps {
   searchMemory: (query: string) => Promise<MemorySearchResponse>;

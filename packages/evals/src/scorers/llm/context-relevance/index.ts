@@ -1,6 +1,6 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
-import { createScorer } from '@mastra/core/scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
+import { createScorer } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import { CONTEXT_RELEVANCE_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
@@ -41,7 +41,7 @@ export function createContextRelevanceScorerLLM({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options: ContextRelevanceOptions;
 }) {
   if (!options.context && !options.contextExtractor) {
@@ -52,6 +52,7 @@ export function createContextRelevanceScorerLLM({
   }
 
   return createScorer({
+    id: 'context-relevance-scorer',
     name: 'Context Relevance (LLM)',
     description: 'Evaluates how relevant and useful the provided context was for generating the agent response',
     judge: {

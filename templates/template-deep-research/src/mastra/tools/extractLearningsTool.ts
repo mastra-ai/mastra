@@ -14,11 +14,15 @@ export const extractLearningsTool = createTool({
       })
       .describe('The search result to process'),
   }),
-  execute: async ({ context, mastra }) => {
+  execute: async (inputData, context) => {
     try {
-      const { query, result } = context;
+      const { query, result } = inputData;
 
-      const learningExtractionAgent = mastra!.getAgent('learningExtractionAgent');
+      const learningExtractionAgent = context?.mastra?.getAgent('learningExtractionAgent');
+
+      if (!learningExtractionAgent) {
+        throw new Error('Learning extraction agent not found');
+      }
 
       const response = await learningExtractionAgent.generate(
         [
@@ -37,10 +41,12 @@ export const extractLearningsTool = createTool({
           },
         ],
         {
-          experimental_output: z.object({
-            learning: z.string(),
-            followUpQuestions: z.array(z.string()).max(1),
-          }),
+          structuredOutput: {
+            schema: z.object({
+              learning: z.string(),
+              followUpQuestions: z.array(z.string()).max(1),
+            }),
+          },
         },
       );
 

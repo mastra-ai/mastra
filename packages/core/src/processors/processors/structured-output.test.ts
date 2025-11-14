@@ -373,7 +373,7 @@ describe('StructuredOutputProcessor', () => {
       expect(typeof instructions).toBe('string');
     });
 
-    it('should use custom instructions if provided', () => {
+    it('should use custom instructions if provided', async () => {
       const customInstructions = 'Custom structuring instructions';
       const customProcessor = new StructuredOutputProcessor({
         schema: testSchema,
@@ -381,8 +381,9 @@ describe('StructuredOutputProcessor', () => {
         instructions: customInstructions,
       });
 
+      const agent = (customProcessor as unknown as { structuringAgent: Agent }).structuringAgent;
       // The custom instructions should be used instead of generated ones
-      expect((customProcessor as any).structuringAgent.instructions).toBe(customInstructions);
+      expect(await agent.getInstructions()).toBe(customInstructions);
     });
   });
 
@@ -455,7 +456,8 @@ describe('Structured Output with Tool Execution', () => {
     // Test processor to track streamParts state
     const streamPartsLog: { type: string; streamPartsLength: number }[] = [];
     class StateTrackingProcessor implements Processor {
-      name = 'state-tracking';
+      id = 'state-tracking-processor';
+      name = 'State Tracking Processor';
       async processOutputStream({ part, streamParts }: any) {
         streamPartsLog.push({ type: part.type, streamPartsLength: streamParts.length });
         console.log(`Processor saw ${part.type}, streamParts.length: ${streamParts.length}`);
@@ -481,8 +483,8 @@ describe('Structured Output with Tool Execution', () => {
         },
         required: ['a', 'b'] as const,
       },
-      execute: vi.fn(async ({ a, b }: { a: number; b: number }) => {
-        return { sum: a + b };
+      execute: vi.fn(async (input: { a: number; b: number }, _context: any) => {
+        return { sum: input.a + input.b };
       }),
     };
 
@@ -540,6 +542,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'Test agent with structured output and tools',
       model: mockModel as any,
@@ -622,8 +625,8 @@ describe('Structured Output with Tool Execution', () => {
       inputSchema: z.object({
         location: z.string(),
       }),
-      execute: async context => {
-        const { location } = context.context;
+      execute: async (inputData, _context) => {
+        const { location } = inputData;
         return {
           temperature: 70,
           feelsLike: 65,
@@ -648,6 +651,7 @@ describe('Structured Output with Tool Execution', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions:
         'You are a helpful assistant. Figure out the weather and then using that weather plan some activities. Always use the weather tool first, and then the plan activities tool with the result of the weather tool. Every tool call you make IMMEDIATELY explain the tool results after executing the tool, before moving on to other steps or tool calls',
@@ -663,6 +667,7 @@ describe('Structured Output with Tool Execution', () => {
       maxSteps: 10,
       structuredOutput: {
         schema: responseSchema,
+        model: openai('gpt-4o-mini'), // Use real model for structured output processor
       },
     });
 
@@ -680,5 +685,81 @@ describe('Structured Output with Tool Execution', () => {
     expect(finalObject.activities.length).toBeGreaterThanOrEqual(1);
     expect(finalObject.toolsCalled).toHaveLength(2);
     expect(finalObject.location).toBe('Toronto');
+  }, 15000);
+
+  it('should NOT use structured output processor when model is not provided', async () => {
+    const responseSchema = z.object({
+      answer: z.string(),
+      confidence: z.number(),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant. Respond with JSON matching the required schema.',
+      model: openai('gpt-4o-mini'),
+    });
+
+    const result = await agent.generate('What is 2+2?', {
+      structuredOutput: {
+        schema: responseSchema,
+        // Note: no model provided - should use response_format or JSON prompt injection
+      },
+    });
+
+    // Verify the result has the expected structure
+    expect(result.object).toBeDefined();
+    expect(result.object.answer).toBeDefined();
+    expect(typeof result.object.confidence).toBe('number');
+    expect(typeof result.object.answer).toBe('string');
+  }, 15000);
+
+  it('should add structuredOutput object to response message metadata', async () => {
+    const responseSchema = z.object({
+      answer: z.string(),
+      confidence: z.number(),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      instructions: 'You are a helpful assistant. Answer the question.',
+      model: openai('gpt-4o-mini'),
+    });
+
+    const stream = await agent.stream('What is 2+2?', {
+      structuredOutput: {
+        schema: responseSchema,
+        model: openai('gpt-4o-mini'),
+      },
+    });
+
+    // Consume the stream
+    const result = await stream.getFullOutput();
+
+    // Verify the structured output is available on the result
+    expect(result.object).toBeDefined();
+    expect(result.object.answer).toBeDefined();
+    expect(typeof result.object.confidence).toBe('number');
+
+    // Check that the structured output is in response message metadata (untyped v2 format)
+    const responseMessages = stream.messageList.get.response.db();
+    const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
+
+    expect(lastAssistantMessage).toBeDefined();
+    expect(lastAssistantMessage?.content.metadata).toBeDefined();
+    expect(lastAssistantMessage?.content.metadata?.structuredOutput).toBeDefined();
+    expect(lastAssistantMessage?.content.metadata?.structuredOutput).toEqual(result.object);
+
+    // Note: For typed metadata access, use result.response.uiMessages instead (see below)
+
+    // UIMessages from response have properly typed metadata with structuredOutput
+    const uiMessages = (await stream.response).uiMessages;
+    const lastAssistantUIMessage = uiMessages!.find(m => m.role === 'assistant');
+
+    expect(lastAssistantUIMessage).toBeDefined();
+    expect(lastAssistantUIMessage?.metadata).toBeDefined();
+    expect(lastAssistantUIMessage?.metadata?.structuredOutput).toBeDefined();
+    expect(lastAssistantUIMessage?.metadata?.structuredOutput).toEqual(result.object);
   }, 15000);
 });

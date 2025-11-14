@@ -212,32 +212,6 @@ describe('getStep', () => {
     expect(result).toBe(loopStep.step);
   });
 
-  it('should return step property for waitForEvent type', () => {
-    // Arrange: Create workflow with waitForEvent step
-    const waitStep = {
-      type: 'waitForEvent' as const,
-      step: {
-        id: 'waitStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
-      },
-    };
-
-    const workflow = new EventedWorkflow({
-      id: 'workflow',
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-    });
-    workflow.stepGraph[0] = waitStep as any;
-
-    // Act: Call getStep with path to wait step
-    const result = getStep(workflow as any, [0]);
-
-    // Assert: Verify returned step matches wait step
-    expect(result).toBe(waitStep.step);
-  });
-
   it('should correctly resolve step from EventedWorkflow nested in parallel step', () => {
     // Arrange: Create nested workflow structure with parallel container
     const { outerWorkflow, targetStep } = createNestedWorkflow('parallel');
