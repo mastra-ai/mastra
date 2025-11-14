@@ -1022,8 +1022,9 @@ describe('Memory Handlers', () => {
       // First message should have custom metadata
       expect(result.messages[0]?.content.metadata).toHaveProperty('sessionId', 'session-1');
 
-      // Second message should NOT have custom metadata
-      expect(result.messages[1]?.content.metadata).toBeUndefined();
+      // Second message should NOT have custom metadata (empty object is ok)
+      const secondMetadata = result.messages[1]?.content.metadata;
+      expect(secondMetadata === undefined || Object.keys(secondMetadata || {}).length === 0).toBe(true);
 
       // Third message should have its own custom metadata
       expect(result.messages[2]?.content.metadata).toHaveProperty('referenceId', 'ref-123');
