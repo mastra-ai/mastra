@@ -5660,7 +5660,7 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
-    it('should throw error if trying to timetravel a workflow execution without input data', async () => {
+    it('should throw error if trying to timetravel to a non-existent step', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',

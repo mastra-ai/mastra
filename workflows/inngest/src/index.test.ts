@@ -4737,86 +4737,6 @@ describe('MastraInngestWorkflow', () => {
         id: 'step3',
         execute: async ({ inputData }) => {
           return {
-            final: inputData.step2Result + 1,
-          };
-        },
-        inputSchema: z.object({ step2Result: z.number() }),
-        outputSchema: z.object({ final: z.number() }),
-      });
-
-      const workflow = createWorkflow({
-        id: 'testWorkflow',
-        inputSchema: z.object({ value: z.number() }),
-        outputSchema: z.object({
-          final: z.number(),
-        }),
-      });
-
-      workflow.then(step1).then(step2).then(step3).commit();
-
-      const mastra = new Mastra({
-        logger: false,
-        storage: testStorage,
-        workflows: { testWorkflow: workflow },
-        server: {
-          apiRoutes: [
-            {
-              path: '/inngest/api',
-              method: 'ALL',
-              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-            },
-          ],
-        },
-      });
-
-      const app = await createHonoServer(mastra);
-
-      const srv = (globServer = serve({
-        fetch: app.fetch,
-        port: (ctx as any).handlerPort,
-      }));
-      await resetInngest();
-
-      const run = await workflow.createRun();
-
-      await expect(run.timeTravel({ step: 'step4', inputData: { step1Result: 2 } })).rejects.toThrow(
-        "Time travel target step not found in execution graph: 'step4'. Verify the step id/path.",
-      );
-
-      srv.close();
-    });
-
-    it('should throw error if trying to timetravel to a non-existent step in a workflow execution', async ctx => {
-      const inngest = new Inngest({
-        id: 'mastra',
-        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-      });
-
-      const { createWorkflow, createStep } = init(inngest);
-
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
-      const step1 = createStep({
-        id: 'step1',
-        execute,
-        inputSchema: z.object({ value: z.number() }),
-        outputSchema: z.object({ step1Result: z.number() }),
-      });
-
-      const step2 = createStep({
-        id: 'step2',
-        execute: async ({ inputData }) => {
-          return {
-            step2Result: inputData.step1Result + 1,
-          };
-        },
-        inputSchema: z.object({ step1Result: z.number() }),
-        outputSchema: z.object({ step2Result: z.number() }),
-      });
-
-      const step3 = createStep({
-        id: 'step3',
-        execute: async ({ inputData }) => {
-          return {
             step3Result: inputData.step2Result + 1,
           };
         },
@@ -4896,6 +4816,86 @@ describe('MastraInngestWorkflow', () => {
 
       await expect(run.timeTravel({ step: 'nestedWorkflow.step3' })).rejects.toThrow(
         'No inputData, resumeData, nor nestedStepsContext provided to time travel',
+      );
+
+      srv.close();
+    });
+
+    it('should throw error if trying to timetravel to a non-existent step', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return {
+            step2Result: inputData.step1Result + 1,
+          };
+        },
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => {
+          return {
+            final: inputData.step2Result + 1,
+          };
+        },
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'testWorkflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({
+          final: z.number(),
+        }),
+      });
+
+      workflow.then(step1).then(step2).then(step3).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { testWorkflow: workflow },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+
+      await expect(run.timeTravel({ step: 'step4', inputData: { step1Result: 2 } })).rejects.toThrow(
+        "Time travel target step not found in execution graph: 'step4'. Verify the step id/path.",
       );
 
       srv.close();
