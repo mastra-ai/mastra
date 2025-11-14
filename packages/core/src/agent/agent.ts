@@ -1890,7 +1890,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 result = await streamResult.result;
               }
 
-              return { result, runId: run.runId };
+              return result;
             } catch (err) {
               const mastraError = new MastraError(
                 {

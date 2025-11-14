@@ -52,6 +52,9 @@ export const weatherAgent = new Agent({
       doStream: async () => {
         count++;
 
+        console.log(`count`, count)
+        console.log(fixtureData)
+
         const chunk = fixtureData[count - 1] as Array<any>;
 
         if (count === fixtureData.length) {
