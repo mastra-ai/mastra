@@ -37,7 +37,8 @@ const voice = new SarvamVoice({
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  name: 'Agent',
+  id: 'voice-agent',
+  name: 'Voice Agent'
   instructions: `You are a helpful assistant with both TTS and STT capabilities.`,
   model: google('gemini-1.5-pro-latest'),
   voice: voice,

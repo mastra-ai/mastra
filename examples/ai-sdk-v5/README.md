@@ -23,21 +23,21 @@ This example demonstrates how to integrate [Mastra](https://mastra.ai) with [AI 
 
 ### Prerequisites
 
-- Node.js 18+
-- pnpm (recommended) or npm/yarn
+- Node.js 20+
+- npm
 
 ### Installation
 
 1. Install dependencies:
 
 ```bash
-pnpm install
+npm install
 ```
 
 2. Start the development server:
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
 3. Open [http://localhost:3000](http://localhost:3000) to see the chat interface

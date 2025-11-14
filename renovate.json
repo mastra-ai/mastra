@@ -13,12 +13,13 @@
     "group:recommended",
     ":prConcurrentLimit20"
   ],
+  "labels": ["automation"],
   "postUpdateOptions": ["pnpmDedupe"],
   "rebaseWhen": "conflicted",
   "major": {
     "dependencyDashboardApproval": true
   },
-  "ignorePaths": ["docs/**", "packages/memory/integration-tests/**", "explorations/**", ".github/scripts"],
+  "ignorePaths": ["docs/**", "explorations/**", ".github/scripts"],
   "packageRules": [
     {
       "matchDepTypes": ["engines"],

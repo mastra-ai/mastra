@@ -37,7 +37,7 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const { icon, title } = getIconAndTitle();
 
   return (
-    <Container className="space-y-4 text-icon3 mb-[2rem] content-center max-w-2xl mx-auto">
+    <Container className="space-y-4 text-icon3 mb-[2rem] content-center">
       {/* Main Error Display */}
       <div
         className={cn(

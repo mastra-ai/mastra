@@ -102,7 +102,7 @@ export function getTransformedSchema<OUTPUT extends OutputSchema = undefined>(sc
   };
 }
 
-export function getResponseFormat(schema?: OutputSchema | undefined):
+export function getResponseFormat(schema?: OutputSchema):
   | {
       type: 'text';
     }

@@ -1,13 +1,13 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 
 // Import agents
-import { flashCardsAgent } from './agents/flash-cards-agent';
+import { pdfProcessorAgent } from './agents/pdf-processor-agent';
 import { contentAnalyzerAgent } from './agents/content-analyzer-agent';
-import { flashCardsGeneratorAgent } from './agents/flash-cards-generator-agent';
-import { pdfContentAgent } from './agents/pdf-content-agent';
-import { pdfSummarizationAgent } from './agents/pdf-summarization-agent';
+import { flashCardCreatorAgent } from './agents/flash-card-creator-agent';
+import { educationalImageAgent } from './agents/educational-image-agent';
 
 // Import workflows
 import { flashCardsGenerationWorkflow } from './workflows/flash-cards-generation-workflow';
@@ -17,17 +17,22 @@ export const mastra = new Mastra({
     flashCardsGenerationWorkflow,
   },
   agents: {
-    flashCardsAgent,
+    pdfProcessorAgent,
     contentAnalyzerAgent,
-    flashCardsGeneratorAgent,
-    pdfContentAgent,
-    pdfSummarizationAgent,
+    flashCardCreatorAgent,
+    educationalImageAgent,
   },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: 'file:../mastra.db',
   }),
   logger: new PinoLogger({
     name: 'Mastra Flash Cards Template',
     level: 'info',
+  }),
+  observability: new Observability({
+    default: {
+      enabled: true,
+    },
   }),
 });

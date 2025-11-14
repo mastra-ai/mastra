@@ -84,13 +84,11 @@ export class AzureVoice extends MastraVoice {
    * @returns {Promise<Array<{ voiceId: string; language: string; region: string; }>>} List of available voices
    */
   async getSpeakers() {
-    return this.traced(async () => {
-      return AZURE_VOICES.map(voice => ({
-        voiceId: voice,
-        language: voice.split('-')[0],
-        region: voice.split('-')[1],
-      }));
-    }, 'voice.azure.voices')();
+    return AZURE_VOICES.map(voice => ({
+      voiceId: voice,
+      language: voice.split('-')[0],
+      region: voice.split('-')[1],
+    }));
   }
 
   /**
@@ -142,20 +140,16 @@ export class AzureVoice extends MastraVoice {
         setTimeout(() => reject(new Error('Speech synthesis timed out')), 5000);
       });
 
-      const synthesisPromise = this.traced(
-        () =>
-          new Promise<Azure.SpeechSynthesisResult>((resolve, reject) => {
-            synthesizer.speakTextAsync(
-              input,
-              result =>
-                result.errorDetails
-                  ? reject(new Error(`Speech synthesis failed: ${result.errorDetails}`))
-                  : resolve(result),
-              error => reject(new Error(`Speech synthesis error: ${String(error)}`)),
-            );
-          }),
-        'voice.azure.speak',
-      )();
+      const synthesisPromise = new Promise<Azure.SpeechSynthesisResult>((resolve, reject) => {
+        synthesizer.speakTextAsync(
+          input,
+          result =>
+            result.errorDetails
+              ? reject(new Error(`Speech synthesis failed: ${result.errorDetails}`))
+              : resolve(result),
+          error => reject(new Error(`Speech synthesis error: ${String(error)}`)),
+        );
+      });
 
       const result = await Promise.race([synthesisPromise, timeoutPromise]);
       synthesizer.close();
@@ -219,11 +213,11 @@ export class AzureVoice extends MastraVoice {
       const chunkSize = 4096;
       for (let i = 0; i < audioData.length; i += chunkSize) {
         const chunk = audioData.slice(i, i + chunkSize);
-        pushStream.write(chunk);
+        pushStream.write(chunk.buffer);
       }
       pushStream.close();
 
-      const text = await this.traced(() => recognitionPromise, 'voice.azure.listen')();
+      const text = await recognitionPromise;
 
       return text;
     } catch (error: unknown) {

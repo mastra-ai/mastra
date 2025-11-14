@@ -180,6 +180,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         bucketName: test_bucketName,
         scopeName: test_scopeName,
         collectionName: test_collectionName,
+        id: 'couchbase-integration-test',
       });
       expect(couchbase_client).toBeDefined();
       const collection = await couchbase_client.getCollection();

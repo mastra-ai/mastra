@@ -171,7 +171,7 @@ export class AuthManager {
    */
   private log(message: string, ...args: unknown[]): void {
     if (this.config.debug) {
-      console.log(`[AuthManager] ${message}`, ...args);
+      console.info(`[AuthManager] ${message}`, ...args);
     }
   }
 }

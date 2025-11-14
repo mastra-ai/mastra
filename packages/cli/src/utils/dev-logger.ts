@@ -6,6 +6,11 @@ interface DevLoggerOptions {
   colors?: boolean;
 }
 
+interface HTTPSOptions {
+  key: Buffer;
+  cert: Buffer;
+}
+
 export class DevLogger {
   private options: DevLoggerOptions;
 
@@ -30,47 +35,52 @@ export class DevLogger {
 
   info(message: string): void {
     const prefix = this.formatPrefix('◐', pc.cyan);
-    console.log(`${prefix} ${message}`);
+    console.info(`${prefix} ${message}`);
   }
 
   success(message: string): void {
     const prefix = this.formatPrefix('✓', pc.green);
-    console.log(`${prefix} ${pc.green(message)}`);
+    console.info(`${prefix} ${pc.green(message)}`);
   }
 
   warn(message: string): void {
     const prefix = this.formatPrefix('⚠', pc.yellow);
-    console.log(`${prefix} ${pc.yellow(message)}`);
+    console.info(`${prefix} ${pc.yellow(message)}`);
   }
 
   error(message: string): void {
     const prefix = this.formatPrefix('✗', pc.red);
-    console.log(`${prefix} ${pc.red(message)}`);
+    console.info(`${prefix} ${pc.red(message)}`);
   }
 
   starting(): void {
     const prefix = this.formatPrefix('◇', pc.blue);
-    console.log(`${prefix} ${pc.blue('Starting Mastra dev server...')}`);
+    console.info(`${prefix} ${pc.blue('Starting Mastra dev server...')}`);
   }
 
-  ready(host: string, port: number, startTime?: number): void {
-    console.log('');
+  ready(host: string, port: number, startTime?: number, https?: HTTPSOptions): void {
+    let protocol = 'http';
+    if (https && https.key && https.cert) {
+      protocol = 'https';
+    }
+
+    console.info('');
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
-    console.log(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
-    console.log('');
-    console.log(`${pc.dim('│')} ${pc.bold('Playground:')}   ${pc.cyan(`http://${host}:${port}/`)}`);
-    console.log(`${pc.dim('│')} ${pc.bold('API:')}     ${`http://${host}:${port}/api`}`);
-    console.log('');
+    console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
+    console.info('');
+    console.info(`${pc.dim('│')} ${pc.bold('Playground:')} ${pc.cyan(`${protocol}://${host}:${port}/`)}`);
+    console.info(`${pc.dim('│')} ${pc.bold('API:')}        ${`${protocol}://${host}:${port}/api`}`);
+    console.info('');
   }
 
   bundling(): void {
     const prefix = this.formatPrefix('◐', pc.magenta);
-    console.log(`${prefix} ${pc.magenta('Bundling...')}`);
+    console.info(`${prefix} ${pc.magenta('Bundling...')}`);
   }
 
   bundleComplete(): void {
     const prefix = this.formatPrefix('✓', pc.green);
-    console.log(`${prefix} ${pc.green('Bundle complete')}`);
+    console.info(`${prefix} ${pc.green('Bundle complete')}`);
   }
 
   watching(): void {
@@ -78,50 +88,50 @@ export class DevLogger {
     const icon = pc.dim('◯');
     const message = pc.dim('watching for file changes...');
     const fullMessage = `${icon} ${message}`;
-    console.log(time ? `${time} ${fullMessage}` : fullMessage);
+    console.info(time ? `${time} ${fullMessage}` : fullMessage);
   }
 
   restarting(): void {
     const prefix = this.formatPrefix('↻', pc.blue);
-    console.log(`${prefix} ${pc.blue('Restarting server...')}`);
+    console.info(`${prefix} ${pc.blue('Restarting server...')}`);
   }
 
   fileChange(file: string): void {
     const prefix = this.formatPrefix('⚡', pc.cyan);
     const fileName = path.basename(file);
-    console.log(`${prefix} ${pc.cyan('File changed:')} ${pc.dim(fileName)}`);
+    console.info(`${prefix} ${pc.cyan('File changed:')} ${pc.dim(fileName)}`);
   }
 
   // Enhanced error reporting
   serverError(error: string): void {
-    console.log('');
-    console.log(pc.red('  ✗ ') + pc.bold(pc.red('Server Error')));
-    console.log('');
-    console.log(`  ${pc.red('│')} ${error}`);
-    console.log('');
+    console.info('');
+    console.info(pc.red('  ✗ ') + pc.bold(pc.red('Server Error')));
+    console.info('');
+    console.info(`  ${pc.red('│')} ${error}`);
+    console.info('');
   }
 
   shutdown(): void {
-    console.log('');
+    console.info('');
     const prefix = this.formatPrefix('✓', pc.green);
-    console.log(`${prefix} ${pc.green('Dev server stopped')}`);
+    console.info(`${prefix} ${pc.green('Dev server stopped')}`);
   }
 
   envInfo(info: { port: number; env?: string; root: string }): void {
-    console.log('');
-    console.log(`  ${pc.dim('│')} ${pc.bold('Environment:')} ${pc.cyan(info.env || 'development')}`);
-    console.log(`  ${pc.dim('│')} ${pc.bold('Root:')} ${pc.dim(info.root)}`);
-    console.log(`  ${pc.dim('│')} ${pc.bold('Port:')} ${pc.cyan(info.port.toString())}`);
+    console.info('');
+    console.info(`  ${pc.dim('│')} ${pc.bold('Environment:')} ${pc.cyan(info.env || 'development')}`);
+    console.info(`  ${pc.dim('│')} ${pc.bold('Root:')} ${pc.dim(info.root)}`);
+    console.info(`  ${pc.dim('│')} ${pc.bold('Port:')} ${pc.cyan(info.port.toString())}`);
   }
 
   raw(message: string): void {
-    console.log(message);
+    console.info(message);
   }
 
   debug(message: string): void {
     if (process.env.DEBUG || process.env.MASTRA_DEBUG) {
       const prefix = this.formatPrefix('◦', pc.gray);
-      console.log(`${prefix} ${pc.gray(message)}`);
+      console.info(`${prefix} ${pc.gray(message)}`);
     }
   }
 

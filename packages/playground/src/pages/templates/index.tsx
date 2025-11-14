@@ -1,9 +1,10 @@
-import { Header, HeaderTitle, MainContentLayout, TemplatesTools, TemplatesList } from '@mastra/playground-ui';
+import { Header, HeaderTitle, MainContentLayout, TemplatesTools, TemplatesList, Icon } from '@mastra/playground-ui';
 import { useMastraTemplates } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router';
 
 import { useState } from 'react';
+import { PackageIcon } from 'lucide-react';
 
 export default function Templates() {
   const { data, isLoading } = useMastraTemplates();
@@ -61,7 +62,12 @@ export default function Templates() {
   return (
     <MainContentLayout>
       <Header>
-        <HeaderTitle>Templates</HeaderTitle>
+        <HeaderTitle>
+          <Icon>
+            <PackageIcon />
+          </Icon>
+          Templates
+        </HeaderTitle>
       </Header>
 
       <div className={cn('overflow-y-auto w-full h-full px-[2rem] pb-[3rem] z-[1]')}>

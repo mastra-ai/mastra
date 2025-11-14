@@ -167,7 +167,7 @@ export class ConnectionManager {
    */
   private log(message: string, ...args: unknown[]): void {
     if (this.debug) {
-      console.log(`[ConnectionManager] ${message}`, ...args);
+      console.info(`[ConnectionManager] ${message}`, ...args);
     }
   }
 }

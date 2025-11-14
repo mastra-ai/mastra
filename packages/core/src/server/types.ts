@@ -2,7 +2,7 @@ import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { Mastra } from '../mastra';
-import type { RuntimeContext } from '../runtime-context';
+import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
@@ -30,7 +30,7 @@ export type Middleware = MiddlewareHandler | { path: string; handler: Middleware
 export type ContextWithMastra = Context<{
   Variables: {
     mastra: Mastra;
-    runtimeContext: RuntimeContext;
+    requestContext: RequestContext;
     customRouteAuthConfig?: Map<string, boolean>;
   };
 }>;
@@ -136,5 +136,13 @@ export type ServerConfig = {
   /**
    * Authentication configuration for the server
    */
-  experimental_auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
+   */
+  https?: {
+    key: Buffer;
+    cert: Buffer;
+  };
 };

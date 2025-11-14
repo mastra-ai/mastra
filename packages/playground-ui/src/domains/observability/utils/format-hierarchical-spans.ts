@@ -1,10 +1,18 @@
-import { AISpanRecord } from '@mastra/core';
+import { SpanRecord } from '@mastra/core/storage';
 import { UISpan } from '../types';
 
-export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
+export const formatHierarchicalSpans = (spans: SpanRecord[]): UISpan[] => {
   if (!spans || spans.length === 0) {
     return [];
   }
+
+  const overallEndDate = spans.reduce(
+    (latest, span) => {
+      const endDate = span?.endedAt ? new Date(span.endedAt) : undefined;
+      return endDate && (!latest || endDate > latest) ? endDate : latest;
+    },
+    null as Date | null,
+  );
 
   // Create a map for quick lookup of spans by spanId
   const spanMap = new Map<string, UISpan>();
@@ -34,6 +42,13 @@ export const formatHierarchicalSpans = (spans: AISpanRecord[]): UISpan[] => {
 
     if (spanRecord?.parentSpanId === null) {
       // This is a root span
+      if (overallEndDate && uiSpan.endTime && overallEndDate > new Date(uiSpan.endTime)) {
+        // A client patch to set the endTime and latency of the root span in api provide inconsistent data, an inner span has endTime later than the root span
+        uiSpan.endTime = overallEndDate.toISOString();
+        const overallEndTime = new Date(overallEndDate).getTime();
+        const spanStartTime = new Date(uiSpan.startTime).getTime();
+        uiSpan.latency = overallEndTime - spanStartTime;
+      }
       rootSpans.push(uiSpan);
     } else {
       // This is a child span

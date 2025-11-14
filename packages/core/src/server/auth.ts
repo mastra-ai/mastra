@@ -1,16 +1,11 @@
 import type { HonoRequest } from 'hono';
 import { MastraBase } from '../base';
-import { InstrumentClass } from '../telemetry';
 
 export interface MastraAuthProviderOptions<TUser = unknown> {
   name?: string;
   authorizeUser?: (user: TUser, request: HonoRequest) => Promise<boolean> | boolean;
 }
 
-@InstrumentClass({
-  prefix: 'auth',
-  excludeMethods: ['__setTools', '__setLogger', '__setTelemetry', '#log'],
-})
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase {
   constructor(options?: MastraAuthProviderOptions<TUser>) {
     super({ component: 'AUTH', name: options?.name });

@@ -1,6 +1,13 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import type { ScoreRowData, ScoringEntityType, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import {
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { StoreOperationsMongoDB } from '../operations';
 
@@ -63,13 +70,22 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     }
   }
 
-  let runtimeContextValue: any = null;
-  if (row.runtimeContext) {
+  let requestContextValue: any = null;
+  if (row.requestContext) {
     try {
-      runtimeContextValue =
-        typeof row.runtimeContext === 'string' ? safelyParseJSON(row.runtimeContext) : row.runtimeContext;
+      requestContextValue =
+        typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext;
     } catch (e) {
-      console.warn('Failed to parse runtimeContext:', e);
+      console.warn('Failed to parse requestContext:', e);
+    }
+  }
+
+  let metadataValue: any = null;
+  if (row.metadata) {
+    try {
+      metadataValue = typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata;
+    } catch (e) {
+      console.warn('Failed to parse metadata:', e);
     }
   }
 
@@ -79,19 +95,21 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
     entityType: row.entityType as ScoringEntityType,
     scorerId: row.scorerId as string,
     traceId: row.traceId as string,
+    spanId: row.spanId as string,
     runId: row.runId as string,
     scorer: scorerValue,
     preprocessStepResult: preprocessStepResultValue,
+    preprocessPrompt: row.preprocessPrompt as string,
     analyzeStepResult: analyzeStepResultValue,
+    generateScorePrompt: row.generateScorePrompt as string,
     score: row.score as number,
-    reason: row.reason as string,
-    extractPrompt: row.extractPrompt as string,
     analyzePrompt: row.analyzePrompt as string,
     reasonPrompt: row.reasonPrompt as string,
+    metadata: metadataValue,
     input: inputValue,
     output: outputValue,
     additionalContext: row.additionalContext,
-    runtimeContext: runtimeContextValue,
+    requestContext: requestContextValue,
     entity: entityValue,
     source: row.source as ScoringSource,
     resourceId: row.resourceId as string,
@@ -133,42 +151,60 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let validatedScore: ValidatedSaveScorePayload;
+    try {
+      validatedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
     try {
       const now = new Date();
       const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       const scoreData = {
         id: scoreId,
-        entityId: score.entityId,
-        entityType: score.entityType,
-        scorerId: score.scorerId,
-        traceId: score.traceId || '',
-        runId: score.runId,
-        scorer: typeof score.scorer === 'string' ? safelyParseJSON(score.scorer) : score.scorer,
+        entityId: validatedScore.entityId,
+        entityType: validatedScore.entityType,
+        scorerId: validatedScore.scorerId,
+        traceId: validatedScore.traceId || '',
+        spanId: validatedScore.spanId || '',
+        runId: validatedScore.runId,
+        scorer:
+          typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer,
         preprocessStepResult:
-          typeof score.preprocessStepResult === 'string'
-            ? safelyParseJSON(score.preprocessStepResult)
-            : score.preprocessStepResult,
+          typeof validatedScore.preprocessStepResult === 'string'
+            ? safelyParseJSON(validatedScore.preprocessStepResult)
+            : validatedScore.preprocessStepResult,
         analyzeStepResult:
-          typeof score.analyzeStepResult === 'string'
-            ? safelyParseJSON(score.analyzeStepResult)
-            : score.analyzeStepResult,
-        score: score.score,
-        reason: score.reason,
-        preprocessPrompt: score.preprocessPrompt,
-        generateScorePrompt: score.generateScorePrompt,
-        generateReasonPrompt: score.generateReasonPrompt,
-        analyzePrompt: score.analyzePrompt,
-        reasonPrompt: score.reasonPrompt,
-        input: typeof score.input === 'string' ? safelyParseJSON(score.input) : score.input,
-        output: typeof score.output === 'string' ? safelyParseJSON(score.output) : score.output,
-        additionalContext: score.additionalContext,
-        runtimeContext:
-          typeof score.runtimeContext === 'string' ? safelyParseJSON(score.runtimeContext) : score.runtimeContext,
-        entity: typeof score.entity === 'string' ? safelyParseJSON(score.entity) : score.entity,
-        source: score.source,
-        resourceId: score.resourceId || '',
-        threadId: score.threadId || '',
+          typeof validatedScore.analyzeStepResult === 'string'
+            ? safelyParseJSON(validatedScore.analyzeStepResult)
+            : validatedScore.analyzeStepResult,
+        score: validatedScore.score,
+        reason: validatedScore.reason,
+        preprocessPrompt: validatedScore.preprocessPrompt,
+        generateScorePrompt: validatedScore.generateScorePrompt,
+        generateReasonPrompt: validatedScore.generateReasonPrompt,
+        analyzePrompt: validatedScore.analyzePrompt,
+        input: typeof validatedScore.input === 'string' ? safelyParseJSON(validatedScore.input) : validatedScore.input,
+        output:
+          typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output,
+        additionalContext: validatedScore.additionalContext,
+        requestContext:
+          typeof validatedScore.requestContext === 'string'
+            ? safelyParseJSON(validatedScore.requestContext)
+            : validatedScore.requestContext,
+        entity:
+          typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity,
+        source: validatedScore.source,
+        resourceId: validatedScore.resourceId || '',
+        threadId: validatedScore.threadId || '',
         createdAt: now,
         updatedAt: now,
       };
@@ -197,7 +233,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -211,6 +247,10 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const query: any = { scorerId };
 
       if (entityId) {
@@ -227,37 +267,38 @@ export class ScoresStorageMongoDB extends ScoresStorage {
 
       const collection = await this.operations.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
-      const currentOffset = pagination.page * pagination.perPage;
 
       if (total === 0) {
         return {
           scores: [],
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
         };
       }
 
-      const documents = await collection
-        .find(query)
-        .sort({ createdAt: 'desc' })
-        .skip(currentOffset)
-        .limit(pagination.perPage)
-        .toArray();
+      const end = perPageInput === false ? total : start + perPage;
 
+      // Build query - omit limit() when perPage is false to fetch all results
+      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const documents = await cursor.toArray();
       const scores = documents.map(row => transformScoreRow(row));
-      const hasMore = currentOffset + scores.length < total;
 
       return {
         scores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -273,7 +314,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -281,39 +322,44 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const collection = await this.operations.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ runId });
-      const currentOffset = pagination.page * pagination.perPage;
 
       if (total === 0) {
         return {
           scores: [],
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
         };
       }
 
-      const documents = await collection
-        .find({ runId })
-        .sort({ createdAt: 'desc' })
-        .skip(currentOffset)
-        .limit(pagination.perPage)
-        .toArray();
+      const end = perPageInput === false ? total : start + perPage;
 
+      // Build query - omit limit() when perPage is false to fetch all results
+      let cursor = collection.find({ runId }).sort({ createdAt: 'desc' }).skip(start);
+
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const documents = await cursor.toArray();
       const scores = documents.map(row => transformScoreRow(row));
-      const hasMore = currentOffset + scores.length < total;
 
       return {
         scores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -329,7 +375,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -339,39 +385,44 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const collection = await this.operations.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ entityId, entityType });
-      const currentOffset = pagination.page * pagination.perPage;
 
       if (total === 0) {
         return {
           scores: [],
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
         };
       }
 
-      const documents = await collection
-        .find({ entityId, entityType })
-        .sort({ createdAt: 'desc' })
-        .skip(currentOffset)
-        .limit(pagination.perPage)
-        .toArray();
+      const end = perPageInput === false ? total : start + perPage;
 
+      // Build query - omit limit() when perPage is false to fetch all results
+      let cursor = collection.find({ entityId, entityType }).sort({ createdAt: 'desc' }).skip(start);
+
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const documents = await cursor.toArray();
       const scores = documents.map(row => transformScoreRow(row));
-      const hasMore = currentOffset + scores.length < total;
 
       return {
         scores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
       };
     } catch (error) {
@@ -381,6 +432,70 @@ export class ScoresStorageMongoDB extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType, page: pagination.page, perPage: pagination.perPage },
+        },
+        error,
+      );
+    }
+  }
+
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const query = { traceId, spanId };
+      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const total = await collection.countDocuments(query);
+
+      if (total === 0) {
+        return {
+          scores: [],
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+        };
+      }
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Build query - omit limit() when perPage is false to fetch all results
+      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const documents = await cursor.toArray();
+      const scores = documents.map(row => transformScoreRow(row));
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },
         },
         error,
       );

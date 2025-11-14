@@ -1,6 +1,6 @@
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import { createScorer } from '@mastra/core/scores';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
 import {
@@ -29,7 +29,7 @@ export function createContextPrecisionScorer({
   model,
   options,
 }: {
-  model: MastraLanguageModel;
+  model: MastraModelConfig;
   options: ContextPrecisionMetricOptions;
 }) {
   if (!options.context && !options.contextExtractor) {
@@ -39,7 +39,8 @@ export function createContextPrecisionScorer({
     throw new Error('Context array cannot be empty if provided');
   }
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer({
+    id: 'context-precision-scorer',
     name: 'Context Precision Scorer',
     description:
       'A scorer that evaluates the relevance and precision of retrieved context nodes for generating expected outputs',
@@ -47,6 +48,7 @@ export function createContextPrecisionScorer({
       model,
       instructions: CONTEXT_PRECISION_AGENT_INSTRUCTIONS,
     },
+    type: 'agent',
   })
     .analyze({
       description: 'Evaluate the relevance of each context piece for generating the expected output',

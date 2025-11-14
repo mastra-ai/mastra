@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -10,11 +9,13 @@ import { sqlGenerationTool } from '../tools/sql-generation-tool';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'sql-agent-storage',
     url: 'file:../mastra.db', // Or your database URL
   }),
 });
 
 export const sqlAgent = new Agent({
+  id: 'sql-agent',
   name: 'SQL Agent',
   instructions: `You are an advanced PostgreSQL database assistant with comprehensive capabilities for database management and querying. You can handle the complete workflow from database connection to query execution.
 
@@ -153,7 +154,7 @@ export const sqlAgent = new Agent({
     Do NOT stop after generating SQL. Always execute it to provide the actual data.
 
     Always prioritize user safety, data security, and clear communication throughout the interaction.`,
-  model: openai('gpt-4.1-mini'),
+  model: process.env.MODEL || 'openai/gpt-4.1-mini',
   tools: {
     databaseIntrospectionTool,
     databaseSeedingTool,

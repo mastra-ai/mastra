@@ -51,10 +51,12 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     } else if (isDefault(z)(value)) {
       const defaultDef = value._def;
       const innerType = defaultDef.innerType;
-      const defaultValue = defaultDef.defaultValue();
-      const constraints: { defaultValue?: unknown } = {};
+      // Handle both Zod v3 (function) and v4 (direct value)
+      const defaultValue =
+        typeof defaultDef.defaultValue === 'function' ? defaultDef.defaultValue() : defaultDef.defaultValue;
+      const constraints: string[] = [];
       if (defaultValue !== undefined) {
-        constraints.defaultValue = defaultValue;
+        constraints.push(`the default value is ${defaultValue}`);
       }
 
       const description = this.mergeParameterDescription(value.description, constraints);

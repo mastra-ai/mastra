@@ -11,7 +11,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",
     "@mastra/core": "latest",

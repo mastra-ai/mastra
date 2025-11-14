@@ -11,19 +11,25 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",
-    "@mastra/agent-builder": "workspace:*",
+    "@mastra/agent-builder": "*",
     "dotenv": "^16.4.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@mastra/core": "workspace:*",
-    "@mastra/libsql": "workspace:*",
-    "@mastra/mcp": "workspace:*",
-    "mastra": "workspace:*",
+    "@mastra/core": "*",
+    "@mastra/libsql": "*",
+    "@mastra/mcp": "*",
+    "mastra": "*",
     "typescript": "^5.8.2",
     "vitest": "^3.2.4"
   },
-  "peerDependencies": {
-    "@mastra/core": ">=0.15.2-0 <0.17.0-0"
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../core",
+      "@mastra/agent-builder": "link:../../agent-builder",
+      "@mastra/libsql": "link:../../../stores/libsql",
+      "@mastra/mcp": "link:../../mcp",
+      "mastra": "link:../../cli"
+    }
   }
 }

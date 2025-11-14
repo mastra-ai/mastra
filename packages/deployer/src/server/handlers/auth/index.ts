@@ -1,11 +1,11 @@
 import type { ContextWithMastra } from '@mastra/core/server';
 import type { Next } from 'hono';
 import { defaultAuthConfig } from './defaults';
-import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest, isCustomRoutePublic } from './helpers';
+import { canAccessPublicly, checkRules, isProtectedPath, isDevPlaygroundRequest } from './helpers';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
-  const authConfig = mastra.getServer()?.experimental_auth;
+  const authConfig = mastra.getServer()?.auth;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
@@ -18,12 +18,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     return next();
   }
 
-  // Check if this is a custom route that doesn't require auth
-  if (isCustomRoutePublic(c.req.path, c.req.method, customRouteAuthConfig)) {
-    return next();
-  }
-
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
@@ -61,7 +56,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
     }
 
     // Store user in context
-    c.get('runtimeContext').set('user', user);
+    c.get('requestContext').set('user', user);
 
     return next();
   } catch (err) {
@@ -72,7 +67,7 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
 export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
-  const authConfig = mastra.getServer()?.experimental_auth;
+  const authConfig = mastra.getServer()?.auth;
   const customRouteAuthConfig = c.get('customRouteAuthConfig');
 
   if (!authConfig) {
@@ -88,12 +83,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  // Check if this is a custom route that doesn't require auth
-  if (isCustomRoutePublic(path, method, customRouteAuthConfig)) {
-    return next();
-  }
-
-  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig, customRouteAuthConfig)) {
     return next();
   }
 
@@ -102,7 +92,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
     return next();
   }
 
-  const user = c.get('runtimeContext').get('user');
+  const user = c.get('requestContext').get('user');
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {

@@ -18,7 +18,7 @@ export const isCustomRoutePublic = (
   // Check exact match first
   const routeKey = `${method}:${path}`;
   if (customRouteAuthConfig.has(routeKey)) {
-    return !customRouteAuthConfig.get(routeKey); // Return true if requiresAuth is false
+    return !customRouteAuthConfig.get(routeKey); // True when route opts out of auth
   }
 
   // Check ALL method
@@ -30,9 +30,14 @@ export const isCustomRoutePublic = (
   return false;
 };
 
-export const isProtectedPath = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
+export const isProtectedPath = (
+  path: string,
+  method: string,
+  authConfig: MastraAuthConfig,
+  customRouteAuthConfig?: Map<string, boolean>,
+): boolean => {
   const protectedAccess = [...(defaultAuthConfig.protected || []), ...(authConfig.protected || [])];
-  return isAnyMatch(path, method, protectedAccess);
+  return isAnyMatch(path, method, protectedAccess) || !isCustomRoutePublic(path, method, customRouteAuthConfig);
 };
 
 export const canAccessPublicly = (path: string, method: string, authConfig: MastraAuthConfig): boolean => {
@@ -91,7 +96,6 @@ export const pathMatchesRule = (path: string, rulePath: string | RegExp | string
   }
 
   if (rulePath instanceof RegExp) {
-    console.log('rulePath', rulePath, path, rulePath.test(path));
     return rulePath.test(path);
   }
 

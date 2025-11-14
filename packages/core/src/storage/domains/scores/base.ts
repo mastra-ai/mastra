@@ -1,5 +1,6 @@
 import { MastraBase } from '../../../base';
-import type { ScoreRowData, ScoringSource } from '../../../scores/types';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import type { ScoreRowData, ScoringSource } from '../../../evals/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 
 export abstract class ScoresStorage extends MastraBase {
@@ -14,7 +15,7 @@ export abstract class ScoresStorage extends MastraBase {
 
   abstract saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }>;
 
-  abstract getScoresByScorerId({
+  abstract listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -28,7 +29,7 @@ export abstract class ScoresStorage extends MastraBase {
     source?: ScoringSource;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByRunId({
+  abstract listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -36,7 +37,7 @@ export abstract class ScoresStorage extends MastraBase {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
 
-  abstract getScoresByEntityId({
+  abstract listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -45,4 +46,21 @@ export abstract class ScoresStorage extends MastraBase {
     entityId: string;
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination: _pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    throw new MastraError({
+      id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { traceId, spanId },
+    });
+  }
 }

@@ -1,7 +1,5 @@
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { extractToolCalls } from '../../utils';
-
 interface ToolCallAccuracyOptions {
   expectedTool?: string;
   strictMode?: boolean;
@@ -76,9 +74,11 @@ export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOption
       : `Evaluates whether the LLM selected the correct tool (${expectedTool}) from the available tools`;
   };
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
-    name: 'Tool Call Accuracy',
+  return createScorer({
+    id: 'code-tool-call-accuracy-scorer',
+    name: 'Tool Call Accuracy Scorer',
     description: getDescription(),
+    type: 'agent',
   })
     .preprocess(async ({ run }) => {
       const isInputInvalid = !run.input || !run.input.inputMessages || run.input.inputMessages.length === 0;

@@ -72,7 +72,3 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-[MIT](LICENSE)

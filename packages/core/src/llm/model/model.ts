@@ -1,3 +1,12 @@
+import { generateObject, generateText, Output, streamObject, streamText } from '@internal/ai-sdk-v4';
+import type {
+  CoreMessage,
+  LanguageModelV1 as LanguageModel,
+  StreamObjectOnFinishCallback,
+  StreamTextOnFinishCallback,
+  Schema,
+} from '@internal/ai-sdk-v4';
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -6,18 +15,16 @@ import {
   MetaSchemaCompatLayer,
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
+  jsonSchema,
 } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { CoreMessage, LanguageModel, Schema, StreamObjectOnFinishCallback, StreamTextOnFinishCallback } from 'ai';
-import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from '../../action';
-import { AISpanType } from '../../ai-tracing';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
+import { SpanType } from '../../observability';
 import { delay, isZodType } from '../../utils';
 
 import type {
@@ -37,16 +44,18 @@ import type {
   StreamObjectResult,
   StreamReturn,
 } from './base.types';
-import type { inferOutput } from './shared.types';
+import type { inferOutput, MastraModelOptions } from './shared.types';
 
 export class MastraLLMV1 extends MastraBase {
   #model: LanguageModel;
   #mastra?: Mastra;
+  #options?: MastraModelOptions;
 
-  constructor({ model, mastra }: { model: LanguageModel; mastra?: Mastra }) {
+  constructor({ model, mastra, options }: { model: LanguageModel; mastra?: Mastra; options?: MastraModelOptions }) {
     super({ name: 'aisdk' });
 
     this.#model = model;
+    this.#options = options;
 
     if (mastra) {
       this.#mastra = mastra;
@@ -57,10 +66,6 @@ export class MastraLLMV1 extends MastraBase {
   }
 
   __registerPrimitives(p: MastraPrimitives) {
-    if (p.telemetry) {
-      this.__setTelemetry(p.telemetry);
-    }
-
     if (p.logger) {
       this.__setLogger(p.logger);
     }
@@ -104,7 +109,7 @@ export class MastraLLMV1 extends MastraBase {
     }
 
     return applyCompatLayer({
-      schema: schema as any,
+      schema: schema as Schema | ZodSchema,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -119,10 +124,9 @@ export class MastraLLMV1 extends MastraBase {
     toolChoice = 'auto',
     onStepFinish,
     experimental_output,
-    telemetry,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
@@ -161,7 +165,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
         schema,
@@ -183,6 +187,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
@@ -237,10 +242,6 @@ export class MastraLLMV1 extends MastraBase {
           this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
           await delay(10 * 1000);
         }
-      },
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
       },
       experimental_output: schema
         ? Output.object({
@@ -297,10 +298,9 @@ export class MastraLLMV1 extends MastraBase {
     messages,
     structuredOutput,
     runId,
-    telemetry,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
@@ -310,7 +310,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
       },
@@ -331,6 +331,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     try {
@@ -355,10 +356,6 @@ export class MastraLLMV1 extends MastraBase {
         // @ts-expect-error - output in our implementation can only be object or array
         output,
         schema: processedSchema as Schema<Z>,
-        experimental_telemetry: {
-          ...this.experimental_telemetry,
-          ...telemetry,
-        },
       };
 
       try {
@@ -432,10 +429,9 @@ export class MastraLLMV1 extends MastraBase {
     temperature,
     toolChoice = 'auto',
     experimental_output,
-    telemetry,
     threadId,
     resourceId,
-    runtimeContext,
+    requestContext,
     tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
@@ -466,7 +462,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
       },
@@ -487,6 +483,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
@@ -543,22 +540,25 @@ export class MastraLLMV1 extends MastraBase {
         }
       },
       onFinish: async props => {
+        // End the model generation span BEFORE calling the user's onFinish callback
+        // This ensures the model span ends before the agent span
+        llmSpan?.end({
+          output: {
+            text: props?.text,
+            reasoning: props?.reasoningDetails,
+            reasoningText: props?.reasoning,
+            files: props?.files,
+            sources: props?.sources,
+            warnings: props?.warnings,
+          },
+          attributes: {
+            finishReason: props?.finishReason,
+            usage: props?.usage,
+          },
+        });
+
         try {
           await onFinish?.({ ...props, runId: runId! });
-          llmSpan?.end({
-            output: {
-              text: props?.text,
-              reasoning: props?.reasoningDetails,
-              reasoningText: props?.reasoning,
-              files: props?.files,
-              sources: props?.sources,
-              warnings: props?.warnings,
-            },
-            attributes: {
-              finishReason: props?.finishReason,
-              usage: props?.usage,
-            },
-          });
         } catch (e: unknown) {
           const mastraError = new MastraError(
             {
@@ -597,10 +597,6 @@ export class MastraLLMV1 extends MastraBase {
       },
       ...rest,
       messages,
-      experimental_telemetry: {
-        ...this.experimental_telemetry,
-        ...telemetry,
-      },
       experimental_output: schema
         ? (Output.object({
             schema,
@@ -634,12 +630,11 @@ export class MastraLLMV1 extends MastraBase {
   __streamObject<T extends ZodSchema | JSONSchema7>({
     messages,
     runId,
-    runtimeContext,
+    requestContext,
     threadId,
     resourceId,
     onFinish,
     structuredOutput,
-    telemetry,
     tracingContext,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
@@ -651,7 +646,7 @@ export class MastraLLMV1 extends MastraBase {
 
     const llmSpan = tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
-      type: AISpanType.LLM_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       input: {
         messages,
       },
@@ -672,6 +667,7 @@ export class MastraLLMV1 extends MastraBase {
         threadId,
         resourceId,
       },
+      tracingPolicy: this.#options?.tracingPolicy,
     });
 
     try {
@@ -693,23 +689,26 @@ export class MastraLLMV1 extends MastraBase {
         ...rest,
         model,
         onFinish: async (props: any) => {
+          // End the model generation span BEFORE calling the user's onFinish callback
+          // This ensures the model span ends before the agent span
+          llmSpan?.end({
+            output: {
+              text: props?.text,
+              object: props?.object,
+              reasoning: props?.reasoningDetails,
+              reasoningText: props?.reasoning,
+              files: props?.files,
+              sources: props?.sources,
+              warnings: props?.warnings,
+            },
+            attributes: {
+              finishReason: props?.finishReason,
+              usage: props?.usage,
+            },
+          });
+
           try {
             await onFinish?.({ ...props, runId: runId! });
-            llmSpan?.end({
-              output: {
-                text: props?.text,
-                object: props?.object,
-                reasoning: props?.reasoningDetails,
-                reasoningText: props?.reasoning,
-                files: props?.files,
-                sources: props?.sources,
-                warnings: props?.warnings,
-              },
-              attributes: {
-                finishReason: props?.finishReason,
-                usage: props?.usage,
-              },
-            });
           } catch (e: unknown) {
             const mastraError = new MastraError(
               {
@@ -745,10 +744,6 @@ export class MastraLLMV1 extends MastraBase {
         messages,
         // @ts-expect-error - output in our implementation can only be object or array
         output,
-        experimental_telemetry: {
-          ...this.experimental_telemetry,
-          ...telemetry,
-        },
         schema: processedSchema as Schema<inferOutput<T>>,
       };
 

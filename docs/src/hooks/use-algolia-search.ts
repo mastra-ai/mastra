@@ -1,5 +1,6 @@
 import { algoliasearch, type SearchClient } from "algoliasearch";
 import { useEffect, useRef, useState } from "react";
+import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 
 /**
  * Options that can be passed to Algolia search.
@@ -48,12 +49,16 @@ export type AlgoliaSearchOptions = {
 };
 
 /**
- * Structure of hierarchy section in Algolia results
+ * Structure of hierarchy in Algolia search results (DocSearch v3 format)
  */
-interface AlgoliaHierarchySection {
-  title?: string;
-  content?: string;
-  anchor?: string;
+interface AlgoliaHierarchy {
+  lvl0?: string;
+  lvl1?: string;
+  lvl2?: string;
+  lvl3?: string;
+  lvl4?: string;
+  lvl5?: string;
+  lvl6?: string;
 }
 
 /**
@@ -61,25 +66,31 @@ interface AlgoliaHierarchySection {
  */
 interface AlgoliaHit {
   objectID: string;
-  title?: string;
   content?: string;
   url?: string;
-  hierarchy?: AlgoliaHierarchySection[];
-  _highlightResult?: Record<
-    string,
-    {
-      value: string;
-      matchLevel: string;
-      matchedWords?: string[];
-    }
-  >;
-  _snippetResult?: Record<
-    string,
-    {
-      value: string;
-      matchLevel: string;
-    }
-  >;
+  url_without_anchor?: string;
+  anchor?: string;
+  hierarchy?: AlgoliaHierarchy;
+  type?: string;
+  lang?: string;
+  section?: string;
+  priority?: number;
+  depth?: number;
+  _highlightResult?: {
+    hierarchy?: {
+      lvl0?: { value: string; matchLevel: string };
+      lvl1?: { value: string; matchLevel: string };
+      lvl2?: { value: string; matchLevel: string };
+      lvl3?: { value: string; matchLevel: string };
+      lvl4?: { value: string; matchLevel: string };
+      lvl5?: { value: string; matchLevel: string };
+      lvl6?: { value: string; matchLevel: string };
+    };
+    content?: { value: string; matchLevel: string; matchedWords?: string[] };
+  };
+  _snippetResult?: {
+    content?: { value: string; matchLevel: string };
+  };
 }
 
 export type AlgoliaResult = {
@@ -87,21 +98,24 @@ export type AlgoliaResult = {
   title: string;
   url: string;
   objectID: string;
-  _highlightResult?: Record<
-    string,
-    {
-      value: string;
-      matchLevel: string;
-      matchedWords?: string[];
-    }
-  >;
-  _snippetResult?: Record<
-    string,
-    {
-      value: string;
-      matchLevel: string;
-    }
-  >;
+  section?: string; // Section type: docs, guides, reference, examples
+  priority?: number; // Priority score for ranking
+  depth?: number; // URL path depth for ranking
+  _highlightResult?: {
+    hierarchy?: {
+      lvl0?: { value: string; matchLevel: string };
+      lvl1?: { value: string; matchLevel: string };
+      lvl2?: { value: string; matchLevel: string };
+      lvl3?: { value: string; matchLevel: string };
+      lvl4?: { value: string; matchLevel: string };
+      lvl5?: { value: string; matchLevel: string };
+      lvl6?: { value: string; matchLevel: string };
+    };
+    content?: { value: string; matchLevel: string; matchedWords?: string[] };
+  };
+  _snippetResult?: {
+    content?: { value: string; matchLevel: string };
+  };
   sub_results: {
     excerpt: string;
     title: string;
@@ -114,6 +128,9 @@ interface UseAlgoliaSearchResult {
   results: AlgoliaResult[];
   search: string;
   setSearch: (value: string) => void;
+  hasMore: boolean;
+  loadMore: () => void;
+  isLoadingMore: boolean;
 }
 
 /**
@@ -123,32 +140,38 @@ interface UseAlgoliaSearchResult {
  * @returns Search state and setter function
  */
 export function useAlgoliaSearch(
-  debounceTime = 300,
+  debounceTime = 100,
   searchOptions?: AlgoliaSearchOptions,
 ): UseAlgoliaSearchResult {
+  const { siteConfig } = useDocusaurusContext();
   const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [results, setResults] = useState<AlgoliaResult[]>([]);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const loadMoreAbortControllerRef = useRef<AbortController | null>(null);
 
   // Initialize Algolia client
   const algoliaClient = useRef<SearchClient | null>(null);
 
+  const hasMore = currentPage < totalPages - 1;
+
   useEffect(() => {
-    // Initialize Algolia client with your credentials
-    // You'll need to set these environment variables
-    const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID;
-    const apiKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY;
+    // Initialize Algolia client with your credentials from site config
+    const { algoliaAppId: appId, algoliaSearchApiKey: apiKey } =
+      siteConfig.customFields || {};
 
     if (appId && apiKey) {
-      algoliaClient.current = algoliasearch(appId, apiKey);
+      algoliaClient.current = algoliasearch(appId as string, apiKey as string);
     } else {
       console.warn(
-        "Algolia credentials not found. Please set NEXT_PUBLIC_ALGOLIA_APP_ID and NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY environment variables.",
+        "Algolia credentials not found. Please set algoliaAppId and algoliaSearchApiKey in docusaurus.config.js customFields.",
       );
     }
-  }, []);
+  }, [siteConfig]);
 
   useEffect(() => {
     // Clear previous timer on each search change
@@ -165,6 +188,8 @@ export function useAlgoliaSearch(
     if (!search) {
       setResults([]);
       setIsSearchLoading(false);
+      setCurrentPage(0);
+      setTotalPages(0);
       return;
     }
 
@@ -190,7 +215,7 @@ export function useAlgoliaSearch(
           return;
         }
 
-        const indexName = searchOptions?.indexName || "crawler_mastra crawler"; // Default index name
+        const indexName = searchOptions?.indexName || "docs_crawler"; // Default index name
 
         const searchRequest = {
           indexName: indexName,
@@ -198,17 +223,25 @@ export function useAlgoliaSearch(
           params: {
             hitsPerPage: searchOptions?.hitsPerPage || 20,
             attributesToRetrieve: searchOptions?.attributesToRetrieve || [
-              "title",
-              "content",
-              "url",
               "hierarchy",
+              "content",
+              "anchor",
+              "url",
+              "url_without_anchor",
+              "type",
+              "section",
+              "lang",
+              "priority",
+              "depth",
             ],
             attributesToHighlight: searchOptions?.attributesToHighlight || [
-              "title",
+              "hierarchy.lvl1",
+              "hierarchy.lvl2",
+              "hierarchy.lvl3",
               "content",
             ],
             attributesToSnippet: searchOptions?.attributesToSnippet || [
-              "content:15",
+              "content:30",
             ],
             highlightPreTag: searchOptions?.highlightPreTag || "<mark>",
             highlightPostTag: searchOptions?.highlightPostTag || "</mark>",
@@ -274,78 +307,85 @@ export function useAlgoliaSearch(
                 return snippet;
               };
 
+              // Build hierarchical title with format "h1: h2" or "h1: h3" etc.
+              const buildHierarchicalTitle = (): string => {
+                const levels: string[] = [];
+                const highlightedLevels: string[] = [];
+
+                // Collect all hierarchy levels (skip lvl0 as it's usually just the section name like "Docs")
+                const hierarchyKeys = [
+                  "lvl1",
+                  "lvl2",
+                  "lvl3",
+                  "lvl4",
+                  "lvl5",
+                  "lvl6",
+                ] as const;
+
+                for (const key of hierarchyKeys) {
+                  const value = typedHit.hierarchy?.[key];
+                  const highlightedValue =
+                    typedHit._highlightResult?.hierarchy?.[key]?.value;
+
+                  if (value) {
+                    levels.push(value);
+                    highlightedLevels.push(highlightedValue || value);
+                  }
+                }
+
+                // If we have multiple levels, format as "h1: h2" or "h1: h3" (showing first and last)
+                if (highlightedLevels.length > 1) {
+                  return stripColon(
+                    `${highlightedLevels[0]}: ${highlightedLevels[highlightedLevels.length - 1]}`,
+                  );
+                } else if (highlightedLevels.length === 1) {
+                  return stripColon(highlightedLevels[0]);
+                } else if (typedHit.hierarchy?.lvl0) {
+                  return (
+                    stripColon(
+                      typedHit._highlightResult?.hierarchy?.lvl0?.value || "",
+                    ) || stripColon(typedHit.hierarchy.lvl0)
+                  );
+                }
+
+                return "Untitled";
+              };
+
+              const displayTitle = buildHierarchicalTitle();
+
               // Prioritize snippet result, then highlighted content, then fallback
               let excerpt = "";
 
               if (typedHit._snippetResult?.content?.value) {
-                // Use Algolia's snippet if available
+                // Use Algolia's snippet if available (already highlighted)
                 excerpt = typedHit._snippetResult.content.value;
               } else if (typedHit._highlightResult?.content?.value) {
-                // Use highlighted content and extract relevant snippet
-                const highlightedContent =
-                  typedHit._highlightResult.content.value;
-                excerpt = extractRelevantSnippet(
-                  highlightedContent,
-                  search,
-                  200,
-                );
+                // Use highlighted content
+                excerpt = typedHit._highlightResult.content.value;
               } else if (typedHit.content) {
                 // Fallback to extracting snippet from raw content
                 excerpt = extractRelevantSnippet(typedHit.content, search, 200);
-              } else if (typedHit._highlightResult?.title?.value) {
-                excerpt = typedHit._highlightResult.title.value;
               } else {
-                excerpt = typedHit.title || "";
+                excerpt = displayTitle;
               }
 
-              // Create multiple sub_results if we have hierarchy or can detect sections
-              const subResults: AlgoliaResult["sub_results"] = [];
-
-              if (typedHit.hierarchy && Array.isArray(typedHit.hierarchy)) {
-                // If we have hierarchy information, create sub-results for different sections
-                typedHit.hierarchy.forEach(
-                  (section: AlgoliaHierarchySection) => {
-                    if (
-                      section.content &&
-                      section.content
-                        .toLowerCase()
-                        .includes(search.toLowerCase())
-                    ) {
-                      subResults.push({
-                        title: section.title || typedHit.title || "",
-                        excerpt: extractRelevantSnippet(
-                          section.content,
-                          search,
-                          180,
-                        ),
-                        url: `${typedHit.url}${section.anchor ? `#${section.anchor}` : ""}`,
-                      });
-                    }
-                  },
-                );
-
-                // If no hierarchy sections matched, add the main result
-                if (subResults.length === 0) {
-                  subResults.push({
-                    title: typedHit.title || "",
-                    excerpt: excerpt,
-                    url: typedHit.url || "",
-                  });
-                }
-              } else {
-                // Single sub-result with the main excerpt
-                subResults.push({
-                  title: typedHit.title || "",
+              // Single result per hit (Algolia already handles ranking and deduplication)
+              const subResults: AlgoliaResult["sub_results"] = [
+                {
+                  title: displayTitle,
                   excerpt: excerpt,
-                  url: typedHit.url || "",
-                });
-              }
+                  url: toRelativePath(typedHit.url || ""),
+                },
+              ];
 
               return {
                 objectID: typedHit.objectID,
-                title: typedHit.title || "",
+                title: displayTitle,
                 excerpt: excerpt,
-                url: typedHit.url || "",
+                url: toRelativePath(typedHit.url || ""),
+                section: typedHit.section,
+                priority: typedHit.priority,
+                depth: typedHit.depth,
                 _highlightResult: typedHit._highlightResult,
                 _snippetResult: typedHit._snippetResult,
                 sub_results: subResults,
@@ -353,11 +393,19 @@ export function useAlgoliaSearch(
             },
           );
 
+          // Update pagination metadata
+          if ("nbPages" in firstResult) {
+            setTotalPages(firstResult.nbPages || 1);
+            setCurrentPage(firstResult.page || 0);
+          }
+
           setIsSearchLoading(false);
           setResults(transformedResults);
         } else {
           setIsSearchLoading(false);
           setResults([]);
+          setCurrentPage(0);
+          setTotalPages(0);
         }
       } catch (error) {
         // Ignore AbortError
@@ -384,10 +432,189 @@ export function useAlgoliaSearch(
     };
   }, [search, debounceTime, searchOptions]);
 
+  // Function to load more results
+  const loadMore = async () => {
+    if (!hasMore || isLoadingMore || !algoliaClient.current || !search) {
+      return;
+    }
+
+    setIsLoadingMore(true);
+
+    // Cancel previous load more request
+    if (loadMoreAbortControllerRef.current) {
+      loadMoreAbortControllerRef.current.abort();
+    }
+
+    loadMoreAbortControllerRef.current = new AbortController();
+    const { signal } = loadMoreAbortControllerRef.current;
+
+    try {
+      const indexName = searchOptions?.indexName || "docs_crawler";
+      const nextPage = currentPage + 1;
+
+      const searchRequest = {
+        indexName,
+        query: search,
+        params: {
+          page: nextPage,
+          hitsPerPage: searchOptions?.hitsPerPage || 20,
+          attributesToRetrieve: searchOptions?.attributesToRetrieve || [
+            "hierarchy",
+            "content",
+            "anchor",
+            "url",
+            "url_without_anchor",
+            "type",
+            "section",
+            "lang",
+            "priority",
+            "depth",
+          ],
+          attributesToHighlight: searchOptions?.attributesToHighlight || [
+            "hierarchy.lvl1",
+            "hierarchy.lvl2",
+            "hierarchy.lvl3",
+            "content",
+          ],
+          attributesToSnippet: searchOptions?.attributesToSnippet || [
+            "content:30",
+          ],
+          highlightPreTag: searchOptions?.highlightPreTag || "<mark>",
+          highlightPostTag: searchOptions?.highlightPostTag || "</mark>",
+          snippetEllipsisText: searchOptions?.snippetEllipsisText || "…",
+          ...(searchOptions?.filters && { filters: searchOptions.filters }),
+          ...(searchOptions?.facetFilters && {
+            facetFilters: searchOptions.facetFilters,
+          }),
+        },
+      };
+
+      const { results: algoliaResults } = await algoliaClient.current.search([
+        searchRequest,
+      ]);
+
+      if (signal.aborted) return;
+
+      const firstResult = algoliaResults[0];
+      if ("hits" in firstResult) {
+        const transformedResults: AlgoliaResult[] = firstResult.hits.map(
+          (hit) => {
+            const typedHit = hit as AlgoliaHit;
+
+            const buildHierarchicalTitle = (): string => {
+              const hierarchyKeys = [
+                "lvl1",
+                "lvl2",
+                "lvl3",
+                "lvl4",
+                "lvl5",
+                "lvl6",
+              ] as const;
+              const highlightedLevels: string[] = [];
+
+              for (const key of hierarchyKeys) {
+                const value = typedHit.hierarchy?.[key];
+                const highlightedValue =
+                  typedHit._highlightResult?.hierarchy?.[key]?.value;
+                if (value) {
+                  highlightedLevels.push(highlightedValue || value);
+                }
+              }
+
+              if (highlightedLevels.length > 1) {
+                const nextLevel =
+                  highlightedLevels[highlightedLevels.length - 1];
+                if (nextLevel) {
+                  return stripColon(`${highlightedLevels[0]}: ${nextLevel}`);
+                } else {
+                  return stripColon(highlightedLevels[0]);
+                }
+              } else if (highlightedLevels.length === 1) {
+                return stripColon(highlightedLevels[0]);
+              } else if (typedHit.hierarchy?.lvl0) {
+                return (
+                  stripColon(
+                    typedHit._highlightResult?.hierarchy?.lvl0?.value || "",
+                  ) || stripColon(typedHit.hierarchy.lvl0)
+                );
+              }
+              return "Untitled";
+            };
+
+            const displayTitle = buildHierarchicalTitle();
+            const excerpt =
+              typedHit._snippetResult?.content?.value ||
+              typedHit._highlightResult?.content?.value ||
+              displayTitle;
+
+            return {
+              objectID: typedHit.objectID,
+              title: displayTitle,
+              excerpt,
+              url: toRelativePath(typedHit.url || ""),
+              section: typedHit.section,
+              priority: typedHit.priority,
+              depth: typedHit.depth,
+              _highlightResult: typedHit._highlightResult,
+              _snippetResult: typedHit._snippetResult,
+              sub_results: [
+                {
+                  title: displayTitle,
+                  excerpt,
+                  url: toRelativePath(typedHit.url || ""),
+                },
+              ],
+            };
+          },
+        );
+
+        // Append new results to existing ones
+        setResults((prevResults) => [...prevResults, ...transformedResults]);
+        setCurrentPage(nextPage);
+        setIsLoadingMore(false);
+      } else {
+        setIsLoadingMore(false);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+      if (!signal.aborted) {
+        console.error("Algolia load more error:", error);
+        setIsLoadingMore(false);
+      }
+    }
+  };
+
   return {
     isSearchLoading,
     results,
     search,
     setSearch,
+    hasMore,
+    loadMore,
+    isLoadingMore,
   };
+}
+
+function stripColon(title: string) {
+  return title.charAt(title.length - 1) === ":" ? title.slice(0, -1) : title;
+}
+
+/**
+ * Convert absolute URLs to relative paths to prevent issues with preview branches
+ * @param url - URL from Algolia (could be absolute or relative)
+ * @returns Relative path with hash if present
+ */
+function toRelativePath(url: string): string {
+  if (!url) return "";
+
+  try {
+    // Try to parse as URL - if it's absolute, extract pathname + hash
+    const urlObj = new URL(url);
+    return urlObj.pathname + urlObj.hash;
+  } catch {
+    // If URL parsing fails, it's likely already a relative path
+    return url;
+  }
 }

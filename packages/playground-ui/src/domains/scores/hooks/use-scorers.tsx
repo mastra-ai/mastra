@@ -1,36 +1,8 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetScorerResponse, GetScoresResponse } from '@mastra/client-js';
-import { useMastraClient } from '@/contexts/mastra-client-context';
-
-export const useScoresByEntityId = (entityId: string, entityType: string, page: number = 0) => {
-  const client = useMastraClient();
-  const [scores, setScores] = useState<GetScoresResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchScores = async () => {
-      setIsLoading(true);
-      try {
-        const res = await client.getScoresByEntityId({
-          entityId,
-          entityType,
-          page: page || 0,
-          perPage: 10,
-        });
-        setScores(res);
-        setIsLoading(false);
-      } catch (error) {
-        setScores(null);
-        setIsLoading(false);
-      }
-    };
-
-    fetchScores();
-  }, [entityId, entityType, page]);
-
-  return { scores, isLoading };
-};
+import { GetScorerResponse } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 
 type UseScoresByScorerIdProps = {
   scorerId: string;
@@ -41,47 +13,31 @@ type UseScoresByScorerIdProps = {
 
 export const useScoresByScorerId = ({ scorerId, page = 0, entityId, entityType }: UseScoresByScorerIdProps) => {
   const client = useMastraClient();
-  const [scores, setScores] = useState<GetScoresResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchScores = async () => {
-      setIsLoading(true);
-      try {
-        const res = await client.getScoresByScorerId({
-          scorerId,
-          page: page || 0,
-          entityId: entityId || undefined,
-          entityType: entityType || undefined,
-          perPage: 10,
-        });
-        setScores(res);
-        setIsLoading(false);
-      } catch (error) {
-        setScores(null);
-        setIsLoading(false);
-      }
-    };
-
-    fetchScores();
-  }, [scorerId, page, entityId, entityType]);
-
-  return { scores, isLoading };
+  return useQuery({
+    queryKey: ['scores', scorerId, page, entityId, entityType],
+    queryFn: () => client.listScoresByScorerId({ scorerId, page, entityId, entityType, perPage: 10 }),
+    refetchInterval: 5000,
+  });
 };
 
 export const useScorer = (scorerId: string) => {
   const client = useMastraClient();
   const [scorer, setScorer] = useState<GetScorerResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const fetchScorer = async () => {
       setIsLoading(true);
+      setError(null);
       try {
         const res = await client.getScorer(scorerId);
         setScorer(res);
       } catch (error) {
         setScorer(null);
+        const errorObj = error instanceof Error ? error : new Error('Error fetching scorer');
+        setError(errorObj);
         console.error('Error fetching scorer', error);
         toast.error('Error fetching scorer');
       } finally {
@@ -92,31 +48,16 @@ export const useScorer = (scorerId: string) => {
     fetchScorer();
   }, [scorerId]);
 
-  return { scorer, isLoading };
+  return { scorer, isLoading, error };
 };
 
 export const useScorers = () => {
   const client = useMastraClient();
-  const [scorers, setScorers] = useState<Record<string, GetScorerResponse>>({});
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchScorers = async () => {
-      setIsLoading(true);
-      try {
-        const res = await client.getScorers();
-        setScorers(res);
-      } catch (error) {
-        setScorers({});
-        console.error('Error fetching agents', error);
-        toast.error('Error fetching agents');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchScorers();
-  }, []);
-
-  return { scorers, isLoading };
+  return useQuery({
+    queryKey: ['scorers'],
+    queryFn: () => client.listScorers(),
+    staleTime: 0,
+    gcTime: 0,
+  });
 };
