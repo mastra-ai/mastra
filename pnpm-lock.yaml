@@ -1543,6 +1543,9 @@ importers:
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
+      serve-handler:
+        specifier: ^6.1.6
+        version: 6.1.6
       shell-quote:
         specifier: ^1.8.3
         version: 1.8.3
@@ -1580,6 +1583,9 @@ importers:
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
+      '@types/serve-handler':
+        specifier: ^6.1.4
+        version: 6.1.4
       '@types/shell-quote':
         specifier: ^1.7.5
         version: 1.7.5
@@ -9783,6 +9789,9 @@ packages:
   '@types/sentiment@5.0.4':
     resolution: {integrity: sha512-6FL0CYijhnrR3gHbu7boAJn8zRCekJXBPfIHLkIgWbkY+hz5Dwfsq79FM7l/tLZKuEgQWktnzf6JqV2UCWKrbg==}
 
+  '@types/serve-handler@6.1.4':
+    resolution: {integrity: sha512-aXy58tNie0NkuSCY291xUxl0X+kGYy986l4kqW6Gi4kEXgr6Tx0fpSH7YwUSa5usPpG3s9DBeIR6hHcDtL2IvQ==}
+
   '@types/serve-static@1.15.9':
     resolution: {integrity: sha512-dOTIuqpWLyl3BBXU3maNQsS4A3zuuoYRNIvYSxxhebPfXg2mzWQEPne/nlJ37yOse6uGgR386uTpdsx4D0QZWA==}
 
@@ -10624,6 +10633,10 @@ packages:
     peerDependencies:
       esbuild: '>=0.18'
 
+  bytes@3.0.0:
+    resolution: {integrity: sha512-pMhOfFDPiv9t5jjIXkHosWmkSyQbvsgEVNkz0ERHbuLh2T/7j4Mqqpz523Fe8MVY89KC6Sh/QfS2sM+SjgFDcw==}
+    engines: {node: '>= 0.8'}
+
   bytes@3.1.2:
     resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
     engines: {node: '>= 0.8'}
@@ -11009,6 +11022,10 @@ packages:
 
   console-table-printer@2.15.0:
     resolution: {integrity: sha512-SrhBq4hYVjLCkBVOWaTzceJalvn5K1Zq5aQA6wXC/cYjI3frKWNPEMK3sZsJfNNQApvCQmgBcc13ZKmFj8qExw==}
+
+  content-disposition@0.5.2:
+    resolution: {integrity: sha512-kRGRZw3bLlFISDBgwTSA1TMBFN6J6GWDeubmDE3AF+3+yXL8hTWv8r5rkLbqYXY4RjPk/EzHnClI3zQf1cFmHA==}
+    engines: {node: '>= 0.6'}
 
   content-disposition@0.5.4:
     resolution: {integrity: sha512-FveZTNuGw04cxlAiWbzi6zTAL/lhehaWbTtgluJh4/E95DqMwTmha3KZN1aAWA8cFIhHzMZUvLevkw5Rqk+tSQ==}
@@ -13464,12 +13481,20 @@ packages:
   microsoft-cognitiveservices-speech-sdk@1.46.0:
     resolution: {integrity: sha512-Vfs2GHQJmPdoSfmVE6uEZTmtiROuaHrP0+ak5SAjS1kXsnuVXQR75wAdxjK14I7d1+0GZ/mE3X3J2cPRGwKxPA==}
 
+  mime-db@1.33.0:
+    resolution: {integrity: sha512-BHJ/EKruNIqJf/QahvxwQZXKygOQ256myeN/Ew+THcAa5q+PjyTTMMeNQC4DZw5AwfvelsUrA6B67NKMqXDbzQ==}
+    engines: {node: '>= 0.6'}
+
   mime-db@1.52.0:
     resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
     engines: {node: '>= 0.6'}
 
   mime-db@1.54.0:
     resolution: {integrity: sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==}
+    engines: {node: '>= 0.6'}
+
+  mime-types@2.1.18:
+    resolution: {integrity: sha512-lc/aahn+t4/SWV/qcmumYjymLsWfN3ELhpmVuUFjgsORruuZPVSwAQryq+HHGvO/SI2KVX26bx+En+zhM8g8hQ==}
     engines: {node: '>= 0.6'}
 
   mime-types@2.1.35:
@@ -14139,6 +14164,9 @@ packages:
     resolution: {integrity: sha512-AVbw3UJ2e9bq64vSaS9Am0fje1Pa8pbGqTTsmXfaIiMpnr5DlDhfJOuLj9Sf95ZPVDAUerDfEk88MPmPe7UCQg==}
     engines: {node: '>=0.10.0'}
 
+  path-is-inside@1.0.2:
+    resolution: {integrity: sha512-DUWJr3+ULp4zXmol/SZkFf3JGsS9/SIv+Y3Rt93/UjPpDpklB5f1er4O3POIbUuUJ3FXgqte2Q7SrU6zAqwk8w==}
+
   path-key@3.1.1:
     resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
     engines: {node: '>=8'}
@@ -14156,6 +14184,9 @@ packages:
 
   path-to-regexp@0.1.12:
     resolution: {integrity: sha512-RA1GjUVMnvYFxuqovrEqZoxxW5NUZqbwKtYz/Tt7nXerk0LbLblQmrsgdeOxV5SFHf0UDggjS/bSeOZwt1pmEQ==}
+
+  path-to-regexp@3.3.0:
+    resolution: {integrity: sha512-qyCH421YQPS2WFDxDjftfc1ZR5WKQzVzqsp4n9M2kQhVOo/ByahFoUNJfl58kOcEGfQ//7weFTDhm+ss8Ecxgw==}
 
   path-to-regexp@6.3.0:
     resolution: {integrity: sha512-Yhpw4T9C6hPpgPeA28us07OJeqZ5EzQTkbfwuhsUg0c237RomFoETJgmp2sa3F/41gfLE6G5cqcYwznmeEeOlQ==}
@@ -14550,6 +14581,10 @@ packages:
 
   raf-schd@4.0.3:
     resolution: {integrity: sha512-tQkJl2GRWh83ui2DiPTJz9wEiMN20syf+5oKfB03yYP7ioZcJwsIK8FjrtLwH1m7C7e+Tt2yYBlrOpdT+dyeIQ==}
+
+  range-parser@1.2.0:
+    resolution: {integrity: sha512-kA5WQoNVo4t9lNx2kQNFCxKeBl5IbbSNBl1M/tLkw9WCn+hxNBAW5Qh8gdhs63CJnhjJ2zQWFoqPJP2sK1AV5A==}
+    engines: {node: '>= 0.6'}
 
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
@@ -15011,6 +15046,9 @@ packages:
   serialize-error@7.0.1:
     resolution: {integrity: sha512-8I8TjW5KMOKsZQTvoxjuSIa7foAwPWGOts+6o7sgjz41/qMD9VQHEDxi6PBvK2l0MXUmqZyNpUK+T2tQaaElvw==}
     engines: {node: '>=10'}
+
+  serve-handler@6.1.6:
+    resolution: {integrity: sha512-x5RL9Y2p5+Sh3D38Fh9i/iQ5ZK+e4xuXRd/pGbM4D13tgo/MGwbttUk8emytcr1YYzBYs+apnUngBDFYfpjPuQ==}
 
   serve-static@1.16.2:
     resolution: {integrity: sha512-VqpjJZKadQB/PEbEwvFdO43Ax5dFBZ2UECszz8bQ7pi7wt//PWe1P6MN7eCnjsatYtBT6EuiClbjSWP2WrIoTw==}
@@ -22871,6 +22909,10 @@ snapshots:
 
   '@types/sentiment@5.0.4': {}
 
+  '@types/serve-handler@6.1.4':
+    dependencies:
+      '@types/node': 22.13.17
+
   '@types/serve-static@1.15.9':
     dependencies:
       '@types/http-errors': 2.0.5
@@ -24004,6 +24046,8 @@ snapshots:
       esbuild: 0.25.11
       load-tsconfig: 0.2.5
 
+  bytes@3.0.0: {}
+
   bytes@3.1.2: {}
 
   bytesish@0.4.4: {}
@@ -24408,6 +24452,8 @@ snapshots:
   console-table-printer@2.15.0:
     dependencies:
       simple-wcswidth: 1.1.2
+
+  content-disposition@0.5.2: {}
 
   content-disposition@0.5.4:
     dependencies:
@@ -27415,9 +27461,15 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  mime-db@1.33.0: {}
+
   mime-db@1.52.0: {}
 
   mime-db@1.54.0: {}
+
+  mime-types@2.1.18:
+    dependencies:
+      mime-db: 1.33.0
 
   mime-types@2.1.35:
     dependencies:
@@ -28074,6 +28126,8 @@ snapshots:
   path-is-absolute@1.0.1:
     optional: true
 
+  path-is-inside@1.0.2: {}
+
   path-key@3.1.1: {}
 
   path-key@4.0.0: {}
@@ -28086,6 +28140,8 @@ snapshots:
       minipass: 7.1.2
 
   path-to-regexp@0.1.12: {}
+
+  path-to-regexp@3.3.0: {}
 
   path-to-regexp@6.3.0:
     optional: true
@@ -28490,6 +28546,8 @@ snapshots:
   radash@12.1.1: {}
 
   raf-schd@4.0.3: {}
+
+  range-parser@1.2.0: {}
 
   range-parser@1.2.1: {}
 
@@ -29092,6 +29150,16 @@ snapshots:
   serialize-error@7.0.1:
     dependencies:
       type-fest: 0.13.1
+
+  serve-handler@6.1.6:
+    dependencies:
+      bytes: 3.0.0
+      content-disposition: 0.5.2
+      mime-types: 2.1.18
+      minimatch: 3.1.2
+      path-is-inside: 1.0.2
+      path-to-regexp: 3.3.0
+      range-parser: 1.2.0
 
   serve-static@1.16.2:
     dependencies:
