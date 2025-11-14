@@ -673,14 +673,6 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    // TODO: Add working memory output processor when implemented
-    // if (this.threadConfig.workingMemory) {
-    //   processors.push(new WorkingMemoryProcessor({
-    //     storage: this.storage.memory,
-    //     ...this.threadConfig.workingMemory
-    //   }));
-    // }
-
     // Return only the auto-generated processors (not the configured ones)
     // The agent will merge them with configuredProcessors
     return processors;
