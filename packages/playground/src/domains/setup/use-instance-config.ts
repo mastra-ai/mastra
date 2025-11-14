@@ -22,7 +22,13 @@ export const useInstanceConfig = () => {
 
   useLayoutEffect(() => {
     const storedConfig = localStorage.getItem('mastra-instance-config');
-    if (storedConfig) return setConfig(JSON.parse(storedConfig));
+    if (storedConfig) {
+      const parsedConfig = JSON.parse(storedConfig);
+
+      if (parsedConfig.url) {
+        setConfig({ ...parsedConfig, isLoading: false });
+      }
+    }
 
     if (isMastraRunning) {
       return setConfig({ url: 'http://localhost:4111', headers: [], isLoading: false });
