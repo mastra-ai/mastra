@@ -208,11 +208,6 @@ export const createTimeTravelExecutionParams = (params: {
         {};
     }
 
-    // if (stepFound && !resumeData && !stepInParallel) {
-    //   //we need to construct stepResult for steps in parallel if timeTravelling to one of the parallel steps
-    //   break;
-    // }
-
     let stepOutput = undefined;
     const nextStep = graph.steps[index + 1]!;
     if (nextStep) {

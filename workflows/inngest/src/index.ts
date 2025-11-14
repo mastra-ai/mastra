@@ -475,16 +475,6 @@ export class InngestRun<
       throw new Error('This workflow run is still running, cannot time travel');
     }
 
-    if (steps.length > 1 && !params.inputData && !params.nestedStepsContext && !params.resumeData) {
-      throw new Error(
-        'No inputData, resumeData, nor nestedStepsContext provided to time travel to this nested workflow step',
-      );
-    }
-
-    if (!params.inputData && !params.resumeData && !params.context) {
-      throw new Error('No inputData, resumeData, nor context provided to time travel');
-    }
-
     let inputDataToUse = params.inputData;
 
     if (inputDataToUse && steps.length === 1) {
@@ -505,7 +495,7 @@ export class InngestRun<
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
-        initialState: timeTravelData.state ?? snapshot?.value ?? {},
+        initialState: timeTravelData.state,
         runId: this.runId,
         workflowId: this.workflowId,
         stepResults: timeTravelData.stepResults,

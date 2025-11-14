@@ -789,6 +789,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (step.type === 'loop') {
+      //timeTravel is not passed to the processWorkflowLoop function becuase the step already ran the first time
+      // with whatever information it needs from timeTravel, subsequent loop runs use the previous loop run result as it's input.
       await processWorkflowLoop(
         {
           workflow,
@@ -821,7 +823,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           executionPath,
           resumeSteps,
-          timeTravel,
+          timeTravel, //timeTravel is passed in as workflow.step.end ends the step, not the workflow, the timeTravel info is passed to the next step to run.
           stepResults,
           prevResult: stepResult,
           activeSteps,

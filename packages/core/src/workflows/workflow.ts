@@ -2697,16 +2697,6 @@ export class Run<
       typeof step === 'string' ? step : step?.id,
     );
 
-    if (steps.length > 1 && !inputData && !nestedStepsContext && !resumeData) {
-      throw new Error(
-        'No inputData, resumeData, nor nestedStepsContext provided to time travel to this nested workflow step',
-      );
-    }
-
-    if (!inputData && !resumeData && !context) {
-      throw new Error('No inputData, resumeData, nor context provided to time travel');
-    }
-
     let inputDataToUse = inputData;
 
     if (inputDataToUse && steps.length === 1) {
