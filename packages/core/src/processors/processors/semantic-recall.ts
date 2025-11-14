@@ -11,8 +11,8 @@ import type { MemoryStorage } from '../../storage/domains/memory/base';
 import type { MastraEmbeddingModel, MastraVector } from '../../vector';
 import type { Processor } from '../index';
 
-const DEFAULT_TOP_K = 5;
-const DEFAULT_MESSAGE_RANGE = 2;
+const DEFAULT_TOP_K = 4;
+const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
 const DEFAULT_CACHE_MAX_SIZE = 1000; // Maximum number of cached embeddings
 
 export interface SemanticRecallOptions {
@@ -48,7 +48,7 @@ export interface SemanticRecallOptions {
    * Scope of semantic search
    * - 'thread': Search within the current thread only
    * - 'resource': Search across all threads for the resource
-   * @default 'thread'
+   * @default 'resource'
    */
   scope?: 'thread' | 'resource';
 
@@ -118,7 +118,7 @@ export class SemanticRecall implements Processor {
     this.vector = options.vector;
     this.embedder = options.embedder;
     this.topK = options.topK ?? DEFAULT_TOP_K;
-    this.scope = options.scope ?? 'thread';
+    this.scope = options.scope ?? 'resource'; // Default to 'resource' to match main's behavior
     this.threshold = options.threshold;
     this.indexName = options.indexName;
     this.logger = options.logger;

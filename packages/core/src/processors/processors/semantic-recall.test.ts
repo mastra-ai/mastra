@@ -151,7 +151,7 @@ describe('SemanticRecall', () => {
         indexName: 'mastra_memory_text_embedding_3_small',
         queryVector: [0.1, 0.2, 0.3],
         topK: 3,
-        filter: { thread_id: 'thread-1' },
+        filter: { resource_id: 'resource-1' },
       });
       // Verify storage was called with correct parameters
       expect(mockStorage.listMessages).toHaveBeenCalledWith({
@@ -161,14 +161,14 @@ describe('SemanticRecall', () => {
           {
             id: 'msg-1',
             threadId: 'thread-1',
-            withNextMessages: 2,
-            withPreviousMessages: 2,
+            withNextMessages: 1,
+            withPreviousMessages: 1,
           },
           {
             id: 'msg-2',
             threadId: 'thread-1',
-            withNextMessages: 2,
-            withPreviousMessages: 2,
+            withNextMessages: 1,
+            withPreviousMessages: 1,
           },
         ],
         perPage: false,

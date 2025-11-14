@@ -2,7 +2,6 @@ import type { TransformStreamDefaultController } from 'stream/web';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -36,7 +35,6 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean;
-  private logger?: IMastraLogger;
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
     if (!options.schema) {
@@ -60,7 +58,6 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
     this.jsonPromptInjection = options.jsonPromptInjection;
-    this.logger = options.logger;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',
@@ -263,22 +260,14 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
 
     switch (this.errorStrategy) {
       case 'strict':
-        this.logger?.error(message);
+        console.error(message);
         abort(message);
         break;
       case 'warn':
-        if (this.logger?.warn) {
-          this.logger.warn(message);
-        } else {
-          this.logger?.error(message);
-        }
+        console.warn(message);
         break;
       case 'fallback':
-        if (this.logger?.info) {
-          this.logger.info(message + ' (using fallback)');
-        } else {
-          this.logger?.error(message + ' (using fallback)');
-        }
+        console.info(`${message} (using fallback)`);
         break;
     }
   }
