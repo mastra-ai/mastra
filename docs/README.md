@@ -32,15 +32,15 @@ cp .env.example .env
 Install the packages
 
 ```bash
-npm i
+npm install
 ```
 
-> The docs have a separate `package.json` file and is not part of the workspace so please do not use
+> The docs have a separate `package.json` file and is not part of the workspace so please do not use `pnpm` or `yarn` commands here.
 
-Run the appropriate CLI command in your terminal:
+Run the appropriate CLI command in your terminal to start the dev server:
 
 ```bash
-npm start
+npm run dev
 ```
 
 The docs will be served on `localhost:3000/docs`.
