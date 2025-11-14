@@ -3201,7 +3201,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251109.0
+        specifier: ^4.20251111.0
         version: 4.20251111.0
       '@internal/lint':
         specifier: workspace:*
@@ -3234,7 +3234,7 @@ importers:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251105.0
+        specifier: ^4.20251109.0
         version: 4.20251109.1
       tsup:
         specifier: ^8.5.0
@@ -3253,7 +3253,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251109.0
+        specifier: ^4.20251111.0
         version: 4.20251111.0
       '@internal/lint':
         specifier: workspace:*
@@ -3286,7 +3286,7 @@ importers:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
       miniflare:
-        specifier: ^4.20251105.0
+        specifier: ^4.20251109.0
         version: 4.20251109.1
       tsup:
         specifier: ^8.5.0
@@ -3992,7 +3992,7 @@ importers:
         version: 4.5.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20251109.0
+        specifier: ^4.20251111.0
         version: 4.20251111.0
       '@internal/lint':
         specifier: workspace:*
