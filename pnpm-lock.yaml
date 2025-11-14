@@ -274,7 +274,7 @@ importers:
     dependencies:
       ai:
         specifier: ^5.0.60
-        version: 5.0.76(zod@3.25.76)
+        version: 5.0.93(zod@3.25.76)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -350,8 +350,8 @@ importers:
         specifier: ^4.3.19
         version: 4.3.19(react@19.2.0)(zod@3.25.76)
       ai-v5:
-        specifier: npm:ai@^5
-        version: ai@5.0.76(zod@3.25.76)
+        specifier: npm:ai@^5.0.93
+        version: ai@5.0.93(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -1323,7 +1323,7 @@ importers:
     devDependencies:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.12
-        version: 3.0.16(zod@3.25.76)
+        version: 3.0.17(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1411,7 +1411,7 @@ importers:
         version: link:../memory
       ai:
         specifier: ^5.0.60
-        version: 5.0.76(zod@3.25.76)
+        version: 5.0.93(zod@3.25.76)
       ignore:
         specifier: ^7.0.5
         version: 7.0.5
@@ -1691,7 +1691,7 @@ importers:
         version: 1.20.1
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.0
-        version: '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.76(zod@3.25.76))(zod@3.25.76)'
+        version: '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.93(zod@3.25.76))(zod@3.25.76)'
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -2085,7 +2085,7 @@ importers:
         version: 2.0.0
       ai:
         specifier: ^5.0.76
-        version: 5.0.76(zod@4.1.12)
+        version: 5.0.93(zod@4.1.12)
       ai-v4:
         specifier: npm:ai@4.3.19
         version: ai@4.3.19(react@19.2.0)(zod@4.1.12)
@@ -2214,7 +2214,7 @@ importers:
         version: 4.0.8(vitest@4.0.8)
       ai:
         specifier: ^5.0.60
-        version: 5.0.76(zod@3.25.76)
+        version: 5.0.93(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -4638,6 +4638,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/gateway@2.0.9':
+    resolution: {integrity: sha512-E6x4h5CPPPJ0za1r5HsLtHbeI+Tp3H+YFtcH8G3dSSPFE6w+PZINzB4NxLZmg1QqSeA5HTP3ZEzzsohp0o2GEw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/google@1.2.22':
     resolution: {integrity: sha512-Ppxu3DIieF1G9pyQ5O1Z646GYR0gkC57YdBqXJ82qvCdhEhZHu0TWhmnOoeIWe2olSbuDeoOY+MfJrW8dzS3Hw==}
     engines: {node: '>=18'}
@@ -4739,6 +4745,12 @@ packages:
 
   '@ai-sdk/provider-utils@3.0.16':
     resolution: {integrity: sha512-lsWQY9aDXHitw7C1QRYIbVGmgwyT98TF3MfM8alNIXKpdJdi+W782Rzd9f1RyOfgRmZ08gJ2EYNDhWNK7RqpEA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.0.17':
+    resolution: {integrity: sha512-TR3Gs4I3Tym4Ll+EPdzRdvo/rc8Js6c4nVhFLuvGLX/Y4V9ZcQMa/HTiYsHEgmYrf1zVi6Q145UEZUfleOwOjw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -10252,6 +10264,12 @@ packages:
 
   ai@5.0.76:
     resolution: {integrity: sha512-ZCxi1vrpyCUnDbtYrO/W8GLvyacV9689f00yshTIQ3mFFphbD7eIv40a2AOZBv3GGRA7SSRYIDnr56wcS/gyQg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  ai@5.0.93:
+    resolution: {integrity: sha512-9eGcu+1PJgPg4pRNV4L7tLjRR3wdJC9CXQoNMvtqvYNOLZHFCzjHtVIOr2SIkoJJeu2+sOy3hyiSuTmy2MA40g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -16466,6 +16484,20 @@ snapshots:
       '@vercel/oidc': 3.0.3
       zod: 4.1.12
 
+  '@ai-sdk/gateway@2.0.9(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.17(zod@3.25.76)
+      '@vercel/oidc': 3.0.3
+      zod: 3.25.76
+
+  '@ai-sdk/gateway@2.0.9(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.17(zod@4.1.12)
+      '@vercel/oidc': 3.0.3
+      zod: 4.1.12
+
   '@ai-sdk/google@1.2.22(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -16588,6 +16620,20 @@ snapshots:
       '@standard-schema/spec': 1.0.0
       eventsource-parser: 3.0.6
       zod: 3.25.76
+
+  '@ai-sdk/provider-utils@3.0.17(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 3.25.76
+
+  '@ai-sdk/provider-utils@3.0.17(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@standard-schema/spec': 1.0.0
+      eventsource-parser: 3.0.6
+      zod: 4.1.12
 
   '@ai-sdk/provider-utils@3.0.3(zod@3.25.76)':
     dependencies:
@@ -19893,7 +19939,7 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mastra/core@1.0.0-beta.2(@mastra/observability@1.0.0-beta.0)(ai@5.0.76(zod@3.25.76))(openapi-types@12.1.3)(zod@3.25.76)':
+  '@mastra/core@1.0.0-beta.2(@mastra/observability@1.0.0-beta.0)(ai@5.0.93(zod@3.25.76))(openapi-types@12.1.3)(zod@3.25.76)':
     dependencies:
       '@a2a-js/sdk': 0.2.5
       '@ai-sdk/provider-utils-v5': '@ai-sdk/provider-utils@3.0.12(zod@3.25.76)'
@@ -19903,7 +19949,7 @@ snapshots:
       '@lukeed/uuid': 2.0.1
       '@mastra/schema-compat': 1.0.0-beta.0(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.20.1
-      '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.76(zod@3.25.76))(zod@3.25.76)'
+      '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.93(zod@3.25.76))(zod@3.25.76)'
       '@sindresorhus/slugify': 2.2.1
       ai-v5: ai@5.0.76(zod@3.25.76)
       date-fns: 3.6.0
@@ -19942,7 +19988,7 @@ snapshots:
 
   '@mastra/observability@1.0.0-beta.0(@mastra/core@1.0.0-beta.2)':
     dependencies:
-      '@mastra/core': 1.0.0-beta.2(@mastra/observability@1.0.0-beta.0)(ai@5.0.76(zod@3.25.76))(openapi-types@12.1.3)(zod@3.25.76)
+      '@mastra/core': 1.0.0-beta.2(@mastra/observability@1.0.0-beta.0)(ai@5.0.93(zod@3.25.76))(openapi-types@12.1.3)(zod@3.25.76)
       zod: 3.25.76
 
   '@mastra/rag@1.3.1(@mastra/core@packages+core)(ai@4.3.19(react@19.2.0)(zod@3.25.76))(encoding@0.1.13)(zod@3.25.76)':
@@ -20290,9 +20336,9 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.10(zod@3.25.76)
       zod: 3.25.76
 
-  '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.76(zod@3.25.76))(zod@3.25.76)':
+  '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.93(zod@3.25.76))(zod@3.25.76)':
     dependencies:
-      ai: 5.0.76(zod@3.25.76)
+      ai: 5.0.93(zod@3.25.76)
       zod: 3.25.76
 
   '@opensearch-project/opensearch@3.5.1':
@@ -23483,6 +23529,22 @@ snapshots:
       '@ai-sdk/gateway': 2.0.0(zod@4.1.12)
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.12(zod@4.1.12)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.1.12
+
+  ai@5.0.93(zod@3.25.76):
+    dependencies:
+      '@ai-sdk/gateway': 2.0.9(zod@3.25.76)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.17(zod@3.25.76)
+      '@opentelemetry/api': 1.9.0
+      zod: 3.25.76
+
+  ai@5.0.93(zod@4.1.12):
+    dependencies:
+      '@ai-sdk/gateway': 2.0.9(zod@4.1.12)
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.17(zod@4.1.12)
       '@opentelemetry/api': 1.9.0
       zod: 4.1.12
 
