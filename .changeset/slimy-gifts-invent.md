@@ -1,5 +1,5 @@
 ---
-'@mastra/ai-sdk': patch
+'@mastra/ai-sdk': major
 ---
 
 Add sendStart, sendFinish, sendReasoning, and sendSources options to toAISdkV5Stream function, allowing fine-grained control over which message chunks are included in the converted stream. Previously, these values were hardcoded in the transformer.
