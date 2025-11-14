@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import * as crypto from 'crypto';
 import z from 'zod';
 import { Agent } from '../../agent';
@@ -118,6 +119,13 @@ export interface PIIDetectorOptions {
   preserveFormat?: boolean;
 
   /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal detection agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
+
+  /**
    * Structured output options used for the detection agent
    */
   structuredOutputOptions?: {
@@ -146,6 +154,7 @@ export class PIIDetector implements Processor {
   private redactionMethod: 'mask' | 'hash' | 'remove' | 'placeholder';
   private includeDetections: boolean;
   private preserveFormat: boolean;
+  private providerOptions?: SharedV2ProviderOptions;
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
@@ -172,6 +181,7 @@ export class PIIDetector implements Processor {
     this.redactionMethod = options.redactionMethod || 'mask';
     this.includeDetections = options.includeDetections ?? false;
     this.preserveFormat = options.preserveFormat ?? true;
+    this.providerOptions = options.providerOptions;
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Create internal detection agent
@@ -299,6 +309,7 @@ export class PIIDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {

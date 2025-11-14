@@ -1,7 +1,8 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
-import type { MastraModelConfig } from '../../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
@@ -20,7 +21,13 @@ export interface SystemPromptScrubberOptions {
   /** Custom placeholder text for redaction */
   placeholderText?: string;
   /** Model to use for the detection agent */
-  model: MastraModelConfig;
+  model: MastraLanguageModel;
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal detection agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
   /**
    * Structured output options used for the detection agent
    */
@@ -68,6 +75,7 @@ export class SystemPromptScrubber implements Processor {
   private placeholderText: string;
   private model: MastraModelConfig;
   private detectionAgent: Agent;
+  private providerOptions?: SharedV2ProviderOptions;
   private structuredOutputOptions?: SystemPromptScrubberOptions['structuredOutputOptions'];
 
   constructor(options: SystemPromptScrubberOptions) {
@@ -80,6 +88,7 @@ export class SystemPromptScrubber implements Processor {
     this.includeDetections = options.includeDetections || false;
     this.redactionMethod = options.redactionMethod || 'mask';
     this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
+    this.providerOptions = options.providerOptions;
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Initialize instructions after customPatterns is set
@@ -278,6 +287,7 @@ export class SystemPromptScrubber implements Processor {
 
       if (model.specificationVersion === 'v2') {
         result = await this.detectionAgent.generate(text, {
+          providerOptions: this.providerOptions,
           structuredOutput: {
             schema,
             ...(this.structuredOutputOptions ?? {}),

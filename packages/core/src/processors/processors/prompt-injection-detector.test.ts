@@ -595,6 +595,20 @@ describe('PromptInjectionDetector', () => {
 
       expect(detector.id).toBe('prompt-injection-detector');
     });
+
+    it('should accept providerOptions in constructor', () => {
+      const providerOptions = {
+        openai: { reasoningEffort: 'low' },
+      };
+      const model = setupMockModel(createMockDetectionResult(false));
+
+      const detector = new PromptInjectionDetector({
+        model,
+        providerOptions,
+      });
+
+      expect(detector['providerOptions']).toEqual(providerOptions);
+    });
   });
 
   describe('edge cases', () => {

@@ -38,6 +38,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 import type { SaveQueueManager } from './save-queue';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -70,6 +71,13 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * If not provided, will generate instructions based on the schema.
    */
   instructions?: string;
+
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal structuring agent's stream call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
 
   /**
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.

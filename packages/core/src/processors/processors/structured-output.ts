@@ -1,4 +1,5 @@
-import type { TransformStreamDefaultController } from 'stream/web';
+import type { TransformStreamDefaultController } from 'node:stream/web';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -34,6 +35,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: InferSchemaOutput<OUTPUT>;
   private isStructuringAgentStreamStarted = false;
+  private providerOptions?: SharedV2ProviderOptions;
   private jsonPromptInjection?: boolean;
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
@@ -57,6 +59,8 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
+    this.providerOptions = options.providerOptions;
+
     this.jsonPromptInjection = options.jsonPromptInjection;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
@@ -107,6 +111,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
 
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
+        providerOptions: this.providerOptions,
         structuredOutput: {
           schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
           jsonPromptInjection: this.jsonPromptInjection,

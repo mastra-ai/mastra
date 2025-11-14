@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -83,6 +84,12 @@ export interface ModerationOptions {
      */
     jsonPromptInjection?: boolean;
   };
+  /**
+   * Provider-specific options (e.g., OpenAI reasoningEffort)
+   * Passed to the internal moderation agent's generate call
+   * Useful for controlling thinking models to reduce latency and token usage
+   */
+  providerOptions?: SharedV2ProviderOptions;
 }
 
 /**
@@ -102,6 +109,7 @@ export class ModerationProcessor implements Processor {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private providerOptions?: SharedV2ProviderOptions;
   private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
 
   // Default OpenAI moderation categories
@@ -125,6 +133,7 @@ export class ModerationProcessor implements Processor {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.providerOptions = options.providerOptions;
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Create internal moderation agent
@@ -272,6 +281,7 @@ export class ModerationProcessor implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
