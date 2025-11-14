@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Introduce mastra studio command to spinup a studio without the need for the mastra backend
+Introduce mastra studio command to spin up a studio without the need for the mastra backend
