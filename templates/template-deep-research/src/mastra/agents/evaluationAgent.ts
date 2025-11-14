@@ -1,9 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-
-// Initialize model
-const mainModel = openai('gpt-4.1');
-
 export const evaluationAgent = new Agent({
   id: 'evaluation-agent',
   name: 'Evaluation Agent',
@@ -29,5 +24,5 @@ export const evaluationAgent = new Agent({
   - isRelevant: boolean indicating if the result is relevant
   - reason: brief explanation of your decision
   `,
-  model: mainModel,
+  model: process.env.MODEL || 'openai/gpt-4.1',
 });

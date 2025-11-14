@@ -79,13 +79,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = {
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           timestamp: Date.now(),
           suspendedPaths: {},
           resumeLabels: {},
           serializedStepGraph: [],
+          status: 'pending',
           value: {},
           waitingPaths: {},
-          status: 'pending',
           runId: runId,
           requestContext: {},
         } as WorkflowRunState;
@@ -370,6 +371,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     page,
     perPage,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -378,6 +380,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       if (workflowName) {
         conditions.push(`[workflow_name] = @workflowName`);
         paramMap['workflowName'] = workflowName;
+      }
+
+      if (status) {
+        conditions.push(`JSON_VALUE([snapshot], '$.status') = @status`);
+        paramMap['status'] = status;
       }
 
       if (resourceId) {

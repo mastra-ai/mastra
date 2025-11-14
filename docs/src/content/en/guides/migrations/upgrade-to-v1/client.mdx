@@ -28,6 +28,16 @@ To migrate, update type imports to use the new naming pattern.
 + } from '@mastra/client-js';
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-sdk-types .
+```
+
+:::
+
 ### Pagination parameters from `offset/limit` to `page/perPage`
 
 All client SDK methods that used `offset/limit` now use `page/perPage`. This change provides a more intuitive pagination model aligned with web pagination patterns.
@@ -44,6 +54,16 @@ To migrate, update pagination parameters in all client SDK method calls. Example
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-offset-limit .
+```
+
+:::
+
 ### `getMemoryThread` parameter structure
 
 The `getMemoryThread` method parameter structure has been updated. This change provides a more consistent API across memory methods.
@@ -51,9 +71,19 @@ The `getMemoryThread` method parameter structure has been updated. This change p
 To migrate, update the method call with the new parameter structure. Check the updated API documentation for the specific changes.
 
 ```diff
-- const thread = await client.memory.getMemoryThread(threadId, agentId);
-+ const thread = await client.memory.getMemoryThread({ threadId, agentId });
+- const thread = await client.getMemoryThread(threadId, agentId);
++ const thread = await client.getMemoryThread({ threadId, agentId });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-get-memory-thread .
+```
+
+:::
 
 ## Removed
 
@@ -69,6 +99,16 @@ To migrate, use `toAISdkStream()` instead.
 + import { toAISdkStream } from '@mastra/ai-sdk';
 + const stream = toAISdkStream(agentStream, { from: 'agent' });
 ```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/client-to-ai-sdk-format .
+```
+
+:::
 
 ### Network memory methods
 

@@ -6,7 +6,7 @@ inputs:
     description: 'Whether to run pnpm install after setup'
     required: false
     default: 'true'
-  package-manager-cache::
+  package-manager-cache:
     description: 'Should use package manager cache'
     required: false
     default: 'true'
@@ -20,7 +20,7 @@ runs:
         run_install: false
 
     - name: Setup Node.js 22.x
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: 22.13.0
         cache: 'pnpm'

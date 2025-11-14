@@ -193,6 +193,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/minimax",
+          label: "Minimax",
+        },
+        {
+          type: "doc",
           id: "providers/modelscope",
           label: "ModelScope",
         },
@@ -230,6 +235,11 @@ const sidebars = {
           type: "doc",
           id: "providers/opencode",
           label: "OpenCode Zen",
+        },
+        {
+          type: "doc",
+          id: "providers/ovhcloud",
+          label: "OVHcloud AI Endpoints",
         },
         {
           type: "doc",

@@ -2,19 +2,17 @@ import React, { type ReactNode } from "react";
 import clsx from "clsx";
 import { useDocsSidebar } from "@docusaurus/plugin-content-docs/client";
 import type { Props } from "@theme/DocRoot/Layout/Main";
+import { useChatbotSidebar } from "../ChatbotSidebar/context";
 
 import styles from "./styles.module.css";
 
-interface ExtendedProps extends Props {
-  hiddenChatbotSidebar?: boolean;
-}
-
 export default function DocRootLayoutMain({
   hiddenSidebarContainer,
-  hiddenChatbotSidebar,
   children,
-}: ExtendedProps): ReactNode {
+}: Props): ReactNode {
   const sidebar = useDocsSidebar();
+  const { isHidden: hiddenChatbotSidebar } = useChatbotSidebar();
+
   return (
     <main
       className={clsx(

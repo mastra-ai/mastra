@@ -1,10 +1,7 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { evaluateResultTool } from '../tools/evaluateResultTool';
 import { extractLearningsTool } from '../tools/extractLearningsTool';
 import { webSearchTool } from '../tools/webSearchTool';
-
-const mainModel = openai('gpt-4o');
 
 export const researchAgent = new Agent({
   id: 'research-agent',
@@ -43,7 +40,7 @@ export const researchAgent = new Agent({
 
   Use all the tools available to you systematically and stop after the follow-up phase.
   `,
-  model: mainModel,
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     webSearchTool,
     evaluateResultTool,
