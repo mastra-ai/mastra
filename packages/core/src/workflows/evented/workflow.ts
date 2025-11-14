@@ -6,7 +6,7 @@ import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
-import { Workflow, Run, createTimeTravelExecutionParams } from '../../workflows';
+import { Workflow, Run } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { ExecuteFunction, Step } from '../../workflows/step';
 import type {
@@ -16,7 +16,6 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
-  TimeTravelContext,
 } from '../../workflows/types';
 import { EMITTER_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
