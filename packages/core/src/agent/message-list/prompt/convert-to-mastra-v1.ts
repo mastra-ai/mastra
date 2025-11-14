@@ -63,7 +63,9 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
-    const { experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
+    // experimental_attachments is deprecated, file parts are now in the parts array
+    const { parts: inputParts } = message.content;
+    const inputAttachments: Array<{ url: string; contentType?: string; name?: string }> = [];
     const { role } = message;
 
     const fields = {
@@ -77,10 +79,15 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
     const parts: typeof inputParts = [];
     for (const part of inputParts) {
       if (part.type === 'file') {
-        experimental_attachments.push({
-          url: part.data,
-          contentType: part.mimeType,
-        });
+        // Convert file part data or url to string URL for attachment
+        const data = part.url || part.data;
+        const url = typeof data === 'string' ? data : data?.toString() || '';
+        if (url) {
+          experimental_attachments.push({
+            url,
+            contentType: part.mimeType,
+          });
+        }
       } else {
         parts.push(part);
       }
@@ -103,25 +110,18 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             content: userContent,
           });
         } else {
-          const textParts = message.content.parts
+          const textParts = parts
             .filter(part => part.type === 'text')
             .map(part => ({
               type: 'text' as const,
               text: part.text,
             }));
 
-          // Convert file parts from DB to attachments
-          const fileParts = message.content.parts
-            .filter(part => part.type === 'file')
-            .map(part => ({
-              type: 'file' as const,
-              data: part.url,
-              mimeType: part.mediaType,
-            }));
-
-          const userContent = experimental_attachments
-            ? [...textParts, ...attachmentsToParts(experimental_attachments), ...fileParts]
-            : [...textParts, ...fileParts];
+          // experimental_attachments now contains converted file parts from the loop above
+          const userContent =
+            experimental_attachments.length > 0
+              ? [...textParts, ...attachmentsToParts(experimental_attachments)]
+              : textParts;
           pushOrCombine({
             role: 'user',
             ...fields,
@@ -146,7 +146,18 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
             for (const part of block) {
               switch (part.type) {
-                case 'file':
+                case 'file': {
+                  // Ensure file parts have required data and mimeType fields
+                  const data = part.url || part.data;
+                  if (data && part.mimeType) {
+                    content.push({
+                      type: 'file',
+                      data,
+                      mimeType: part.mimeType,
+                    });
+                  }
+                  break;
+                }
                 case 'text': {
                   content.push(part);
                   break;
@@ -267,8 +278,9 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           break;
         }
 
-        // Extract tool invocations from parts
-        const partsArray = message.content.parts || [];
+        // Fallback: Extract tool invocations from parts (for non-migrated messages)
+        // After migration, this code path shouldn't be hit since parts will always exist
+        const partsArray = (message.content.parts || []) as MastraMessageContentV2['parts'];
         const toolInvocationParts = partsArray.filter(
           p => p.type === 'tool-invocation' && p.toolInvocation?.toolName !== 'updateWorkingMemory',
         );

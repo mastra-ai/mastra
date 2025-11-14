@@ -161,7 +161,6 @@ describe('MessageList', () => {
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Hello from UI!' }],
-          experimental_attachments: [],
         },
         threadId,
         resourceId,
@@ -477,7 +476,6 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            content: 'Hello from V1!',
             parts: [{ type: 'text', text: inputV1Message.content }],
           },
           threadId,
@@ -569,7 +567,6 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [{ type: 'text', text: msg1.content }],
-            experimental_attachments: [],
           },
           threadId,
           resourceId,
@@ -586,6 +583,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
+                  step: undefined,
                   toolName: msg2.content[1].toolName,
                   toolCallId: msg2.content[1].toolCallId,
                   args: msg2.content[1].args,
@@ -596,15 +594,6 @@ describe('MessageList', () => {
               {
                 type: 'text',
                 text: msg4.content,
-              },
-            ],
-            toolInvocations: [
-              {
-                state: 'result',
-                toolName: msg2.content[1].toolName,
-                toolCallId: msg2.content[1].toolCallId,
-                args: msg2.content[1].args,
-                result: msg3.content[0].result,
               },
             ],
           },
@@ -635,10 +624,11 @@ describe('MessageList', () => {
       // Filter out tool invocations with state="call" from expected UI messages
       const expectedUIMessages = messages.map(m => {
         if (m.role === 'assistant' && m.parts && m.toolInvocations) {
+          const filteredToolInvocations = m.toolInvocations.filter(t => t.state === 'result');
           return {
             ...m,
             parts: m.parts.filter(p => !(p.type === 'tool-invocation' && p.toolInvocation.state === 'call')),
-            toolInvocations: m.toolInvocations.filter(t => t.state === 'result'),
+            toolInvocations: filteredToolInvocations.length > 0 ? filteredToolInvocations : undefined,
             createdAt: expect.any(Date),
           };
         }
@@ -841,7 +831,6 @@ describe('MessageList', () => {
           role: 'assistant',
           createdAt: expect.any(Date),
           content: {
-            content: 'Final response.',
             format: 2,
             parts: [
               { type: 'text', text: 'Step 1: Call tool A' },
@@ -849,6 +838,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
+                  step: undefined,
                   toolName: 'tool-a',
                   toolCallId: 'call-a-1',
                   args: {},
@@ -861,6 +851,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
+                  step: undefined,
                   toolName: 'tool-b',
                   toolCallId: 'call-b-1',
                   args: {},
@@ -869,22 +860,6 @@ describe('MessageList', () => {
               },
               { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
-            ],
-            toolInvocations: [
-              {
-                state: 'result',
-                toolName: 'tool-a',
-                toolCallId: 'call-a-1',
-                args: {},
-                result: 'Result A',
-              },
-              {
-                state: 'result',
-                toolName: 'tool-b',
-                toolCallId: 'call-b-1',
-                args: {},
-                result: 'Result B',
-              },
             ],
           },
           threadId,
@@ -934,7 +909,6 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            content: userMsg.content,
             parts: [{ type: 'text', text: userMsg.content }],
           },
           threadId,
@@ -957,6 +931,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result', // State should be updated to result
+                  step: undefined,
                   toolName: 'data-tool',
                   toolCallId: 'call-data-1',
                   args: { query: 'required data' },
@@ -969,15 +944,6 @@ describe('MessageList', () => {
                 details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
               },
               { type: 'text', text: 'Task completed successfully with gathered data.' },
-            ],
-            toolInvocations: [
-              {
-                state: 'result', // State should be updated to result
-                toolName: 'data-tool',
-                toolCallId: 'call-data-1',
-                args: { query: 'required data' },
-                result: '{"data": "gathered"}', // Result from the tool message
-              },
             ],
           },
           threadId,
@@ -1095,13 +1061,6 @@ describe('MessageList', () => {
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Message with attachment' }],
-          experimental_attachments: [
-            {
-              name: 'report.pdf',
-              url: 'https://example.com/files/report.pdf',
-              contentType: 'application/pdf',
-            },
-          ],
         },
         threadId,
         resourceId,
@@ -1136,13 +1095,6 @@ describe('MessageList', () => {
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Check out this image:' }],
-          experimental_attachments: [
-            {
-              name: 'example.png',
-              url: 'https://example.com/images/example.png',
-              contentType: 'image/png',
-            },
-          ],
         },
         threadId,
         resourceId,
@@ -1205,7 +1157,6 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            content: userMsgV1.content,
             parts: [{ type: 'text', text: userMsgV1.content }],
           },
           threadId,
@@ -1223,6 +1174,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result', // State should be updated to result
+                  step: undefined,
                   toolName: 'search-tool',
                   toolCallId: 'call-mix-1',
                   args: { query: 'info' },
@@ -1231,15 +1183,6 @@ describe('MessageList', () => {
               },
               { type: 'step-start' },
               { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
-            ],
-            toolInvocations: [
-              {
-                state: 'result', // State should be updated to result
-                toolName: 'search-tool',
-                toolCallId: 'call-mix-1',
-                args: { query: 'info' },
-                result: 'Found relevant data.', // Result from the tool message
-              },
             ],
           },
           threadId,
@@ -1290,7 +1233,6 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            content: userMsg.content,
             parts: [{ type: 'text', text: userMsg.content }],
           },
           threadId,
@@ -1308,6 +1250,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
+                  step: undefined,
                   toolName: 'task-tool',
                   toolCallId: 'call-task-1',
                   args: { task: 'perform' },
@@ -1317,16 +1260,6 @@ describe('MessageList', () => {
               { type: 'step-start' },
               { type: 'text', text: 'The task is now complete.' },
             ],
-            toolInvocations: [
-              {
-                state: 'result',
-                toolName: 'task-tool',
-                toolCallId: 'call-task-1',
-                args: { task: 'perform' },
-                result: 'Task completed successfully.',
-              },
-            ],
-            content: 'The task is now complete.',
           },
           threadId,
           resourceId,
@@ -1468,7 +1401,6 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            content: userMsg.content,
             parts: [{ type: 'text', text: userMsg.content }],
           },
           threadId,
@@ -1480,13 +1412,13 @@ describe('MessageList', () => {
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
           content: {
             format: 2,
-            content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
             parts: [
               { type: 'text', text: 'Okay, I will check the weather for both cities.' },
               {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
+                  step: undefined,
                   toolName: 'weather-tool',
                   toolCallId: 'call-london',
                   args: { city: 'London' },
@@ -1499,6 +1431,7 @@ describe('MessageList', () => {
                 type: 'tool-invocation',
                 toolInvocation: {
                   state: 'result',
+                  step: undefined,
                   toolName: 'weather-tool',
                   toolCallId: 'call-paris',
                   args: { city: 'Paris' },
@@ -1507,22 +1440,6 @@ describe('MessageList', () => {
               },
               { type: 'step-start' },
               { type: 'text', text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy." },
-            ],
-            toolInvocations: [
-              {
-                state: 'result',
-                toolName: 'weather-tool',
-                toolCallId: 'call-london',
-                args: { city: 'London' },
-                result: '20°C, sunny',
-              },
-              {
-                state: 'result',
-                toolName: 'weather-tool',
-                toolCallId: 'call-paris',
-                args: { city: 'Paris' },
-                result: '15°C, cloudy',
-              },
             ],
           },
           threadId,
@@ -2491,8 +2408,14 @@ describe('MessageList', () => {
       // Verify the content remains as a JSON string (not parsed back to object)
       const messages = list.get.all.db();
       expect(messages.length).toBe(1);
-      expect(messages[0].content.content).toBe(JSON.stringify(inputData)); // Should stay as string
-      expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
+      // Content is now stored in parts array
+      expect(messages[0].content.parts).toEqual([
+        {
+          type: 'text',
+          text: JSON.stringify(inputData),
+        },
+      ]);
+      expect(typeof messages[0].content.parts[0].text).toBe('string'); // Should be a string, not an object
     });
 
     it('should not parse regular JSON string content back to objects', () => {
@@ -2509,14 +2432,13 @@ describe('MessageList', () => {
 
       // The content should stay as a string, not be parsed to an object
       const messages = list.get.all.db();
-      expect(messages[0].content.content).toBe('{"data": "value", "number": 42}'); // Should stay as string
-      expect(typeof messages[0].content.content).toBe('string'); // Should be a string, not an object
       expect(messages[0].content.parts).toEqual([
         {
           type: 'text',
           text: '{"data": "value", "number": 42}',
         },
       ]);
+      expect(typeof messages[0].content.parts[0].text).toBe('string'); // Should be a string, not an object
     });
   });
 
@@ -2579,8 +2501,8 @@ describe('MessageList', () => {
       // Check that text and step-start parts are preserved
       expect(uiMessage.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'Let me check that for you.' }]);
 
-      // Check that toolInvocations array is also filtered
-      expect(uiMessage.toolInvocations).toEqual([]);
+      // Check that toolInvocations is undefined when empty
+      expect(uiMessage.toolInvocations).toBeUndefined();
     });
 
     it('should preserve tool invocations with state="result" when converting to UIMessage', () => {
@@ -2809,8 +2731,8 @@ describe('MessageList', () => {
         { type: 'text', text: 'Let me get your lucky number.' },
       ]);
 
-      // toolInvocations array should be empty (filtered)
-      expect(uiMessage.toolInvocations).toEqual([]);
+      // toolInvocations should be undefined when empty (filtered)
+      expect(uiMessage.toolInvocations).toBeUndefined();
 
       // Now test with a result state - should be preserved
       const assistantResultMessage: MastraDBMessage = {

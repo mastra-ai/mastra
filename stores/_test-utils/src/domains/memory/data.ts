@@ -94,9 +94,6 @@ export const createSampleMessageV2 = ({
     content: {
       format: 2,
       parts: defaultParts,
-      reasoning: content?.reasoning,
-      experimental_attachments: content?.experimental_attachments,
-      annotations: content?.annotations,
       metadata: content?.metadata,
     },
   };

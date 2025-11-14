@@ -42,12 +42,29 @@ type MastraMessageShared = {
   type?: string;
 };
 
+/**
+ * Extended FilePart that includes properties from both AIv4 FilePart and Attachment.
+ * This allows us to store file information from experimental_attachments in the parts array.
+ * We make properties optional to support both formats during migration.
+ */
+type ExtendedFilePart = {
+  type: 'file';
+  // AIv4 FilePart properties
+  data?: AIV4Type.FilePart['data'];
+  mimeType?: string;
+  // Attachment properties (from experimental_attachments)
+  url?: string;
+  name?: string;
+  // Provider metadata
+  providerMetadata?: AIV5Type.ProviderMetadata;
+};
+
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
-  parts: (UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata })[]; // add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
-  experimental_attachments?: UIMessageV4['experimental_attachments'];
-  reasoning?: UIMessageV4['reasoning'];
-  annotations?: UIMessageV4['annotations'];
+  parts: (
+    | (Exclude<UIMessageV4['parts'][number], { type: 'file' }> & { providerMetadata?: AIV5Type.ProviderMetadata })
+    | ExtendedFilePart
+  )[]; // add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
   metadata?: Record<string, unknown>;
 };
 
@@ -60,6 +77,12 @@ type MastraMessageContentV2WithDeprecated = MastraMessageContentV2 & {
   content?: string;
   /** @deprecated Use parts array instead */
   toolInvocations?: ToolInvocationV4[];
+  /** @deprecated Use parts array instead */
+  reasoning?: string;
+  /** @deprecated Use parts array instead */
+  experimental_attachments?: Array<{ url: string; name?: string; contentType?: string }>;
+  /** @deprecated Use metadata instead */
+  annotations?: Array<unknown>;
 };
 
 // maps to AI SDK V4 UIMessage
@@ -775,10 +798,8 @@ export class MessageList {
   }
 
   private static mastraDBMessageToAIV4UIMessage(m: MastraDBMessage): UIMessageWithMetadata {
-    const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
-      .experimental_attachments
-      ? [...m.content.experimental_attachments]
-      : [];
+    // experimental_attachments are now migrated to file parts in the parts array
+    const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = [];
     const contentString = m.content.parts.reduce((prev, part) => {
       if (part.type === `text`) {
         // return only the last text part like AI SDK does
@@ -792,9 +813,11 @@ export class MessageList {
     if (m.content.parts.length) {
       for (const part of m.content.parts) {
         if (part.type === `file`) {
+          // Use url if available (from experimental_attachments migration), otherwise convert data
+          const url = part.url || (typeof part.data === 'string' ? part.data : part.data?.toString()) || '';
           experimentalAttachments.push({
             contentType: part.mimeType,
-            url: part.data,
+            url,
           });
         } else if (
           part.type === 'tool-invocation' &&
@@ -852,7 +875,7 @@ export class MessageList {
         role: m.role,
         content: contentString,
         createdAt: m.createdAt,
-        parts,
+        parts: parts as UIMessageV4['parts'],
         experimental_attachments: experimentalAttachments,
       };
       // Preserve metadata if present
@@ -861,8 +884,8 @@ export class MessageList {
       }
       return uiMessage;
     } else if (m.role === `assistant`) {
-      // Extract content from parts when possible
-      const extractedContent = m.content.parts.find(p => p.type === 'text')?.text || contentString;
+      // Extract content from parts when possible - use the last text part like AI SDK does
+      const extractedContent = contentString;
       const extractedToolInvocations = m.content.parts
         .filter((p): p is { type: 'tool-invocation'; toolInvocation: any } => p.type === 'tool-invocation')
         .map(p => p.toolInvocation)
@@ -873,7 +896,7 @@ export class MessageList {
         role: m.role,
         content: extractedContent,
         createdAt: m.createdAt,
-        parts,
+        parts: parts as UIMessageV4['parts'],
         reasoning: undefined,
         toolInvocations: extractedToolInvocations.length > 0 ? extractedToolInvocations : undefined,
       };
@@ -889,7 +912,7 @@ export class MessageList {
       role: m.role,
       content: contentString,
       createdAt: m.createdAt,
-      parts,
+      parts: parts as UIMessageV4['parts'],
       experimental_attachments: experimentalAttachments,
     };
     // Preserve metadata if present
@@ -985,7 +1008,8 @@ export class MessageList {
         MessageList.isMastraDBMessage(message);
 
       if (isSupportedSystemFormat) {
-        return this.addSystem(message);
+        // Type assertion: at runtime we know message is a supported system message type
+        return this.addSystem(message as Parameters<typeof this.addSystem>[0]);
       }
 
       // if we didn't add the message and we didn't ignore this intentionally, then it's a problem!
@@ -1107,6 +1131,13 @@ export class MessageList {
    * Migrates deprecated fields from old database messages to the new parts-based format.
    * This provides backward compatibility for messages stored before the migration.
    *
+   * Migrates:
+   * - content.content (string) → text part
+   * - content.toolInvocations (array) → tool-invocation parts
+   * - content.reasoning (string) → reasoning part
+   * - content.experimental_attachments (array) → file parts
+   * - content.annotations (array) → metadata
+   *
    * @param message - The message to migrate
    * @returns The migrated message with deprecated fields converted to parts
    */
@@ -1114,33 +1145,38 @@ export class MessageList {
     // Type assertion to access potentially deprecated fields from database
     const content = message.content as MastraMessageContentV2WithDeprecated;
 
-    // If there are no deprecated fields, return as-is
-    if (!content.content && !content.toolInvocations) {
+    // Check if there are any deprecated fields to migrate
+    const hasDeprecatedFields =
+      content.content ||
+      content.toolInvocations ||
+      content.reasoning ||
+      content.experimental_attachments ||
+      content.annotations;
+
+    if (!hasDeprecatedFields) {
       return message;
     }
 
     // Clone the message to avoid mutating the original
     const migratedMessage = { ...message };
     const parts = [...(content.parts || [])];
+    const metadata = { ...(content.metadata || {}) };
 
-    // Migrate deprecated content.content string to text part
+    // 1. Migrate deprecated content.content string to text part
     if (content.content && typeof content.content === 'string') {
       // Only add if there isn't already a text part with this content
-      const hasMatchingTextPart = parts.some(
-        p => p.type === 'text' && p.text === content.content
-      );
+      const hasMatchingTextPart = parts.some(p => p.type === 'text' && p.text === content.content);
       if (!hasMatchingTextPart) {
         parts.unshift({ type: 'text', text: content.content });
       }
     }
 
-    // Migrate deprecated toolInvocations array to tool-invocation parts
+    // 2. Migrate deprecated toolInvocations array to tool-invocation parts
     if (content.toolInvocations && Array.isArray(content.toolInvocations)) {
       for (const invocation of content.toolInvocations) {
         // Only add if not already in parts
         const hasMatchingInvocation = parts.some(
-          p => p.type === 'tool-invocation' &&
-               p.toolInvocation?.toolCallId === invocation.toolCallId
+          p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === invocation.toolCallId,
         );
         if (!hasMatchingInvocation) {
           parts.push({
@@ -1151,11 +1187,64 @@ export class MessageList {
       }
     }
 
+    // 3. Migrate deprecated reasoning string to reasoning part
+    if (content.reasoning && typeof content.reasoning === 'string') {
+      const hasReasoningPart = parts.some(p => p.type === 'reasoning');
+      if (!hasReasoningPart) {
+        parts.push({
+          type: 'reasoning',
+          reasoning: content.reasoning,
+          details: [{ type: 'text', text: content.reasoning }],
+        });
+      }
+    }
+
+    // 4. Migrate deprecated experimental_attachments to file parts
+    if (content.experimental_attachments && Array.isArray(content.experimental_attachments)) {
+      for (const attachment of content.experimental_attachments) {
+        // Only add if not already in parts
+        const hasMatchingFile = parts.some(p => p.type === 'file' && p.url === attachment.url);
+        if (!hasMatchingFile) {
+          const filePart: ExtendedFilePart = {
+            type: 'file',
+            url: attachment.url,
+            mimeType: attachment.contentType || 'unknown',
+          };
+          // Add name if available
+          if (attachment.name) {
+            filePart.name = attachment.name;
+          }
+          parts.push(filePart);
+        }
+      }
+    }
+
+    // 5. Migrate deprecated annotations to metadata
+    if (content.annotations && Array.isArray(content.annotations)) {
+      // Merge annotations into metadata as they represent similar concepts
+      for (const annotation of content.annotations) {
+        // Store annotations under a special key to preserve them
+        if (!metadata.annotations) {
+          metadata.annotations = [];
+        }
+        (metadata.annotations as unknown[]).push(annotation);
+      }
+    }
+
     // Update the message with migrated parts, excluding deprecated fields
-    const { content: deprecatedContent, toolInvocations, ...cleanContent } = content;
+    const {
+      content: deprecatedContent,
+      toolInvocations,
+      reasoning: deprecatedReasoning,
+      experimental_attachments,
+      annotations,
+      ...cleanContent
+    } = content;
+
     migratedMessage.content = {
       ...cleanContent,
       parts,
+      metadata,
     };
 
     return migratedMessage;
@@ -1477,11 +1566,8 @@ export class MessageList {
       parts: message.parts,
     };
 
-    if (message.reasoning) content.reasoning = message.reasoning;
-    if (message.annotations) content.annotations = message.annotations;
-    if (message.experimental_attachments) {
-      content.experimental_attachments = message.experimental_attachments;
-    }
+    // Note: reasoning, annotations, and experimental_attachments are deprecated
+    // They should already be in the parts array in UIMessageV4
     if ('metadata' in message && message.metadata !== null && message.metadata !== undefined) {
       content.metadata = message.metadata as Record<string, unknown>;
     }
@@ -1498,7 +1584,6 @@ export class MessageList {
   private aiV4CoreMessageToMastraDBMessage(coreMessage: CoreMessageV4, messageSource: MessageSource): MastraDBMessage {
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
     const parts: UIMessageV4['parts'] = [];
-    const experimentalAttachments: UIMessageV4['experimental_attachments'] = [];
 
     const isSingleTextContent =
       messageSource === `response` &&
@@ -1679,8 +1764,7 @@ export class MessageList {
 
     // Tool invocations are now stored only in parts, not in a separate array
     // Text content is also stored in parts, not in a separate content field
-
-    if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
+    // Note: experimental_attachments are deprecated, files are now in parts array
 
     return {
       id,
@@ -1747,7 +1831,7 @@ export class MessageList {
     );
   }
 
-  private static cacheKeyFromAIV4Parts(parts: UIMessageV4['parts']): string {
+  private static cacheKeyFromAIV4Parts(parts: MastraMessageContentV2['parts']): string {
     let key = ``;
     for (const part of parts) {
       key += part.type;
@@ -1768,8 +1852,9 @@ export class MessageList {
         }, 0);
       }
       if (part.type === `file`) {
-        key += part.data;
-        key += part.mimeType;
+        // Handle both url and data properties for extended file parts
+        key += part.url || part.data || '';
+        key += part.mimeType || '';
       }
     }
     return key;
@@ -2141,34 +2226,7 @@ export class MessageList {
     // Tool invocations are now only stored in parts array
     // No need to check for separate toolInvocations field
 
-    // 2. Check if we have parts with providerMetadata first
-    const hasReasoningInParts = dbMsg.content.parts?.some(p => p.type === 'reasoning');
-    const hasFileInParts = dbMsg.content.parts?.some(p => p.type === 'file');
-
-    // 3. Handle reasoning (AIV4 reasoning is a string) - only if not in parts
-    if (dbMsg.content.reasoning && !hasReasoningInParts) {
-      parts.push({
-        type: 'reasoning',
-        text: dbMsg.content.reasoning,
-      });
-    }
-
-    // 4. Handle files (experimental_attachments) - only if not in parts
-    // Track attachment URLs to avoid duplicates when processing parts
-    const attachmentUrls = new Set<string>();
-    if (dbMsg.content.experimental_attachments && !hasFileInParts) {
-      for (const attachment of dbMsg.content.experimental_attachments) {
-        attachmentUrls.add(attachment.url);
-        parts.push({
-          type: 'file',
-          url: attachment.url,
-          mediaType: attachment.contentType || 'unknown',
-        });
-      }
-    }
-
-    // 5. Handle parts directly (if present in V2) - check this first as it has providerMetadata
-    let hasNonToolReasoningParts = false;
+    // Handle parts directly (if present in V2) - check this first as it has providerMetadata
     if (dbMsg.content.parts) {
       for (const part of dbMsg.content.parts) {
         // Handle tool-invocation parts
@@ -2233,11 +2291,6 @@ export class MessageList {
 
         // Convert file parts from V2 format (data) to AIV5 format (url)
         if (part.type === 'file') {
-          // Skip file parts that came from experimental_attachments to avoid duplicates
-          if (typeof part.data === 'string' && attachmentUrls.has(part.data)) {
-            continue;
-          }
-
           const categorized =
             typeof part.data === 'string'
               ? categorizeFileData(part.data, part.mimeType)
@@ -2271,8 +2324,12 @@ export class MessageList {
                 // It's not a data URI, treat it as raw base64 or plain text
                 filePartData = part.data;
               }
+            } else if (part.data) {
+              // Convert non-string data to string
+              filePartData = part.data.toString();
             } else {
-              filePartData = part.data;
+              // Use url if data is not available (from experimental_attachments migration)
+              filePartData = part.url || '';
             }
 
             // Ensure we always have a valid MIME type - default to image/png for better compatibility
@@ -2320,11 +2377,9 @@ export class MessageList {
             text: part.text,
             ...(part.providerMetadata && { providerMetadata: part.providerMetadata }),
           });
-          hasNonToolReasoningParts = true;
         } else {
           // Other parts (step-start, etc.) can be pushed as-is
           parts.push(part);
-          hasNonToolReasoningParts = true;
         }
       }
     }
@@ -2363,27 +2418,9 @@ export class MessageList {
     delete cleanMetadata.threadId;
     delete cleanMetadata.resourceId;
 
-    // Process parts to build V2 content
-    const reasoningParts = parts.filter(p => p.type === 'reasoning');
-    const fileParts = parts.filter(p => p.type === 'file');
-
     // Tool invocations are now stored directly in parts array
     // No need to build separate toolInvocations array
-
-    // Build reasoning string (AIV4 reasoning is a string, not an array)
-    let reasoning: MastraDBMessage['content']['reasoning'] = undefined;
-    if (reasoningParts.length > 0) {
-      reasoning = reasoningParts.map(p => p.text).join('\n');
-    }
-
-    // Build experimental_attachments from file parts
-    let experimental_attachments: MastraDBMessage['content']['experimental_attachments'] = undefined;
-    if (fileParts.length > 0) {
-      experimental_attachments = fileParts.map(p => ({
-        url: p.url || '',
-        contentType: p.mediaType,
-      }));
-    }
+    // Note: reasoning and experimental_attachments are deprecated and stored in parts array
 
     // Text content is now stored only in parts array, not as separate content field
     // Build V2-compatible parts array
@@ -2489,8 +2526,6 @@ export class MessageList {
       content: {
         format: 2,
         parts: v2Parts as MastraMessageContentV2['parts'],
-        reasoning,
-        experimental_attachments,
         metadata: Object.keys(cleanMetadata).length > 0 ? cleanMetadata : undefined,
       },
     };
@@ -2508,8 +2543,6 @@ export class MessageList {
 
     // Process parts to build V2 content structure
     const v2Parts: MastraMessageContentV2['parts'] = [];
-    const reasoningParts: string[] = [];
-    const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
     const textParts: Array<{ text: string; providerMetadata?: Record<string, unknown> }> = [];
 
     let lastPartWasToolResult = false;
@@ -2612,7 +2645,6 @@ export class MessageList {
           ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
         v2Parts.push(v2ReasoningPart);
-        reasoningParts.push(reasoningPart.text);
         lastPartWasToolResult = false;
       } else if (part.type === 'image') {
         const imagePart = part as AIV5Type.ImagePart;
@@ -2645,10 +2677,6 @@ export class MessageList {
           ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
         v2Parts.push(imageFilePart);
-        experimental_attachments.push({
-          url: imageData,
-          contentType: mimeType,
-        });
         lastPartWasToolResult = false;
       } else if (part.type === 'file') {
         const filePart = part as AIV5Type.FilePart;
@@ -2679,10 +2707,6 @@ export class MessageList {
           ...(hasProviderMetadata && { providerMetadata: providerMetadata as AIV5Type.ProviderMetadata }),
         };
         v2Parts.push(v2FilePart);
-        experimental_attachments.push({
-          url: fileData,
-          contentType: mimeType,
-        });
         lastPartWasToolResult = false;
       }
     }
@@ -2715,8 +2739,6 @@ export class MessageList {
       content: {
         format: 2,
         parts: v2Parts,
-        reasoning: reasoningParts.length > 0 ? reasoningParts.join('\n') : undefined,
-        experimental_attachments: experimental_attachments.length > 0 ? experimental_attachments : undefined,
         metadata,
       },
     };
