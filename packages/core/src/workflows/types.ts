@@ -203,7 +203,7 @@ export interface WorkflowState {
   >;
   result?: Record<string, any>;
   payload?: Record<string, any>;
-  error?: Record<string, any>;
+  error?: SerializedError;
 }
 
 export interface WorkflowRunState {
@@ -211,7 +211,7 @@ export interface WorkflowRunState {
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
-  error?: Record<string, any>;
+  error?: SerializedError;
   requestContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, SerializedStepResult<any, any, any, any>>;

@@ -1843,7 +1843,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       // TODO: do we need to use the error.cause here as the stepFailure instead?
       // ? since we added the execResult to the error cause on line 1780
 
-      const stepFailure: StepFailure<any, any, any> = {
+      const stepFailure: StepFailure<any, any, any, any> = {
         status: 'failed' as const,
         error,
         payload: inputData,
