@@ -46,15 +46,17 @@ export const agentCardResponseSchema = z.object({
   name: z.string(),
   description: z.string(),
   url: z.string(),
-  provider: z.object({
-    organization: z.string(),
-    url: z.string(),
-  }),
+  provider: z
+    .object({
+      organization: z.string(),
+      url: z.string(),
+    })
+    .optional(),
   version: z.string(),
   capabilities: z.object({
-    streaming: z.boolean(),
-    pushNotifications: z.boolean(),
-    stateTransitionHistory: z.boolean(),
+    streaming: z.boolean().optional(),
+    pushNotifications: z.boolean().optional(),
+    stateTransitionHistory: z.boolean().optional(),
   }),
   defaultInputModes: z.array(z.string()),
   defaultOutputModes: z.array(z.string()),

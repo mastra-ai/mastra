@@ -121,10 +121,8 @@ export const serializedAgentWithIdSchema = serializedAgentSchema.extend({
 export const providerSchema = z.object({
   id: z.string(),
   name: z.string(),
-  envVar: z.union([z.string(), z.array(z.string())]),
-  connected: z.boolean(),
-  docUrl: z.string().optional(),
-  models: z.array(z.string()),
+  label: z.string().optional(),
+  description: z.string().optional(),
 });
 
 /**

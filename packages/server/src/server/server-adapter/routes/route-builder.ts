@@ -6,16 +6,19 @@ interface RouteConfig<
   TPathSchema extends z.ZodTypeAny | undefined = undefined,
   TQuerySchema extends z.ZodTypeAny | undefined = undefined,
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
-  TResponse = unknown,
+  TResponseSchema extends z.ZodTypeAny | undefined = undefined,
 > {
   method: ServerRoute['method'];
   path: string;
   responseType: 'stream' | 'json';
-  handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>, TResponse>;
+  handler: ServerRouteHandler<
+    InferParams<TPathSchema, TQuerySchema, TBodySchema>,
+    TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown
+  >;
   pathParamSchema?: TPathSchema;
   queryParamSchema?: TQuerySchema;
   bodySchema?: TBodySchema;
-  responseSchema?: z.ZodTypeAny;
+  responseSchema?: TResponseSchema;
   summary?: string;
   description?: string;
   tags?: string[];
@@ -58,10 +61,13 @@ export function createRoute<
   TPathSchema extends z.ZodTypeAny | undefined = undefined,
   TQuerySchema extends z.ZodTypeAny | undefined = undefined,
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
-  TResponse = unknown,
+  TResponseSchema extends z.ZodTypeAny | undefined = undefined,
 >(
-  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponse>,
-): ServerRoute<InferParams<TPathSchema, TQuerySchema, TBodySchema>, TResponse> {
+  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+): ServerRoute<
+  InferParams<TPathSchema, TQuerySchema, TBodySchema>,
+  TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown
+> {
   const { summary, description, tags, deprecated, ...baseRoute } = config;
 
   // Generate OpenAPI specification from the route config

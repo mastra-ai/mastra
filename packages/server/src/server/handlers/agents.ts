@@ -319,34 +319,6 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
   return agent;
 }
 
-// Agent handlers
-export async function listAgentsHandler({
-  mastra,
-  requestContext,
-}: Context & { requestContext: RequestContext }): Promise<Record<string, SerializedAgent>> {
-  try {
-    const agents = mastra.listAgents();
-
-    const serializedAgentsMap = await Promise.all(
-      Object.entries(agents).map(async ([id, agent]) => {
-        return formatAgentList({ id, mastra, agent, requestContext });
-      }),
-    );
-
-    const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
-      (acc, { id, ...rest }) => {
-        acc[id] = { id, ...rest };
-        return acc;
-      },
-      {},
-    );
-
-    return serializedAgents;
-  } catch (error) {
-    return handleError(error, 'Error getting agents');
-  }
-}
-
 async function formatAgent({
   mastra,
   agent,
@@ -461,519 +433,6 @@ async function formatAgent({
   };
 }
 
-export async function getAgentByIdHandler({
-  mastra,
-  requestContext,
-  agentId,
-  isPlayground = false,
-}: Context & { isPlayground?: boolean; requestContext: RequestContext; agentId: string }): Promise<
-  SerializedAgent | ReturnType<typeof handleError>
-> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    return formatAgent({ mastra, agent, requestContext, isPlayground });
-  } catch (error) {
-    return handleError(error, 'Error getting agent');
-  }
-}
-
-export async function generateLegacyHandler({
-  mastra,
-  requestContext,
-  agentId,
-  abortSignal,
-  ...params
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  abortSignal?: AbortSignal;
-} & GetBody<'generateLegacy'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
-    agentRequestContext?: Record<string, unknown>;
-  }) {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(params, ['tools']);
-
-    const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params;
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const result = await agent.generateLegacy(messages, {
-      ...rest,
-      abortSignal,
-      // @ts-expect-error TODO fix types
-      resourceId: finalResourceId,
-      requestContext: finalRequestContext,
-    });
-
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error generating from agent');
-  }
-}
-
-export async function generateHandler({
-  mastra,
-  requestContext,
-  agentId,
-  abortSignal,
-  ...params
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  abortSignal?: AbortSignal;
-} & GetBody<'generate'> & {
-    agentRequestContext?: Record<string, unknown>;
-  }): Promise<ReturnType<Agent['generate']>> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(params, ['tools']);
-
-    const { messages, agentRequestContext, ...rest } = params;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const result = await agent.generate(messages, {
-      ...rest,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return result;
-  } catch (error) {
-    return handleError(error, 'Error generating from agent');
-  }
-}
-
-export async function streamGenerateLegacyHandler({
-  mastra,
-  requestContext,
-  agentId,
-  abortSignal,
-  ...params
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  abortSignal?: AbortSignal;
-} & GetBody<'streamLegacy'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
-    agentRequestContext?: Record<string, unknown>;
-  }): Promise<Response | undefined> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(params, ['tools']);
-
-    const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params;
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const streamResult = await agent.streamLegacy(messages, {
-      ...rest,
-      abortSignal,
-      // @ts-expect-error TODO fix types
-      resourceId: finalResourceId,
-      requestContext: finalRequestContext,
-    });
-
-    const streamResponse = rest.output
-      ? streamResult.toTextStreamResponse({
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        })
-      : streamResult.toDataStreamResponse({
-          sendUsage: true,
-          sendReasoning: true,
-          getErrorMessage: (error: any) => {
-            return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
-          },
-          headers: {
-            'Transfer-Encoding': 'chunked',
-          },
-        });
-
-    return streamResponse;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function streamGenerateHandler({
-  mastra,
-  requestContext,
-  agentId,
-  abortSignal,
-  ...params
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  abortSignal?: AbortSignal;
-} & GetBody<'stream'> & {
-    agentRequestContext?: Record<string, unknown>;
-  }): ReturnType<Agent['stream']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(params, ['tools']);
-
-    const { messages, agentRequestContext, ...rest } = params;
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const streamResult = agent.stream(messages, {
-      ...rest,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function approveToolCallHandler({
-  mastra,
-  requestContext,
-  agentId,
-  abortSignal,
-  ...params
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  abortSignal?: AbortSignal;
-} & GetHITLBody<'approveToolCall'> & {
-    agentRequestContext?: Record<string, unknown>;
-  }): ReturnType<Agent['approveToolCall']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    if (!params.runId) {
-      throw new HTTPException(400, { message: 'Run id is required' });
-    }
-
-    if (!params.toolCallId) {
-      throw new HTTPException(400, { message: 'Tool call id is required' });
-    }
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(params, ['tools']);
-
-    const { runId, agentRequestContext, ...rest } = params;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    const streamResult = agent.approveToolCall({
-      ...rest,
-      runId,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function declineToolCallHandler({
-  mastra,
-  requestContext,
-  agentId,
-  abortSignal,
-  ...params
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  abortSignal?: AbortSignal;
-} & GetHITLBody<'declineToolCall'> & {
-    agentRequestContext?: Record<string, unknown>;
-  }): ReturnType<Agent['declineToolCall']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    if (!params.runId) {
-      throw new HTTPException(400, { message: 'Run id is required' });
-    }
-
-    if (!params.toolCallId) {
-      throw new HTTPException(400, { message: 'Tool call id is required' });
-    }
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(params, ['tools']);
-
-    const { runId, agentRequestContext, ...rest } = params;
-
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    const streamResult = agent.declineToolCall({
-      ...rest,
-      runId,
-      requestContext: finalRequestContext,
-      abortSignal,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function streamNetworkHandler({
-  mastra,
-  requestContext,
-  agentId,
-  ...params
-  // abortSignal,
-}: Context & {
-  requestContext: RequestContext;
-  agentId: string;
-  // abortSignal?: AbortSignal;
-} & GetBody<'network'> & {
-    thread?: string;
-    resourceId?: string;
-    agentRequestContext?: Record<string, unknown>;
-  }): ReturnType<Agent['network']> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // UI Frameworks may send "client tools" in the body,
-    // but it interferes with llm providers tool handling, so we remove them
-    sanitizeBody(params, ['tools']);
-
-    const { messages, agentRequestContext, ...rest } = params;
-    const finalRequestContext = new RequestContext<Record<string, unknown>>([
-      ...Array.from(requestContext.entries()),
-      ...Array.from(Object.entries(agentRequestContext ?? {})),
-    ]);
-
-    validateBody({ messages });
-
-    const streamResult = agent.network(messages, {
-      ...rest,
-      memory: {
-        thread: rest.thread ?? '',
-        resource: rest.resourceId ?? '',
-        options: rest.memory?.options ?? {},
-      },
-      requestContext: finalRequestContext,
-    });
-
-    return streamResult;
-  } catch (error) {
-    return handleError(error, 'error streaming agent loop response');
-  }
-}
-
-export async function streamUIMessageHandler(
-  _params: Context & {
-    requestContext: RequestContext;
-    agentId: string;
-    body: GetBody<'stream'> & {
-      requestContext?: string;
-      onStepFinish?: StreamTextOnStepFinishCallback<any>;
-      onFinish?: StreamTextOnFinishCallback<any>;
-      output?: undefined;
-    };
-    abortSignal?: AbortSignal;
-  },
-): Promise<Response | undefined> {
-  try {
-    throw new MastraError({
-      category: ErrorCategory.USER,
-      domain: ErrorDomain.MASTRA_SERVER,
-      id: 'DEPRECATED_ENDPOINT',
-      text: 'This endpoint is deprecated. Please use the @mastra/ai-sdk package to for uiMessage transformations',
-    });
-  } catch (error) {
-    return handleError(error, 'error streaming agent response');
-  }
-}
-
-export async function updateAgentModelHandler({
-  mastra,
-  agentId,
-  modelId,
-  provider,
-}: Context & {
-  agentId: string;
-  modelId: string;
-  provider: string;
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    // Use the universal Mastra router format: provider/model
-    const newModel = `${provider}/${modelId}`;
-
-    agent.__updateModel({ model: newModel });
-
-    return { message: 'Agent model updated' };
-  } catch (error) {
-    return handleError(error, 'error updating agent model');
-  }
-}
-
-export async function resetAgentModelHandler({
-  mastra,
-  agentId,
-}: Context & {
-  agentId: string;
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    agent.__resetToOriginalModel();
-
-    return { message: 'Agent model reset to original' };
-  } catch (error) {
-    return handleError(error, 'error resetting agent model');
-  }
-}
-
-export async function reorderAgentModelListHandler({
-  mastra,
-  agentId,
-  reorderedModelIds,
-}: Context & {
-  agentId: string;
-  reorderedModelIds: Array<string>;
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    const modelList = await agent.getModelList();
-    if (!modelList || modelList.length === 0) {
-      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
-    }
-
-    agent.reorderModels(reorderedModelIds);
-
-    return { message: 'Model list reordered' };
-  } catch (error) {
-    return handleError(error, 'error reordering model list');
-  }
-}
-
-export async function updateAgentModelInModelListHandler({
-  mastra,
-  agentId,
-  modelConfigId,
-  model: bodyModel,
-  maxRetries,
-  enabled,
-}: Context & {
-  agentId: string;
-  modelConfigId: string;
-  model?: {
-    modelId: string;
-    provider: string;
-  };
-  maxRetries?: number;
-  enabled?: boolean;
-}): Promise<{ message: string }> {
-  try {
-    const agent = await getAgentFromSystem({ mastra, agentId });
-
-    if (!modelConfigId) {
-      throw new HTTPException(400, { message: 'Model id is required' });
-    }
-
-    const modelList = await agent.getModelList();
-    if (!modelList || modelList.length === 0) {
-      throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
-    }
-
-    const modelToUpdate = modelList.find(m => m.id === modelConfigId);
-    if (!modelToUpdate) {
-      throw new HTTPException(400, { message: 'Model to update is not found in agent model list' });
-    }
-
-    let model: string | undefined;
-    if (bodyModel) {
-      const { modelId, provider } = bodyModel;
-      // Use the universal Mastra router format: provider/model
-      model = `${provider}/${modelId}`;
-    }
-
-    agent.updateModelInModelList({ id: modelConfigId, model, maxRetries, enabled });
-
-    return { message: 'Model list updated' };
-  } catch (error) {
-    return handleError(error, 'error updating model list');
-  }
-}
-
-export async function getProvidersHandler() {
-  try {
-    const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
-      // Check if the provider is connected by checking for its API key env var(s)
-      const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
-      const connected = envVars.every(envVar => !!process.env[envVar]);
-
-      return {
-        id,
-        name: provider.name,
-        envVar: provider.apiKeyEnvVar,
-        connected,
-        docUrl: provider.docUrl,
-        models: [...provider.models], // Convert readonly array to regular array
-      };
-    });
-
-    return { providers };
-  } catch (error) {
-    return handleError(error, 'error fetching providers');
-  }
-}
-
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
@@ -1004,7 +463,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
         {},
       );
 
-      return serializedAgents;
+      return serializedAgents as unknown as z.infer<typeof listAgentsResponseSchema>;
     } catch (error) {
       return handleError(error, 'Error getting agents');
     }
@@ -1024,7 +483,8 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
       const isPlayground = false; // TODO: Get from context if needed
-      return formatAgent({ mastra, agent, requestContext, isPlayground });
+      const result = await formatAgent({ mastra, agent, requestContext, isPlayground });
+      return result as unknown as z.infer<typeof serializedAgentSchema>;
     } catch (error) {
       return handleError(error, 'Error getting agent');
     }
@@ -1085,7 +545,37 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Generate with legacy format',
   description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ctx => await generateLegacyHandler(ctx as any),
+  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params as any;
+      // Use resourceId if provided, fall back to resourceid (deprecated)
+      const finalResourceId = resourceId ?? resourceid;
+
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext.entries()),
+        ...Array.from(Object.entries(agentRequestContext ?? {})),
+      ]);
+
+      validateBody({ messages });
+
+      const result = await agent.generateLegacy(messages, {
+        ...rest,
+        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        resourceId: finalResourceId,
+        requestContext: finalRequestContext,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error generating from agent');
+    }
+  },
 });
 
 export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
@@ -1098,7 +588,54 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   summary: '[DEPRECATED] Stream with legacy format',
   description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
-  handler: async ctx => await streamGenerateLegacyHandler(ctx as any),
+  handler: async ({ mastra, requestContext, agentId, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, resourceId, resourceid, agentRequestContext, ...rest } = params as any;
+      // Use resourceId if provided, fall back to resourceid (deprecated)
+      const finalResourceId = resourceId ?? resourceid;
+
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext.entries()),
+        ...Array.from(Object.entries(agentRequestContext ?? {})),
+      ]);
+
+      validateBody({ messages });
+
+      const streamResult = await agent.streamLegacy(messages, {
+        ...rest,
+        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+        resourceId: finalResourceId,
+        requestContext: finalRequestContext,
+      });
+
+      const streamResponse = rest.output
+        ? streamResult.toTextStreamResponse({
+            headers: {
+              'Transfer-Encoding': 'chunked',
+            },
+          })
+        : streamResult.toDataStreamResponse({
+            sendUsage: true,
+            sendReasoning: true,
+            getErrorMessage: (error: any) => {
+              return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+            },
+            headers: {
+              'Transfer-Encoding': 'chunked',
+            },
+          });
+
+      return streamResponse;
+    } catch (error) {
+      return handleError(error, 'error streaming agent response');
+    }
+  },
 });
 
 export const GET_PROVIDERS_ROUTE = createRoute({

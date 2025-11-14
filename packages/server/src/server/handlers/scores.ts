@@ -1,6 +1,8 @@
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
+import type { z } from 'zod';
+import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { handleError } from './error';
 import {
@@ -101,126 +103,6 @@ async function listScorersFromSystem({
   return Object.fromEntries(scorersMap.entries());
 }
 
-export async function listScorersHandler({ mastra, requestContext }: Context & { requestContext: RequestContext }) {
-  const scorers = await listScorersFromSystem({
-    mastra,
-    requestContext,
-  });
-
-  return scorers;
-}
-
-export async function getScorerHandler({
-  mastra,
-  scorerId,
-  requestContext,
-}: Context & { scorerId: string; requestContext: RequestContext }) {
-  const scorers = await listScorersFromSystem({
-    mastra,
-    requestContext,
-  });
-
-  const scorer = scorers[scorerId];
-
-  if (!scorer) {
-    return null;
-  }
-
-  return scorer;
-}
-
-export async function listScoresByRunIdHandler({
-  mastra,
-  runId,
-  page,
-  perPage,
-}: Context & { runId: string; page: number; perPage: number | false }) {
-  try {
-    const pagination: StoragePagination = {
-      page: page ?? 0,
-      perPage: perPage ?? 10,
-    };
-    const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
-      runId,
-      pagination,
-    })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
-    return {
-      pagination: scoreResults.pagination,
-      scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting scores by run id');
-  }
-}
-
-export async function listScoresByScorerIdHandler({
-  mastra,
-  scorerId,
-  page,
-  perPage,
-  entityId,
-  entityType,
-}: Context & {
-  scorerId: string;
-  page: StoragePagination['page'];
-  perPage: StoragePagination['perPage'];
-  entityId?: string;
-  entityType?: string;
-}) {
-  try {
-    const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
-      scorerId,
-      pagination: { page, perPage },
-      entityId,
-      entityType,
-    })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
-    return {
-      pagination: scoreResults.pagination,
-      scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting scores by scorer id');
-  }
-}
-
-export async function listScoresByEntityIdHandler({
-  mastra,
-  entityId,
-  entityType,
-  page,
-  perPage,
-}: Context & { entityId: string; entityType: string; page: number; perPage: number | false }) {
-  try {
-    let entityIdToUse = entityId;
-
-    if (entityType === 'AGENT') {
-      const agent = mastra.getAgentById(entityId);
-      entityIdToUse = agent.id;
-    } else if (entityType === 'WORKFLOW') {
-      const workflow = mastra.getWorkflowById(entityId);
-      entityIdToUse = workflow.id;
-    }
-
-    const pagination: StoragePagination = {
-      page: page ?? 0,
-      perPage: perPage ?? 10,
-    };
-
-    const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
-      entityId: entityIdToUse,
-      entityType,
-      pagination,
-    })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
-
-    return {
-      pagination: scoreResults.pagination,
-      scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting scores by entity id');
-  }
-}
-
 // Legacy function to get trace and span details
 function getTraceDetails(traceIdWithSpanId?: string) {
   if (!traceIdWithSpanId) {
@@ -233,15 +115,6 @@ function getTraceDetails(traceIdWithSpanId?: string) {
     ...(traceId ? { traceId } : {}),
     ...(spanId ? { spanId } : {}),
   };
-}
-
-export async function saveScoreHandler({ mastra, score }: Context & { score: ScoreRowData }) {
-  try {
-    const scores = (await mastra.getStorage()?.saveScore?.(score)) || [];
-    return scores;
-  } catch (error) {
-    return handleError(error, 'Error saving score');
-  }
 }
 
 // ============================================================================
@@ -261,7 +134,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
       mastra,
       requestContext,
     });
-    return scorers;
+    return scorers as unknown as z.infer<typeof listScorersResponseSchema>;
   },
 });
 
@@ -286,7 +159,7 @@ export const GET_SCORER_ROUTE = createRoute({
       return null;
     }
 
-    return scorer;
+    return scorer as unknown as z.infer<typeof scorerEntrySchema>;
   },
 });
 
@@ -411,8 +284,11 @@ export const SAVE_SCORE_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     try {
       const { score } = params as { score: ScoreRowData };
-      const scores = (await mastra.getStorage()?.saveScore?.(score)) || [];
-      return scores;
+      const result = await mastra.getStorage()?.saveScore?.(score);
+      if (!result) {
+        throw new HTTPException(500, { message: 'Storage not configured' });
+      }
+      return result;
     } catch (error) {
       return handleError(error, 'Error saving score');
     }

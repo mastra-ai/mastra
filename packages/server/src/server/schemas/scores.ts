@@ -12,7 +12,7 @@ const scoringSamplingConfigSchema = z.object({}).passthrough();
  */
 const mastraScorerConfigSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  name: z.string().optional(),
   description: z.string(),
   type: z.unknown().optional(),
   judge: z.unknown().optional(),
@@ -20,12 +20,13 @@ const mastraScorerConfigSchema = z.object({
 
 /**
  * Schema for MastraScorer
+ * Only validates public config property, uses passthrough to allow class instance
  */
-const mastraScorerSchema = z.object({
-  config: mastraScorerConfigSchema,
-  steps: z.array(z.unknown()),
-  originalPromptObjects: z.union([z.instanceof(Map), z.record(z.string(), z.unknown())]),
-});
+const mastraScorerSchema = z
+  .object({
+    config: mastraScorerConfigSchema,
+  })
+  .passthrough();
 
 /**
  * Schema for scorer entry with associations to agents and workflows

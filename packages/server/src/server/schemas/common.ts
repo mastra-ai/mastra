@@ -24,7 +24,7 @@ export const optionalRunIdSchema = z.object({
 export const paginationInfoSchema = z.object({
   total: z.number(),
   page: z.number(),
-  perPage: z.number(),
+  perPage: z.union([z.number(), z.literal(false)]),
   hasMore: z.boolean(),
 });
 
@@ -141,7 +141,7 @@ export const messageResponseSchema = z.object({
  * Base log message schema
  */
 export const baseLogMessageSchema = z.object({
-  level: z.enum(['debug', 'info', 'warn', 'error']),
+  level: z.enum(['debug', 'info', 'warn', 'error', 'silent']),
   msg: z.string(),
   time: z.date(),
   context: z.record(z.string(), z.unknown()).optional(),

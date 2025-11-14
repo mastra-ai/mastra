@@ -5,7 +5,7 @@ import { createPagePaginationSchema, baseLogMessageSchema } from './common';
 export const listLogsQuerySchema = createPagePaginationSchema().extend({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
-  logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
+  logLevel: z.enum(['debug', 'info', 'warn', 'error', 'silent']).optional(),
   filters: z.union([z.string(), z.array(z.string())]).optional(),
   transportId: z.string(),
 });
@@ -15,7 +15,7 @@ export const listLogsResponseSchema = z.object({
   logs: z.array(baseLogMessageSchema),
   total: z.number(),
   page: z.number(),
-  perPage: z.number(),
+  perPage: z.union([z.number(), z.literal(false)]),
   hasMore: z.boolean(),
 });
 

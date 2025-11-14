@@ -28,6 +28,58 @@ const storageOrderBySchema = z.object({
 });
 
 /**
+ * Include schema for message listing - handles JSON parsing from query strings
+ */
+const includeSchema = z.preprocess(
+  val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  },
+  z
+    .array(
+      z.object({
+        id: z.string(),
+        threadId: z.string().optional(),
+        withPreviousMessages: z.number().optional(),
+        withNextMessages: z.number().optional(),
+      }),
+    )
+    .optional(),
+);
+
+/**
+ * Filter schema for message listing - handles JSON parsing from query strings
+ */
+const filterSchema = z.preprocess(
+  val => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return undefined;
+      }
+    }
+    return val;
+  },
+  z
+    .object({
+      dateRange: z
+        .object({
+          start: z.coerce.date().optional(),
+          end: z.coerce.date().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+);
+
+/**
  * Thread object structure
  */
 const threadSchema = z.object({
@@ -67,7 +119,7 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/threads
  */
-export const listThreadsQuerySchema = createOffsetPaginationSchema(100).extend({
+export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string(),
   resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
@@ -85,8 +137,8 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string(),
   resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
-  include: z.unknown().optional(),
-  filter: z.unknown().optional(),
+  include: includeSchema,
+  filter: filterSchema,
 });
 
 /**
@@ -110,7 +162,7 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 /**
  * GET /api/memory/network/threads
  */
-export const listThreadsNetworkQuerySchema = createOffsetPaginationSchema(100).extend({
+export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string(),
   resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
@@ -128,8 +180,8 @@ export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).ext
   agentId: z.string(),
   resourceId: z.string().optional(),
   orderBy: storageOrderBySchema.optional(),
-  include: z.unknown().optional(),
-  filter: z.unknown().optional(),
+  include: includeSchema,
+  filter: filterSchema,
 });
 
 /**

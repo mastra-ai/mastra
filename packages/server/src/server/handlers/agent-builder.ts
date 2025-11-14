@@ -1,5 +1,6 @@
 import { agentBuilderWorkflows } from '@mastra/agent-builder';
 import type { WorkflowInfo } from '@mastra/core/workflows';
+import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
@@ -221,7 +222,10 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
   summary: 'List agent-builder actions',
   description: 'Returns a list of all available agent-builder actions',
   tags: ['Agent Builder'],
-  handler: async ctx => await getAgentBuilderActionsHandler(ctx),
+  handler: async ctx => {
+    const result = await getAgentBuilderActionsHandler(ctx);
+    return result as unknown as z.infer<typeof listWorkflowsResponseSchema>;
+  },
 });
 
 export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
@@ -233,7 +237,10 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
   summary: 'Get action by ID',
   description: 'Returns details for a specific agent-builder action',
   tags: ['Agent Builder'],
-  handler: async ctx => await getAgentBuilderActionByIdHandler(ctx),
+  handler: async ctx => {
+    const result = await getAgentBuilderActionByIdHandler(ctx);
+    return result as unknown as z.infer<typeof workflowInfoSchema>;
+  },
 });
 
 export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
@@ -246,7 +253,10 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
   summary: 'List action runs',
   description: 'Returns a paginated list of execution runs for the specified action',
   tags: ['Agent Builder'],
-  handler: async ctx => await getAgentBuilderActionRunsHandler(ctx),
+  handler: async ctx => {
+    const result = await getAgentBuilderActionRunsHandler(ctx);
+    return result as unknown as z.infer<typeof workflowRunsResponseSchema>;
+  },
 });
 
 export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
@@ -258,7 +268,10 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   summary: 'Get action run by ID',
   description: 'Returns details for a specific action run',
   tags: ['Agent Builder'],
-  handler: async ctx => await getAgentBuilderActionRunByIdHandler(ctx),
+  handler: async ctx => {
+    const result = await getAgentBuilderActionRunByIdHandler(ctx);
+    return result as unknown as z.infer<typeof workflowRunResponseSchema>;
+  },
 });
 
 export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
@@ -270,7 +283,10 @@ export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
   summary: 'Get action execution result',
   description: 'Returns the final execution result of a completed action run',
   tags: ['Agent Builder'],
-  handler: async ctx => await getAgentBuilderActionRunExecutionResultHandler(ctx),
+  handler: async ctx => {
+    const result = await getAgentBuilderActionRunExecutionResultHandler(ctx);
+    return result as unknown as z.infer<typeof workflowExecutionResultSchema>;
+  },
 });
 
 export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
