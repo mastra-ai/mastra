@@ -64,6 +64,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/human-in-the-loop-with-tools",
+          label: "Human in the Loop with Tools",
+        },
+        {
+          type: "doc",
           id: "agents/agent-memory",
           label: "Memory",
         },

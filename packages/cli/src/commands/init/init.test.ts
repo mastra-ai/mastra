@@ -1,6 +1,5 @@
 import { fs, vol } from 'memfs';
 import { describe, beforeEach, expect, vi, test } from 'vitest';
-import { DepsService } from '../../services/service.deps';
 
 beforeEach(() => {
   vol.reset();
@@ -55,14 +54,15 @@ const utils = await import('./utils');
 const { init } = await import('./init');
 
 vi.mock('../../services/service.deps', () => {
+  class MockDepsService {
+    packageManager = 'pnpm';
+    
+    checkDependencies = vi.fn(() => Promise.resolve('ok'));
+    installPackages = vi.fn(() => Promise.resolve());
+  }
+  
   return {
-    DepsService: vi.fn().mockImplementation(() => {
-      return {
-        checkDependencies: vi.fn(() => Promise.resolve('ok')),
-        installPackages: vi.fn(() => Promise.resolve()),
-        packageManager: 'pnpm',
-      };
-    }),
+    DepsService: MockDepsService,
   };
 });
 
@@ -129,8 +129,6 @@ describe('CLI', () => {
   });
 
   test('generates env file', async () => {
-    DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
-
     vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
@@ -199,8 +197,6 @@ describe('CLI', () => {
   // });
 
   test('stops initialization if mastra is already setup', async () => {
-    DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
-
     fs.mkdirSync('/mock/mastra', { recursive: true });
 
     vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {

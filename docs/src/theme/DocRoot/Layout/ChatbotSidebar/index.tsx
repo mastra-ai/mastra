@@ -9,6 +9,7 @@ import { Button } from "@site/src/components/ui/button";
 import {
   Conversation,
   ConversationContent,
+  ConversationScrollButton,
 } from "@site/src/components/ui/conversation";
 import { Textarea } from "@site/src/components/ui/textarea";
 import { cn } from "@site/src/lib/utils";
@@ -20,19 +21,11 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
+import { useChatbotSidebar } from "./context";
 import styles from "./styles.module.css";
 
-interface ChatbotSidebarProps {
-  hiddenChatbotSidebar: boolean;
-  setHiddenChatbotSidebar: (
-    value: boolean | ((prev: boolean) => boolean),
-  ) => void;
-}
-
-export default function ChatbotSidebar({
-  hiddenChatbotSidebar,
-  setHiddenChatbotSidebar,
-}: ChatbotSidebarProps): ReactNode {
+export default function ChatbotSidebar(): ReactNode {
+  const { isHidden: hiddenChatbotSidebar, toggle } = useChatbotSidebar();
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
 
   const toggleSidebar = useCallback(() => {
@@ -44,8 +37,8 @@ export default function ChatbotSidebar({
     if (!hiddenSidebar && prefersReducedMotion()) {
       setHiddenSidebar(true);
     }
-    setHiddenChatbotSidebar((value) => !value);
-  }, [setHiddenChatbotSidebar, hiddenSidebar]);
+    toggle();
+  }, [toggle, hiddenSidebar]);
 
   const {
     conversation,
@@ -200,6 +193,7 @@ export default function ChatbotSidebar({
               </div>
             )}
           </ConversationContent>
+          <ConversationScrollButton className="backdrop-blur-md bg-white/50 dark:bg-black/50 border-none ring-1 ring-(--border-subtle)" />
         </Conversation>
       )}
       {/* Footer */}

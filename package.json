@@ -5,6 +5,8 @@
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
     "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "^4.0.8",
+    "@vitest/ui": "^4.0.8",
     "changesets-changelog-github-local": "^1.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
@@ -13,7 +15,7 @@
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "catalog:"
   },
   "private": true,
   "scripts": {
@@ -50,6 +52,7 @@
     "test:deployer": "pnpm --filter ./packages/deployer test",
     "test:server": "pnpm --filter ./packages/server test",
     "test:core": "pnpm --filter ./packages/core test",
+    "test:core:zod": "pnpm --filter ./packages/core test:types:zod",
     "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",

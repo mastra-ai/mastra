@@ -34,10 +34,10 @@
     "@arizeai/openinference-genai": "0.1.0",
     "@arizeai/openinference-semantic-conventions": "^2.1.2",
     "@mastra/otel-exporter": "workspace:*",
+    "@opentelemetry/core": "^2.1.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
     "@opentelemetry/resources": "^2.1.0",
-    "@opentelemetry/sdk-trace-base": "^2.1.0",
-    "@opentelemetry/core": "^2.1.0"
+    "@opentelemetry/sdk-trace-base": "^2.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -45,10 +45,12 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "eslint": "^9.36.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
