@@ -4,9 +4,13 @@ import { z } from 'zod/v4';
 import { SchemaCompatLayer } from './schema-compatibility';
 import type { ModelInformation } from './types';
 
-vi.mock('zod', () => ({
-  z,
-}));
+// Mock zod to use zod/v4 - Vitest 4 requires the mock to be at the top level
+vi.mock('zod', async () => {
+  const zodV4 = await import('zod/v4');
+  return {
+    z: zodV4.z,
+  };
+});
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
