@@ -11390,7 +11390,7 @@ describe('Workflow', () => {
 
   describe('Time travel', () => {
     afterEach(async () => {
-      testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async () => {

@@ -700,6 +700,11 @@ export class WorkflowEventProcessor extends EventProcessor {
     let resumeDataToUse;
     if (timeTravelResumeData && !timeTravelResumeValidationError) {
       resumeDataToUse = timeTravelResumeData;
+    } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+      this.mastra.getLogger()?.warn('Time travel resume data validation failed', {
+        stepId: step.step.id,
+        error: timeTravelResumeValidationError.message,
+      });
     } else if (resumeSteps?.length > 0 && resumeSteps?.[0] === step.step.id) {
       resumeDataToUse = resumeData;
     }

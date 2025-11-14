@@ -769,7 +769,7 @@ export class InngestRun<
             runId: self.runId,
             from,
             payload: {
-              stepName: (payload as unknown as { id: string }).id,
+              stepName: (payload as unknown as { id: string })?.id,
               ...payload,
             },
           } as WorkflowStreamEvent);
@@ -1992,6 +1992,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         let resumeDataToUse;
         if (timeTravelResumeData && !timeTravelResumeValidationError) {
           resumeDataToUse = timeTravelResumeData;
+        } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+          this.logger.warn('Time travel resume data validation failed', {
+            stepId: step.id,
+            error: timeTravelResumeValidationError.message,
+          });
         } else if (resume?.steps[0] === step.id) {
           resumeDataToUse = resume?.resumePayload;
         }

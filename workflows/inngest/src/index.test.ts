@@ -9,6 +9,7 @@ import type { MastraScorer } from '@mastra/core/evals';
 import { createScorer, runEvals } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { MockStore, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
@@ -20,7 +21,6 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 
 import { z } from 'zod';
 import { init, serve as inngestServe } from './index';
-import { MockStore, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 
 interface LocalTestContext {
   inngestPort: number;
@@ -4504,7 +4504,7 @@ describe('MastraInngestWorkflow', () => {
   describe('Time travel', () => {
     const testStorage = new MockStore();
     afterEach(async () => {
-      testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async ctx => {
@@ -5996,6 +5996,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
+    //parallel steps tests seem to be failing in inngest
     it.skip('should timeTravel workflow execution for workflow with parallel steps', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',

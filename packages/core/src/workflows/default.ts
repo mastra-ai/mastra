@@ -691,6 +691,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let resumeDataToUse;
     if (timeTravelResumeData && !timeTravelResumeValidationError) {
       resumeDataToUse = timeTravelResumeData;
+    } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+      this.logger.warn('Time travel resume data validation failed', {
+        stepId: step.id,
+        error: timeTravelResumeValidationError.message,
+      });
     } else if (resume?.steps[0] === step.id) {
       resumeDataToUse = resume?.resumePayload;
     }

@@ -274,7 +274,7 @@ export const createTimeTravelExecutionParams = (params: {
     steps,
     stepResults,
     nestedStepResults: nestedStepsContext as any,
-    state: initialState ?? {},
+    state: initialState ?? snapshot.value ?? {},
     resumeData,
   };
 
