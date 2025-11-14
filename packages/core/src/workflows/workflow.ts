@@ -1303,6 +1303,38 @@ export class Workflow<
     return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
+  public async listActiveWorkflowRuns() {
+    const runningRuns = await this.listWorkflowRuns({ status: 'running' });
+    const waitingRuns = await this.listWorkflowRuns({ status: 'waiting' });
+
+    return {
+      runs: [...runningRuns.runs, ...waitingRuns.runs],
+      total: runningRuns.total + waitingRuns.total,
+    };
+  }
+
+  public async restartAllActiveWorkflowRuns(): Promise<void> {
+    if (this.engineType !== 'default') {
+      this.logger.debug(`Cannot restart active workflow runs for ${this.engineType} engine`);
+      return;
+    }
+    const activeRuns = await this.listActiveWorkflowRuns();
+    if (activeRuns.runs.length > 0) {
+      this.logger.debug(
+        `Restarting ${activeRuns.runs.length} active workflow run${activeRuns.runs.length > 1 ? 's' : ''}`,
+      );
+    }
+    for (const runSnapshot of activeRuns.runs) {
+      try {
+        const run = await this.createRun({ runId: runSnapshot.runId });
+        await run.restart();
+        this.logger.debug(`Restarted ${this.id} workflow run ${runSnapshot.runId}`);
+      } catch (error) {
+        this.logger.error(`Failed to restart ${this.id} workflow run ${runSnapshot.runId}: ${error}`);
+      }
+    }
+  }
+
   async getWorkflowRunById(runId: string) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
