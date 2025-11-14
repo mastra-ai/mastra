@@ -6,7 +6,9 @@ const useIsMastraRunning = () => {
   return useQuery({
     queryKey: ['is-mastra-running'],
     queryFn: () => {
-      return fetch('http://localhost:4111').then(res => res.ok);
+      return fetch('http://localhost:4111')
+        .then(res => res.ok)
+        .catch(() => false);
     },
     retry: false,
   });
