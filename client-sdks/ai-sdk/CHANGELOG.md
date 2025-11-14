@@ -1,5 +1,11 @@
 # @mastra/ai-sdk
 
+## 0.2.7-alpha.1
+
+### Patch Changes
+
+- Fix bad dane change in 0.x workflowRoute ([#10090](https://github.com/mastra-ai/mastra/pull/10090))
+
 ## 0.2.7-alpha.0
 
 ### Patch Changes

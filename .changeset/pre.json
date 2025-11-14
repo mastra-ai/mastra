@@ -83,6 +83,7 @@
     "@mastra/inngest": "0.18.4"
   },
   "changesets": [
+    "afraid-walls-follow",
     "dry-peaches-stick",
     "four-candies-add",
     "funny-badgers-play",
