@@ -86,7 +86,7 @@
     "@radix-ui/react-visually-hidden": "^1.2.3",
     "@tanstack/react-table": "^8.21.3",
     "@types/react-syntax-highlighter": "^15.5.13",
-    "@uiw/codemirror-theme-dracula": "^4.23.14",
+    "@uiw/codemirror-theme-dracula": "^4.25.3",
     "@uiw/codemirror-theme-github": "^4.25.2",
     "@uiw/react-codemirror": "^4.23.14",
     "@xyflow/react": "^12.8.6",
