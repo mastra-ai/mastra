@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { MessageList } from '../../agent/message-list';
-import type { MastraDBMessage } from '../../agent/types';
-import { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage/domains/memory/base';
-import type { MastraEmbeddingModel, MastraVector } from '../../vector';
+import { MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/request-context';
+import type { MemoryStorage } from '@mastra/core/storage';
+import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 
 import { SemanticRecall } from './semantic-recall';
 

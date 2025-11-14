@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { MastraMessageV2 } from '../../agent/index.js';
-import type { MemoryRuntimeContext } from '../../memory/types.js';
-import { RequestContext } from '../../request-context/index.js';
-import { MemoryStorage } from '../../storage/domains/memory/base.js';
+import type { MastraMessageV2, MastraDBMessage } from '@mastra/core/agent';
+import type { MemoryRuntimeContext } from '@mastra/core/memory';
+import { RequestContext } from '@mastra/core/request-context';
+import { MemoryStorage } from '@mastra/core/storage';
 
 import { MessageHistory } from './message-history.js';
 
@@ -20,20 +20,31 @@ function createRuntimeContextWithMemory(threadId: string, resourceId?: string): 
 
 // Mock storage implementation
 class MockStorage extends MemoryStorage {
-  private messages: MastraMessageV2[] = [];
+  private messages: MastraDBMessage[] = [];
 
-  async getMessages(params: any): Promise<{ messages: MastraMessageV2[] }> {
-    const { threadId, selectBy } = params;
+  async listMessages(params: any): Promise<any> {
+    const { threadId, perPage = false, page = 1 } = params;
     const threadMessages = this.messages.filter(m => m.threadId === threadId);
 
-    if (selectBy?.last) {
-      return { messages: threadMessages.slice(-selectBy.last) };
+    let resultMessages = threadMessages;
+    if (typeof perPage === 'number' && perPage > 0) {
+      resultMessages = threadMessages.slice(-perPage);
     }
 
-    return { messages: threadMessages };
+    return {
+      messages: resultMessages,
+      total: threadMessages.length,
+      page,
+      perPage,
+      hasMore: false,
+    };
   }
 
-  setMessages(messages: MastraMessageV2[]) {
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return { messages: this.messages.filter(m => m.id && messageIds.includes(m.id)) };
+  }
+
+  setMessages(messages: MastraDBMessage[]) {
     this.messages = messages;
   }
 
@@ -41,11 +52,8 @@ class MockStorage extends MemoryStorage {
   async getThreadById(_args: { threadId: string }) {
     return null;
   }
-  async getThreadsByResourceId(_args: { resourceId: string }) {
-    return [];
-  }
   async saveThread(args: any) {
-    return args;
+    return args.thread || args;
   }
   async updateThread(args: { id: string; title: string; metadata: Record<string, unknown> }) {
     return {
@@ -57,22 +65,15 @@ class MockStorage extends MemoryStorage {
       updatedAt: new Date(),
     };
   }
-  async deleteThread(_args: { threadId: string }) {}
-  async getMessagesById(_args: { ids: string[] }) {
-    return [];
-  }
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }) {
-    return args.messages;
+  async deleteThread(_args: { threadId: string}) {}
+  async saveMessages(args: { messages: MastraDBMessage[] }) {
+    return { messages: args.messages };
   }
   async updateMessages(args: any) {
     return args.messages || [];
   }
-  async deleteMessages(_args: { ids: string[] }) {}
-  async getThreadsByResourceIdPaginated(_args: any) {
-    return { data: [], nextCursor: null };
-  }
-  async getMessagesPaginated(_args: any) {
-    return { data: [], nextCursor: null };
+  async listThreadsByResourceId(_args: any): Promise<any> {
+    return { threads: [], total: 0, page: 1, perPage: false, hasMore: false };
   }
 }
 
@@ -576,7 +577,13 @@ describe('MessageHistory', () => {
           title: 'Test Thread',
           metadata: { createdAt: new Date('2024-01-01') },
         }),
-        getMessages: vi.fn().mockResolvedValue({ messages: [{ role: 'user', content: 'existing' }] }),
+        listMessages: vi.fn().mockResolvedValue({
+          messages: [{ role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'existing' }] } }],
+          total: 1,
+          page: 0,
+          perPage: 40,
+          hasMore: false,
+        }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 

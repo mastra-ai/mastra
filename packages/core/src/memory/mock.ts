@@ -1,7 +1,8 @@
+import type { WorkingMemoryTemplate } from '@mastra/memory/processors';
+
 import { MessageList } from '../agent/message-list';
 import { MastraMemory } from '../memory';
 import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
-import type { WorkingMemoryTemplate } from '../processors/processors/working-memory';
 import { InMemoryStore } from '../storage';
 import type {
   StorageListMessagesInput,

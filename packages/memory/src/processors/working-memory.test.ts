@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import type { MemoryRuntimeContext } from '../../memory/types';
-import type { MastraMessageV2 } from '../../message';
-import { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage';
+import type { MemoryRuntimeContext } from '@mastra/core/memory';
+import type { MastraMessageV2 } from '@mastra/core/message';
+import { RequestContext } from '@mastra/core/request-context';
+import type { MemoryStorage } from '@mastra/core/storage';
 
 import type { WorkingMemoryTemplate } from './working-memory';
 import { WorkingMemory } from './working-memory';

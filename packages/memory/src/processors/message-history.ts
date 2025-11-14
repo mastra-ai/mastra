@@ -1,9 +1,9 @@
-import type { MastraDBMessage } from '../../agent/index.js';
-import { parseMemoryRuntimeContext } from '../../memory/types.js';
-import type { TracingContext } from '../../observability';
-import type { RequestContext } from '../../request-context/index.js';
-import type { MemoryStorage } from '../../storage/domains/memory/base.js';
-import type { Processor } from '../index.js';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { parseMemoryRuntimeContext } from '@mastra/core/memory';
+import type { TracingContext } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
+import type { MemoryStorage } from '@mastra/core/storage';
+import type { Processor } from '@mastra/core/processors';
 
 /**
  * Options for the MessageHistory processor
