@@ -1,0 +1,195 @@
+---
+title: "Reference: Mastra.getStore() | Core"
+description: "Documentation for the `Mastra.getStore()` and `MastraStorage.getStore()` methods, which retrieve domain-specific storage instances."
+---
+
+# Mastra.getStore()
+
+The `.getStore()` method is used to retrieve a specific storage domain instance. It's available on both `Mastra` and `MastraStorage` instances.
+
+## Usage
+
+```typescript copy
+// From Mastra instance
+const memoryStore = await mastra.getStore('memory');
+
+// From MastraStorage instance
+const memoryStore = await storage.getStore('memory');
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "domain",
+      type: "'memory' | 'workflows' | 'evals' | 'observability'",
+      description: "The storage domain to retrieve. Each domain provides access to specific operations and data types.",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "store",
+      type: "MemoryStorageBase | WorkflowsStorageBase | EvalsStorageBase | ObservabilityStorageBase | undefined",
+      description:
+        "The domain-specific storage instance, or `undefined` if the domain is not available or not supported by the storage adapter.",
+    },
+  ]}
+/>
+
+## Storage Domains
+
+Each domain provides access to specific operations:
+
+### `memory`
+
+Provides access to threads, messages, and resources:
+
+```typescript copy
+const memoryStore = await mastra.getStore('memory');
+
+if (memoryStore) {
+  // List threads for a resource
+  const threads = await memoryStore.listThreads({
+    resourceId: 'user-123',
+    page: 0,
+    perPage: 20,
+  });
+
+  // Get messages for a thread
+  const messages = await memoryStore.listMessages({
+    threadId: 'thread-123',
+    page: 0,
+    perPage: 50,
+  });
+
+  // Get a resource by ID
+  const resource = await memoryStore.getResourceById({
+    resourceId: 'user-123',
+  });
+}
+```
+
+### `workflows`
+
+Provides access to workflow snapshots and runs:
+
+```typescript copy
+const workflowsStore = await mastra.getStore('workflows');
+
+if (workflowsStore) {
+  // Get a workflow snapshot
+  const snapshot = await workflowsStore.getWorkflowSnapshot({
+    workflowId: 'my-workflow',
+    runId: 'run-123',
+  });
+
+  // List workflow runs
+  const runs = await workflowsStore.listWorkflowRuns({
+    workflowId: 'my-workflow',
+    page: 0,
+    perPage: 50,
+  });
+}
+```
+
+### `evals`
+
+Provides access to evaluation scores:
+
+```typescript copy
+const evalsStore = await mastra.getStore('evals');
+
+if (evalsStore) {
+  // List scores by scorer
+  const scores = await evalsStore.listScoresByScorerId({
+    scorerId: 'my-scorer',
+    pagination: { page: 0, perPage: 50 },
+  });
+
+  // Get a score by ID
+  const score = await evalsStore.getScoreById({ id: 'score-id' });
+}
+```
+
+### `observability`
+
+Provides access to traces and spans:
+
+```typescript copy
+const observabilityStore = await mastra.getStore('observability');
+
+if (observabilityStore) {
+  // Get a trace by ID
+  const trace = await observabilityStore.getTrace('trace-123');
+
+  // List traces with pagination
+  const result = await observabilityStore.listTraces({
+    pagination: {
+      page: 0,
+      perPage: 50,
+      dateRange: {
+        start: new Date('2024-01-01'),
+        end: new Date('2024-01-31'),
+      },
+    },
+    filters: {
+      spanType: 'WORKFLOW_RUN',
+    },
+  });
+}
+```
+
+## Fallback Behavior
+
+When using `MastraStorage.getStore()`, the method follows a fallback pattern:
+
+1. **First**, it checks if the domain is explicitly provided in the `stores` configuration
+2. **Then**, it falls back to the `default` store if one is configured
+3. **Finally**, it returns `undefined` if the domain is not available
+
+This enables [composite storage](/docs/v1/server-db/storage#composite-storage) patterns where different domains can use different storage adapters.
+
+```typescript copy
+// Example: Composite storage setup
+const storage = new MastraStorage({
+  id: 'composite-storage',
+  name: 'CompositeStorage',
+  stores: {
+    memory: memoryStore, // Explicit memory store
+    workflows: workflowsStore, // Explicit workflows store
+  },
+  default: defaultStore, // Fallback for evals and observability
+});
+
+// This will use the explicit memory store
+const memoryStore = await storage.getStore('memory');
+
+// This will fall back to the default store
+const evalsStore = await storage.getStore('evals');
+```
+
+## getStorage() vs getStore()
+- **Use `getStorage()`** when you need access to the storage instance itself (e.g., for initialization, configuration, or direct database access)
+- **Use `getStore()`** when you need to perform domain-specific operations (e.g., listing threads, saving workflow snapshots, querying scores)
+
+```typescript copy
+// Use getStorage() for storage-level operations
+const storage = mastra.getStorage();
+await storage?.init();
+
+// Use getStore() for domain-specific operations
+const memoryStore = await mastra.getStore('memory');
+await memoryStore?.createThread({ ... });
+```
+
+## Related
+- [Storage overview](/docs/v1/server-db/storage)
+- [Mastra.getStorage()](/reference/v1/core/getStorage)
+

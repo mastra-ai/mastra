@@ -34,6 +34,7 @@ const sidebars = {
         { type: "doc", id: "core/listVectors", label: ".listVectors()" },
         { type: "doc", id: "core/getDeployer", label: ".getDeployer()" },
         { type: "doc", id: "core/getStorage", label: ".getStorage()" },
+        { type: "doc", id: "core/getStore", label: ".getStore()" },
         { type: "doc", id: "core/listMCPServers", label: ".listMCPServers()" },
         { type: "doc", id: "core/getTelemetry", label: ".getTelemetry()" },
         { type: "doc", id: "core/setTelemetry", label: ".setTelemetry()" },
