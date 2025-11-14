@@ -1547,13 +1547,21 @@ export class MessageList {
             toolInvocations.push(invocation);
             break;
 
-          case 'reasoning':
+          case 'reasoning': {
+            // Merge part-level and message-level providerOptions for reasoning
+            // part-level takes precedence over message-level
+            const providerMetadata = {
+              ...(coreMessage.providerOptions ?? {}),
+              ...(part.providerOptions ?? {}),
+            };
             parts.push({
               type: 'reasoning',
               reasoning: '', // leave this blank so we aren't double storing it in the db along with details
               details: [{ type: 'text', text: part.text, signature: part.signature }],
+              ...(Object.keys(providerMetadata).length && { providerMetadata }),
             });
             break;
+          }
           case 'redacted-reasoning':
             parts.push({
               type: 'reasoning',

@@ -3864,4 +3864,124 @@ describe('MessageList', () => {
       );
     });
   });
+
+  describe('providerOptions preservation', () => {
+    it('should preserve providerOptions as providerMetadata in reasoning type content', () => {
+      const messageList = new MessageList({
+        threadId: '88603d63-08b5-4584-b4c4-8a66636b6f60',
+        resourceId: 'abcde',
+      });
+
+      // Add initial user messages
+      messageList.add(
+        {
+          id: '7bba0816-4f10-451e-8c39-b11111111823',
+          role: 'user',
+          content: '<environmental_details> omitted </environmental_details>',
+        },
+        'input',
+      );
+
+      messageList.add(
+        {
+          id: '9f5b0223-2222-4c6a-95b8-40242800193f',
+          role: 'user',
+          content: 'Some User prompt',
+        },
+        'input',
+      );
+
+      // Add assistant message with reasoning that has providerOptions
+      messageList.add(
+        {
+          id: '00000d63-0111-2224-3334-555666666999',
+          role: 'assistant',
+          content: [
+            {
+              type: 'reasoning',
+              text: 'Reasoning text',
+              providerOptions: {
+                bedrock: {
+                  signature: 'SIGNATURE==',
+                },
+              },
+            },
+          ],
+        },
+        'response',
+      );
+
+      // Verify the message was added correctly
+      const responseMessages = messageList.get.response.db();
+
+      expect(responseMessages).toHaveLength(1);
+      expect(responseMessages[0].role).toBe('assistant');
+      expect(responseMessages[0].id).toBe('00000d63-0111-2224-3334-555666666999');
+      expect(responseMessages[0].content.parts).toHaveLength(1);
+
+      const reasoningPart = responseMessages[0].content.parts[0];
+      expect(reasoningPart.type).toBe('reasoning');
+
+      // Verify that providerOptions is preserved as providerMetadata
+      expect(reasoningPart).toHaveProperty('providerMetadata');
+      expect(reasoningPart.providerMetadata).toBeDefined();
+      expect(reasoningPart.providerMetadata?.bedrock).toBeDefined();
+      expect(reasoningPart.providerMetadata?.bedrock?.signature).toBe('SIGNATURE==');
+    });
+
+    it('should preserve providerOptions when adding multiple reasoning parts', () => {
+      const messageList = new MessageList({
+        threadId: '88603d63-08b5-4584-b4c4-8a66636b6f60',
+        resourceId: 'abcde',
+      });
+
+      messageList.add(
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'reasoning',
+              text: 'First reasoning step',
+              providerOptions: {
+                bedrock: {
+                  signature: 'SIG1==',
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'Intermediate text',
+            },
+            {
+              type: 'reasoning',
+              text: 'Second reasoning step',
+              providerOptions: {
+                bedrock: {
+                  signature: 'SIG2==',
+                },
+              },
+            },
+          ],
+        },
+        'response',
+      );
+      const responseMessages = messageList.get.response.db();
+      expect(responseMessages).toHaveLength(1);
+      expect(responseMessages[0].content.parts).toHaveLength(3);
+
+      // Check first reasoning part
+      const firstReasoning = responseMessages[0].content.parts[0];
+      expect(firstReasoning.type).toBe('reasoning');
+      expect(firstReasoning.providerMetadata?.bedrock?.signature).toBe('SIG1==');
+
+      // Check text part (no providerMetadata expected)
+      const textPart = responseMessages[0].content.parts[1];
+      expect(textPart.type).toBe('text');
+
+      // Check second reasoning part
+      const secondReasoning = responseMessages[0].content.parts[2];
+      expect(secondReasoning.type).toBe('reasoning');
+      expect(secondReasoning.providerMetadata?.bedrock?.signature).toBe('SIG2==');
+    });
+  });
 });
