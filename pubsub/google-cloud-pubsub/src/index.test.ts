@@ -23,7 +23,8 @@ describe.sequential(
   () => {
     beforeEach(async () => {
       vi.resetAllMocks();
-      testStorage.getStore('workflows')?.dropData();
+      const workflowsStore = await testStorage.getStore('workflows');
+      await workflowsStore?.dropData();
     });
 
     describe.sequential('Streaming', () => {

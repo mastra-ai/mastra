@@ -565,7 +565,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       await expect(
-        store.updateSpan({
+        observabilityStore.updateSpan({
           spanId: 'update-span-1',
           traceId: 'update-trace-1',
           updates,
@@ -573,7 +573,7 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await store.getTrace('update-trace-1');
+      const trace = await observabilityStore.getTrace('update-trace-1');
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });

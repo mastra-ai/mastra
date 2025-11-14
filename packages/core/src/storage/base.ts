@@ -3,9 +3,9 @@ import type { ObservabilityStorageBase, WorkflowsStorageBase, EvalsStorageBase, 
 import type { StorageColumn } from './types';
 
 export type StorageDomains = {
-  workflows: WorkflowsStorageBase;
-  evals: EvalsStorageBase;
-  memory: MemoryStorageBase;
+  workflows?: WorkflowsStorageBase;
+  evals?: EvalsStorageBase;
+  memory?: MemoryStorageBase;
   observability?: ObservabilityStorageBase;
 };
 
