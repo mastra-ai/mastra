@@ -532,6 +532,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-coder',
     'x-ai/grok-4',
   ];
+  readonly minimax: readonly ['MiniMax-M2'];
   readonly google: readonly [
     'gemini-1.5-flash',
     'gemini-1.5-flash-8b',
@@ -682,6 +683,10 @@ export type ProviderModelsMap = {
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
     'openai/gpt-5-pro',
+    'openai/gpt-5.1',
+    'openai/gpt-5.1-chat',
+    'openai/gpt-5.1-codex',
+    'openai/gpt-5.1-codex-mini',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-120b:exacto',
     'openai/gpt-oss-20b',
@@ -740,7 +745,10 @@ export type ProviderModelsMap = {
     'inclusionai/lint-1t',
     'inclusionai/ring-1t',
     'kuaishou/kat-coder-pro-v1',
+    'minimax/minimax-m2',
     'moonshotai/kimi-k2-0905',
+    'moonshotai/kimi-k2-thinking',
+    'moonshotai/kimi-k2-thinking-turbo',
     'openai/gpt-5',
     'openai/gpt-5-codex',
     'qwen/qwen3-coder-plus',
