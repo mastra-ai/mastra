@@ -9,7 +9,7 @@ config();
 export function imagePromptTest({ version }: { version: 'v1' | 'v2' }) {
   const openaiModel = version === 'v1' ? openai('gpt-4o') : openaiV5('gpt-4o');
 
-  describe.skip('image prompt test', () => {
+  describe('image prompt test', () => {
     it('should download assets from messages', async () => {
       const agent = new Agent({
         name: 'llmPrompt-agent',
