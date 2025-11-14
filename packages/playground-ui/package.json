@@ -136,6 +136,8 @@
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.4",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -148,7 +150,7 @@
     "vite": "^7.1.9",
     "vite-plugin-dts": "^4.5.4",
     "vite-plugin-lib-inject-css": "^2.2.2",
-    "vitest": "^3.2.4"
+    "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {

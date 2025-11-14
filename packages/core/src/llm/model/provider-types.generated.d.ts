@@ -506,6 +506,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'gpt-5',
     'gpt-5-codex',
+    'gpt-5-nano',
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
@@ -771,6 +772,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'kimi-k2',
     'kimi-k2-0905',
+    'minimax-m2',
     'qwen3-235b',
     'qwen3-235b-a22b-instruct',
     'qwen3-235b-a22b-thinking-2507',
@@ -841,9 +843,11 @@ export type ProviderModelsMap = {
   ];
   readonly requesty: readonly [
     'anthropic/claude-3-7-sonnet',
-    'anthropic/claude-4-sonnet-20250522',
+    'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4',
-    'anthropic/claude-opus-4-1-20250805',
+    'anthropic/claude-opus-4-1',
+    'anthropic/claude-sonnet-4',
+    'anthropic/claude-sonnet-4-5',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-pro',
     'openai/gpt-4.1',
@@ -853,6 +857,8 @@ export type ProviderModelsMap = {
     'openai/gpt-5-mini',
     'openai/gpt-5-nano',
     'openai/o4-mini',
+    'xai/grok-4',
+    'xai/grok-4-fast',
   ];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
