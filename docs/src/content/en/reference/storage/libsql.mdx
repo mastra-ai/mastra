@@ -53,6 +53,23 @@ const storage = new LibSQLStore({
 
 ## Additional Notes
 
+### Using Storage Domains
+
+LibSQLStore implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+
+```typescript copy
+const storage = new LibSQLStore({
+  id: 'libsql-storage',
+  url: "file:./storage.db",
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const workflowsStore = await storage.getStore('workflows');
+```
+
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
+
 ### In-Memory vs Persistent Storage
 
 The file configuration (`file:storage.db`) is useful for:

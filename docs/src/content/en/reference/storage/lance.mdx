@@ -63,6 +63,20 @@ const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
 
 ## Additional Notes
 
+### Using Storage Domains
+
+LanceStorage implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+
+```typescript copy
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const workflowsStore = await storage.getStore('workflows');
+```
+
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
+
 ### Schema Management
 
 The LanceStorage implementation automatically handles schema creation and updates. It maps Mastra's schema types to Apache Arrow data types, which are used by LanceDB internally:

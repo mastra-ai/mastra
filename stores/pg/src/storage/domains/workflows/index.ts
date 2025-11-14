@@ -1,9 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorageBase, TABLE_SCHEMAS } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
+import { IndexManagementPG } from '../operations';
 import { getTableName } from '../utils';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -26,12 +34,60 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   };
 }
 
+// Workflows domain table names
+type WorkflowsTableNames = typeof TABLE_WORKFLOW_SNAPSHOT;
+
 export class WorkflowsStoragePG extends WorkflowsStorageBase {
   private domainBase: PGDomainBase;
+  indexManagement?: IndexManagementPG;
+  schemaPrefix?: string;
 
   constructor(opts: PGDomainConfig) {
     super();
     this.domainBase = new PGDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends WorkflowsTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends WorkflowsTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
   }
 
   async init(): Promise<void> {
@@ -72,6 +128,7 @@ export class WorkflowsStoragePG extends WorkflowsStorageBase {
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error('Method not implemented.');
   }
+
   updateWorkflowState(
     {
       // workflowId,

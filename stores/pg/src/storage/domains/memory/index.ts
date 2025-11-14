@@ -17,11 +17,17 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '@mastra/core/storage';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
 import { IndexManagementPG } from '../operations';
 import { getTableName, getSchemaName } from '../utils';
+
+// Memory domain table names
+type MemoryTableNames = typeof TABLE_MESSAGES | typeof TABLE_THREADS | typeof TABLE_RESOURCES;
 
 // Database row type that includes timezone-aware columns
 type MessageRowFromDB = {
@@ -38,26 +44,56 @@ type MessageRowFromDB = {
 export class MemoryStoragePG extends MemoryStorageBase {
   private domainBase: PGDomainBase;
   indexManagement?: IndexManagementPG;
+  schemaPrefix?: string;
 
   constructor(opts: PGDomainConfig) {
     super();
     this.domainBase = new PGDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends MemoryTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends MemoryTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
   }
 
   async createIndexes(): Promise<void> {
-    // Create indexes for memory domain
-    const indexManagement = new IndexManagementPG({
-      client: this.domainBase.getClient(),
-      schemaName: this.domainBase.getSchema(),
-    });
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
-    this.indexManagement = indexManagement;
-
     // Create threads index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
+      await this.createIndex({
+        name: 'mastra_threads_resourceid_createdat_idx',
         table: TABLE_THREADS,
         columns: ['resourceId', 'createdAt DESC'],
       });
@@ -68,8 +104,8 @@ export class MemoryStoragePG extends MemoryStorageBase {
 
     // Create messages index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
+      await this.createIndex({
+        name: 'mastra_messages_thread_id_createdat_idx',
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
       });
@@ -79,17 +115,14 @@ export class MemoryStoragePG extends MemoryStorageBase {
     }
   }
 
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
+  }
+
   async dropIndexes(): Promise<void> {
-    if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementPG({
-        client: this.domainBase.getClient(),
-        schemaName: this.domainBase.getSchema(),
-      });
-    }
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_threads_resourceid_createdat_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_messages_thread_id_createdat_idx`);
+    await this.dropIndex('mastra_threads_resourceid_createdat_idx');
+    await this.dropIndex('mastra_messages_thread_id_createdat_idx');
   }
 
   async init(): Promise<void> {

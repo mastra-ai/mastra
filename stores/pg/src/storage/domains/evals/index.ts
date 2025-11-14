@@ -1,7 +1,13 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type {
+  PaginationInfo,
+  StoragePagination,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
+} from '@mastra/core/storage';
 import {
   calculatePagination,
   normalizePerPage,
@@ -32,29 +38,68 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   } as ScoreRowData;
 }
 
+// Evals domain table names
+type EvalsTableNames = typeof TABLE_SCORERS;
+
 export class EvalsStoragePG extends EvalsStorageBase {
   private domainBase: PGDomainBase;
   indexManagement?: IndexManagementPG;
+  schemaPrefix?: string;
 
   constructor(opts: PGDomainConfig) {
     super();
     this.domainBase = new PGDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends EvalsTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async listIndexes<T extends EvalsTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
   }
 
   async createIndexes(): Promise<void> {
     // Create indexes for evals domain
-    const indexManagement = new IndexManagementPG({
-      client: this.domainBase.getClient(),
-      schemaName: this.domainBase.getSchema(),
-    });
-    this.indexManagement = indexManagement;
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
-
     // Create scores index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
+      await this.createIndex({
+        name: 'mastra_scores_trace_id_span_id_created_at_idx',
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       });
@@ -65,15 +110,7 @@ export class EvalsStoragePG extends EvalsStorageBase {
   }
 
   async dropIndexes(): Promise<void> {
-    if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementPG({
-        client: this.domainBase.getClient(),
-        schemaName: this.domainBase.getSchema(),
-      });
-    }
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`);
+    await this.dropIndex('mastra_scores_trace_id_span_id_created_at_idx');
   }
 
   async init(): Promise<void> {

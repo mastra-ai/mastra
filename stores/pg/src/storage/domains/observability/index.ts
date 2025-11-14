@@ -8,35 +8,77 @@ import type {
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '@mastra/core/storage';
 import { PGDomainBase } from '../base';
 import type { PGDomainConfig } from '../base';
 import { IndexManagementPG } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
+// Observability domain table names
+type ObservabilityTableNames = typeof TABLE_SPANS;
+
 export class ObservabilityPG extends ObservabilityStorageBase {
   private domainBase: PGDomainBase;
   indexManagement?: IndexManagementPG;
+  schemaPrefix?: string;
 
   constructor(opts: PGDomainConfig) {
     super();
     this.domainBase = new PGDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends ObservabilityTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async listIndexes<T extends ObservabilityTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
   }
 
   async createIndexes(): Promise<void> {
     // Create indexes for observability domain
-    const indexManagement = new IndexManagementPG({
-      client: this.domainBase.getClient(),
-      schemaName: this.domainBase.getSchema(),
-    });
-    this.indexManagement = indexManagement;
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
-
     // Create traceId + startedAt index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_traceid_startedat_idx',
         table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       });
@@ -47,8 +89,8 @@ export class ObservabilityPG extends ObservabilityStorageBase {
 
     // Create parentSpanId + startedAt index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_parentspanid_startedat_idx',
         table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       });
@@ -59,8 +101,8 @@ export class ObservabilityPG extends ObservabilityStorageBase {
 
     // Create name index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_name_idx',
         table: TABLE_SPANS,
         columns: ['name'],
       });
@@ -71,8 +113,8 @@ export class ObservabilityPG extends ObservabilityStorageBase {
 
     // Create spanType + startedAt index
     try {
-      await indexManagement.createIndex({
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+      await this.createIndex({
+        name: 'mastra_ai_spans_spantype_startedat_idx',
         table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       });
@@ -83,18 +125,10 @@ export class ObservabilityPG extends ObservabilityStorageBase {
   }
 
   async dropIndexes(): Promise<void> {
-    if (!this.indexManagement) {
-      this.indexManagement = new IndexManagementPG({
-        client: this.domainBase.getClient(),
-        schemaName: this.domainBase.getSchema(),
-      });
-    }
-    const schemaPrefix =
-      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_name_idx`);
-    await this.indexManagement.dropIndex(`${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`);
+    await this.dropIndex('mastra_ai_spans_traceid_startedat_idx');
+    await this.dropIndex('mastra_ai_spans_parentspanid_startedat_idx');
+    await this.dropIndex('mastra_ai_spans_name_idx');
+    await this.dropIndex('mastra_ai_spans_spantype_startedat_idx');
   }
 
   async init(): Promise<void> {

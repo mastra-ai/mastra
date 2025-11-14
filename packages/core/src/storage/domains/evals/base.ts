@@ -1,7 +1,8 @@
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../../../evals/types';
-import type { PaginationInfo, StoragePagination } from '../../types';
+import type { TABLE_SCORERS } from '../../constants';
+import type { PaginationInfo, StoragePagination, CreateIndexOptions, IndexInfo, StorageIndexStats } from '../../types';
 
 export abstract class EvalsStorageBase extends MastraBase {
   constructor() {
@@ -73,6 +74,33 @@ export abstract class EvalsStorageBase extends MastraBase {
   }
 
   async dropIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
+  }
+
+  async createIndex<T extends typeof TABLE_SCORERS>({
+    name: _name,
+    table: _table,
+    columns: _columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async listIndexes<T extends typeof TABLE_SCORERS>(_table: T): Promise<IndexInfo[]> {
+    // Optional: subclasses can override this method to implement index listing
+    return [];
+  }
+
+  async describeIndex(_name: string): Promise<StorageIndexStats> {
+    // Optional: subclasses can override this method to implement index description
+    throw new Error(
+      `Index description is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The describeIndex method needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  async dropIndex(_name: string): Promise<void> {
     // Optional: subclasses can override this method to implement index dropping
   }
 }

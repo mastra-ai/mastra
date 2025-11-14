@@ -59,6 +59,24 @@ const storage = new UpstashStore({
 
 ## Additional Notes
 
+### Using Storage Domains
+
+UpstashStore implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+
+```typescript copy
+const storage = new UpstashStore({
+  id: 'upstash-storage',
+  url: process.env.UPSTASH_URL,
+  token: process.env.UPSTASH_TOKEN,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const workflowsStore = await storage.getStore('workflows');
+```
+
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
+
 ### Key Structure
 
 The Upstash storage implementation uses a key-value structure:

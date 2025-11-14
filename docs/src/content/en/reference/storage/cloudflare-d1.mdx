@@ -87,6 +87,22 @@ database_id = "db-id"
 
 ## Additional Notes
 
+### Using Storage Domains
+
+D1Store implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+
+```typescript copy
+const storage = new D1Store({
+  binding: D1Database,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const workflowsStore = await storage.getStore('workflows');
+```
+
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
+
 ### Schema Management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:

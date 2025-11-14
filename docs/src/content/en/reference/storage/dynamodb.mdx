@@ -160,6 +160,26 @@ The IAM role or user executing the code needs appropriate permissions to interac
 }
 ```
 
+## Using Storage Domains
+
+DynamoDBStore implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+
+```typescript copy
+const storage = new DynamoDBStore({
+  name: "dynamodb",
+  config: {
+    tableName: "mastra-single-table",
+    region: "us-east-1",
+  },
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const workflowsStore = await storage.getStore('workflows');
+```
+
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
+
 ## Key Considerations
 
 Before diving into the architectural details, keep these key points in mind when working with the DynamoDB storage adapter:

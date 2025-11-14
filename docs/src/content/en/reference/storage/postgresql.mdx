@@ -87,19 +87,117 @@ const store5 = new PostgresStore({
 });
 ```
 
-## Additional Notes
+## Storage Domains
+
+To access domain-specific operations, use `getStore()`:
+
+```typescript copy
+import { PostgresStore } from "@mastra/pg";
+
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Access memory domain for threads and messages
+const memoryStore = await storage.getStore('memory');
+
+const threads = await memoryStore.listThreads({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
+});
+  
+const messages = await memoryStore.listMessages({
+  threadId: 'thread-123',
+  page: 0,
+  perPage: 50,
+});
+
+
+// Access workflows domain for workflow snapshots
+const workflowsStore = await storage.getStore('workflows');
+
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
+
+
+// Access evals domain for scores
+const evalsStore = await storage.getStore('evals');
+
+const scores = await evalsStore.listScoresByScorerId({
+  scorerId: 'my-scorer',
+  pagination: { page: 0, perPage: 50 },
+});
+
+
+// Access observability domain for traces
+const observabilityStore = await storage.getStore('observability');
+
+const traces = await observabilityStore.listTraces({
+  page: 0,
+  perPage: 50,
+});
+```
+
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
 
 ### Schema Management
 
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
+Schema creation and table management is handled automatically through each domain's `init()` method. When you call `storage.init()` (or when storage is initialized automatically), each domain creates its own tables:
 
-- `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata
+**Memory Domain** (`memory`):
 - `mastra_threads`: Stores conversation threads
 - `mastra_messages`: Stores individual messages
-- `mastra_traces`: Stores telemetry and tracing data
-- `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
+
+**Workflows Domain** (`workflows`):
+- `mastra_workflow_snapshot`: Stores workflow state and execution data
+
+**Evals Domain** (`evals`):
+- `mastra_scorers`: Stores scoring and evaluation data
+
+**Observability Domain** (`observability`):
+- `mastra_ai_spans`: Stores telemetry and tracing data
+
+Each domain's `init()` method is called automatically when the storage instance initializes. In composite storage setups, only domains that are explicitly provided or exist in the default store will be initialized. This allows you to selectively enable domains based on your needs.
+
+```typescript copy
+// Initialize storage - all configured domains will create their tables
+await storage.init();
+
+// Or access a domain store directly - it will initialize if needed
+const memoryStore = await storage.getStore('memory');
+// Memory domain tables are now created
+```
+
+## Index Management
+
+PostgreSQL storage provides comprehensive index management capabilities to optimize query performance. Indexes are created automatically by each domain during initialization through their `createIndexes()` method.
+
+### Automatic Performance Indexes by Domain
+
+Each domain creates its own indexes when initialized:
+
+**Memory Domain** (`memory`):
+- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC) - Optimizes thread listing by resource
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC) - Optimizes message retrieval by thread
+
+**Evals Domain** (`evals`):
+- `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt DESC) - Optimizes score queries by trace and span
+
+**Observability Domain** (`observability`):
+- `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt DESC) - Optimizes span queries by trace
+- `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt DESC) - Optimizes child span queries
+- `mastra_ai_spans_name_idx`: (name) - Optimizes span queries by operation name
+- `mastra_ai_spans_spantype_startedat_idx`: (spanType, startedAt DESC) - Optimizes span queries by type
+
+**Workflows Domain** (`workflows`):
+- No automatic indexes created (workflow snapshots use primary key lookups)
+
+These indexes are created automatically when each domain's `init()` method is called. Index creation failures are logged but don't prevent domain initialization, as indexes are performance optimizations.
 
 ### Direct Database and Pool Access
 
@@ -118,44 +216,48 @@ This enables direct queries and custom transaction management. When using these 
 
 This approach is intended for advanced scenarios where low-level access is required.
 
-## Index Management
-
-PostgreSQL storage provides comprehensive index management capabilities to optimize query performance.
-
-### Automatic Performance Indexes
-
-PostgreSQL storage automatically creates composite indexes during initialization for common query patterns:
-
-- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
-- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
-- `mastra_traces_name_starttime_idx`: (name, startTime DESC)
-- `mastra_evals_agent_name_created_at_idx`: (agent_name, created_at DESC)
-
-These indexes significantly improve performance for filtered queries with sorting.
 
 ### Creating Custom Indexes
 
-Create additional indexes to optimize specific query patterns:
+Create additional indexes to optimize specific query patterns. The `createIndex` method is available on each domain store.
 
 ```typescript copy
-// Basic index for common queries
-await storage.createIndex({
+import { PostgresStore } from "@mastra/pg";
+import { 
+  TABLE_THREADS, 
+  TABLE_MESSAGES, 
+  TABLE_SPANS,
+  TABLE_SCORERS,
+  TABLE_WORKFLOW_SNAPSHOT 
+} from "@mastra/core/storage";
+
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const observabilityStore = await storage.getStore('observability');
+
+// Memory domain: Basic index for threads
+await memoryStore.createIndex({
   name: "idx_threads_resource",
-  table: "mastra_threads",
+  table: TABLE_THREADS,
   columns: ["resourceId"],
 });
 
-// Composite index with sort order for filtering + sorting
-await storage.createIndex({
+// Memory domain: Composite index with sort order for messages
+await memoryStore.createIndex({
   name: "idx_messages_composite",
-  table: "mastra_messages",
+  table: TABLE_MESSAGES,
   columns: ["thread_id", "createdAt DESC"],
 });
 
-// GIN index for JSONB columns (fast JSON queries)
-await storage.createIndex({
-  name: "idx_traces_attributes",
-  table: "mastra_traces",
+// Observability domain: GIN index for JSONB columns (fast JSON queries)
+await observabilityStore.createIndex({
+  name: "idx_spans_attributes",
+  table: TABLE_SPANS,
   columns: ["attributes"],
   method: "gin",
 });
@@ -169,6 +271,27 @@ For more advanced use cases, you can also use:
 - `storage: { fillfactor: 90 }` for update-heavy tables
 - `concurrent: true` for non-blocking creation (default)
 
+When using custom schemas, indexes are automatically prefixed with the schema name:
+
+```typescript copy
+import { TABLE_THREADS } from "@mastra/core/storage";
+
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  schemaName: "custom_schema",
+});
+
+const memoryStore = await storage.getStore('memory');
+
+// Creates index as: custom_schema_idx_threads_resource
+await memoryStore.createIndex({
+  name: "idx_threads_resource",
+  table: TABLE_THREADS,
+  columns: ["resourceId"],
+});
+```
+
 ### Index Options
 
 <PropertiesTable
@@ -181,8 +304,8 @@ For more advanced use cases, you can also use:
     },
     {
       name: "table",
-      type: "string",
-      description: "Table name (e.g., 'mastra_threads')",
+      type: "TABLE_THREADS | TABLE_MESSAGES | TABLE_RESOURCES | ...",
+      description: "Table constant from @mastra/core/storage (e.g., TABLE_THREADS). Type-safe and domain-specific.",
       isOptional: false,
     },
     {
@@ -239,12 +362,23 @@ For more advanced use cases, you can also use:
 
 ### Managing Indexes
 
-List and monitor existing indexes:
+List and monitor existing indexes using domain-specific methods:
 
 ```typescript copy
-// List all indexes
-const allIndexes = await storage.listIndexes();
-console.log(allIndexes);
+import { PostgresStore } from "@mastra/pg";
+import { TABLE_THREADS, TABLE_MESSAGES } from "@mastra/core/storage";
+
+const storage = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+
+// List indexes for a specific table (table parameter is required)
+const threadIndexes = await memoryStore.listIndexes(TABLE_THREADS);
+console.log(threadIndexes);
 // [
 //   {
 //     name: 'mastra_threads_pkey',
@@ -257,11 +391,11 @@ console.log(allIndexes);
 //   ...
 // ]
 
-// List indexes for specific table
-const threadIndexes = await storage.listIndexes("mastra_threads");
+// List indexes for messages table
+const messageIndexes = await memoryStore.listIndexes(TABLE_MESSAGES);
 
 // Get detailed statistics for an index
-const stats = await storage.describeIndex("idx_threads_resource");
+const stats = await memoryStore.describeIndex("idx_threads_resource");
 console.log(stats);
 // {
 //   name: 'idx_threads_resource',
@@ -277,27 +411,10 @@ console.log(stats);
 // }
 
 // Drop an index
-await storage.dropIndex("idx_threads_status");
+await memoryStore.dropIndex("idx_threads_resource");
 ```
 
-### Schema-Specific Indexes
-
-When using custom schemas, indexes are created with schema prefixes:
-
-```typescript copy
-const storage = new PostgresStore({
-  id: 'pg-storage',
-  connectionString: process.env.DATABASE_URL,
-  schemaName: "custom_schema",
-});
-
-// Creates index as: custom_schema_idx_threads_status
-await storage.createIndex({
-  name: "idx_threads_status",
-  table: "mastra_threads",
-  columns: ["status"],
-});
-```
+**Note**: When using custom schemas, index names are automatically prefixed with the schema name. Pass the index name without the schema prefix (e.g., `"idx_threads_resource"` instead of `"custom_schema_idx_threads_resource"`).
 
 ### Index Types and Use Cases
 

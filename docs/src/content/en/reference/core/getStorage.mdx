@@ -30,6 +30,20 @@ This method does not accept any parameters.
   ]}
 />
 
+## Accessing Storage Domains
+
+To access a specific storage domain (memory, workflows, evals, or observability), use the `.getStore()` method instead:
+
+```typescript copy
+// Get the memory domain store
+const memoryStore = await mastra.getStore('memory');
+
+// Get the workflows domain store
+const workflowsStore = await mastra.getStore('workflows');
+```
+
+The `.getStore()` method is async and returns a promise. See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains.
+
 ## Related
 
 - [Storage overview](/docs/v1/server-db/storage)
