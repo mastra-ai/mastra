@@ -20,7 +20,6 @@ export async function studio(options: StudioOptions = {}) {
   try {
     const builtStudioPath = join(__dirname, 'playground');
 
-    logger.info(`Studio current path: ${builtStudioPath}`);
     const port = options.port || 3000;
 
     // Start the server using node
