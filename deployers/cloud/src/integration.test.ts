@@ -55,19 +55,6 @@ describe('CloudDeployer Integration Tests', () => {
       expect(fs.existsSync(join(outputDir, 'output'))).toBe(true);
     });
 
-    it('should write instrumentation file correctly', async () => {
-      await deployer.writeInstrumentationFile(outputDir);
-
-      const instrumentationPath = join(outputDir, 'instrumentation.mjs');
-      const fs = await import('fs');
-      expect(fs.existsSync(instrumentationPath)).toBe(true);
-
-      const content = await readFile(instrumentationPath, 'utf-8');
-      expect(content).toContain('MastraCloudExporter');
-      expect(content).toContain('NodeSDK');
-      expect(content).toContain('telemetry');
-    });
-
     it('should write package.json with cloud dependencies', async () => {
       const dependencies = new Map<string, string>([
         ['express', '^4.18.0'],
@@ -92,15 +79,10 @@ describe('CloudDeployer Integration Tests', () => {
       // Verify nested package handling (should only take first part)
       expect(packageJson.dependencies['nested']).toBe('2.0.0');
 
-      // Verify telemetry dependencies
-      expect(packageJson.dependencies['@opentelemetry/core']).toBeDefined();
-      expect(packageJson.dependencies['@opentelemetry/sdk-node']).toBeDefined();
-
       // Verify package.json structure
       expect(packageJson.name).toBe('server');
       expect(packageJson.type).toBe('module');
       expect(packageJson.main).toBe('index.mjs');
-      expect(packageJson.scripts.start).toContain('node --import=./instrumentation.mjs');
     });
 
     it('should handle scoped packages correctly in package.json', async () => {
@@ -145,7 +127,6 @@ describe('CloudDeployer Integration Tests', () => {
         "import { mastra } from '#mastra'",
         "import { MultiLogger } from '@mastra/core/logger'",
         "import { PinoLogger } from '@mastra/loggers'",
-        "import { evaluate } from '@mastra/core/eval'",
         "import { AvailableHooks, registerHook } from '@mastra/core/hooks'",
         "import { LibSQLStore, LibSQLVector } from '@mastra/libsql'",
       ];
@@ -169,7 +150,6 @@ describe('CloudDeployer Integration Tests', () => {
       const nonExistentDir = join(tempDir, 'non-existent');
 
       // These operations should create directories as needed
-      await expect(deployer.writeInstrumentationFile(nonExistentDir)).resolves.not.toThrow();
       await expect(deployer.writePackageJson(nonExistentDir, new Map())).resolves.not.toThrow();
     });
 
@@ -217,9 +197,10 @@ describe('CloudDeployer Integration Tests', () => {
       expect(capturedEntry).toContain('import { createNodeServer');
       expect(capturedEntry).toContain('import { LibSQLStore, LibSQLVector }');
 
-      // Verify tools path was included
+      // Verify tools path was included - now it's an array of glob patterns
       expect(capturedToolsPaths).toHaveLength(1);
-      expect(capturedToolsPaths[0]).toContain('src/mastra/tools');
+      expect(Array.isArray(capturedToolsPaths[0])).toBe(true);
+      expect(capturedToolsPaths[0][0]).toContain('tools');
     });
   });
 });

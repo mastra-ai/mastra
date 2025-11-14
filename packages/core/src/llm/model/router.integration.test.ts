@@ -64,6 +64,7 @@ describe('ModelRouter Integration Tests', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -89,6 +90,7 @@ describe('ModelRouter Integration Tests', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -117,6 +119,7 @@ describe('ModelRouter Integration Tests', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: modelId,
@@ -136,6 +139,7 @@ describe('ModelRouter Integration Tests', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: modelId,
@@ -162,6 +166,7 @@ describe('ModelRouter Integration Tests', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a pirate. Always respond like a pirate.',
         model: modelId,
@@ -185,6 +190,7 @@ describe('ModelRouter Integration Tests', () => {
         }
 
         const agent = new Agent({
+          id: 'test-agent',
           name: 'test-agent',
           instructions: 'You are a helpful assistant.',
           model: modelId,
@@ -218,6 +224,7 @@ describe('ModelRouter Integration Tests', () => {
         expect(
           () =>
             new Agent({
+              id: 'test-agent',
               name: 'test-agent',
               instructions: 'test',
               model: id,

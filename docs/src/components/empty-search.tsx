@@ -1,61 +1,61 @@
-import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";
+import { cn } from "../css/utils";
 
 export const searches = [
   {
     label: "Quickstart",
     description: "Get up and running with Mastra AI",
-    link: "/docs/getting-started/installation",
+    link: "/docs/v1/getting-started/installation",
   },
   {
     label: "Agents",
     description: "Use LLMs and tools to solve open-ended tasks",
-    link: "/docs/agents/overview",
+    link: "/docs/v1/agents/overview",
   },
   {
     label: "Workflows",
     description: "Define and manage complex sequences of tasks",
-    link: "/docs/workflows/overview",
+    link: "/docs/v1/workflows/overview",
   },
   {
     label: "Playground",
     description: "Test your agents, workflows, and tools during development",
-    link: "/docs/server-db/local-dev-playground",
+    link: "/docs/v1/server-db/local-dev-playground",
   },
   {
     label: "Streaming",
     description: "Streaming for real-time agent interactions",
-    link: "/docs/streaming/overview",
+    link: "/docs/v1/streaming/overview",
   },
   {
     label: "MCP",
     description: "Connect AI agents to external tools and resources",
-    link: "/docs/tools-mcp/mcp-overview",
+    link: "/docs/v1/tools-mcp/mcp-overview",
   },
   {
     label: "Memory",
     description: "Manage agent context across conversations",
-    link: "/docs/memory/overview",
+    link: "/docs/v1/memory/overview",
   },
   {
     label: "Scorers",
     description: "Evaluate agent performance",
-    link: "/docs/scorers/overview",
+    link: "/docs/v1/scorers/overview",
   },
   {
     label: "RAG",
     description: "Incorporate relevant context from your own data sources",
-    link: "/docs/rag/overview",
+    link: "/docs/v1/rag/overview",
   },
   {
     label: "Observability",
     description: "Monitor and log agent activity",
-    link: "/docs/observability/overview",
+    link: "/docs/v1/observability/overview",
   },
   {
     label: "Deployment",
     description: "Deploy your agents, workflows, and tools",
-    link: "/docs/deployment/overview",
+    link: "/docs/v1/deployment/overview",
   },
 ];
 
@@ -93,17 +93,17 @@ export function EmptySearch({
             className={cn(
               "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
               isSelected
-                ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
-                : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
+                ? "dark:bg-(--mastra-surface-5) bg-(--mastra-surface-2)"
+                : "bg-(--ifm-background-color) dark:bg-transparent",
             )}
             onClick={() => onSelect(index)}
             onMouseEnter={() => onHover(index)}
           >
-            <p className="text-sm font-medium truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
+            <p className="text-sm mb-0! font-medium truncate dark:text-white text-(--mastra-text-tertiary)">
               {search.label}
             </p>
 
-            <p className="text-sm font-normal truncate text-icons-3">
+            <p className="text-sm font-normal mb-0! truncate text-(--mastra-text-muted)">
               {search.description}
             </p>
           </div>

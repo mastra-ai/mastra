@@ -5,6 +5,7 @@ We can configure semantic recall in more detail by setting options for the `sema
 ```typescript
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: "learning-memory-storage",
     url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }),
   vector: new LibSQLVector({

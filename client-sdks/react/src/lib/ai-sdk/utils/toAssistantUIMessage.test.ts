@@ -359,15 +359,46 @@ describe('toAssistantUIMessage', () => {
       ]);
     });
 
-    it('should handle image files', () => {
+    it('should handle image files with proper type detection and metadata', () => {
       const message: MastraUIMessage = {
-        id: 'msg-14',
+        id: 'msg-14b',
         role: 'assistant',
         parts: [
           {
             type: 'file',
-            mediaType: 'image/png',
-            url: 'data:image/png;base64,iVBORw0KGgo=',
+            mediaType: 'image/jpeg',
+            url: 'https://example.com/image.jpg',
+          },
+        ],
+        metadata: {
+          mode: 'stream',
+          customField: 'value',
+        } as any,
+      };
+
+      const result = toAssistantUIMessage(message);
+
+      expect(result.content).toEqual([
+        {
+          type: 'image',
+          image: 'https://example.com/image.jpg',
+          metadata: {
+            mode: 'stream',
+            customField: 'value',
+          },
+        },
+      ]);
+    });
+
+    it('should handle different image formats correctly', () => {
+      const message: MastraUIMessage = {
+        id: 'msg-14c',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'file',
+            mediaType: 'image/gif',
+            url: 'https://example.com/animation.gif',
           },
         ],
       };
@@ -376,9 +407,8 @@ describe('toAssistantUIMessage', () => {
 
       expect(result.content).toEqual([
         {
-          type: 'file',
-          mimeType: 'image/png',
-          data: 'data:image/png;base64,iVBORw0KGgo=',
+          type: 'image',
+          image: 'https://example.com/animation.gif',
           metadata: undefined,
         },
       ]);

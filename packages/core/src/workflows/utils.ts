@@ -3,6 +3,12 @@ import type z from 'zod';
 import type { IMastraLogger } from '../logger';
 import type { Step } from './step';
 
+export function getZodErrors(error: z.ZodError) {
+  // zod v4 returns issues instead of errors
+  const errors = error.issues;
+  return errors;
+}
+
 export async function validateStepInput({
   prevOutput,
   step,
@@ -22,9 +28,8 @@ export async function validateStepInput({
     const validatedInput = await inputSchema.safeParseAsync(prevOutput);
 
     if (!validatedInput.success) {
-      const errorMessages = validatedInput.error.errors
-        .map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`)
-        ?.join('\n');
+      const errors = getZodErrors(validatedInput.error);
+      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
 
       validationError = new Error('Step input validation failed: \n' + errorMessages);
     } else {

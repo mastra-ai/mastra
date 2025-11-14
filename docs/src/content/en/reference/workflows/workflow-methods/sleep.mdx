@@ -1,5 +1,5 @@
 ---
-title: "Reference: Workflow.sleep() | Workflows | Mastra Docs"
+title: "Reference: Workflow.sleep() | Workflows"
 description: Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
 ---
 
@@ -20,7 +20,8 @@ workflow.sleep(5000);
     {
       name: "milliseconds",
       type: "number | ((context: { inputData: any }) => number | Promise<number>)",
-      description: "The number of milliseconds to pause execution, or a callback that returns the delay",
+      description:
+        "The number of milliseconds to pause execution, or a callback that returns the delay",
       isOptional: false,
     },
   ]}
@@ -58,4 +59,4 @@ export const testWorkflow = createWorkflow({...})
 
 ## Related
 
-- [Suspend & Resume](../../../docs/workflows/suspend-and-resume.mdx#sleep--events)
+- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume#sleep--events)

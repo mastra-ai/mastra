@@ -3,6 +3,7 @@ import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
 import * as p from '@clack/prompts';
+import type { ModelRouterModelId } from '@mastra/core/llm/model';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
@@ -11,11 +12,7 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import {
-  cursorGlobalMCPConfigPath,
-  globalMCPIsAlreadyInstalled,
-  windsurfGlobalMCPConfigPath,
-} from './mcp-docs-server-install';
+import { cursorGlobalMCPConfigPath, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
@@ -40,20 +37,22 @@ export function areValidComponents(values: string[]): values is Component[] {
   return values.every(value => COMPONENTS.includes(value as Component));
 }
 
-export const getModelIdentifier = (llmProvider: LLMProvider) => {
-  if (llmProvider === 'openai') {
-    return `'openai/gpt-4o-mini'`;
-  } else if (llmProvider === 'anthropic') {
-    return `'anthropic/claude-sonnet-4-5-20250929'`;
+export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
+  let model: ModelRouterModelId = 'openai/gpt-4o';
+
+  if (llmProvider === 'anthropic') {
+    model = 'anthropic/claude-sonnet-4-5';
   } else if (llmProvider === 'groq') {
-    return `'groq/llama-3.3-70b-versatile'`;
+    model = 'groq/llama-3.3-70b-versatile';
   } else if (llmProvider === 'google') {
-    return `'google/gemini-2.5-pro'`;
+    model = 'google/gemini-2.5-pro';
   } else if (llmProvider === 'cerebras') {
-    return `'cerebras/llama-3.3-70b'`;
+    model = 'cerebras/llama-3.3-70b';
   } else if (llmProvider === 'mistral') {
-    return `'mistral/mistral-medium-2508'`;
+    model = 'mistral/mistral-medium-2508';
   }
+
+  return model;
 };
 
 export async function writeAgentSample(
@@ -86,9 +85,10 @@ ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelString},
+  model: '${modelString}',
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   ${
     addScorers
@@ -119,6 +119,7 @@ export const weatherAgent = new Agent({
   }
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "memory-storage",
       url: "file:../mastra.db", // path is relative to the .mastra/output directory
     })
   })
@@ -337,9 +338,10 @@ export async function writeToolSample(destPath: string) {
 export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
   const modelString = getModelIdentifier(llmProvider);
   const content = `import { z } from 'zod';
-import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
-import { createCompletenessScorer } from '@mastra/evals/scorers/code';
-import { createScorer } from '@mastra/core/scores';
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
+import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
+import { createScorer } from '@mastra/core/evals';
 
 export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'weatherTool',
@@ -350,11 +352,12 @@ export const completenessScorer = createCompletenessScorer();
 
 // Custom LLM-judged scorer: evaluates if non-English locations are translated appropriately
 export const translationScorer = createScorer({
+  id: 'translation-quality-scorer',
   name: 'Translation Quality',
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
-    model: ${modelString},
+    model: '${modelString}',
     instructions:
       'You are an expert evaluator of translation quality for geographic locations. ' +
       'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
@@ -363,8 +366,8 @@ export const translationScorer = createScorer({
   },
 })
   .preprocess(({ run }) => {
-    const userText = (run.input?.inputMessages?.[0]?.content as string) || '';
-    const assistantText = (run.output?.[0]?.content as string) || '';
+    const userText = getUserMessageFromRunInput(run.input) || '';
+    const assistantText = getAssistantMessageFromRunOutput(run.output) || '';
     return { userText, assistantText };
   })
   .analyze({
@@ -480,7 +483,7 @@ export const writeIndexFile = async ({
       await fs.writeFile(
         destPath,
         `
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,
@@ -494,6 +497,7 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { Observability } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';` : ''}
@@ -501,6 +505,7 @@ ${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, tran
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
   storage: new LibSQLStore({
+    id: "mastra-storage",
     // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
@@ -508,14 +513,10 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  telemetry: {
-    // Telemetry is deprecated and will be removed in the Nov 4th release
-    enabled: false, 
-  },
-  observability: {
-    // Enables DefaultExporter and CloudExporter for AI tracing
-    default: { enabled: true }, 
-  },
+  observability: new Observability({
+    // Enables DefaultExporter and CloudExporter for tracing
+    default: { enabled: true },
+    }),
 });
 `,
     );
@@ -543,10 +544,15 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
     spinner.start();
 
     const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
+    const needsCli = (await depService.checkDependencies(['mastra'])) !== `ok`;
     const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
     if (needsCore) {
       packages.push({ name: '@mastra/core', version: 'latest' });
+    }
+
+    if (needsCli) {
+      packages.push({ name: 'mastra', version: 'latest' });
     }
 
     if (needsZod) {
@@ -637,7 +643,7 @@ export const writeCodeSample = async (
   }
 };
 
-const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
+export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
   { value: 'openai', label: 'OpenAI', hint: 'recommended' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'groq', label: 'Groq' },
@@ -702,10 +708,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         return undefined;
       },
       configureEditorWithDocsMCP: async () => {
-        const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
-        const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
-        const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
-
         const editor = await p.select({
           message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
           options: [
@@ -713,35 +715,23 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             {
               value: 'cursor',
               label: 'Cursor (project only)',
-              hint: cursorIsAlreadyInstalled ? `Already installed globally` : undefined,
             },
             {
               value: 'cursor-global',
               label: 'Cursor (global, all projects)',
-              hint: cursorIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'windsurf',
               label: 'Windsurf',
-              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'vscode',
               label: 'VSCode',
-              hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
             },
           ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
         if (editor === `skip`) return undefined;
-        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
-          p.log.message(`\nWindsurf is already installed, skipping.`);
-          return undefined;
-        }
-        if (editor === `vscode` && vscodeIsAlreadyInstalled) {
-          p.log.message(`\nVSCode is already installed, skipping.`);
-          return undefined;
-        }
 
         if (editor === `cursor`) {
           p.log.message(

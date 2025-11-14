@@ -5,9 +5,8 @@ import {
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_TRACES,
-  TABLE_EVALS,
   TABLE_SCORERS,
-  TABLE_AI_SPANS,
+  TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
@@ -289,8 +288,8 @@ export class StoreOperationsPG extends StoreOperations {
         ifNotExists: timeZColumnNames,
       });
 
-      // Set up timestamp triggers for AI spans table
-      if (tableName === TABLE_AI_SPANS) {
+      // Set up timestamp triggers for Spans table
+      if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
       }
     } catch (error) {
@@ -738,37 +737,31 @@ export class StoreOperationsPG extends StoreOperations {
         table: TABLE_TRACES,
         columns: ['name', 'startTime DESC'],
       },
-      // Composite index for evals (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_evals_agent_name_created_at_idx`,
-        table: TABLE_EVALS,
-        columns: ['agent_name', 'created_at DESC'],
-      },
       // Composite index for scores (filter + sort)
       {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       },
-      // AI Spans indexes for optimal trace querying
+      // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['traceId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['parentSpanId', 'startedAt DESC'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['name'],
       },
       {
         name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_AI_SPANS,
+        table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       },
     ];

@@ -40,7 +40,7 @@ export class NetlifyDeployer extends Deployer {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      { outputDirectory, projectRoot },
+      { outputDirectory, projectRoot, enableEsmShim: false },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
@@ -69,53 +69,11 @@ export class NetlifyDeployer extends Deployer {
     import { mastra } from '#mastra';
     import { createHonoServer, getToolExports } from '#server';
     import { tools } from '#tools';
-    import { evaluate } from '@mastra/core/eval';
-    import { AvailableHooks, registerHook } from '@mastra/core/hooks';
-    import { TABLE_EVALS } from '@mastra/core/storage';
-    import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
-    import { checkEvalStorageFields } from '@mastra/core/utils';
-
-    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
-      evaluate({
-        agentName,
-        input,
-        metric,
-        output,
-        runId,
-        globalRunId: runId,
-        instructions,
-      });
-    });
+    import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
     if (mastra.getStorage()) {
       mastra.__registerInternalWorkflow(scoreTracesWorkflow);
     }
-
-    registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-      const storage = mastra.getStorage();
-      if (storage) {
-        // Check for required fields
-        const logger = mastra.getLogger();
-        const areFieldsValid = checkEvalStorageFields(traceObject, logger);
-        if (!areFieldsValid) return;
-
-        await storage.insert({
-          tableName: TABLE_EVALS,
-          record: {
-            input: traceObject.input,
-            output: traceObject.output,
-            result: JSON.stringify(traceObject.result || {}),
-            agent_name: traceObject.agentName,
-            metric_name: traceObject.metricName,
-            instructions: traceObject.instructions,
-            test_info: null,
-            global_run_id: traceObject.globalRunId,
-            run_id: traceObject.runId,
-            created_at: new Date().toISOString(),
-          },
-        });
-      }
-    });
 
     const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
 

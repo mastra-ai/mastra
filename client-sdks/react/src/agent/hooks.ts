@@ -4,12 +4,13 @@ import { UIMessage } from '@ai-sdk/react';
 import { MastraUIMessage } from '../lib/ai-sdk';
 import { MastraClient } from '@mastra/client-js';
 import { CoreUserMessage } from '@mastra/core/llm';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useRef, useState } from 'react';
 import { toUIMessage } from '@/lib/ai-sdk';
 import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
 import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
+import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
 
 export interface MastraChatProps {
   agentId: string;
@@ -18,7 +19,7 @@ export interface MastraChatProps {
 
 interface SharedArgs {
   coreUserMessages: CoreUserMessage[];
-  runtimeContext?: RuntimeContext;
+  requestContext?: RequestContext;
   threadId?: string;
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
@@ -56,7 +57,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
   const generate = async ({
     coreUserMessages,
-    runtimeContext,
+    requestContext,
     threadId,
     modelSettings,
     signal,
@@ -99,7 +100,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
         topP,
       },
       instructions,
-      runtimeContext,
+      requestContext,
       ...(threadId ? { threadId, resourceId: agentId } : {}),
       providerOptions: providerOptions as any,
     });
@@ -119,7 +120,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
     }
   };
 
-  const stream = async ({ coreUserMessages, runtimeContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
+  const stream = async ({ coreUserMessages, requestContext, threadId, onChunk, modelSettings, signal }: StreamArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -161,7 +162,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
         topP,
       },
       instructions,
-      runtimeContext,
+      requestContext,
       ...(threadId ? { threadId, resourceId: agentId } : {}),
       providerOptions: providerOptions as any,
       requireToolApproval,
@@ -185,7 +186,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
   const network = async ({
     coreUserMessages,
-    runtimeContext,
+    requestContext,
     threadId,
     onNetworkChunk,
     modelSettings,
@@ -218,7 +219,7 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
         topP,
       },
       runId: agentId,
-      runtimeContext,
+      requestContext,
       ...(threadId ? { thread: threadId, resourceId: agentId } : {}),
     });
 
@@ -291,16 +292,21 @@ export const useChat = ({ agentId, initializeMessages }: MastraChatProps) => {
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
     const nextMessage: Omit<CoreUserMessage, 'id'> = { role: 'user', content: [{ type: 'text', text: args.message }] };
-    const messages = args.coreUserMessages ? [nextMessage, ...args.coreUserMessages] : [nextMessage];
+    const coreUserMessages = [nextMessage];
 
-    setMessages(s => [...s, { role: 'user', parts: [{ type: 'text', text: args.message }] }] as MastraUIMessage[]);
+    if (args.coreUserMessages) {
+      coreUserMessages.push(...args.coreUserMessages);
+    }
+
+    const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
+    setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
 
     if (mode === 'generate') {
-      await generate({ ...args, coreUserMessages: messages });
+      await generate({ ...args, coreUserMessages });
     } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages: messages });
+      await stream({ ...args, coreUserMessages });
     } else if (mode === 'network') {
-      await network({ ...args, coreUserMessages: messages });
+      await network({ ...args, coreUserMessages });
     }
   };
 

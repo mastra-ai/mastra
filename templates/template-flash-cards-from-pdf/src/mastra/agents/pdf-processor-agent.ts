@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -6,11 +5,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'pdf-processor-agent-storage',
     url: 'file:../mastra.db',
   }),
 });
 
 export const pdfProcessorAgent = new Agent({
+  id: 'pdf-processor-agent',
   name: 'PDF Content Processor',
   description:
     'An agent specialized in processing and extracting educational content from PDF documents for learning and flash card generation',
@@ -108,6 +109,6 @@ Provide comprehensive educational summaries that include:
 
 Your analysis will serve as the foundation for creating effective educational flash cards, so ensure every element you extract is valuable for learning and suitable for question-answer format.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   memory,
 });

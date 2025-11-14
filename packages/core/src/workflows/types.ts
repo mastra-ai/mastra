@@ -1,13 +1,15 @@
-import type { TextStreamPart } from 'ai';
+import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
-import type { TracingPolicy, TracingProperties } from '../ai-tracing';
 import type { Mastra } from '../mastra';
+import type { TracingPolicy, TracingProperties } from '../observability';
 import type { WorkflowStreamEvent } from '../stream/types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } from './step';
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
+
+export type WorkflowEngineType = string;
 
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
@@ -24,6 +26,7 @@ export type StepSuccess<P, R, S, T> = {
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -31,12 +34,13 @@ export type StepSuccess<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
-export type StepFailure<P, R, S> = {
+export type StepFailure<P, R, S, T> = {
   status: 'failed';
   error: string | Error;
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -44,41 +48,44 @@ export type StepFailure<P, R, S> = {
   metadata?: StepMetadata;
 };
 
-export type StepSuspended<P, S> = {
+export type StepSuspended<P, S, T> = {
   status: 'suspended';
   payload: P;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   suspendedAt: number;
   metadata?: StepMetadata;
 };
 
-export type StepRunning<P, R, S> = {
+export type StepRunning<P, R, S, T> = {
   status: 'running';
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
   metadata?: StepMetadata;
 };
 
-export type StepWaiting<P, R, S> = {
+export type StepWaiting<P, R, S, T> = {
   status: 'waiting';
   payload: P;
   suspendPayload?: S;
   resumePayload?: R;
+  suspendOutput?: T;
   startedAt: number;
   metadata?: StepMetadata;
 };
 
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
-  | StepFailure<P, R, S>
-  | StepSuspended<P, S>
-  | StepRunning<P, R, S>
-  | StepWaiting<P, R, S>;
+  | StepFailure<P, R, S, T>
+  | StepSuspended<P, S, T>
+  | StepRunning<P, R, S, T>
+  | StepWaiting<P, R, S, T>;
 
 export type WorkflowStepStatus = StepResult<any, any, any, any>['status'];
 
@@ -147,42 +154,15 @@ export type StreamEvent =
   // vnext events
   | WorkflowStreamEvent;
 
-export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
-
-export type WatchEvent = {
-  type: 'watch';
-  payload: {
-    currentStep?: {
-      id: string;
-      status: WorkflowRunStatus;
-      output?: Record<string, any>;
-      resumePayload?: Record<string, any>;
-      payload?: Record<string, any>;
-      error?: string | Error;
-    };
-    workflowState: {
-      status: WorkflowRunStatus;
-      steps: Record<
-        string,
-        {
-          status: WorkflowRunStatus;
-          output?: Record<string, any>;
-          payload?: Record<string, any>;
-          resumePayload?: Record<string, any>;
-          error?: string | Error;
-          startedAt: number;
-          endedAt: number;
-          suspendedAt?: number;
-          resumedAt?: number;
-        }
-      >;
-      result?: Record<string, any>;
-      payload?: Record<string, any>;
-      error?: string | Error;
-    };
-  };
-  eventTimestamp: Date;
-};
+export type WorkflowRunStatus =
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'suspended'
+  | 'waiting'
+  | 'pending'
+  | 'canceled'
+  | 'bailed';
 
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
@@ -198,17 +178,41 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         : never
     : never;
 
+export interface WorkflowState {
+  status: WorkflowRunStatus;
+  activeStepsPath: Record<string, number[]>;
+  serializedStepGraph: SerializedStepFlowEntry[];
+  steps: Record<
+    string,
+    {
+      status: WorkflowRunStatus;
+      output?: Record<string, any>;
+      payload?: Record<string, any>;
+      resumePayload?: Record<string, any>;
+      error?: string | Error;
+      startedAt: number;
+      endedAt: number;
+      suspendedAt?: number;
+      resumedAt?: number;
+    }
+  >;
+  result?: Record<string, any>;
+  payload?: Record<string, any>;
+  error?: string | Error;
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: string | Error;
-  runtimeContext?: Record<string, any>;
+  requestContext?: Record<string, any>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
-  activePaths: Array<unknown>;
+  activePaths: Array<number>;
+  activeStepsPath: Record<string, number[]>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,
@@ -247,14 +251,13 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
-  | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
-      steps: StepFlowEntry[];
+      steps: { type: 'step'; step: Step }[];
     }
   | {
       type: 'conditional';
-      steps: StepFlowEntry[];
+      steps: { type: 'step'; step: Step }[];
       conditions: ConditionFunction<any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
@@ -280,6 +283,7 @@ export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   component?: string;
   serializedStepFlow?: SerializedStepFlowEntry[];
   mapConfig?: string;
+  canSuspend?: boolean;
 };
 
 export type SerializedStepFlowEntry =
@@ -300,18 +304,18 @@ export type SerializedStepFlowEntry =
       fn?: string;
     }
   | {
-      type: 'waitForEvent';
-      event: string;
-      step: SerializedStep;
-      timeout?: number;
-    }
-  | {
       type: 'parallel';
-      steps: SerializedStepFlowEntry[];
+      steps: {
+        type: 'step';
+        step: SerializedStep;
+      }[];
     }
   | {
       type: 'conditional';
-      steps: SerializedStepFlowEntry[];
+      steps: {
+        type: 'step';
+        step: SerializedStep;
+      }[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {

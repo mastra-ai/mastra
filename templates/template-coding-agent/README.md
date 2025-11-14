@@ -20,7 +20,7 @@ This template demonstrates how to build an AI coding assistant that can work wit
 
 - Node.js 20 or higher
 - E2B API key (sign up at [e2b.dev](https://e2b.dev))
-- OpenAI API key
+- API key for your chosen provider
 
 ## Setup
 
@@ -49,6 +49,19 @@ This template demonstrates how to build an AI coding assistant that can work wit
    ```bash
    pnpm run dev
    ```
+
+## Model Configuration
+
+This template supports any AI model provider through Mastra's model router. You can use models from:
+
+- **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-4o`
+- **Anthropic**: `anthropic/claude-sonnet-4-5-20250929`, `anthropic/claude-haiku-4-5-20250929`
+- **Google**: `google/gemini-2.5-pro`, `google/gemini-2.0-flash-exp`
+- **Groq**: `groq/llama-3.3-70b-versatile`, `groq/llama-3.1-8b-instant`
+- **Cerebras**: `cerebras/llama-3.3-70b`
+- **Mistral**: `mistral/mistral-medium-2508`
+
+Set the `MODEL` environment variable in your `.env` file to your preferred model.
 
 ## Architecture
 
@@ -123,6 +136,7 @@ You can customize the agent behavior by modifying the instructions in `src/mastr
 
 ```typescript
 export const codingAgent = new Agent({
+  id: 'coding-agent',
   name: 'Coding Agent',
   instructions: `
     // Customize agent instructions here

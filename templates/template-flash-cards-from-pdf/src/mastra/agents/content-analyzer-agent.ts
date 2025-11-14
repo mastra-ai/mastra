@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -6,11 +5,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'content-analyzer-agent-storage',
     url: 'file:../mastra.db',
   }),
 });
 
 export const contentAnalyzerAgent = new Agent({
+  id: 'content-analyzer-agent',
   name: 'Educational Content Analyzer Agent',
   description:
     'An agent specialized in analyzing educational content to identify key concepts, definitions, and learning elements suitable for flash card generation',
@@ -103,6 +104,6 @@ Always format your analysis as valid JSON with the exact structure requested, in
 
 Your analysis will directly feed into flash card generation, so ensure every element you identify is suitable for educational question-answer pairs.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   memory,
 });

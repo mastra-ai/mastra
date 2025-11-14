@@ -32,6 +32,10 @@
             - link "weatherInfo":
                 - /url: /agents/weatherAgent/tools/weatherInfo
                 - img
+        - listitem:
+            - link "simpleMcpTool":
+                - /url: /agents/weatherAgent/tools/simpleMcpTool
+                - img
     - heading "Workflows" [level=3]:
         - link:
             - /url: https://mastra.ai/en/docs/workflows/overview
@@ -44,7 +48,7 @@
     - heading "Scorers" [level=3]
     - paragraph: No Scorers
     - heading "System Prompt" [level=3]
-    - button
-    - text: 'You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn’t in English, please translate it - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative Click to copy'
-    - textbox "Add your comments or requirements for enhancing your agent's prompt..."
-    - button
+    - textbox
+    - textbox "Enter your comment here..."
+    - button "Enhance prompt":
+        - img

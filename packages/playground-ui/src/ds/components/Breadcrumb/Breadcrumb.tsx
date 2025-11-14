@@ -24,14 +24,15 @@ export interface CrumbProps {
   to: string;
   prefetch?: boolean | null;
   children: React.ReactNode;
+  action?: React.ReactNode;
 }
 
-export const Crumb = ({ className, as, isCurrent, ...props }: CrumbProps) => {
+export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps) => {
   const Root = as || 'span';
 
   return (
     <>
-      <li className="flex h-full items-center">
+      <li className="flex h-full shrink-0 items-center gap-1">
         <Root
           aria-current={isCurrent ? 'page' : undefined}
           className={clsx(
@@ -41,6 +42,7 @@ export const Crumb = ({ className, as, isCurrent, ...props }: CrumbProps) => {
           )}
           {...props}
         />
+        {action}
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">

@@ -1,5 +1,5 @@
-import type { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import type { Mastra } from '@mastra/core/mastra';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
@@ -25,31 +25,6 @@ export async function generateSystemPromptHandler(c: Context) {
 
     if (!agent) {
       return c.json({ error: 'Agent not found' }, 404);
-    }
-
-    let evalSummary = '';
-
-    try {
-      // Get both test and live evals
-      const testEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
-      const liveEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
-      // Format eval results for the prompt
-      const evalsMapped = [...testEvals, ...liveEvals].filter(
-        ({ instructions: evalInstructions }) => evalInstructions === instructions,
-      );
-
-      evalSummary = evalsMapped
-        .map(
-          ({ input, output, result }) => `
-          Input: ${input}\n
-          Output: ${output}\n
-          Result: ${JSON.stringify(result)}
-
-        `,
-        )
-        .join('');
-    } catch (error) {
-      mastra.getLogger().error(`Error fetching evals`, { error });
     }
 
     const ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS = `
@@ -101,6 +76,7 @@ export async function generateSystemPromptHandler(c: Context) {
         `;
 
     const systemPromptAgent = new Agent({
+      id: 'system-prompt-enhancer',
       name: 'system-prompt-enhancer',
       instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
       model: await agent.getModel(),
@@ -111,7 +87,6 @@ export async function generateSystemPromptHandler(c: Context) {
             We need to improve the system prompt. 
             Current: ${instructions}
             ${comment ? `User feedback: ${comment}` : ''}
-            ${evalSummary ? `\nEvaluation Results:\n${evalSummary}` : ''}
         `,
       {
         structuredOutput: {

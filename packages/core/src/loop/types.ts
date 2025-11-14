@@ -1,21 +1,12 @@
+import type { WritableStream } from 'stream/web';
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type {
-  CallSettings,
-  IdGenerator,
-  StopCondition,
-  TelemetrySettings,
-  ToolChoice,
-  ToolSet,
-  StepResult,
-  ModelMessage,
-} from 'ai-v5';
+import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';
 import type { MessageList } from '../agent/message-list';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { ModelSpanTracker } from '../ai-tracing';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { IModelSpanTracker } from '../observability';
 import type { OutputProcessor, ProcessorState } from '../processors';
 import type { OutputSchema } from '../stream/base/schema';
 import type {
@@ -72,7 +63,6 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   runId?: string;
   idGenerator?: MastraIdGenerator;
   toolCallStreaming?: boolean;
-  telemetry_settings?: TelemetrySettings;
   messageList: MessageList;
   includeRawChunks?: boolean;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
@@ -90,7 +80,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
-  modelSpanTracker?: ModelSpanTracker;
+  modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
 };
@@ -102,7 +92,6 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   messageId: string;
   runId: string;
   startTimestamp: number;
-  modelStreamSpan: Span;
   _internal: StreamInternal;
   streamState: {
     serialize: () => any;

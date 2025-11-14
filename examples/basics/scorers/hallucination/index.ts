@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { createHallucinationScorer } from '@mastra/evals/scorers/llm';
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Example 1: No hallucination (output matches context)
 const context1 = [
