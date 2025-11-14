@@ -88,13 +88,18 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
     const storage = await this.mastra.getStore('workflows');
-    const currentState = await storage?.updateWorkflowState({
-      workflowId,
-      runId,
-      opts: {
-        status: 'canceled',
-      },
-    });
+
+    let currentState: WorkflowRunState | undefined = undefined;
+
+    if (storage) {
+      currentState = await storage?.updateWorkflowState({
+        workflowId,
+        runId,
+        opts: {
+          status: 'canceled',
+        },
+      });
+    }
 
     await this.endWorkflow({
       workflow: undefined as any,

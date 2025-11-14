@@ -126,13 +126,13 @@ const thread = await storage.createThread({
 
 // Get thread by ID
 const memoryStore = await storage.getStore('memory');
-const retrievedThread = await memoryStore?.getThreadById({
+const retrievedThread = await memoryStore.getThreadById({
   threadId: thread.id,
 });
 
 // Update thread
 const memoryStore = await storage.getStore('memory');
-await memoryStore?.updateThread({
+await memoryStore.updateThread({
   id: thread.id,
   title: 'Updated Title',
   metadata: { newKey: 'newValue' },
@@ -144,7 +144,7 @@ await memoryStore?.updateThread({
 ```typescript
 // Save messages
 const memoryStore = await storage.getStore('memory');
-await memoryStore?.saveMessages({
+await memoryStore.saveMessages({
   messages: [
     {
       id: 'msg-1',
@@ -157,7 +157,7 @@ await memoryStore?.saveMessages({
 });
 
 // Get thread messages with pagination
-const result = await memoryStore?.listMessages({
+const result = await memoryStore.listMessages({
   threadId: thread.id,
   page: 0,
   perPage: 50,
