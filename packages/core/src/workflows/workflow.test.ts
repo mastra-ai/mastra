@@ -12620,9 +12620,6 @@ describe('Workflow', () => {
           userInput: 'test input for resumption',
         },
       });
-      if (!timeTravelResult) {
-        throw new Error('Resume failed to return a result');
-      }
 
       expect(timeTravelResult.steps).toEqual({
         input: { input: 'test input' },
