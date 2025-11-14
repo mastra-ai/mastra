@@ -647,15 +647,27 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all configured AI model providers',
   tags: ['Agents'],
   handler: async () => {
-    const providers = Object.entries(PROVIDER_REGISTRY).map(([key, provider]) => {
-      return {
-        id: key,
-        name: provider.name,
-        label: (provider as any).label || provider.name,
-        description: (provider as any).description || '',
-      };
-    });
-    return { providers };
+    try {
+      const providers = Object.entries(PROVIDER_REGISTRY).map(([id, provider]) => {
+        // Check if the provider is connected by checking for its API key env var(s)
+        const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+        const connected = envVars.every(envVar => !!process.env[envVar]);
+
+        return {
+          id,
+          name: provider.name,
+          label: (provider as any).label || provider.name,
+          description: (provider as any).description || '',
+          envVar: provider.apiKeyEnvVar,
+          connected,
+          docUrl: provider.docUrl,
+          models: [...provider.models], // Convert readonly array to regular array
+        };
+      });
+      return { providers };
+    } catch (error) {
+      return handleError(error, 'Error fetching providers');
+    }
   },
 });
 
