@@ -72,7 +72,7 @@ const findUserTool = createTool({
 });
 ```
 
-To continue execution, call `resumeStreamVNext` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
+To continue execution, call `resumeStream` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
 
 ```typescript {1} title="Resume a suspended tool call" showLineNumbers copy
 const resumedStream = await myAgent.resumeStream(
