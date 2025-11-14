@@ -25,7 +25,7 @@ program
       analytics.trackCommand({
         command: 'version',
       });
-      console.log(`create-mastra ${version}`);
+      console.info(`create-mastra ${version}`);
     } catch {
       // ignore
     }
@@ -39,8 +39,8 @@ program
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
-  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
+  .option('--default', 'Quick start with defaults (src, OpenAI, examples)')
+  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows, scorers)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras)')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
@@ -48,6 +48,10 @@ program
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
   .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
   .option('-m, --mcp <mcp>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .option(
+    '--template [template-name]',
+    'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
+  )
   .action(async (projectNameArg, args) => {
     // Unify: use argument if present, else option
     const projectName = projectNameArg || args.projectName;
@@ -55,13 +59,15 @@ program
 
     if (args.default) {
       await create({
-        components: ['agents', 'tools', 'workflows'],
+        components: ['agents', 'tools', 'workflows', 'scorers'],
         llmProvider: 'openai',
         addExample: true,
         createVersionTag,
         timeout,
         mcpServer: args.mcp,
         directory: 'src/',
+        template: args.template,
+        analytics,
       });
       return;
     }
@@ -70,12 +76,14 @@ program
       components: args.components ? args.components.split(',') : [],
       llmProvider: args.llm,
       addExample: args.example,
-      llmApiKey: args['llm-api-key'],
+      llmApiKey: args.llmApiKey,
       createVersionTag,
       timeout,
       projectName,
       directory: args.dir,
       mcpServer: args.mcp,
+      template: args.template,
+      analytics,
     });
   });
 

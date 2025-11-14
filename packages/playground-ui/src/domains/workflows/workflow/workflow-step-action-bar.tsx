@@ -4,27 +4,32 @@ import { Button } from '@/ds/components/Button';
 import { Dialog } from '@/components/ui/dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
   output?: any;
+  suspendOutput?: any;
   resumeData?: any;
   error?: any;
   stepName: string;
+  stepId?: string;
   mapConfig?: string;
-  onShowTrace?: () => void;
   onShowNestedGraph?: () => void;
+  status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
 }
 
 export const WorkflowStepActionBar = ({
   input,
   output,
   resumeData,
+  suspendOutput,
   error,
   mapConfig,
   stepName,
-  onShowTrace,
+  stepId,
   onShowNestedGraph,
+  status,
 }: WorkflowStepActionBarProps) => {
   const [isInputOpen, setIsInputOpen] = useState(false);
   const [isOutputOpen, setIsOutputOpen] = useState(false);
@@ -38,7 +43,16 @@ export const WorkflowStepActionBar = ({
   return (
     <>
       {(input || output || error || mapConfig || resumeData || onShowNestedGraph) && (
-        <div className="flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg">
+        <div
+          className={cn(
+            'flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg',
+            status === 'success' && 'bg-accent1Dark',
+            status === 'failed' && 'bg-accent2Dark',
+            status === 'suspended' && 'bg-accent3Dark',
+            status === 'waiting' && 'bg-accent5Dark',
+            status === 'running' && 'bg-accent6Dark',
+          )}
+        >
           {onShowNestedGraph && <Button onClick={onShowNestedGraph}>View nested graph</Button>}
           {mapConfig && (
             <>
@@ -46,7 +60,12 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isMapConfigOpen} onOpenChange={setIsMapConfigOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} map config</DialogTitle>
+                  <DialogTitle className={dialogTitleClass}>
+                    <div className="flex flex-col gap-1">
+                      <div>{stepName} Map Config</div>
+                      {stepId && stepId !== stepName && <div className="text-xs text-icon3 font-normal">{stepId}</div>}
+                    </div>
+                  </DialogTitle>
 
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent data={mapConfig} />
@@ -87,7 +106,7 @@ export const WorkflowStepActionBar = ({
             </>
           )}
 
-          {output && (
+          {(output ?? suspendOutput) && (
             <>
               <Button onClick={() => setIsOutputOpen(true)}>Output</Button>
 
@@ -95,7 +114,7 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogTitle className={dialogTitleClass}>{stepName} output</DialogTitle>
                   <div className="px-4 overflow-hidden">
-                    <CodeDialogContent data={output} />
+                    <CodeDialogContent data={output ?? suspendOutput} />
                   </div>
                 </DialogContent>
               </Dialog>
@@ -117,8 +136,6 @@ export const WorkflowStepActionBar = ({
               </Dialog>
             </>
           )}
-
-          {onShowTrace && <Button onClick={onShowTrace}>Show trace</Button>}
         </div>
       )}
     </>

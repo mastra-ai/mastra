@@ -1,8 +1,9 @@
 import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
-import { RuntimeContext } from './runtime-context';
+import { RequestContext } from './request-context';
 import type { InternalCoreTool } from './tools';
 import { createTool, isVercelTool } from './tools';
 import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
@@ -156,7 +157,8 @@ describe('makeCoreTool', () => {
   const mockOptions = {
     name: 'testTool',
     description: 'Test tool description',
-    runtimeContext: new RuntimeContext(),
+    requestContext: new RequestContext(),
+    tracingContext: {},
   };
 
   it('should convert a Vercel tool correctly', async () => {
@@ -231,9 +233,9 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeDefined();
 
     if (coreTool.execute) {
-      await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
-        'Test error',
-      );
+      const result = await coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
+      expect(result).toBeInstanceOf(MastraError);
+      expect(result.message).toBe('Test error');
       expect(errorSpy).toHaveBeenCalled();
     }
     errorSpy.mockRestore();
@@ -299,7 +301,8 @@ it('should log correctly for Vercel tool execution', async () => {
   const coreTool = makeCoreTool(vercelTool, {
     name: 'testTool',
     agentName: 'testAgent',
-    runtimeContext: new RuntimeContext(),
+    requestContext: new RequestContext(),
+    tracingContext: {},
   });
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });

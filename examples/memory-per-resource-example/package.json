@@ -7,7 +7,7 @@
     "dev": "tsx src/example.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^0.0.68",
+    "@ai-sdk/openai": "^1.3.24",
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
     "@mastra/libsql": "latest",
@@ -17,7 +17,7 @@
     "tsx": "^4.19.2"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
     "typescript": "^5.8.3"
   },
   "pnpm": {

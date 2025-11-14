@@ -31,12 +31,10 @@ This example demonstrates how to use the Prompt Alignment metric to evaluate how
 The example demonstrates three scenarios:
 
 1. High Alignment: Weather report with specific requirements
-
    - Shows perfect instruction adherence
    - Demonstrates complete coverage of all instructions
 
 2. Mixed Alignment: Product listing with formatting rules
-
    - Shows partial instruction adherence
    - Demonstrates handling of missing requirements
 

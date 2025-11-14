@@ -15,10 +15,9 @@ export interface WorkflowGraphProps {
   workflowId: string;
   isLoading?: boolean;
   workflow?: GetWorkflowResponse;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
-export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading }: WorkflowGraphProps) {
+export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraphProps) {
   const { snapshot } = useContext(WorkflowRunContext);
 
   if (isLoading) {
@@ -41,11 +40,10 @@ export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading }: 
   }
 
   return (
-    <WorkflowNestedGraphProvider key={snapshot?.runId ?? workflowId} onShowTrace={onShowTrace}>
+    <WorkflowNestedGraphProvider key={snapshot?.runId ?? workflowId}>
       <ReactFlowProvider>
         <WorkflowGraphInner
           workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
-          onShowTrace={onShowTrace}
         />
       </ReactFlowProvider>
     </WorkflowNestedGraphProvider>

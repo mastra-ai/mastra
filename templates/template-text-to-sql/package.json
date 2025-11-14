@@ -1,0 +1,37 @@
+{
+  "name": "template-text-to-sql",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "description": "A Mastra workflow system for database introspection and natural language to SQL conversion. Features PostgreSQL schema analysis, AI-powered query generation, safe SQL execution, and interactive workflows for database operations.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/loggers": "beta",
+    "@mastra/memory": "beta",
+    "@mastra/observability": "beta",
+    "ai": "^4.3.19",
+    "csv-parse": "^5.6.0",
+    "dotenv": "^17.0.1",
+    "pg": "^8.16.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.17",
+    "@types/pg": "^8.15.5",
+    "mastra": "beta",
+    "typescript": "^5.8.3"
+  }
+}

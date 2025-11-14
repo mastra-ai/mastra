@@ -1,10 +1,9 @@
 import jsonSchemaToZod from 'json-schema-to-zod';
-import { Braces, Footprints, Loader2 } from 'lucide-react';
-import { useState, useEffect, useContext, useId } from 'react';
+import { Braces, Loader2, StopCircle } from 'lucide-react';
+import { useState, useEffect, useContext } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
-import { DynamicForm } from '@/components/dynamic-form';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { Button } from '@/ds/components/Button';
 import { CodeBlockDemo } from '@/components/ui/code-block';
@@ -12,16 +11,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { WorkflowRunContext } from '../context/workflow-run-context';
+import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
 
-import { GetWorkflowResponse, WorkflowWatchResult } from '@mastra/client-js';
+import { GetWorkflowResponse } from '@mastra/client-js';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
-import { Input } from '@/components/ui/input';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { WorkflowStatus } from './workflow-status';
+import { WorkflowInputData } from './workflow-input-data';
+import { isObjectEmpty } from '@/lib/object';
 
 interface SuspendedStep {
   stepId: string;
@@ -31,8 +32,9 @@ interface SuspendedStep {
   isLoading: boolean;
 }
 
-interface WorkflowTriggerProps {
+export interface WorkflowTriggerProps {
   workflowId: string;
+  paramsRunId?: string;
   setRunId?: (runId: string) => void;
   workflow?: GetWorkflowResponse;
   isLoading?: boolean;
@@ -44,49 +46,55 @@ interface WorkflowTriggerProps {
     workflowId,
     runId,
     inputData,
-    runtimeContext,
+    requestContext,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
-    runtimeContext: Record<string, unknown>;
+    requestContext: Record<string, unknown>;
   }) => Promise<void>;
+  observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
   resumeWorkflow: ({
     workflowId,
     step,
     runId,
     resumeData,
-    runtimeContext,
+    requestContext,
   }: {
     workflowId: string;
     step: string | string[];
     runId: string;
     resumeData: Record<string, unknown>;
-    runtimeContext: Record<string, unknown>;
-  }) => Promise<{
+    requestContext: Record<string, unknown>;
+  }) => Promise<void>;
+  streamResult: WorkflowRunStreamResult | null;
+  isCancellingWorkflowRun: boolean;
+  cancelWorkflowRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => Promise<{
     message: string;
   }>;
-  streamResult: WorkflowWatchResult | null;
-  isResumingWorkflow: boolean;
 }
 
 export function WorkflowTrigger({
   workflowId,
+  paramsRunId,
   setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
   resumeWorkflow,
   streamWorkflow,
+  observeWorkflowStream,
   isStreamingWorkflow,
   streamResult,
-  isResumingWorkflow,
+  isCancellingWorkflowRun,
+  cancelWorkflowRun,
 }: WorkflowTriggerProps) {
-  const { runtimeContext } = usePlaygroundStore();
-  const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
+  const { requestContext } = usePlaygroundStore();
+  const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
 
-  const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [innerRunId, setInnerRunId] = useState<string>('');
+  const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
   const triggerSchema = workflow?.inputSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
@@ -94,22 +102,29 @@ export function WorkflowTrigger({
       if (!workflow) return;
       setIsRunning(true);
 
+      setCancelResponse(null);
+
       setResult(null);
 
       const { runId } = await createWorkflowRun({ workflowId });
 
       setRunId?.(runId);
+      setInnerRunId(runId);
+      setContextRunId(runId);
 
-      streamWorkflow({ workflowId, runId, inputData: data, runtimeContext });
+      streamWorkflow({ workflowId, runId, inputData: data, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
     }
   };
 
-  const handleResumeWorkflow = async (step: SuspendedStep & { resumeData: any }) => {
+  const handleResumeWorkflow = async (
+    step: Omit<SuspendedStep, 'stepId'> & { resumeData: any; stepId: string | string[] },
+  ) => {
     if (!workflow) return;
 
+    setCancelResponse(null);
     const { stepId, runId: prevRunId, resumeData } = step;
 
     const { runId } = await createWorkflowRun({ workflowId, prevRunId });
@@ -119,29 +134,37 @@ export function WorkflowTrigger({
       runId,
       resumeData,
       workflowId,
-      runtimeContext,
+      requestContext,
     });
+  };
+
+  const handleCancelWorkflowRun = async () => {
+    const response = await cancelWorkflowRun({ workflowId, runId: innerRunId });
+    setCancelResponse(response);
   };
 
   const streamResultToUse = result ?? streamResult;
 
+  const suspendedSteps = Object.entries(streamResultToUse?.steps || {})
+    .filter(([_, { status }]) => status === 'suspended')
+    .map(([stepId, { suspendPayload }]) => ({
+      stepId,
+      runId: innerRunId,
+      suspendPayload,
+      isLoading: false,
+    }));
+
+  useEffect(() => {
+    if (paramsRunId && observeWorkflowStream) {
+      observeWorkflowStream({ workflowId, runId: paramsRunId });
+      setInnerRunId(paramsRunId);
+      setContextRunId(paramsRunId);
+    }
+  }, [paramsRunId]);
+
   useEffect(() => {
     setIsRunning(isStreamingWorkflow);
   }, [isStreamingWorkflow]);
-
-  useEffect(() => {
-    if (!streamResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
-
-    const suspended = Object.entries(streamResultToUse.payload.workflowState.steps)
-      .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { payload }]) => ({
-        stepId,
-        runId: result.runId,
-        suspendPayload: payload,
-        isLoading: false,
-      }));
-    setSuspendedSteps(suspended);
-  }, [streamResultToUse, result]);
 
   useEffect(() => {
     if (streamResult) {
@@ -166,10 +189,15 @@ export function WorkflowTrigger({
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
 
+  const workflowActivePaths = streamResultToUse?.steps ?? {};
+  const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
+
+  const doneStatuses = ['success', 'failed', 'canceled'];
+
   return (
     <div className="h-full pt-3 pb-12">
       <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
-        {(isResumingWorkflow || (isSuspendedSteps && isStreamingWorkflow)) && (
+        {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
               <Loader2 className="animate-spin text-icon6" />
@@ -181,7 +209,7 @@ export function WorkflowTrigger({
         {!isSuspendedSteps && (
           <>
             {zodInputSchema ? (
-              <DynamicForm
+              <WorkflowInputData
                 schema={zodInputSchema}
                 defaultValues={payload}
                 isSubmitLoading={isStreamingWorkflow}
@@ -190,8 +218,9 @@ export function WorkflowTrigger({
                   setPayload(data);
                   handleExecuteWorkflow(data);
                 }}
+                withoutSubmit={!!paramsRunId}
               />
-            ) : (
+            ) : !!paramsRunId ? null : (
               <Button
                 className="w-full"
                 variant="light"
@@ -213,17 +242,19 @@ export function WorkflowTrigger({
         {!isStreamingWorkflow &&
           isSuspendedSteps &&
           suspendedSteps?.map(step => {
-            const stepDefinition = workflow.steps[step.stepId];
+            const stepDefinition = workflow.allSteps[step.stepId];
+            if (!stepDefinition || stepDefinition.isWorkflow) return null;
+
             const stepSchema = stepDefinition?.resumeSchema
               ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.resumeSchema)))
               : z.record(z.string(), z.any());
             return (
-              <div className="flex flex-col px-4">
+              <div className="flex flex-col px-4" key={step.stepId}>
                 <Text variant="secondary" className="text-mastra-el-3" size="xs">
                   {step.stepId}
                 </Text>
                 {step.suspendPayload && (
-                  <div>
+                  <div data-testid="suspended-payload">
                     <CodeBlockDemo
                       className="w-full overflow-x-auto p-2"
                       code={JSON.stringify(step.suspendPayload, null, 2)}
@@ -231,13 +262,14 @@ export function WorkflowTrigger({
                     />
                   </div>
                 )}
-                <DynamicForm
+                <WorkflowInputData
                   schema={stepSchema}
-                  isSubmitLoading={isResumingWorkflow}
-                  submitButtonLabel="Resume"
+                  isSubmitLoading={isStreamingWorkflow}
+                  submitButtonLabel="Resume workflow"
                   onSubmit={data => {
+                    const stepIds = step.stepId?.split('.');
                     handleResumeWorkflow({
-                      stepId: step.stepId,
+                      stepId: stepIds,
                       runId: step.runId,
                       suspendPayload: step.suspendPayload,
                       resumeData: data,
@@ -248,8 +280,68 @@ export function WorkflowTrigger({
               </div>
             );
           })}
+
+        {result?.status === 'running' && (
+          <Button
+            variant="light"
+            className="w-full"
+            size="lg"
+            onClick={handleCancelWorkflowRun}
+            disabled={
+              !!cancelResponse?.message ||
+              isCancellingWorkflowRun ||
+              (result?.status && doneStatuses.includes(result?.status))
+            }
+          >
+            {isCancellingWorkflowRun ? (
+              <Icon>
+                <Loader2 className="animate-spin" />
+              </Icon>
+            ) : (
+              <Icon>
+                <StopCircle />
+              </Icon>
+            )}
+            {cancelResponse?.message || 'Cancel Workflow Run'}
+          </Button>
+        )}
+
+        {hasWorkflowActivePaths && (
+          <>
+            <hr className="border-border1 border-sm my-5" />
+            <div className="flex flex-col gap-2">
+              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
+                Status
+              </Text>
+              <div className="px-4 flex flex-col gap-4">
+                {Object.entries(workflowActivePaths)
+                  .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
+                  .map(([stepId, step]) => {
+                    const { status } = step;
+                    let output = undefined;
+                    let suspendOutput = undefined;
+                    if (step.status === 'suspended') {
+                      suspendOutput = step.suspendOutput;
+                    }
+                    if (step.status === 'success') {
+                      output = step.output;
+                    }
+                    return (
+                      <WorkflowStatus
+                        key={stepId}
+                        stepId={stepId}
+                        status={status}
+                        result={output ?? suspendOutput ?? {}}
+                      />
+                    );
+                  })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
-      {result && (
+
+      {result && !isObjectEmpty(result) && (
         <div className="p-5 border-b-sm border-border1">
           <WorkflowJsonDialog result={result} />
         </div>
@@ -257,95 +349,6 @@ export function WorkflowTrigger({
     </div>
   );
 }
-
-interface WorkflowResultSectionProps {
-  result: WorkflowWatchResult;
-  workflow: GetWorkflowResponse;
-}
-
-const WorkflowResultSection = ({ result, workflow }: WorkflowResultSectionProps) => {
-  const workflowState = result.payload.workflowState as WorkflowWatchResult['payload']['workflowState'] & {
-    result: unknown | null;
-  };
-
-  const hasResult = Object.keys(workflowState.steps || {}).length > 0;
-  if (!hasResult) return null;
-
-  return (
-    <div className="p-5">
-      <Txt variant="ui-sm" className="text-icon3">
-        Final Output
-      </Txt>
-      <ul className="pt-4">
-        {Object.entries(workflowState.steps || {}).map(([stepId, stepResult]) => {
-          const stepDefinition = workflow.steps[stepId];
-          if (!stepDefinition) return null;
-
-          return (
-            <li
-              key={stepId}
-              className="border-b-sm border-dashed border-border1 last:border-b-0 py-4 first:pt-0 last:pb-0"
-            >
-              <WorkflowResultFinishedStep stepResult={stepResult.output} stepDefinition={stepDefinition} />
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-};
-
-interface WorkflowResultFinishedStepProps {
-  stepResult: unknown;
-  stepDefinition: GetWorkflowResponse['steps'][string];
-}
-
-const WorkflowResultFinishedStep = ({ stepResult, stepDefinition }: WorkflowResultFinishedStepProps) => {
-  const id = useId();
-
-  try {
-    const zodObjectSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.outputSchema)));
-
-    if (zodObjectSchema?._def?.typeName === 'ZodString') {
-      return (
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <Icon>
-              <Footprints className="text-icon3" />
-            </Icon>
-
-            <Txt as="label" htmlFor={id} variant="ui-sm" className="text-icon3">
-              {stepDefinition.description || stepDefinition.id}
-            </Txt>
-          </div>
-          <Input id={id} defaultValue={stepResult as string} readOnly />
-        </div>
-      );
-    }
-
-    return (
-      <div>
-        <div className="flex items-center gap-2 pb-2">
-          <Icon>
-            <Footprints className="text-icon3" />
-          </Icon>
-          <Txt variant="ui-sm" className="text-icon3">
-            {stepDefinition.description || stepDefinition.id}
-          </Txt>
-        </div>
-        <DynamicForm
-          key={JSON.stringify(stepResult)}
-          schema={zodObjectSchema}
-          defaultValues={stepResult as Record<string, unknown>}
-          readOnly
-        />
-      </div>
-    );
-  } catch (err: unknown) {
-    console.error('Error parsing output schema', err);
-    return <Txt>An error occured. Please open an issue on GitHub.</Txt>;
-  }
-};
 
 const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => {
   const [open, setOpen] = useState(false);

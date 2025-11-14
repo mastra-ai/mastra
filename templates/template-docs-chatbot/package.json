@@ -1,0 +1,24 @@
+{
+  "name": "template-docs-chatbot",
+  "private": true,
+  "type": "module",
+  "description": "A monorepo template for building documentation chatbots with separate MCP server and agent components",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "turbo run check-types",
+    "dev:mcp": "turbo run dev --filter=@templates/mcp-server",
+    "dev:agent": "turbo run dev --filter=@templates/agent"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.8",
+    "typescript": "5.8.3"
+  },
+  "packageManager": "pnpm@10.18.2",
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

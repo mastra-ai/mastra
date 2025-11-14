@@ -53,8 +53,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     syncInterval,
     maxRetries = 5,
     initialBackoffMs = 100,
-  }: LibSQLVectorConfig) {
-    super();
+    id,
+  }: LibSQLVectorConfig & { id: string }) {
+    super({ id });
 
     this.turso = createClient({
       url: connectionUrl,
@@ -120,7 +121,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     topK = 10,
     filter,
     includeVector = false,
-    minScore = 0,
+    minScore = -1, // Default to -1 to include all results (cosine similarity ranges from -1 to 1)
   }: LibSQLQueryVectorParams): Promise<QueryResult[]> {
     try {
       if (!Number.isInteger(topK) || topK <= 0) {
@@ -232,7 +233,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
       await tx.commit();
       return vectorIds;
     } catch (error) {
-      await tx.rollback();
+      !tx.closed && (await tx.rollback());
       if (error instanceof Error && error.message?.includes('dimensions are different')) {
         const match = error.message.match(/dimensions are different: (\d+) != (\d+)/);
         if (match) {

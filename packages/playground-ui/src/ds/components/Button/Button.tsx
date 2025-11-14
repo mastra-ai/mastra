@@ -10,6 +10,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   children: React.ReactNode;
   size?: 'md' | 'lg';
   variant?: 'default' | 'light';
+  target?: string;
 }
 
 const sizeClasses = {
@@ -18,8 +19,8 @@ const sizeClasses = {
 };
 
 const variantClasses = {
-  default: 'bg-surface2 hover:bg-surface4 text-icon3 hover:text-icon6',
-  light: 'bg-surface3 hover:bg-surface5 text-icon6',
+  default: 'bg-surface2 hover:bg-surface4 text-icon3 hover:text-icon6 disabled:opacity-50',
+  light: 'bg-surface3 hover:bg-surface5 text-icon6 disabled:opacity-50',
 };
 
 export const Button = ({ className, as, size = 'md', variant = 'default', ...props }: ButtonProps) => {
@@ -32,6 +33,9 @@ export const Button = ({ className, as, size = 'md', variant = 'default', ...pro
         variantClasses[variant],
         sizeClasses[size],
         className,
+        {
+          'cursor-not-allowed': props.disabled,
+        },
       )}
       {...props}
     />

@@ -1,6 +1,7 @@
 import { connect, Index } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, CreateTableOptions, Table, TableLike } from '@lancedb/lancedb';
 
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -11,8 +12,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
-} from '@mastra/core';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+} from '@mastra/core/vector';
 
 import { MastraVector } from '@mastra/core/vector';
 import type { LanceVectorFilter } from './filter';
@@ -64,8 +64,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * const store = await LanceVectorStore.create('s3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
    */
-  public static async create(uri: string, options?: ConnectionOptions): Promise<LanceVectorStore> {
-    const instance = new LanceVectorStore();
+  public static async create(uri: string, options?: ConnectionOptions & { id: string }): Promise<LanceVectorStore> {
+    const instance = new LanceVectorStore(options?.id || crypto.randomUUID());
     try {
       instance.lanceClient = await connect(uri, options);
       return instance;
@@ -86,8 +86,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * @internal
    * Private constructor to enforce using the create factory method
    */
-  private constructor() {
-    super();
+  private constructor(id: string) {
+    super({ id });
   }
 
   close() {

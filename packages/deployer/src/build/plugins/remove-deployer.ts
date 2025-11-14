@@ -3,7 +3,7 @@ import type { Plugin } from 'rollup';
 
 import { removeDeployer as removeDeployerBabelPlugin } from '../babel/remove-deployer';
 
-export function removeDeployer(mastraEntry: string): Plugin {
+export function removeDeployer(mastraEntry: string, options?: { sourcemap?: boolean }): Plugin {
   return {
     name: 'remove-deployer',
     transform(code, id) {
@@ -19,6 +19,7 @@ export function removeDeployer(mastraEntry: string): Plugin {
             configFile: false,
             filename: id,
             plugins: [removeDeployerBabelPlugin],
+            sourceMaps: options?.sourcemap,
           },
           (err, result) => {
             if (err) {

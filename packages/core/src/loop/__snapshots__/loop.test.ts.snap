@@ -1,0 +1,1716 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: initial, tool-result > onStepFinish should be called for each step 1`] = `
+[
+  DefaultStepResult {
+    "content": [
+      {
+        "input": {
+          "value": "value",
+        },
+        "providerExecuted": undefined,
+        "providerMetadata": undefined,
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-call",
+      },
+      {
+        "dynamic": false,
+        "input": {
+          "value": "value",
+        },
+        "output": "result1",
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-result",
+      },
+    ],
+    "finishReason": "tool-calls",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": undefined,
+      "id": "test-id-1-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 10,
+      "outputTokens": 5,
+      "reasoningTokens": undefined,
+      "totalTokens": 15,
+    },
+    "warnings": [],
+  },
+  DefaultStepResult {
+    "content": [
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": {
+        "custom-response-header": "response-header-value",
+      },
+      "id": "test-id-2-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+        {
+          "content": [
+            {
+              "providerOptions": undefined,
+              "text": "Hello, world!",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:10.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
+    },
+    "warnings": [],
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: initial, tool-result > result.response.messages should contain response messages from all steps 1`] = `
+[
+  {
+    "content": [
+      {
+        "input": {
+          "value": "value",
+        },
+        "providerExecuted": undefined,
+        "providerOptions": undefined,
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-call",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "output": {
+          "type": "text",
+          "value": "result1",
+        },
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-result",
+      },
+    ],
+    "role": "tool",
+  },
+  {
+    "content": [
+      {
+        "providerOptions": undefined,
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: initial, tool-result > result.steps should contain all steps 1`] = `
+[
+  DefaultStepResult {
+    "content": [
+      {
+        "input": {
+          "value": "value",
+        },
+        "providerExecuted": undefined,
+        "providerMetadata": undefined,
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-call",
+      },
+      {
+        "dynamic": false,
+        "input": {
+          "value": "value",
+        },
+        "output": "result1",
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-result",
+      },
+    ],
+    "finishReason": "tool-calls",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": undefined,
+      "id": "test-id-1-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 10,
+      "outputTokens": 5,
+      "reasoningTokens": undefined,
+      "totalTokens": 15,
+    },
+    "warnings": [],
+  },
+  DefaultStepResult {
+    "content": [
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": {
+        "custom-response-header": "response-header-value",
+      },
+      "id": "test-id-2-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+        {
+          "content": [
+            {
+              "providerOptions": undefined,
+              "text": "Hello, world!",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:10.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
+    },
+    "warnings": [],
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: initial, tool-result with prepareStep > onStepFinish should be called for each step 1`] = `
+[
+  DefaultStepResult {
+    "content": [
+      {
+        "input": {
+          "value": "value",
+        },
+        "providerExecuted": undefined,
+        "providerMetadata": undefined,
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-call",
+      },
+      {
+        "dynamic": false,
+        "input": {
+          "value": "value",
+        },
+        "output": "result1",
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-result",
+      },
+    ],
+    "finishReason": "tool-calls",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": undefined,
+      "id": "test-id-1-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 10,
+      "outputTokens": 5,
+      "reasoningTokens": undefined,
+      "totalTokens": 15,
+    },
+    "warnings": [],
+  },
+  DefaultStepResult {
+    "content": [
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": {
+        "custom-response-header": "response-header-value",
+      },
+      "id": "test-id-2-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+        {
+          "content": [
+            {
+              "providerOptions": undefined,
+              "text": "Hello, world!",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:10.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
+    },
+    "warnings": [],
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: initial, tool-result with prepareStep > result.response.messages should contain response messages from all steps 1`] = `
+[
+  {
+    "content": [
+      {
+        "input": {
+          "value": "value",
+        },
+        "providerExecuted": undefined,
+        "providerOptions": undefined,
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-call",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "output": {
+          "type": "text",
+          "value": "result1",
+        },
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-result",
+      },
+    ],
+    "role": "tool",
+  },
+  {
+    "content": [
+      {
+        "providerOptions": undefined,
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: initial, tool-result with prepareStep > result.steps should contain all steps 1`] = `
+[
+  DefaultStepResult {
+    "content": [
+      {
+        "input": {
+          "value": "value",
+        },
+        "providerExecuted": undefined,
+        "providerMetadata": undefined,
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-call",
+      },
+      {
+        "dynamic": false,
+        "input": {
+          "value": "value",
+        },
+        "output": "result1",
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-result",
+      },
+    ],
+    "finishReason": "tool-calls",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": undefined,
+      "id": "test-id-1-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 10,
+      "outputTokens": 5,
+      "reasoningTokens": undefined,
+      "totalTokens": 15,
+    },
+    "warnings": [],
+  },
+  DefaultStepResult {
+    "content": [
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "body": undefined,
+      "headers": {
+        "custom-response-header": "response-header-value",
+      },
+      "id": "test-id-2-from-model",
+      "messages": [
+        {
+          "content": [
+            {
+              "input": {
+                "value": "value",
+              },
+              "providerExecuted": undefined,
+              "providerOptions": undefined,
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-call",
+            },
+          ],
+          "role": "assistant",
+        },
+        {
+          "content": [
+            {
+              "output": {
+                "type": "text",
+                "value": "result1",
+              },
+              "toolCallId": "call-1",
+              "toolName": "tool1",
+              "type": "tool-result",
+            },
+          ],
+          "role": "tool",
+        },
+        {
+          "content": [
+            {
+              "providerOptions": undefined,
+              "text": "Hello, world!",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "test-response-model-id",
+      "modelProvider": "mock-provider",
+      "modelVersion": "v2",
+      "timestamp": 1970-01-01T00:00:10.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
+    },
+    "warnings": [],
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain response body and headers 1`] = `
+{
+  "body": "test body",
+  "headers": {
+    "custom-response-header": "response-header-value",
+  },
+  "id": "test-id-from-model",
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "Hello, world!",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
+  "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
+  "timestamp": 1970-01-01T00:00:10.000Z,
+}
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain response body and headers 2`] = `
+{
+  "body": "test body",
+  "headers": {
+    "custom-response-header": "response-header-value",
+  },
+  "id": "test-id-from-model",
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "Hello, world!",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
+  "modelId": "test-response-model-id",
+  "modelProvider": "mock-provider",
+  "modelVersion": "v2",
+  "timestamp": 1970-01-01T00:00:10.000Z,
+  "uiMessages": [
+    {
+      "id": "GhOQiW2oZck1AgkJ",
+      "metadata": {
+        "__originalContent": "Hello, world!",
+        "createdAt": 2025-09-09T17:52:08.767Z,
+      },
+      "parts": [
+        {
+          "text": "Hello, world!",
+          "type": "text",
+        },
+      ],
+      "role": "assistant",
+    },
+  ],
+}
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > result.response.messages > should contain assistant response message and tool message when there are tool calls with results 1`] = `
+[
+  {
+    "content": [
+      {
+        "providerOptions": undefined,
+        "text": "Hello, world!",
+        "type": "text",
+      },
+      {
+        "input": {
+          "value": "value",
+        },
+        "providerExecuted": undefined,
+        "providerOptions": undefined,
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-call",
+      },
+    ],
+    "role": "assistant",
+  },
+  {
+    "content": [
+      {
+        "output": {
+          "type": "text",
+          "value": "result1",
+        },
+        "toolCallId": "call-1",
+        "toolName": "tool1",
+        "type": "tool-result",
+      },
+    ],
+    "role": "tool",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > result.response.messages > should contain assistant response message when there are no tool calls 1`] = `
+[
+  {
+    "content": [
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "id": "msg-0",
+    "role": "assistant",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain sources 1`] = `
+[
+  {
+    "id": "123",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example",
+    "type": "source",
+    "url": "https://example.com",
+  },
+  {
+    "id": "456",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value2",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example 2",
+    "type": "source",
+    "url": "https://example.com/2",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > result.steps > should add the reasoning from the model response to the step result 1`] = `
+[
+  DefaultStepResult {
+    "content": [
+      {
+        "providerMetadata": {
+          "testProvider": {
+            "signature": "signature",
+          },
+        },
+        "text": "I will open the conversation with witty banter.",
+        "type": "reasoning",
+      },
+      {
+        "providerMetadata": {
+          "testProvider": {
+            "redactedData": "redacted-reasoning-data",
+          },
+        },
+        "text": "",
+        "type": "reasoning",
+      },
+      {
+        "text": "Hello, world!",
+        "type": "text",
+      },
+    ],
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "request": {},
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "messages": [
+        {
+          "content": [
+            {
+              "providerOptions": {
+                "testProvider": {
+                  "signature": "signature",
+                },
+              },
+              "text": "I will open the conversation with witty banter.",
+              "type": "reasoning",
+            },
+            {
+              "providerOptions": {
+                "testProvider": {
+                  "redactedData": "redacted-reasoning-data",
+                },
+              },
+              "text": "",
+              "type": "reasoning",
+            },
+            {
+              "providerOptions": undefined,
+              "text": "Hello, world!",
+              "type": "text",
+            },
+          ],
+          "role": "assistant",
+        },
+      ],
+      "modelId": "mock-model-id",
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "usage": {
+      "cachedInputTokens": undefined,
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "reasoningTokens": undefined,
+      "totalTokens": 13,
+    },
+    "warnings": [],
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > generateText > result.text > should generate text 1`] = `[]`;
+
+exports[`Loop Tests > AISDK v5 > generateText > telemetry > should not record any telemetry data when not explicitly enabled 1`] = `[]`;
+
+exports[`Loop Tests > AISDK v5 > generateText > telemetry > should not record telemetry inputs / outputs when disabled 1`] = `
+[
+  {
+    "attributes": {
+      "ai.model.id": "mock-model-id",
+      "ai.model.provider": "mock-provider",
+      "ai.operationId": "ai.generateText",
+      "ai.response.finishReason": "stop",
+      "ai.settings.maxRetries": 2,
+      "ai.usage.completionTokens": 10,
+      "ai.usage.promptTokens": 3,
+      "operation.name": "ai.generateText",
+    },
+    "events": [],
+    "name": "ai.generateText",
+  },
+  {
+    "attributes": {
+      "ai.model.id": "mock-model-id",
+      "ai.model.provider": "mock-provider",
+      "ai.operationId": "ai.generateText.doGenerate",
+      "ai.response.finishReason": "stop",
+      "ai.response.id": "test-id",
+      "ai.response.model": "mock-model-id",
+      "ai.response.timestamp": "1970-01-01T00:00:00.000Z",
+      "ai.settings.maxRetries": 2,
+      "ai.usage.completionTokens": 10,
+      "ai.usage.promptTokens": 3,
+      "gen_ai.request.model": "mock-model-id",
+      "gen_ai.response.finish_reasons": [
+        "stop",
+      ],
+      "gen_ai.response.id": "test-id",
+      "gen_ai.response.model": "mock-model-id",
+      "gen_ai.system": "mock-provider",
+      "gen_ai.usage.input_tokens": 3,
+      "gen_ai.usage.output_tokens": 10,
+      "operation.name": "ai.generateText.doGenerate",
+    },
+    "events": [],
+    "name": "ai.generateText.doGenerate",
+  },
+  {
+    "attributes": {
+      "ai.operationId": "ai.toolCall",
+      "ai.toolCall.id": "call-1",
+      "ai.toolCall.name": "tool1",
+      "operation.name": "ai.toolCall",
+    },
+    "events": [],
+    "name": "ai.toolCall",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > options.stopWhen > 2 steps: initial, tool-result > should record telemetry data for each step 1`] = `
+[
+  {
+    "attributes": {
+      "aisdk.model.id": "mock-model-id",
+      "aisdk.model.provider": "mock-provider",
+      "mastra.operationId": "mastra.stream",
+      "operation.name": "mastra.stream",
+      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
+      "stream.response.finishReason": "stop",
+      "stream.response.text": "Hello, world!",
+      "stream.response.toolCalls": "[]",
+      "stream.settings.maxRetries": 2,
+      "stream.usage.cachedInputTokens": 3,
+      "stream.usage.inputTokens": 3,
+      "stream.usage.outputTokens": 10,
+      "stream.usage.reasoningTokens": 10,
+      "stream.usage.totalTokens": 23,
+    },
+    "events": [],
+    "name": "mastra.stream",
+  },
+  {
+    "attributes": {
+      "aisdk.model.id": "mock-model-id",
+      "aisdk.model.provider": "mock-provider",
+      "mastra.operationId": "mastra.stream.aisdk.doStream",
+      "operation.name": "mastra.stream.aisdk.doStream",
+      "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
+      "stream.prompt.toolChoice": "auto",
+      "stream.prompt.tools": [
+        "{"type":"function","name":"tool1","inputSchema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
+      ],
+      "stream.response.avgOutputTokensPerSecond": 40,
+      "stream.response.finishReason": "stop",
+      "stream.response.id": "id-1",
+      "stream.response.model": "mock-model-id",
+      "stream.response.msToFinish": 500,
+      "stream.response.msToFirstChunk": 100,
+      "stream.response.text": "Hello, world!",
+      "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
+      "stream.response.toolCalls": "[{"toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
+      "stream.settings.maxRetries": 2,
+      "stream.usage.inputTokens": 3,
+      "stream.usage.outputTokens": 10,
+      "stream.usage.totalTokens": 23,
+    },
+    "events": [
+      {
+        "attributes": {
+          "ai.response.msToFirstChunk": 100,
+        },
+        "name": "ai.stream.firstChunk",
+      },
+      {
+        "attributes": undefined,
+        "name": "ai.stream.finish",
+      },
+    ],
+    "name": "mastra.stream.aisdk.doStream",
+  },
+  {
+    "attributes": {
+      "mastra.operationId": "mastra.stream.toolCall",
+      "operation.name": "mastra.stream.toolCall",
+      "stream.toolCall.args": "{"value":"value"}",
+      "stream.toolCall.result": ""result1"",
+      "stream.toolCall.toolCallId": "call-1",
+      "stream.toolCall.toolName": "tool1",
+    },
+    "events": [],
+    "name": "mastra.stream.toolCall",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > options.transform > with base transformation > telemetry should record transformed data when enabled 1`] = `
+[
+  {
+    "attributes": {
+      "ai.model.id": "mock-model-id",
+      "ai.model.provider": "mock-provider",
+      "ai.operationId": "ai.streamText",
+      "ai.prompt": "{"prompt":"test-input"}",
+      "ai.response.finishReason": "stop",
+      "ai.response.providerMetadata": "{"testProvider":{"testKey":"TEST VALUE"}}",
+      "ai.response.text": "HELLO, WORLD!",
+      "ai.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"VALUE"}}]",
+      "ai.settings.maxRetries": 2,
+      "ai.usage.inputTokens": 3,
+      "ai.usage.outputTokens": 10,
+      "ai.usage.totalTokens": 13,
+      "operation.name": "ai.streamText",
+    },
+    "events": [],
+    "name": "ai.streamText",
+  },
+  {
+    "attributes": {
+      "ai.model.id": "mock-model-id",
+      "ai.model.provider": "mock-provider",
+      "ai.operationId": "ai.streamText.doStream",
+      "ai.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
+      "ai.prompt.toolChoice": "{"type":"auto"}",
+      "ai.prompt.tools": [
+        "{"type":"function","name":"tool1","inputSchema":{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}",
+      ],
+      "ai.response.avgOutputTokensPerSecond": 20,
+      "ai.response.finishReason": "stop",
+      "ai.response.id": "id-0",
+      "ai.response.model": "mock-model-id",
+      "ai.response.msToFinish": 500,
+      "ai.response.msToFirstChunk": 100,
+      "ai.response.providerMetadata": "{"testProvider":{"testKey":"testValue"}}",
+      "ai.response.text": "Hello, world!",
+      "ai.response.timestamp": "1970-01-01T00:00:00.000Z",
+      "ai.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","toolName":"tool1","input":{"value":"VALUE"}}]",
+      "ai.settings.maxRetries": 2,
+      "ai.usage.inputTokens": 3,
+      "ai.usage.outputTokens": 10,
+      "ai.usage.totalTokens": 13,
+      "operation.name": "ai.streamText.doStream",
+    },
+    "events": [
+      {
+        "attributes": {
+          "ai.response.msToFirstChunk": 100,
+        },
+        "name": "ai.stream.firstChunk",
+      },
+      {
+        "attributes": undefined,
+        "name": "ai.stream.finish",
+      },
+    ],
+    "name": "ai.streamText.doStream",
+  },
+  {
+    "attributes": {
+      "ai.operationId": "ai.toolCall",
+      "ai.toolCall.args": "{"value":"value"}",
+      "ai.toolCall.id": "call-1",
+      "ai.toolCall.name": "tool1",
+      "ai.toolCall.result": ""value-result"",
+      "operation.name": "ai.toolCall",
+    },
+    "events": [],
+    "name": "ai.toolCall",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.files > should contain files 1`] = `
+[
+  DefaultGeneratedFileWithType {
+    "base64Data": "Hello World",
+    "mediaType": "text/plain",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+  DefaultGeneratedFileWithType {
+    "base64Data": "QkFVRw==",
+    "mediaType": "image/jpeg",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchronous tool results 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "output": "value-result",
+    "providerExecuted": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-result",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "sig",
+      },
+    },
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "output": "value-result",
+    "providerExecuted": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-result",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.pipeUIMessageStreamToResponse > should mask error messages by default 1`] = `
+[
+  "data: {"type":"start"}
+
+",
+  "data: {"type":"start-step"}
+
+",
+  "data: {"type":"error","errorText":"error"}
+
+",
+  "data: {"type":"finish-step"}
+
+",
+  "data: {"type":"finish"}
+
+",
+  "data: [DONE]
+
+",
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.pipeUIMessageStreamToResponse > should support custom error messages 1`] = `
+[
+  "data: {"type":"start"}
+
+",
+  "data: {"type":"start-step"}
+
+",
+  "data: {"type":"error","errorText":"custom error message: Error: error"}
+
+",
+  "data: {"type":"finish-step"}
+
+",
+  "data: {"type":"finish"}
+
+",
+  "data: [DONE]
+
+",
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.reasoning > should contain reasoning from model response 1`] = `
+[
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "text": "I will open the conversation with witty banter.",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "redactedData": "redacted-reasoning-data",
+      },
+    },
+    "text": "",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "text": " Once the user has relaxed, I will pry for valuable information.",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "text": " I need to think about this problem carefully.",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "text": " The best solution requires careful consideration of all factors.",
+    "type": "reasoning",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.reasoningText > should contain reasoning text from model response 1`] = `"I will open the conversation with witty banter. Once the user has relaxed, I will pry for valuable information. I need to think about this problem carefully. The best solution requires careful consideration of all factors."`;
+
+exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
+[
+  {
+    "id": "123",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example",
+    "type": "source",
+    "url": "https://example.com",
+  },
+  {
+    "id": "456",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value2",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example 2",
+    "type": "source",
+    "url": "https://example.com/2",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.text > should resolve with full text 1`] = `"Hello, world!"`;
+
+exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should mask error messages by default 1`] = `
+[
+  {
+    "messageId": "msg-0",
+    "type": "start",
+  },
+  {
+    "type": "start-step",
+  },
+  {
+    "errorText": "error",
+    "type": "error",
+  },
+  {
+    "type": "finish-step",
+  },
+  {
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should send tool call, tool call stream start, tool call deltas, and tool result stream parts 1`] = `
+[
+  {
+    "messageId": "msg-0",
+    "type": "start",
+  },
+  {
+    "type": "start-step",
+  },
+  {
+    "dynamic": false,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-input-start",
+  },
+  {
+    "inputTextDelta": "{ "value":",
+    "toolCallId": "call-1",
+    "type": "tool-input-delta",
+  },
+  {
+    "inputTextDelta": " "value" }",
+    "toolCallId": "call-1",
+    "type": "tool-input-delta",
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-input-available",
+  },
+  {
+    "output": "value-result",
+    "toolCallId": "call-1",
+    "type": "tool-output-available",
+  },
+  {
+    "type": "finish-step",
+  },
+  {
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.toUIMessageStream > should support custom error messages 1`] = `
+[
+  {
+    "messageId": "msg-0",
+    "type": "start",
+  },
+  {
+    "type": "start-step",
+  },
+  {
+    "errorText": "custom error message: Error: error",
+    "type": "error",
+  },
+  {
+    "type": "finish-step",
+  },
+  {
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should mask error messages by default 1`] = `
+[
+  "data: {"type":"start","messageId":"id-0"}
+
+",
+  "data: {"type":"start-step"}
+
+",
+  "data: {"type":"error","errorText":"error"}
+
+",
+  "data: {"type":"finish-step"}
+
+",
+  "data: {"type":"finish"}
+
+",
+  "data: [DONE]
+
+",
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > result.toUIMessageStreamResponse > should support custom error messages 1`] = `
+[
+  "data: {"type":"start","messageId":"id-0"}
+
+",
+  "data: {"type":"start-step"}
+
+",
+  "data: {"type":"error","errorText":"custom error message: Error: error"}
+
+",
+  "data: {"type":"finish-step"}
+
+",
+  "data: {"type":"finish"}
+
+",
+  "data: [DONE]
+
+",
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > telemetry > should not record any telemetry data when not explicitly enabled 1`] = `[]`;
+
+exports[`Loop Tests > AISDK v5 > telemetry > should not record telemetry inputs / outputs when disabled 1`] = `
+[
+  {
+    "attributes": {
+      "aisdk.model.id": "mock-model-id",
+      "aisdk.model.provider": "mock-provider",
+      "mastra.operationId": "mastra.stream",
+      "operation.name": "mastra.stream",
+      "stream.response.finishReason": "stop",
+      "stream.settings.maxRetries": 2,
+      "stream.usage.inputTokens": 3,
+      "stream.usage.outputTokens": 10,
+      "stream.usage.totalTokens": 13,
+    },
+    "events": [],
+    "name": "mastra.stream",
+  },
+  {
+    "attributes": {
+      "aisdk.model.id": "mock-model-id",
+      "aisdk.model.provider": "mock-provider",
+      "mastra.operationId": "mastra.stream.aisdk.doStream",
+      "operation.name": "mastra.stream.aisdk.doStream",
+      "stream.response.avgOutputTokensPerSecond": 20,
+      "stream.response.finishReason": "stop",
+      "stream.response.id": "id-0",
+      "stream.response.model": "mock-model-id",
+      "stream.response.msToFinish": 500,
+      "stream.response.msToFirstChunk": 100,
+      "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
+      "stream.settings.maxRetries": 2,
+      "stream.usage.inputTokens": 3,
+      "stream.usage.outputTokens": 10,
+      "stream.usage.totalTokens": 13,
+    },
+    "events": [
+      {
+        "attributes": {
+          "ai.response.msToFirstChunk": 100,
+        },
+        "name": "ai.stream.firstChunk",
+      },
+      {
+        "attributes": undefined,
+        "name": "ai.stream.finish",
+      },
+    ],
+    "name": "mastra.stream.aisdk.doStream",
+  },
+  {
+    "attributes": {
+      "mastra.operationId": "mastra.stream.toolCall",
+      "operation.name": "mastra.stream.toolCall",
+      "stream.toolCall.args": "{"value":"value"}",
+      "stream.toolCall.result": ""value-result"",
+      "stream.toolCall.toolCallId": "call-1",
+      "stream.toolCall.toolName": "tool1",
+    },
+    "events": [],
+    "name": "mastra.stream.toolCall",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool calls 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v2",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;

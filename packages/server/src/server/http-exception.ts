@@ -54,12 +54,6 @@ type ServerErrorStatusCode = 500 | 501 | 502 | 503 | 504 | 505 | 506 | 507 | 508
 export type UnofficialStatusCode = -1;
 
 /**
- * @deprecated
- * Use `UnofficialStatusCode` instead.
- */
-export type UnOfficalStatusCode = UnofficialStatusCode;
-
-/**
  * If you want to use an unofficial status, use `UnofficialStatusCode`.
  */
 export type StatusCode =
@@ -75,11 +69,13 @@ export type StatusCode =
  * @property res - Optional response object to use.
  * @property message - Optional custom error message.
  * @property cause - Optional cause of the error.
+ * @property stack - Optional stack trace for the error.
  */
 type HTTPExceptionOptions = {
   res?: Response;
   message?: string;
   cause?: unknown;
+  stack?: string;
 };
 
 /**
@@ -121,6 +117,7 @@ export class HTTPException extends Error {
     super(options?.message, { cause: options?.cause });
     this.res = options?.res;
     this.status = status;
+    this.stack = options?.stack || this.stack;
   }
 
   /**

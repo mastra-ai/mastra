@@ -1,5 +1,5 @@
 // To setup a Opensearch server, run the docker compose file in the opensearch directory
-import type { QueryResult } from '@mastra/core';
+import type { QueryResult } from '@mastra/core/vector';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OpenSearchVector } from './index';
@@ -38,8 +38,8 @@ describe('OpenSearchVector', () => {
   const testIndexName2 = 'test-index2-' + Date.now();
 
   beforeAll(async () => {
-    // Initialize PgVector
-    vectorDB = new OpenSearchVector({ url });
+    // Initialize OpenSearchVector
+    vectorDB = new OpenSearchVector({ url, id: 'opensearch-test' });
   });
 
   afterAll(async () => {

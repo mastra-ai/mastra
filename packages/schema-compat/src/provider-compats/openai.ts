@@ -1,11 +1,13 @@
-import type { LanguageModelV1 } from 'ai';
-import type { ZodTypeAny } from 'zod';
+import { z } from 'zod';
+import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatLayer, isArr, isObj, isOptional, isString, isUnion } from '../schema-compatibility';
-import type { StringCheckType } from '../schema-compatibility';
+import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ModelInformation } from '../types';
+import { isOptional, isObj, isUnion, isArr, isString } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: LanguageModelV1) {
+  constructor(model: ModelInformation) {
     super(model);
   }
 
@@ -24,8 +26,10 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     return false;
   }
 
-  processZodType(value: ZodTypeAny): ZodTypeAny {
-    if (isOptional(value)) {
+  processZodType(value: ZodTypeV3): ZodTypeV3;
+  processZodType(value: ZodTypeV4): ZodTypeV4;
+  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+    if (isOptional(z)(value)) {
       return this.defaultZodOptionalHandler(value, [
         'ZodObject',
         'ZodArray',
@@ -35,22 +39,27 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
         'ZodUndefined',
         'ZodTuple',
       ]);
-    } else if (isObj(value)) {
+    } else if (isObj(z)(value)) {
       return this.defaultZodObjectHandler(value);
-    } else if (isUnion(value)) {
+    } else if (isUnion(z)(value)) {
       return this.defaultZodUnionHandler(value);
-    } else if (isArr(value)) {
+    } else if (isArr(z)(value)) {
       return this.defaultZodArrayHandler(value);
-    } else if (isString(value)) {
+    } else if (isString(z)(value)) {
       const model = this.getModel();
-      const checks: StringCheckType[] = ['emoji'];
+      const checks = ['emoji'] as const;
 
       if (model.modelId.includes('gpt-4o-mini')) {
-        checks.push('regex');
+        return this.defaultZodStringHandler(value, ['emoji', 'regex']);
       }
+
       return this.defaultZodStringHandler(value, checks);
     }
 
-    return this.defaultUnsupportedZodTypeHandler(value, ['ZodNever', 'ZodUndefined', 'ZodTuple']);
+    return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>, [
+      'ZodNever',
+      'ZodUndefined',
+      'ZodTuple',
+    ]);
   }
 }

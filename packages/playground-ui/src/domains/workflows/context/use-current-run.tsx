@@ -5,36 +5,39 @@ export type Step = {
   error?: any;
   startedAt: number;
   endedAt?: number;
-  status: 'running' | 'success' | 'failed' | 'suspended';
+  status: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
   output?: any;
   input?: any;
   resumeData?: any;
+  suspendOutput?: any;
+  suspendPayload?: any;
 };
 
 type UseCurrentRunReturnType = {
   steps: Record<string, Step>;
-  isRunning: boolean;
   runId?: string;
 };
 
 export const useCurrentRun = (): UseCurrentRunReturnType => {
   const context = useContext(WorkflowRunContext);
 
-  const workflowCurrentSteps = context.result?.payload?.workflowState?.steps ?? {};
-  const steps = Object.entries(workflowCurrentSteps).reduce((acc, [key, value]) => {
+  const workflowCurrentSteps = context.result?.steps ?? {};
+  const steps = Object.entries(workflowCurrentSteps).reduce((acc, [key, value]: [string, any]) => {
     return {
       ...acc,
       [key]: {
-        error: value.error,
+        error: 'error' in value ? value.error : undefined,
         startedAt: value.startedAt,
-        endedAt: value.endedAt,
+        endedAt: 'endedAt' in value ? value.endedAt : undefined,
         status: value.status,
-        output: value.output,
+        output: 'output' in value ? value.output : undefined,
         input: value.payload,
-        resumeData: value.resumePayload,
+        resumeData: 'resumePayload' in value ? value.resumePayload : undefined,
+        suspendOutput: 'suspendOutput' in value ? value.suspendOutput : undefined,
+        suspendPayload: 'suspendPayload' in value ? value.suspendPayload : undefined,
       },
     };
   }, {});
 
-  return { steps, isRunning: Boolean(context.payload), runId: context.result?.runId };
+  return { steps, runId: context.runId };
 };

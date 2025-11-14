@@ -103,8 +103,8 @@ const logger = new Logger({
 logger.info('Hello world', { metadata: 'value' });
 
 // Query logs
-const allLogs = await fileTransport.getLogs();
-const runLogs = await upstashTransport.getLogsByRunId({ runId: 'abc-123' });
+const allLogs = await fileTransport.listLogs();
+const runLogs = await upstashTransport.listLogsByRunId({ runId: 'abc-123' });
 ```
 
 ## Log Message Format
@@ -129,7 +129,6 @@ interface BaseLogMessage {
 Both transports include robust error handling:
 
 - File Transport:
-
   - Validates file path existence
   - Handles stream errors
   - Graceful cleanup on destroy

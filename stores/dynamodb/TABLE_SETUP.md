@@ -22,7 +22,6 @@ _(Note: These GSIs (Global Secondary Indexes) allow efficient querying on attrib
 ### GSI Usage Details:
 
 - **GSI1 (Index Name: `gsi1`)**: This index is used by multiple entities for common lookup patterns:
-
   - `threadEntity`: Query by `resourceId` (`byResource` index).
   - `messageEntity`: Query by `threadId` (`byThread` index).
   - `traceEntity`: Query by `name` (`byName` index).

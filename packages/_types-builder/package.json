@@ -1,0 +1,20 @@
+{
+  "name": "@internal/types-builder",
+  "version": "0.0.28",
+  "description": "",
+  "type": "module",
+  "main": "src/index.js",
+  "private": true,
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "globby": "^14.1.0",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:"
+  }
+}

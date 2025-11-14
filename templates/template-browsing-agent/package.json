@@ -1,0 +1,34 @@
+{
+  "name": "template-browsing-agent",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "description": "A powerful integration that combines Browserbase's Stagehand with Mastra for advanced web automation, scraping, and AI-powered web interactions. Features include web navigation, element observation, action execution, data extraction, and intelligent session management.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/loggers": "beta",
+    "@mastra/memory": "beta",
+    "@mastra/observability": "beta",
+    "@browserbasehq/stagehand": "^2.5.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.4",
+    "mastra": "beta",
+    "dotenv": "^17.2.1",
+    "typescript": "^5.8.3"
+  }
+}

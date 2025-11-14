@@ -23,14 +23,14 @@ pnpm add @mastra/auth-firebase
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 
 // Initialize with default configuration
-const auth = new MastraAuthFirebase();
+const firebaseAuth = new MastraAuthFirebase();
 
 // Or with custom options
-const auth = new MastraAuthFirebase({
+const firebaseAuth = new MastraAuthFirebase({
   serviceAccount: 'path/to/service-account.json',
   databaseId: 'your-database-id',
 });
@@ -39,7 +39,7 @@ const auth = new MastraAuthFirebase({
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth,
+    auth: firebaseAuth,
   },
 });
 ```
@@ -61,7 +61,3 @@ The package can be configured through constructor options or environment variabl
 ## User Authorization
 
 The package uses Firestore to manage user access. It expects a collection named `user_access` with documents keyed by user UIDs. The presence of a document in this collection determines whether a user is authorized.
-
-## License
-
-Elastic-2.0

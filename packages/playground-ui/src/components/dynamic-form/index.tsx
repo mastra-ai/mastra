@@ -2,12 +2,12 @@
 
 import { Loader2 } from 'lucide-react';
 import { Button } from '../../ds/components/Button';
-import { ScrollArea } from '../ui/scroll-area';
-import { AutoForm, CustomZodProvider } from '@/components/ui/autoform';
+import { AutoForm } from '@/components/ui/autoform';
 import type { ExtendableAutoFormProps } from '@autoform/react';
-import z, { ZodObject } from 'zod';
+import z, { ZodObject, ZodIntersection } from 'zod';
 import { Label } from '../ui/label';
 import { Icon } from '@/ds/icons';
+import { CustomZodProvider } from '../ui/autoform/zodProvider';
 
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
@@ -23,6 +23,11 @@ function isEmptyZodObject(schema: unknown): boolean {
   if (schema instanceof ZodObject) {
     return Object.keys(schema.shape).length === 0;
   }
+
+  if (schema instanceof ZodIntersection) {
+    return isEmptyZodObject(schema._def.left) || isEmptyZodObject(schema._def.right);
+  }
+
   return false;
 }
 
@@ -56,14 +61,15 @@ export function DynamicForm<T extends z.ZodSchema>({
 
   const schemaProvider = new CustomZodProvider(normalizedSchema(schema) as any);
 
-  const formProps: ExtendableAutoFormProps<z.infer<T>> = {
+  const formProps: ExtendableAutoFormProps<any> = {
     schema: schemaProvider,
-    onSubmit: async values => {
+    onSubmit: async (values: any) => {
       await onSubmit?.(isNotZodObject ? values['\u200B'] || {} : values);
     },
-    defaultValues: isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : defaultValues,
+    defaultValues: isNotZodObject ? (defaultValues ? { '\u200B': defaultValues } : undefined) : (defaultValues as any),
     formProps: {
-      className: '',
+      className,
+      noValidate: true,
     },
     uiComponents: {
       SubmitButton: ({ children }) =>

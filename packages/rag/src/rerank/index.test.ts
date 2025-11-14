@@ -1,6 +1,6 @@
 import { cohere } from '@ai-sdk/cohere';
-import { CohereRelevanceScorer } from '@mastra/core/relevance';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { CohereRelevanceScorer } from './relevance';
 
 import { rerank } from '.';
 

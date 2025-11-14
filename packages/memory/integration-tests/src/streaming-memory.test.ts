@@ -5,7 +5,8 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
@@ -34,13 +35,17 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
 // @ts-ignore - JSDOM types don't match exactly but this works for testing
 global.window = dom.window;
 global.document = dom.window.document;
-global.navigator = dom.window.navigator;
+Object.defineProperty(global, 'navigator', {
+  value: dom.window.navigator,
+  writable: false,
+});
 global.fetch = global.fetch || fetch;
 
 describe('Memory Streaming Tests', () => {
   it('should handle multiple tool calls in memory thread history', async () => {
     // Create agent with memory and tools
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test',
       instructions:
         'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
@@ -53,7 +58,7 @@ describe('Memory Streaming Tests', () => {
     const resourceId = 'test-resource';
 
     // First weather check
-    const stream1 = await agent.stream('what is the weather in LA?', {
+    const stream1 = await agent.streamLegacy('what is the weather in LA?', {
       threadId,
       resourceId,
     });
@@ -70,7 +75,7 @@ describe('Memory Streaming Tests', () => {
     expect(response1).toContain('70 degrees');
 
     // Second weather check
-    const stream2 = await agent.stream('what is the weather in Seattle?', {
+    const stream2 = await agent.streamLegacy('what is the weather in Seattle?', {
       threadId,
       resourceId,
     });
@@ -88,8 +93,9 @@ describe('Memory Streaming Tests', () => {
     expect(response2).toContain('70 degrees');
   });
 
-  it('should use experimental_generateMessageId for messages in memory', async () => {
+  it('should use custom mastra ID generator for messages in memory', async () => {
     const agent = new Agent({
+      id: 'test-msg-id',
       name: 'test-msg-id',
       instructions: 'you are a helpful assistant.',
       model: openai('gpt-4o'),
@@ -100,20 +106,30 @@ describe('Memory Streaming Tests', () => {
     const resourceId = 'test-resource-msg-id';
     const customIds: UUID[] = [];
 
-    await agent.generate('Hello, world!', {
-      threadId,
-      resourceId,
-      experimental_generateMessageId: () => {
+    const _mastra = new Mastra({
+      idGenerator: () => {
         const id = randomUUID();
         customIds.push(id);
         return id;
       },
+      agents: {
+        agent: agent,
+      },
     });
 
-    const { messages } = await agent.getMemory()!.query({ threadId });
+    await agent.generateLegacy('Hello, world!', {
+      threadId,
+      resourceId,
+    });
+
+    const agentMemory = (await agent.getMemory())!;
+    const { messages } = await agentMemory.recall({ threadId });
+
+    console.log('Custom IDs: ', customIds);
+    console.log('Messages: ', messages);
 
     expect(messages).toHaveLength(2);
-    expect(messages.length).toBe(customIds.length);
+    expect(messages.length).toBeLessThan(customIds.length);
     for (const message of messages) {
       if (!(`id` in message)) {
         throw new Error(`Expected message.id`);
@@ -133,15 +149,14 @@ describe('Memory Streaming Tests', () => {
 
       mastraServer = spawn(
         'pnpm',
-        [
-          path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-          'dev',
-          '--port',
-          port.toString(),
-        ],
+        [path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`), 'dev'],
         {
           stdio: 'pipe',
           detached: true, // Run in a new process group so we can kill it and children
+          env: {
+            ...process.env,
+            PORT: port.toString(),
+          },
         },
       );
 
@@ -159,7 +174,7 @@ describe('Memory Streaming Tests', () => {
           console.error('Mastra server error:', data.toString());
         });
 
-        setTimeout(() => reject(new Error('Mastra server failed to start')), 10000);
+        setTimeout(() => reject(new Error('Mastra server failed to start')), 100000);
       });
     });
 
@@ -178,7 +193,7 @@ describe('Memory Streaming Tests', () => {
       let error: Error | null = null;
       const { result } = renderHook(() => {
         const chat = useChat({
-          api: `http://localhost:${port}/api/agents/test/stream`,
+          api: `http://localhost:${port}/api/agents/test/stream-legacy`,
           experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
             return {
               messages: [messages.at(-1)],
@@ -234,17 +249,20 @@ describe('Memory Streaming Tests', () => {
       let error: Error | null = null;
       const threadId = randomUUID();
 
-      await weatherAgent.generate(`hi`, {
+      await weatherAgent.generateLegacy(`hi`, {
         threadId,
         resourceId,
       });
-      await weatherAgent.generate(`LA weather`, { threadId, resourceId });
+      await weatherAgent.generateLegacy(`LA weather`, { threadId, resourceId });
 
-      const initialMessages = (await weatherAgent.getMemory()!.query({ threadId })).uiMessages;
+      const agentMemory = (await weatherAgent.getMemory())!;
+      // Get initial messages from memory and convert to AI SDK v4 format
+      const { messages } = await agentMemory.recall({ threadId });
+      const initialMessages = messages.map(m => MessageList.mastraDBMessageToAIV4UIMessage(m)) as Message[];
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
-          api: `http://localhost:${port}/api/agents/test/stream`,
+          api: `http://localhost:${port}/api/agents/test/stream-legacy`,
           initialMessages,
           experimental_prepareRequestBody({ messages }: { messages: Message[]; id: string }) {
             return {

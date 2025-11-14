@@ -13,3 +13,16 @@ export function validateBody(body: Record<string, unknown>) {
     throw new HTTPException(400, { message: Object.values(errorResponse)[0] });
   }
 }
+
+/**
+ * sanitizes the body by removing disallowed keys.
+ * @param body body to sanitize
+ * @param disallowedKeys keys to remove from the body
+ */
+export function sanitizeBody(body: Record<string, unknown>, disallowedKeys: string[]) {
+  for (const key of disallowedKeys) {
+    if (key in body) {
+      delete body[key];
+    }
+  }
+}

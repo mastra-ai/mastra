@@ -1,14 +1,16 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 
 import { Text } from '@/components/ui/text';
 
 import { cn } from '@/lib/utils';
 
-import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, Footprints } from 'lucide-react';
+import { Badge } from '@/ds/components/Badge';
+import { Icon } from '@/ds/icons';
+import { BADGE_COLORS, BADGE_ICONS } from './workflow-node-badges';
 
 export type AfterNode = Node<
   {
@@ -30,18 +32,14 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
 
       <CollapsibleTrigger className="flex items-center justify-between w-full">
-        <Text
-          size={'xs'}
-          weight="medium"
-          className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px] w-fit"
-        >
-          AFTER
-        </Text>
-        <ChevronDown
-          className={cn('w-4 h-4 transition-transform', {
-            'transform rotate-180': open,
-          })}
-        />
+        <Badge icon={<BADGE_ICONS.after className="text-current" style={{ color: BADGE_COLORS.after }} />}>AFTER</Badge>
+        <Icon>
+          <ChevronDown
+            className={cn('transition-transform text-icon3', {
+              'transform rotate-180': open,
+            })}
+          />
+        </Icon>
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2">
         {steps.map(step => (

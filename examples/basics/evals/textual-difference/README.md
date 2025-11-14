@@ -42,12 +42,10 @@ The Textual Difference metric evaluates text similarity by analyzing:
 The example includes three scenarios:
 
 1. Identical Texts: Testing perfect matches
-
    - Same text in both input and output
    - Demonstrates maximum similarity score
 
 2. Minor Differences: Testing small variations
-
    - Few word changes between texts
    - Shows how small edits affect the score
 

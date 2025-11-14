@@ -12,7 +12,8 @@ import { publishPackages } from '../_local-registry-setup/publish';
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
-  const teardown = await prepareMonorepo(rootDir, globby);
+  const tag = 'monorepo-test';
+  const teardown = await prepareMonorepo(rootDir, globby, tag);
 
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
   const port = await getPort();
@@ -22,7 +23,6 @@ export default async function setup(project: TestProject) {
   await copyFile(join(__dirname, '../_local-registry-setup/verdaccio.yaml'), join(registryLocation, 'verdaccio.yaml'));
   const registry = await startRegistry(verdaccioPath, port, registryLocation);
 
-  const tag = 'monorepo-test';
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 

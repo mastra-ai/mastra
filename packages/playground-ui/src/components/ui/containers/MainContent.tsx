@@ -50,7 +50,7 @@ export function MainContentContent({
           'items-start content-start': !isCentered && !isDivided && !hasLeftServiceColumn,
           'grid place-items-center': isCentered,
           'grid-cols-[1fr_1fr]': isDivided && !hasLeftServiceColumn,
-          'grid-cols-[auto_1fr_1fr]': isDivided && hasLeftServiceColumn,
+          'grid-cols-[12rem_1fr_1fr]': isDivided && hasLeftServiceColumn,
           'grid-cols-[auto_1fr]': !isDivided && hasLeftServiceColumn,
         },
         className,

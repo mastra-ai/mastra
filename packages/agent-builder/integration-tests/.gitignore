@@ -1,0 +1,11 @@
+memory.db
+*.db
+*.db*
+node_modules
+temp
+*.log
+.DS_Store
+
+.env.test
+.env
+integration-projects

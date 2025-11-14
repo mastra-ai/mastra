@@ -18,6 +18,16 @@ interface CommandData {
 
 export type CLI_ORIGIN = 'mastra-cloud' | 'oss';
 
+let analyticsInstance: PosthogAnalytics | null = null;
+
+export function getAnalytics(): PosthogAnalytics | null {
+  return analyticsInstance;
+}
+
+export function setAnalytics(instance: PosthogAnalytics): void {
+  analyticsInstance = instance;
+}
+
 export class PosthogAnalytics {
   private sessionId: string;
   private client?: PostHog;
@@ -126,6 +136,25 @@ export class PosthogAnalytics {
         ...this.getSystemProperties(),
       },
     });
+  }
+
+  trackEvent(eventName: string, properties?: Record<string, any>): void {
+    try {
+      if (!this.client) {
+        return;
+      }
+
+      this.client.capture({
+        distinctId: this.distinctId,
+        event: eventName,
+        properties: {
+          ...this.getSystemProperties(),
+          ...properties,
+        },
+      });
+    } catch {
+      //swallow
+    }
   }
 
   trackCommand(options: {

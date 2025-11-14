@@ -4,11 +4,11 @@ import { Mastra } from '@mastra/core/mastra';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { getLogsHandler, getLogsByRunIdHandler, getLogTransports } from './logs';
+import { listLogsHandler, listLogsByRunIdHandler, listLogTransports } from './logs';
 
 type MockedLogger = {
-  getLogsByRunId: Mock<IMastraLogger['getLogsByRunId']>;
-  getLogs: Mock<IMastraLogger['getLogs']>;
+  listLogsByRunId: Mock<IMastraLogger['listLogsByRunId']>;
+  listLogs: Mock<IMastraLogger['listLogs']>;
 };
 
 function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
@@ -33,23 +33,31 @@ describe('Logs Handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // @ts-expect-error - mockLogger is not typed
     mockLogger = {
-      getLogsByRunId: vi.fn(),
-      getLogs: vi.fn(),
+      listLogsByRunId: vi.fn(),
+      listLogs: vi.fn(),
       transports: new Map<string, unknown>(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      error: vi.fn(),
+      cleanup: vi.fn(),
+      trackException: vi.fn(),
+      getTransports: vi.fn(() => mockLogger.transports ?? new Map<string, unknown>()),
     } as unknown as MockedLogger & {
       transports: Record<string, unknown>;
+      getTransports: () => Map<string, unknown>;
     };
-    mockLogger.getTransports = vi.fn(() => mockLogger.transports ?? new Map<string, unknown>());
 
     mastra = new Mastra({
       logger: mockLogger as unknown as IMastraLogger,
     });
   });
 
-  describe('getLogsHandler', () => {
+  describe('listLogsHandler', () => {
     it('should throw error when transportId is not provided', async () => {
-      await expect(getLogsHandler({ mastra })).rejects.toThrow(
+      await expect(listLogsHandler({ mastra })).rejects.toThrow(
         new HTTPException(400, { message: 'Argument "transportId" is required' }),
       );
     });
@@ -57,14 +65,14 @@ describe('Logs Handlers', () => {
     it('should get logs successfully', async () => {
       const mockLogs: BaseLogMessage[] = [createLog({})];
 
-      mockLogger.getLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
-      const result = await getLogsHandler({
+      mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+      const result = await listLogsHandler({
         mastra,
         transportId: 'test-transport',
       });
 
       expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
-      expect(mockLogger.getLogs).toHaveBeenCalledWith('test-transport', {
+      expect(mockLogger.listLogs).toHaveBeenCalledWith('test-transport', {
         filters: undefined,
         fromDate: undefined,
         logLevel: undefined,
@@ -75,8 +83,8 @@ describe('Logs Handlers', () => {
     it('should get logs successfully with params', async () => {
       const mockLogs: BaseLogMessage[] = [createLog({})];
 
-      mockLogger.getLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
-      const result = await getLogsHandler({
+      mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
+      const result = await listLogsHandler({
         mastra,
         transportId: 'test-transport',
         params: {
@@ -85,16 +93,16 @@ describe('Logs Handlers', () => {
       });
 
       expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
-      expect(mockLogger.getLogs).toHaveBeenCalledWith('test-transport', {
+      expect(mockLogger.listLogs).toHaveBeenCalledWith('test-transport', {
         logLevel: LogLevel.INFO,
       });
     });
   });
 
-  describe('getLogsByRunIdHandler', () => {
+  describe('listLogsByRunIdHandler', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
-        getLogsByRunIdHandler({
+        listLogsByRunIdHandler({
           mastra,
           transportId: 'test-transport',
         }),
@@ -103,7 +111,7 @@ describe('Logs Handlers', () => {
 
     it('should throw error when transportId is not provided', async () => {
       await expect(
-        getLogsByRunIdHandler({
+        listLogsByRunIdHandler({
           mastra,
           runId: 'test-run',
         }),
@@ -113,35 +121,35 @@ describe('Logs Handlers', () => {
     it('should get logs by run ID successfully', async () => {
       const mockLogs: BaseLogMessage[] = [createLog({})];
 
-      mockLogger.getLogsByRunId.mockResolvedValue({
+      mockLogger.listLogsByRunId.mockResolvedValue({
         logs: mockLogs,
         total: 1,
         page: 1,
         perPage: 100,
         hasMore: false,
       });
-      const result = await getLogsByRunIdHandler({
+      const result = await listLogsByRunIdHandler({
         mastra,
         runId: 'test-run',
         transportId: 'test-transport',
       });
 
       expect(result).toEqual({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
-      expect(mockLogger.getLogsByRunId).toHaveBeenCalledWith({
+      expect(mockLogger.listLogsByRunId).toHaveBeenCalledWith({
         runId: 'test-run',
         transportId: 'test-transport',
       });
     });
   });
 
-  describe('getLogTransports', () => {
+  describe('listLogTransports', () => {
     it('should get log transports successfully', async () => {
       mockLogger.transports = new Map([
         ['console', {}],
         ['file', {}],
       ]) as unknown as Record<string, unknown>;
 
-      const result = await getLogTransports({ mastra });
+      const result = await listLogTransports({ mastra });
 
       expect(result).toEqual({
         transports: ['console', 'file'],
@@ -151,7 +159,7 @@ describe('Logs Handlers', () => {
     it('should handle empty transports', async () => {
       mockLogger.transports = new Map<string, unknown>();
 
-      const result = await getLogTransports({ mastra });
+      const result = await listLogTransports({ mastra });
 
       expect(result).toEqual({
         transports: [],

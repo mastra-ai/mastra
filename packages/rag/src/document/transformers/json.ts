@@ -1,12 +1,17 @@
 import { Document } from '../schema';
+import type { JsonChunkOptions } from '../types';
 
 export class RecursiveJsonTransformer {
   private maxSize: number;
   private minSize: number;
+  private ensureAscii: boolean;
+  private convertLists: boolean;
 
-  constructor({ maxSize = 2000, minSize }: { maxSize: number; minSize?: number }) {
+  constructor({ maxSize = 2000, minSize, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
     this.maxSize = maxSize;
     this.minSize = minSize ?? Math.max(maxSize - 200, 50);
+    this.ensureAscii = ensureAscii;
+    this.convertLists = convertLists;
   }
 
   private static jsonSize(data: Record<string, any>): number {
@@ -170,8 +175,8 @@ export class RecursiveJsonTransformer {
   private isWithinSizeLimit(value: any, currentSize: number = 0): boolean {
     const size = RecursiveJsonTransformer.jsonSize(value);
     // If this is a new chunk (currentSize = 0), allow items smaller than maxSize
-    // If adding to existing chunk, ensure we're above minSize before splitting
-    return currentSize === 0 ? size <= this.maxSize : size + currentSize <= this.maxSize || currentSize < this.minSize;
+    // If adding to existing chunk, ensure total size doesn't exceed maxSize
+    return currentSize === 0 ? size <= this.maxSize : size + currentSize <= this.maxSize;
   }
 
   /**

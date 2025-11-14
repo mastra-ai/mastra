@@ -1,6 +1,5 @@
 import { fs, vol } from 'memfs';
 import { describe, beforeEach, expect, vi, test } from 'vitest';
-import { DepsService } from '../../services/service.deps';
 
 beforeEach(() => {
   vol.reset();
@@ -12,7 +11,7 @@ vi.mock('./utils', () => ({
   writeIndexFile: vi.fn(),
   createComponentsDir: vi.fn(),
   writeAPIKey: vi.fn(),
-  getAPIKey: vi.fn(),
+  getAPIKey: vi.fn(() => 'OPENAI_API_KEY'),
   createMastraDir: vi.fn(),
   writeCodeSample: vi.fn(),
   checkDependencies: vi.fn(),
@@ -29,16 +28,41 @@ vi.mock('../../utils/logger', () => ({
   },
 }));
 
+vi.mock('../utils', () => ({
+  getPackageManagerInstallCommand: vi.fn(() => 'add'),
+}));
+
+vi.mock('./mcp-docs-server-install', () => ({
+  installMastraDocsMCPServer: vi.fn(),
+}));
+
+vi.mock('node:child_process', () => ({
+  default: {
+    exec: vi.fn((cmd, callback) => callback(null, { stdout: '', stderr: '' })),
+  },
+  exec: vi.fn((cmd, callback) => callback(null, { stdout: '', stderr: '' })),
+}));
+
+vi.mock('node:util', () => ({
+  default: {
+    promisify: vi.fn(() => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
+  },
+  promisify: vi.fn(() => vi.fn(() => Promise.resolve({ stdout: '', stderr: '' }))),
+}));
+
 const utils = await import('./utils');
 const { init } = await import('./init');
 
 vi.mock('../../services/service.deps', () => {
+  class MockDepsService {
+    packageManager = 'pnpm';
+    
+    checkDependencies = vi.fn(() => Promise.resolve('ok'));
+    installPackages = vi.fn(() => Promise.resolve());
+  }
+  
   return {
-    DepsService: vi.fn().mockImplementation(() => {
-      return {
-        checkDependencies: vi.fn(() => Promise.resolve('ok')),
-      };
-    }),
+    DepsService: MockDepsService,
   };
 });
 
@@ -84,7 +108,7 @@ describe('CLI', () => {
     vi.spyOn(utils, 'writeIndexFile').mockImplementation(async ({ dirPath, addExample }) => {
       const content = addExample
         ? `
-        import { Mastra } from '@mastra/core';
+        import { Mastra } from '@mastra/core/mastra';
         export const mastra = new Mastra({});
       `
         : ``;
@@ -105,8 +129,6 @@ describe('CLI', () => {
   });
 
   test('generates env file', async () => {
-    DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
-
     vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
       const dirPath = `${directory}/mastra`;
       fs.mkdirSync(dirPath, { recursive: true });
@@ -175,8 +197,6 @@ describe('CLI', () => {
   // });
 
   test('stops initialization if mastra is already setup', async () => {
-    DepsService.prototype.checkDependencies = vi.fn(() => Promise.resolve('ok'));
-
     fs.mkdirSync('/mock/mastra', { recursive: true });
 
     vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {

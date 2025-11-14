@@ -1,8 +1,8 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { MastraAgentRelevanceScorer, CohereRelevanceScorer } from '@mastra/core/relevance';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
 import { Big } from 'big.js';
+import { MastraAgentRelevanceScorer, CohereRelevanceScorer } from './relevance';
 
 // Default weights for different scoring components (must add up to 1)
 const DEFAULT_WEIGHTS = {
@@ -48,7 +48,7 @@ export interface RerankerFunctionOptions {
 
 export interface RerankConfig {
   options?: RerankerOptions;
-  model: MastraLanguageModel;
+  model: MastraLanguageModel | RelevanceScoreProvider;
 }
 
 // Calculate position score based on position in original list
@@ -83,19 +83,17 @@ function adjustScores(score: number, queryAnalysis: { magnitude: number; dominan
   return score * magnitudeAdjustment * featureStrengthAdjustment;
 }
 
-// Takes in a list of results from a vector store and reranks them based on semantic, vector, and position scores
-export async function rerank(
-  results: QueryResult[],
-  query: string,
-  model: MastraLanguageModel,
-  options: RerankerFunctionOptions,
-): Promise<RerankResult[]> {
-  let semanticProvider: RelevanceScoreProvider;
-  if (model.modelId === 'rerank-v3.5') {
-    semanticProvider = new CohereRelevanceScorer(model.modelId);
-  } else {
-    semanticProvider = new MastraAgentRelevanceScorer(model.provider, model);
-  }
+async function executeRerank({
+  results,
+  query,
+  scorer,
+  options,
+}: {
+  results: QueryResult[];
+  query: string;
+  scorer: RelevanceScoreProvider;
+  options: RerankerFunctionOptions;
+}) {
   const { queryEmbedding, topK = 3 } = options;
   const weights = {
     ...DEFAULT_WEIGHTS,
@@ -118,7 +116,7 @@ export async function rerank(
       // Get semantic score from chosen provider
       let semanticScore = 0;
       if (result?.metadata?.text) {
-        semanticScore = await semanticProvider.getRelevanceScore(query, result?.metadata?.text);
+        semanticScore = await scorer.getRelevanceScore(query, result?.metadata?.text);
       }
 
       // Get existing vector score from result
@@ -155,4 +153,46 @@ export async function rerank(
 
   // Sort by score and take top K
   return scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
+}
+
+export async function rerankWithScorer({
+  results,
+  query,
+  scorer,
+  options,
+}: {
+  results: QueryResult[];
+  query: string;
+  scorer: RelevanceScoreProvider;
+  options: RerankerFunctionOptions;
+}): Promise<RerankResult[]> {
+  return executeRerank({
+    results,
+    query,
+    scorer,
+    options,
+  });
+}
+
+// Takes in a list of results from a vector store and reranks them based on semantic, vector, and position scores
+export async function rerank(
+  results: QueryResult[],
+  query: string,
+  model: MastraLanguageModel,
+  options: RerankerFunctionOptions,
+): Promise<RerankResult[]> {
+  let semanticProvider: RelevanceScoreProvider;
+
+  if (model.modelId === 'rerank-v3.5') {
+    semanticProvider = new CohereRelevanceScorer(model.modelId);
+  } else {
+    semanticProvider = new MastraAgentRelevanceScorer(model.provider, model);
+  }
+
+  return executeRerank({
+    results,
+    query,
+    scorer: semanticProvider,
+    options,
+  });
 }

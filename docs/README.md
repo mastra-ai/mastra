@@ -36,12 +36,11 @@ npm i
 ```
 
 > The docs have a separate `package.json` file and is not part of the workspace so please do not use
-> `pnpm` or `yarn` to launch the docs.
 
 Run the appropriate CLI command in your terminal:
 
 ```bash
-npm run dev
+npm start
 ```
 
 The docs will be served on `localhost:3000/docs`.
@@ -52,10 +51,12 @@ Search is implemented with Algolia. To set up search functionality:
 
 1. Create an Algolia account and application
 2. Set up your environment variables in `.env.local`:
-   ```bash
+
+```bash
    NEXT_PUBLIC_ALGOLIA_APP_ID=your_app_id
    NEXT_PUBLIC_ALGOLIA_SEARCH_API_KEY=your_search_key
-   ```
+```
+
 3. Index your documentation content in Algolia
 
 For detailed setup instructions, see [ALGOLIA_SETUP.md](./ALGOLIA_SETUP.md).
@@ -74,7 +75,7 @@ Frontmatter looks like this. title and description are mandatory.
 
 ```bash
 ---
-title: "Introduction | Mastra Docs"
+title: "Introduction"
 description: "Mastra is a TypeScript agent framework. It helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals."
 ---
 ```
@@ -93,7 +94,7 @@ export default meta;
 
 Mastra is built on [Nextra](https://nextra.site/docs) and therefore we use custom components that `Nextra` provides which includes `callouts`, `Tabs` e.t.c
 
-You can find the full list [here](https://nextra.site/docs/built-ins)
+You can find the full list [on the nextra site](https://nextra.site/docs/built-ins)
 
 ### Guidelines
 

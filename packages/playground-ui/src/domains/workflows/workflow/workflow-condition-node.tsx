@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, Network } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import { getConditionIconAndColor } from './workflow-node-badges';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCurrentRun } from '../context/use-current-run';
@@ -20,6 +21,7 @@ import { WorkflowStepActionBar } from './workflow-step-action-bar';
 export type ConditionNode = Node<
   {
     conditions: Condition[];
+    withoutTopHandle?: boolean;
     previousStepId: string;
     nextStepId: string;
     mapConfig?: string;
@@ -28,7 +30,7 @@ export type ConditionNode = Node<
 >;
 
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
-  const { conditions, previousStepId, nextStepId } = data;
+  const { conditions, previousStepId, nextStepId, withoutTopHandle } = data;
   const [open, setOpen] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const type = conditions[0]?.type;
@@ -39,15 +41,21 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const previousStep = steps[previousStepId];
   const nextStep = steps[nextStepId];
 
+  const { icon: IconComponent, color } = getConditionIconAndColor(type);
+
   return (
     <>
-      <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
+      {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
 
       <div
+        data-workflow-node
+        data-workflow-step-status={previousStep?.status}
+        data-testid="workflow-condition-node"
         className={cn(
           'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
-          previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1',
-          previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2',
+          previousStep?.status === 'success' && nextStep && 'bg-accent1Darker',
+          previousStep?.status === 'failed' && nextStep && 'bg-accent2Darker',
+          !previousStep && Boolean(nextStep?.status) && 'bg-accent1Darker',
         )}
       >
         <Collapsible
@@ -59,7 +67,15 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           }}
         >
           <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2">
-            <Badge icon={type === 'when' ? <Network className="text-[#ECB047]" /> : null}>{type?.toUpperCase()}</Badge>
+            <Badge
+              icon={
+                IconComponent ? (
+                  <IconComponent className="text-current" {...(color ? { style: { color } } : {})} />
+                ) : null
+              }
+            >
+              {type?.toUpperCase()}
+            </Badge>
             {isCollapsible && (
               <Icon>
                 <ChevronDown
@@ -74,12 +90,36 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           {type === 'else' ? null : (
             <CollapsibleContent className="flex flex-col gap-2 pb-2">
               {conditions.map((condition, index) => {
+                // Compute the conjunction badge for ref-based conditions
+                const conjType = condition.conj || type;
+                const { icon: ConjIconComponent, color: conjColor } = getConditionIconAndColor(conjType);
+                const conjBadge =
+                  index === 0 ? null : (
+                    <Badge
+                      icon={
+                        ConjIconComponent ? (
+                          <ConjIconComponent
+                            className="text-current"
+                            {...(conjColor ? { style: { color: conjColor } } : {})}
+                          />
+                        ) : null
+                      }
+                    >
+                      {condition.conj?.toLocaleUpperCase() || 'WHEN'}
+                    </Badge>
+                  );
+
                 return condition.fnString ? (
                   <div key={`${condition.fnString}-${index}`} className="px-3">
                     <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
-                          className={`${className} relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 overflow-scroll`}
+                          className={cn(
+                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 overflow-scroll',
+                            className,
+                            previousStep?.status === 'success' && nextStep && '!bg-accent1Dark',
+                            previousStep?.status === 'failed' && nextStep && '!bg-accent2Dark',
+                          )}
                           onClick={() => setOpenDialog(true)}
                           style={style}
                         >
@@ -132,11 +172,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                   <Fragment key={`${condition.ref?.path}-${index}`}>
                     {condition.ref?.step ? (
                       <div className="flex items-center gap-1">
-                        {index === 0 ? null : (
-                          <Badge icon={<Network className="text-[#ECB047]" />}>
-                            {condition.conj?.toLocaleUpperCase() || 'WHEN'}
-                          </Badge>
-                        )}
+                        {conjBadge}
 
                         <Text size={'xs'} className=" text-mastra-el-3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
@@ -151,7 +187,12 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           )}
         </Collapsible>
 
-        <WorkflowStepActionBar stepName={nextStepId} input={previousStep?.output} mapConfig={data.mapConfig} />
+        <WorkflowStepActionBar
+          stepName={nextStepId}
+          input={previousStep?.output}
+          mapConfig={data.mapConfig}
+          status={nextStep ? previousStep?.status : undefined}
+        />
       </div>
 
       <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />

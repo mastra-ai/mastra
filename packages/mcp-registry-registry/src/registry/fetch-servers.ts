@@ -17,7 +17,7 @@ export async function fetchServersFromRegistry(registryId: string): Promise<Serv
       throw new Error(`Registry "${registry.name}" does not have a servers endpoint.`);
     }
 
-    console.log(`Fetching servers from ${registry.name} at ${registry.servers_url}`);
+    console.info(`Fetching servers from ${registry.name} at ${registry.servers_url}`);
 
     // Fetch the servers from the registry's servers_url
     const response = await fetch(registry.servers_url);
@@ -30,7 +30,7 @@ export async function fetchServersFromRegistry(registryId: string): Promise<Serv
 
     // If the registry has a custom post-processing function, use it
     if (registry.postProcessServers) {
-      console.log(`Using custom post-processor for ${registry.name}`);
+      console.info(`Using custom post-processor for ${registry.name}`);
       return registry.postProcessServers(data);
     }
 

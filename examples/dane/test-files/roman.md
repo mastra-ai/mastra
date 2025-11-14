@@ -38,14 +38,12 @@
 ## Major Achievements and Legacy
 
 1. Architecture and Engineering:
-
    - Aqueducts for water transportation
    - Advanced road systems (over 50,000 miles by 200 BCE)
    - Revolutionary concrete and construction techniques
    - Iconic structures like the Colosseum
 
 2. Cultural Contributions:
-
    - Development of Romance languages
    - Modern Western alphabet
    - Legal system foundations

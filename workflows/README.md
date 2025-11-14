@@ -23,17 +23,17 @@ docker run --rm -p 8288:8288 \
 ### Example
 
 ```ts
-import { init } from '@mastra/inngest';
+import { init, serve as inngestServe } from '@mastra/inngest';
 import { PinoLogger } from '@mastra/loggers';
-import { Inngest, serve as inngestServe } from 'inngest';
+import { Inngest } from 'inngest';
 import { z } from 'zod';
 
-const { createWorkflow, createStep } = init(
-  new Inngest({
-    id: 'mastra',
-    baseUrl: `http://localhost:8288`, // if using local dev server
-  }),
-);
+const inngest = new Inngest({
+  id: 'mastra',
+  baseUrl: `http://localhost:8288`, // if using local dev server
+});
+
+const { createWorkflow, createStep } = init(inngest);
 
 const incrementStep = createStep({
   id: 'increment',
@@ -75,7 +75,7 @@ const finalStep = createStep({
   },
 });
 
-const workflow = createWorkflow({
+const incrementWorkflow = createWorkflow({
   id: 'increment-workflow',
   inputSchema: z.object({
     value: z.number(),

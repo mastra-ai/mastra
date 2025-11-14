@@ -120,7 +120,7 @@ If there are advanced use cases, edge cases, or performance considerations, add 
 
 For a more advanced usage, see “transformDataSync” in the following file:
 
-```ts filename="src/examples/advancedUsage/transformDataSync.ts"
+```ts title="src/examples/advancedUsage/transformDataSync.ts"
 import { MyFunction } from "@mastra/core";
 
 export async function transformDataSync(data: string) {
@@ -150,7 +150,7 @@ By consistently following these guidelines, you ensure that Mastra’s reference
 
 - Start with a concise **description**.
 - Provide a **usage example**.
-- Present **parameters** in a <PropertiesTable>.
-- Show **returns** in another <PropertiesTable> (if applicable).
+- Present **parameters** in a `<PropertiesTable>`.
+- Show **returns** in another `<PropertiesTable>` (if applicable).
 - Include **additional examples** or **notes** for advanced usage.
 - **Cross-link** to relevant sections or features.

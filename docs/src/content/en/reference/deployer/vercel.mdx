@@ -1,67 +1,46 @@
 ---
-title: "Vercel Deployer"
+title: "Reference: VercelDeployer | Deployer"
 description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
 ---
 
 # VercelDeployer
 
-The VercelDeployer deploys standalone Mastra applications to Vercel, handling configuration, environment variable synchronization, and deployment processes. It extends the abstract Deployer class to provide Vercel-specific deployment functionality.
+The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
 
-## Installation
+## Usage example
 
-```bash copy
-npm install @mastra/deployer-vercel@latest
-```
-
-## Usage Example
-
-```typescript filename="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
-const mastra = new Mastra({
+export const mastra = new Mastra({
   // ...
-  deployer: new VercelDeployer()
+  deployer: new VercelDeployer(),
 });
 ```
 
-## Lint Mastra Project
+## Constructor options
 
-Lint your Mastra project to make sure it's fine to build
+The deployer supports a small set of high‑value overrides that are written to the Vercel Output API function config (`.vc-config.json`):
 
-```bash
-npx mastra lint
+- `maxDuration?: number` — Function execution timeout (in seconds)
+- `memory?: number` — Function memory (in MB)
+- `regions?: string[]` — Regions to deploy the function (e.g. `['sfo1','iad1']`)
+
+These options are merged into `.vercel/output/functions/index.func/.vc-config.json` while preserving default fields (`handler`, `launcherType`, `runtime`, `shouldAddHelpers`).
+
+### Example with overrides
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer({
+    maxDuration: 600,
+    memory: 1536,
+    regions: ["sfo1", "iad1"],
+  }),
+});
 ```
-
-## Build Mastra Project
-
-To build your Mastra project for Vercel deployment:
-
-```bash
-npx mastra build
-```
-
-The build process generates the following output structure in the `.vercel/output` directory:
-
-```
-.vercel/output/functions/index.func
-└── index.mjs       # Application entry point
-```
-
-## Deployment Options
-
-After building, you can deploy your Mastra application to Vercel using any of these methods:
-
-1. **Vercel CLI**: Deploy directly using Vercel's official CLI tool
-
-   - Install the CLI: `npm install -g vercel`
-   - Deploy to preview environment: `vercel --prebuilt`
-   - For production deployment: `vercel --prod --prebuilt`
-
-2. **Vercel Dashboard**: Connect your Git repository or drag-and-drop the build output through the Vercel dashboard
-
-> You can also run `vercel dev` in your project directory to test your Mastra application locally. (Make sure you configured your dev command to `mastra dev`)
-
-## Platform Documentation
-
-- [Vercel](https://vercel.com/docs)

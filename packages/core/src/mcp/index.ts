@@ -2,15 +2,15 @@ import { randomUUID } from 'node:crypto';
 import slugify from '@sindresorhus/slugify';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
+import { MastraError } from '../error';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { InternalCoreTool, MCPToolType, ToolAction, ToolExecutionContext } from '../tools';
 import type {
-  ConvertedTool,
   MCPServerConfig,
   MCPServerHonoSSEOptions,
   MCPServerHTTPOptions,
   MCPServerSSEOptions,
-  MCPToolType,
   PackageInfo,
   RemoteInfo,
   Repository,
@@ -18,6 +18,7 @@ import type {
   ServerInfo,
 } from './types';
 export * from './types';
+export type { MCPToolType } from '../tools';
 
 /**
  * Abstract base class for MCP server implementations.
@@ -48,13 +49,15 @@ export abstract class MCPServerBase extends MastraBase {
   /** Information about remote access points for this server. */
   public readonly remotes?: RemoteInfo[];
   /** The tools registered with and converted by this MCP server. */
-  public readonly convertedTools: Record<string, ConvertedTool>;
+  public convertedTools: Record<string, InternalCoreTool>;
   /** Reference to the Mastra instance if this server is registered with one. */
   public mastra: Mastra | undefined;
   /** Agents to be exposed as tools. */
   protected readonly agents?: MCPServerConfig['agents'];
   /** Workflows to be exposed as tools. */
   protected readonly workflows?: MCPServerConfig['workflows'];
+  /** Original tools configuration for re-conversion when Mastra instance is registered. */
+  protected readonly originalTools: ToolsInput;
 
   /**
    * Public getter for the server's unique ID.
@@ -68,7 +71,7 @@ export abstract class MCPServerBase extends MastraBase {
    * Gets a read-only view of the registered tools.
    * @returns A readonly record of converted tools.
    */
-  tools(): Readonly<Record<string, ConvertedTool>> {
+  tools(): Readonly<Record<string, InternalCoreTool>> {
     return this.convertedTools;
   }
 
@@ -99,7 +102,7 @@ export abstract class MCPServerBase extends MastraBase {
     tools: ToolsInput,
     agents?: MCPServerConfig['agents'],
     workflows?: MCPServerConfig['workflows'],
-  ): Record<string, ConvertedTool>;
+  ): Record<string, InternalCoreTool>;
 
   /**
    * Internal method used by Mastra to register itself with the server.
@@ -108,6 +111,55 @@ export abstract class MCPServerBase extends MastraBase {
    */
   __registerMastra(mastra: Mastra): void {
     this.mastra = mastra;
+    // Re-convert tools now that we have the Mastra instance to populate MCP tools execute with mastra instance
+    this.convertedTools = this.convertTools(this.originalTools, this.agents, this.workflows);
+
+    // Auto-register tools with the Mastra instance
+    if (this.originalTools && typeof this.originalTools === 'object') {
+      Object.entries(this.originalTools).forEach(([key, tool]) => {
+        try {
+          // Only add tools that have an id property (ToolAction type)
+          if (tool && typeof tool === 'object' && 'id' in tool) {
+            // Use tool's intrinsic ID to avoid collisions across MCP servers
+            const toolKey = typeof (tool as any).id === 'string' ? (tool as any).id : key;
+            mastra.addTool(tool as ToolAction<any, any, any, any, ToolExecutionContext<any, any>>, toolKey);
+          }
+        } catch (error) {
+          // Tool might already be registered, that's okay
+          if (!(error instanceof MastraError) || error.id !== 'MASTRA_ADD_TOOL_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register agents with the Mastra instance
+    if (this.agents && typeof this.agents === 'object') {
+      Object.entries(this.agents).forEach(([key, agent]) => {
+        try {
+          mastra.addAgent(agent, key);
+        } catch (error) {
+          // Agent might already be registered, that's okay
+          if (!(error instanceof MastraError) || error.id !== 'MASTRA_ADD_AGENT_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register workflows with the Mastra instance
+    if (this.workflows && typeof this.workflows === 'object') {
+      Object.entries(this.workflows).forEach(([key, workflow]) => {
+        try {
+          mastra.addWorkflow(workflow, key);
+        } catch (error) {
+          // Workflow might already be registered, that's okay
+          if (!(error instanceof MastraError) || error.id !== 'MASTRA_ADD_WORKFLOW_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
   }
 
   /**
@@ -125,7 +177,7 @@ export abstract class MCPServerBase extends MastraBase {
       this._id = slugify(config.id);
       this.idWasSet = true;
     } else {
-      this._id = randomUUID();
+      this._id = this.mastra?.generateId() || randomUUID();
     }
 
     this.description = config.description;
@@ -137,6 +189,7 @@ export abstract class MCPServerBase extends MastraBase {
     this.remotes = config.remotes;
     this.agents = config.agents;
     this.workflows = config.workflows;
+    this.originalTools = config.tools;
     this.convertedTools = this.convertTools(config.tools, config.agents, config.workflows);
   }
 

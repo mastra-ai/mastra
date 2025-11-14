@@ -12,7 +12,8 @@ import { publishPackages } from '../_local-registry-setup/publish';
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
-  const teardown = await prepareMonorepo(rootDir, globby);
+  const tag = 'commonjs-e2e-test';
+  const teardown = await prepareMonorepo(rootDir, globby, tag);
 
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
   const port = await getPort();
@@ -24,7 +25,6 @@ export default async function setup(project: TestProject) {
 
   console.log('registry', registry.toString());
 
-  const tag = 'commonjs-e2e-test';
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
