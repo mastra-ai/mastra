@@ -471,10 +471,17 @@ export async function createHonoServer(
     );
   }
 
+  const serverOptions = mastra.getServer();
+  // Normalize base path: ensure it starts with / and doesn't end with /
+  // Empty string means playground is served at root
+  const basePath = serverOptions?.path
+    ? `/${serverOptions.path}`.replace(/^\/+/, '/').replace(/\/+$/, '')
+    : '';
+
   if (options?.playground) {
     // SSE endpoint for refresh notifications
     app.get(
-      '/refresh-events',
+      `${basePath}/refresh-events`,
       describeRoute({
         hide: true,
       }),
@@ -483,7 +490,7 @@ export async function createHonoServer(
 
     // Trigger refresh for all clients
     app.post(
-      '/__refresh',
+      `${basePath}/__refresh`,
       describeRoute({
         hide: true,
       }),
@@ -492,7 +499,7 @@ export async function createHonoServer(
 
     // Check hot reload status
     app.get(
-      '/__hot-reload-status',
+      `${basePath}/__hot-reload-status`,
       describeRoute({
         hide: true,
       }),
@@ -505,7 +512,7 @@ export async function createHonoServer(
     );
     // Playground routes - these should come after API routes
     // Serve assets with specific MIME types
-    app.use('/assets/*', async (c, next) => {
+    app.use(`${basePath}/assets/*`, async (c, next) => {
       const path = c.req.path;
       if (path.endsWith('.js')) {
         c.header('Content-Type', 'application/javascript');
@@ -517,36 +524,39 @@ export async function createHonoServer(
 
     // Serve static assets from playground directory
     app.use(
-      '/assets/*',
+      `${basePath}/assets/*`,
       serveStatic({
         root: './playground/assets',
+        rewriteRequestPath: basePath ? (path) => path.replace(basePath, '') : undefined,
       }),
     );
   }
 
   // Dynamic HTML handler - this must come before static file serving
   app.get('*', async (c, next) => {
+    const requestPath = c.req.path;
+    
     // Skip if it's an API route
     if (
-      c.req.path.startsWith('/api/') ||
-      c.req.path.startsWith('/swagger-ui') ||
-      c.req.path.startsWith('/openapi.json')
+      requestPath.startsWith('/api/') ||
+      requestPath.startsWith('/swagger-ui') ||
+      requestPath.startsWith('/openapi.json')
     ) {
       return await next();
     }
 
     // Skip if it's an asset file (has extension other than .html)
-    const path = c.req.path;
-    if (path.includes('.') && !path.endsWith('.html')) {
+    if (requestPath.includes('.') && !requestPath.endsWith('.html')) {
       return await next();
     }
 
-    if (options?.playground) {
+    // Only serve playground for routes matching the configured base path
+    const isPlaygroundRoute = !basePath || requestPath === basePath || requestPath.startsWith(`${basePath}/`);
+    if (options?.playground && isPlaygroundRoute) {
       // For HTML routes, serve index.html with dynamic replacements
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
 
-      // Inject the server port information
-      const serverOptions = mastra.getServer();
+      // Inject the server configuration information
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
@@ -554,6 +564,8 @@ export async function createHonoServer(
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
+      // Inject the base path for frontend routing
+      indexHtml = indexHtml.replace(`'%%MASTRA_BASE_PATH%%'`, `'${basePath}'`);
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
@@ -563,10 +575,12 @@ export async function createHonoServer(
 
   if (options?.playground) {
     // Serve extra static files from playground directory (this comes after HTML handler)
+    const playgroundPath = basePath || '*';
     app.use(
-      '*',
+      playgroundPath,
       serveStatic({
         root: './playground',
+        rewriteRequestPath: basePath ? (path) => path.replace(basePath, '') : undefined,
       }),
     );
   }

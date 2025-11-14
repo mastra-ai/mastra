@@ -91,6 +91,12 @@ export type ServerConfig = {
    */
   host?: string;
   /**
+   * Base path for the studio/playground
+   * @default ''
+   * @example 'my-mastra-studio'
+   */
+  path?: string;
+  /**
    * Timeout for the server
    */
   timeout?: number;
