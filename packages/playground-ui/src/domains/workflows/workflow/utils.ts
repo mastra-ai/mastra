@@ -30,6 +30,37 @@ export type Condition =
 
 export const pathAlphabet = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
 
+const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: string[]): string => {
+  // If not a mapping node, return original ID
+  if (!stepId.startsWith('mapping_')) {
+    return stepId;
+  }
+
+  const capitalizeWords = (str: string) => {
+    return str
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  const formatStepName = (id: string) => {
+    // Remove common prefixes and clean up
+    const cleaned = id.replace(/Step$/, '').replace(/[-_]/g, ' ').trim();
+    return capitalizeWords(cleaned);
+  };
+
+  const formatMultipleSteps = (ids: string[], isTarget: boolean) => {
+    if (ids.length === 0) return isTarget ? 'End' : 'Start';
+    if (ids.length === 1) return formatStepName(ids[0]);
+    return `${ids.length} Steps`;
+  };
+
+  const fromLabel = formatMultipleSteps(prevStepIds, false);
+  const toLabel = formatMultipleSteps(nextStepIds, true);
+
+  return `${fromLabel} → ${toLabel} Map`;
+};
+
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: 'TB' });
@@ -107,12 +138,7 @@ const getStepNodeAndEdge = ({
 }): { nodes: Node[]; edges: Edge[]; nextPrevNodeIds: string[]; nextPrevStepIds: string[] } => {
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
-  if (
-    nextStepFlow?.type === 'step' ||
-    nextStepFlow?.type === 'foreach' ||
-    nextStepFlow?.type === 'loop' ||
-    nextStepFlow?.type === 'waitForEvent'
-  ) {
+  if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
     const nextStepId = allPrevNodeIds?.includes(nextStepFlow.step.id)
       ? `${nextStepFlow.step.id}-${yIndex + 1}`
       : nextStepFlow.step.id;
@@ -138,7 +164,7 @@ const getStepNodeAndEdge = ({
     nextStepIds = nextStepFlow?.steps?.map(step => step.step.id) || [];
   }
 
-  if (stepFlow.type === 'step' || stepFlow.type === 'foreach' || stepFlow.type === 'waitForEvent') {
+  if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
     const hasGraph = stepFlow.step.component === 'WORKFLOW';
     const nodeId = allPrevNodeIds?.includes(stepFlow.step.id) ? `${stepFlow.step.id}-${yIndex}` : stepFlow.step.id;
     const nodes = [
@@ -165,13 +191,15 @@ const getStepNodeAndEdge = ({
         position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
         type: hasGraph ? 'nested-node' : 'default-node',
         data: {
-          label: stepFlow.step.id,
+          label: formatMappingLabel(stepFlow.step.id, prevStepIds, nextStepIds),
+          stepId: stepFlow.step.id,
           description: stepFlow.step.description,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
           stepGraph: hasGraph ? stepFlow.step.serializedStepFlow : undefined,
           mapConfig: stepFlow.step.mapConfig,
-          ...(stepFlow.type === 'waitForEvent' ? { event: stepFlow.event } : {}),
+          canSuspend: stepFlow.step.canSuspend,
+          isForEach: stepFlow.type === 'foreach',
         },
       },
     ];
@@ -302,6 +330,7 @@ const getStepNodeAndEdge = ({
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
           stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
+          canSuspend: _step.canSuspend,
         },
       },
       {
@@ -370,7 +399,15 @@ const getStepNodeAndEdge = ({
         nextStepFlow,
         allPrevNodeIds,
       });
-      nodes.push(..._nodes);
+      // Mark nodes as part of parallel execution
+      const markedNodes = _nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          isParallel: true,
+        },
+      }));
+      nodes.push(...markedNodes);
       edges.push(..._edges);
       nextPrevStepIds.push(..._nextPrevStepIds);
     });

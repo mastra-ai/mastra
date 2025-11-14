@@ -43,7 +43,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkNewThreadLink: (networkId: string) => `/networks/v-next/${networkId}/chat/${uuid()}`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
-  toolLink: (toolId: string) => `/tools/all/${toolId}`,
+  toolLink: (toolId: string) => `/tools/${toolId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
@@ -122,7 +122,7 @@ function App() {
                   </Route>
                   <Route path="/tools" element={<Tools />} />
 
-                  <Route path="/tools/all/:toolId" element={<Tool />} />
+                  <Route path="/tools/:toolId" element={<Tool />} />
                   <Route path="/mcps" element={<MCPs />} />
 
                   <Route path="/mcps/:serverId" element={<McpServerPage />} />

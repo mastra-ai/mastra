@@ -9,7 +9,6 @@ import type {
   TABLE_SCHEMAS,
   PaginationInfo,
   StorageColumn,
-  StorageGetMessagesArg,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -38,6 +37,7 @@ type IntervalUnit =
   | 'YEAR';
 
 export type ClickhouseConfig = {
+  id: string;
   url: string;
   username: string;
   password: string;
@@ -62,7 +62,7 @@ export class ClickhouseStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: ClickhouseConfig) {
-    super({ name: 'ClickhouseStore' });
+    super({ id: config.id, name: 'ClickhouseStore' });
 
     this.db = createClient({
       url: config.url,
@@ -245,15 +245,8 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
   }
 
-  async listWorkflowRuns({
-    workflowName,
-    fromDate,
-    toDate,
-    perPage,
-    page,
-    resourceId,
-  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns({ workflowName, fromDate, toDate, perPage, page, resourceId });
+  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
+    return this.stores.workflows.listWorkflowRuns(args);
   }
 
   async getWorkflowRunById({
@@ -288,14 +281,6 @@ export class ClickhouseStore extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     return this.stores.memory.deleteThread({ threadId });
-  }
-
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.getMessages({ threadId, resourceId, selectBy });
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

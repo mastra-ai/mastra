@@ -1,7 +1,7 @@
 import { openai } from '@ai-sdk/openai';
 import { createTool } from '@mastra/core/tools';
 import { describe, expect, it, vi } from 'vitest';
-import { createAgentTestRun, createToolInvocation, createUIMessage, extractToolCalls } from '../../utils';
+import { createAgentTestRun, createTestMessage, extractToolCalls } from '../../utils';
 import { createToolCallAccuracyScorerLLM } from './index';
 
 describe('createToolCallAccuracyScorerLLM', () => {
@@ -21,7 +21,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
         availableTools,
       });
 
-      expect(scorer.id).toBe('tool-call-accuracy-scorer');
+      expect(scorer.id).toBe('llm-tool-call-accuracy-scorer');
       expect(scorer.name).toBe('Tool Call Accuracy (LLM)');
       expect(scorer.description).toContain('Evaluates whether an agent selected appropriate tools');
     });
@@ -56,24 +56,25 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is the weather in Paris?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'Let me check the weather in Paris for you.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'weather-tool',
                 args: { location: 'Paris' },
                 result: { temperature: 15, condition: 'cloudy' },
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],
@@ -101,14 +102,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Hello, how are you?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'I am doing well, thank you for asking!',
@@ -136,24 +137,25 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is the weather in Paris?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'The weather in Paris is 15°C and cloudy.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'weather-tool',
                 args: { location: 'Paris' },
                 result: { temperature: 15, condition: 'cloudy' },
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],
@@ -178,30 +180,32 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is the weather today?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'Let me calculate that and check your calendar.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'calculator-tool',
                 args: {},
                 result: {},
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_2',
                 toolName: 'calendar-tool',
                 args: {},
                 result: {},
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],
@@ -226,30 +230,32 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is the weather in London?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'The weather in London is 10°C.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'weather-tool',
                 args: { location: 'London' },
                 result: { temperature: 10 },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_2',
                 toolName: 'calculator-tool',
                 args: { operation: 'celsius_to_fahrenheit' },
                 result: { fahrenheit: 50 },
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],
@@ -273,14 +279,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Hello, how are you?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'Hello! I am doing well, thank you for asking.',
@@ -306,14 +312,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is the weather in Tokyo?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'I cannot provide weather information without checking.',
@@ -341,30 +347,32 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is the weather in Paris and what are the top tourist attractions?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'Let me get you the weather and tourist information for Paris.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'weather-tool',
                 args: { location: 'Paris' },
                 result: { temperature: 15 },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_2',
                 toolName: 'search-tool',
                 args: { query: 'Paris tourist attractions' },
                 result: { results: ['Eiffel Tower', 'Louvre'] },
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],
@@ -388,14 +396,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'I need help with something',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content:
@@ -423,14 +431,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Test query',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'Test response',
@@ -458,14 +466,14 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is the weather in InvalidCity?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'I encountered an error getting the weather.',
@@ -475,7 +483,7 @@ describe('createToolCallAccuracyScorerLLM', () => {
                 toolName: 'weather-tool',
                 args: { location: 'InvalidCity' },
                 result: { error: 'City not found' },
-                state: 'error' as any,
+                state: 'error',
               },
             ],
           }),
@@ -502,36 +510,39 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Compare weather in Paris and London',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'Checking weather for both cities.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'weather-tool',
                 args: { location: 'Paris' },
                 result: { temperature: 15 },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_2',
                 toolName: 'weather-tool',
                 args: { location: 'London' },
                 result: { temperature: 10 },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_3',
                 toolName: 'weather-tool',
                 args: { location: 'Paris' },
                 result: { temperature: 15 },
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],
@@ -557,36 +568,39 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'Schedule an outdoor picnic for this weekend if the weather is good',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: 'I will check the weather and schedule the picnic.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'calendar-tool',
                 args: { event: 'Outdoor Picnic' },
                 result: { scheduled: true },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_2',
                 toolName: 'weather-tool',
                 args: { date: 'weekend' },
                 result: { forecast: 'sunny' },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_3',
                 toolName: 'email-tool',
                 args: { to: 'user@example.com' },
                 result: { sent: true },
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],
@@ -610,36 +624,39 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const testRun = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: '1',
             role: 'user',
             content: 'What is 15% of 240?',
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: '2',
             role: 'assistant',
             content: '15% of 240 is 36. I also found some helpful tips about percentages and checked the weather.',
             toolInvocations: [
-              createToolInvocation({
+              {
                 toolCallId: 'call_1',
                 toolName: 'calculator-tool',
                 args: { operation: 'percentage', value: 240, percent: 15 },
                 result: { result: 36 },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_2',
                 toolName: 'search-tool',
                 args: { query: 'percentage calculation tips' },
                 result: { results: ['tip1', 'tip2'] },
-              }),
-              createToolInvocation({
+                state: 'result',
+              },
+              {
                 toolCallId: 'call_3',
                 toolName: 'weather-tool',
                 args: { location: 'current' },
                 result: { temperature: 20 },
-              }),
+                state: 'result',
+              },
             ],
           }),
         ],

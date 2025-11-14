@@ -1,5 +1,5 @@
 /**
- * Mastra AI Spans
+ * Mastra Spans
  */
 
 export * from './base';

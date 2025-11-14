@@ -25,11 +25,16 @@ const sidebars = {
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
         { type: "doc", id: "core/getServer", label: ".getServer()" },
         { type: "doc", id: "core/getMCPServer", label: ".getMCPServer()" },
+        {
+          type: "doc",
+          id: "core/getMCPServerById",
+          label: ".getMCPServerById()",
+        },
         { type: "doc", id: "core/getVector", label: ".getVector()" },
-        { type: "doc", id: "core/getVectors", label: ".getVectors()" },
+        { type: "doc", id: "core/listVectors", label: ".listVectors()" },
         { type: "doc", id: "core/getDeployer", label: ".getDeployer()" },
         { type: "doc", id: "core/getStorage", label: ".getStorage()" },
-        { type: "doc", id: "core/getMCPServers", label: ".getMCPServers()" },
+        { type: "doc", id: "core/listMCPServers", label: ".listMCPServers()" },
         { type: "doc", id: "core/getTelemetry", label: ".getTelemetry()" },
         { type: "doc", id: "core/setTelemetry", label: ".setTelemetry()" },
         { type: "doc", id: "core/listLogs", label: ".listLogs()" },
@@ -301,7 +306,8 @@ const sidebars = {
       items: [
         { type: "doc", id: "memory/memory-class", label: "Memory Class" },
         { type: "doc", id: "memory/createThread", label: ".createThread()" },
-        { type: "doc", id: "memory/query", label: ".query()" },
+        { type: "doc", id: "memory/recall", label: ".recall()" },
+        { type: "doc", id: "memory/query", label: ".query() (Deprecated)" },
         { type: "doc", id: "memory/getThreadById", label: ".getThreadById()" },
         {
           type: "doc",
@@ -447,26 +453,26 @@ const sidebars = {
       items: [
         {
           type: "category",
-          label: "AI Tracing",
+          label: "Tracing",
           items: [
             {
               type: "doc",
-              id: "observability/ai-tracing/ai-tracing",
-              label: "AITracing",
+              id: "observability/tracing/instances",
+              label: "Instances",
             },
             {
               type: "doc",
-              id: "observability/ai-tracing/configuration",
+              id: "observability/tracing/configuration",
               label: "Configuration",
             },
             {
               type: "doc",
-              id: "observability/ai-tracing/span",
-              label: "Span",
+              id: "observability/tracing/spans",
+              label: "Spans",
             },
             {
               type: "doc",
-              id: "observability/ai-tracing/interfaces",
+              id: "observability/tracing/interfaces",
               label: "Interfaces",
             },
             {
@@ -475,43 +481,43 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/arize",
+                  id: "observability/tracing/exporters/arize",
                   label: "ArizeExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/cloud-exporter",
-                  label: "CloudExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/console-exporter",
-                  label: "ConsoleExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/langsmith",
-                  label: "LangSmithExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/langfuse",
-                  label: "LangfuseExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/otel",
-                  label: "OtelExporter",
-                },
-                {
-                  type: "doc",
-                  id: "observability/ai-tracing/exporters/braintrust",
+                  id: "observability/tracing/exporters/braintrust",
                   label: "BraintrustExporter",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/default-exporter",
+                  id: "observability/tracing/exporters/cloud-exporter",
+                  label: "CloudExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/console-exporter",
+                  label: "ConsoleExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/default-exporter",
                   label: "DefaultExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/langfuse",
+                  label: "LangfuseExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/langsmith",
+                  label: "LangSmithExporter",
+                },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/otel",
+                  label: "OtelExporter",
                 },
               ],
             },
@@ -521,7 +527,7 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/processors/sensitive-data-filter",
+                  id: "observability/tracing/processors/sensitive-data-filter",
                   label: "SensitiveDataFilter",
                 },
               ],
@@ -534,90 +540,8 @@ const sidebars = {
           items: [
             {
               type: "doc",
-              id: "observability/logging/pino-logger",
+              id: "logging/pino-logger",
               label: "PinoLogger",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "OTEL Tracing",
-          items: [
-            {
-              type: "doc",
-              id: "observability/otel-tracing/otel-config",
-              label: "OtelConfig",
-            },
-            {
-              type: "category",
-              label: "Providers",
-              items: [
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/traceloop",
-                  label: "Traceloop",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/dash0",
-                  label: "Dash0",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/new-relic",
-                  label: "New Relic",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/langwatch",
-                  label: "LangWatch",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/index",
-                  label: "OTLP Providers",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/langsmith",
-                  label: "LangSmith",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/langfuse",
-                  label: "Langfuse",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/arize-ax",
-                  label: "Arize AX",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/laminar",
-                  label: "Laminar",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/braintrust",
-                  label: "Braintrust",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/signoz",
-                  label: "SigNoz",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/arize-phoenix",
-                  label: "Arize Phoenix",
-                },
-                {
-                  type: "doc",
-                  id: "observability/otel-tracing/providers/keywordsai",
-                  label: "Keywords AI",
-                },
-              ],
             },
           ],
         },
@@ -625,70 +549,70 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Scorers",
+      label: "Evals",
       collapsed: true,
       items: [
-        { type: "doc", id: "scorers/bias", label: "Bias" },
-        { type: "doc", id: "scorers/completeness", label: "Completeness" },
-        { type: "doc", id: "scorers/faithfulness", label: "Faithfulness" },
-        { type: "doc", id: "scorers/hallucination", label: "Hallucination" },
-        { type: "doc", id: "scorers/toxicity", label: "Toxicity" },
+        { type: "doc", id: "evals/mastra-scorer", label: "MastraScorer" },
+        { type: "doc", id: "evals/create-scorer", label: "createScorer" },
+        { type: "doc", id: "evals/run-evals", label: "runEvals" },
+        { type: "doc", id: "evals/bias", label: "Bias" },
+        { type: "doc", id: "evals/completeness", label: "Completeness" },
+        { type: "doc", id: "evals/faithfulness", label: "Faithfulness" },
+        { type: "doc", id: "evals/hallucination", label: "Hallucination" },
+        { type: "doc", id: "evals/toxicity", label: "Toxicity" },
         {
           type: "doc",
-          id: "scorers/keyword-coverage",
+          id: "evals/keyword-coverage",
           label: "Keyword Coverage Scorer",
         },
         {
           type: "doc",
-          id: "scorers/tone-consistency",
+          id: "evals/tone-consistency",
           label: "Tone Consistency Scorer",
         },
         {
           type: "doc",
-          id: "scorers/noise-sensitivity",
-          label: "Noise Sensitivity Scorer (CI/Testing Only)",
+          id: "evals/noise-sensitivity",
+          label: "Noise Sensitivity Scorer",
         },
-        { type: "doc", id: "scorers/mastra-scorer", label: "MastraScorer" },
-        { type: "doc", id: "scorers/create-scorer", label: "createScorer" },
         {
           type: "doc",
-          id: "scorers/content-similarity",
+          id: "evals/content-similarity",
           label: "Content Similarity Scorer",
         },
-        { type: "doc", id: "scorers/run-evals", label: "runEvals" },
         {
           type: "doc",
-          id: "scorers/answer-relevancy",
+          id: "evals/answer-relevancy",
           label: "Answer Relevancy Scorer",
         },
         {
           type: "doc",
-          id: "scorers/context-precision",
+          id: "evals/context-precision",
           label: "Context Precision Scorer",
         },
         {
           type: "doc",
-          id: "scorers/answer-similarity",
+          id: "evals/answer-similarity",
           label: "Answer Similarity Scorer",
         },
         {
           type: "doc",
-          id: "scorers/context-relevance",
+          id: "evals/context-relevance",
           label: "Context Relevance Scorer",
         },
         {
           type: "doc",
-          id: "scorers/tool-call-accuracy",
+          id: "evals/tool-call-accuracy",
           label: "Tool Call Accuracy Scorers",
         },
         {
           type: "doc",
-          id: "scorers/textual-difference",
+          id: "evals/textual-difference",
           label: "Textual Difference Scorer",
         },
         {
           type: "doc",
-          id: "scorers/prompt-alignment",
+          id: "evals/prompt-alignment",
           label: "Prompt Alignment Scorer",
         },
       ],

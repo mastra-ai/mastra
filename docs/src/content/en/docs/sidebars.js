@@ -64,6 +64,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/human-in-the-loop-with-tools",
+          label: "Human in the Loop with Tools",
+        },
+        {
+          type: "doc",
           id: "agents/agent-memory",
           label: "Memory",
         },
@@ -110,11 +115,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/error-handling",
-          label: "Error Handling",
-        },
-        {
-          type: "doc",
           id: "workflows/human-in-the-loop",
           label: "Human-in-the-loop",
         },
@@ -122,6 +122,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/snapshots",
           label: "Snapshots",
+        },
+        {
+          type: "doc",
+          id: "workflows/error-handling",
+          label: "Error Handling",
         },
         {
           type: "doc",
@@ -224,6 +229,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "memory/storage/memory-with-mongodb",
+              label: "Memory with MongoDB",
+            },
+            {
+              type: "doc",
               id: "memory/storage/memory-with-pg",
               label: "Memory with PostgreSQL",
             },
@@ -268,8 +278,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "server-db/production-server",
-          label: "Production Server",
+          id: "server-db/mastra-server",
+          label: "Mastra Server",
         },
         {
           type: "doc",
@@ -309,8 +319,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/server-deployment",
-          label: "Server deployment",
+          id: "deployment/building-mastra",
+          label: "Building Mastra",
         },
         {
           type: "doc",
@@ -324,27 +334,27 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Serverless Platforms",
+          label: "Mastra Cloud",
           items: [
             {
               type: "doc",
-              id: "deployment/serverless-platforms/index",
+              id: "deployment/mastra-cloud/overview",
               label: "Overview",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/cloudflare-deployer",
-              label: "Cloudflare",
+              id: "deployment/mastra-cloud/setting-up",
+              label: "Setup & Deploy",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/netlify-deployer",
-              label: "Netlify",
+              id: "deployment/mastra-cloud/dashboard",
+              label: "Dashboard",
             },
             {
               type: "doc",
-              id: "deployment/serverless-platforms/vercel-deployer",
-              label: "Vercel",
+              id: "deployment/mastra-cloud/observability",
+              label: "Observability",
             },
           ],
         },
@@ -369,43 +379,37 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "deployment/cloud-providers/azure-app-services",
+              label: "Azure App Services",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/cloudflare-deployer",
+              label: "Cloudflare",
+            },
+            {
+              type: "doc",
               id: "deployment/cloud-providers/digital-ocean",
               label: "Digital Ocean",
             },
             {
               type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
+              id: "deployment/cloud-providers/netlify-deployer",
+              label: "Netlify",
+            },
+            {
+              type: "doc",
+              id: "deployment/cloud-providers/vercel-deployer",
+              label: "Vercel",
             },
           ],
         },
       ],
     },
     {
-      type: "category",
-      label: "Mastra Cloud",
-      items: [
-        {
-          type: "doc",
-          id: "mastra-cloud/overview",
-          label: "Overview",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/setting-up",
-          label: "Setup & Deploy",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/dashboard",
-          label: "Dashboard",
-        },
-        {
-          type: "doc",
-          id: "mastra-cloud/observability",
-          label: "Observability",
-        },
-      ],
+      type: "doc",
+      id: "logging",
+      label: "Logging",
     },
     {
       type: "category",
@@ -417,27 +421,12 @@ const sidebars = {
           label: "Overview",
         },
         {
-          type: "doc",
-          id: "observability/logging",
-          label: "Logging",
-        },
-        {
-          type: "doc",
-          id: "observability/otel-tracing",
-          label: "OTEL Tracing",
-        },
-        {
-          type: "doc",
-          id: "observability/nextjs-tracing",
-          label: "Next.js Tracing",
-        },
-        {
           type: "category",
-          label: "AI Tracing",
+          label: "Tracing",
           items: [
             {
               type: "doc",
-              id: "observability/ai-tracing/overview",
+              id: "observability/tracing/overview",
               label: "Overview",
             },
             {
@@ -446,37 +435,37 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/default",
+                  id: "observability/tracing/exporters/default",
                   label: "Default",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/cloud",
+                  id: "observability/tracing/exporters/cloud",
                   label: "Cloud",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/arize",
+                  id: "observability/tracing/exporters/arize",
                   label: "Arize",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/braintrust",
+                  id: "observability/tracing/exporters/braintrust",
                   label: "Braintrust",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/langfuse",
+                  id: "observability/tracing/exporters/langfuse",
                   label: "Langfuse",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/langsmith",
+                  id: "observability/tracing/exporters/langsmith",
                   label: "LangSmith",
                 },
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/exporters/otel",
+                  id: "observability/tracing/exporters/otel",
                   label: "OpenTelemetry",
                 },
               ],
@@ -487,7 +476,7 @@ const sidebars = {
               items: [
                 {
                   type: "doc",
-                  id: "observability/ai-tracing/processors/sensitive-data-filter",
+                  id: "observability/tracing/processors/sensitive-data-filter",
                   label: "SensitiveDataFilter",
                 },
               ],
@@ -498,26 +487,26 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Scorers",
+      label: "Evals",
       items: [
         {
           type: "doc",
-          id: "scorers/overview",
+          id: "evals/overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "scorers/off-the-shelf-scorers",
+          id: "evals/off-the-shelf-scorers",
           label: "Off the Shelf Scorers",
         },
         {
           type: "doc",
-          id: "scorers/custom-scorers",
+          id: "evals/custom-scorers",
           label: "Custom Scorers",
         },
         {
           type: "doc",
-          id: "scorers/running-in-ci",
+          id: "evals/running-in-ci",
           label: "Running in CI",
         },
       ],

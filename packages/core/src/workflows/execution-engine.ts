@@ -1,12 +1,12 @@
-import type { WritableStream } from 'node:stream/web';
+import type { WritableStream } from 'stream/web';
 import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AISpan, AISpanType, TracingPolicy } from '../observability';
+import type { Span, SpanType, TracingPolicy } from '../observability';
 import type { ChunkType } from '../stream/types';
 import type { Emitter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
-import type { StepFlowEntry } from '.';
+import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
 /**
  * Represents an execution graph for a workflow
@@ -57,6 +57,8 @@ export abstract class ExecutionEngine extends MastraBase {
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     initialState?: TState;
+    timeTravel?: TimeTravelExecutionParams;
+    restart?: RestartExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -67,7 +69,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     emitter: Emitter;
     requestContext: RequestContext;
-    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;
       delay?: number;

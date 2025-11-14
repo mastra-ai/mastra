@@ -943,12 +943,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     if (this.#returnScorerData) {
       scoringData = {
         input: {
-          inputMessages: this.messageList.getPersisted.input.ui(),
-          rememberedMessages: this.messageList.getPersisted.remembered.ui(),
+          inputMessages: this.messageList.getPersisted.input.db(),
+          rememberedMessages: this.messageList.getPersisted.remembered.db(),
           systemMessages: this.messageList.getSystemMessages(),
           taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
         },
-        output: this.messageList.getPersisted.response.ui(),
+        output: this.messageList.getPersisted.response.db(),
       };
     }
 

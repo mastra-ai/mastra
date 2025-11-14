@@ -287,7 +287,7 @@ async function buildExternalDependencies(
       {} as Record<string, string>,
     ),
     external: externals,
-    treeshake: 'smallest',
+    treeshake: 'safest',
     plugins: getInputPlugins(virtualDependencies, {
       transpilePackages: packagesToTranspile,
       workspaceMap,

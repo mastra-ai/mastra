@@ -25,6 +25,7 @@ import {
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useEffect, useState } from 'react';
 import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { version } from '@mastra/core/package.json';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
@@ -46,10 +47,13 @@ export default function Template() {
     owner: 'mastra-ai',
   });
 
+  const isBeta = version?.includes('beta') ?? false;
+  const branch = isBeta ? 'beta' : 'main';
+
   const { data: templateEnvVars, isLoading: isLoadingEnvVars } = useTemplateRepoEnvVars({
     repo: template?.githubUrl ? new URL(template.githubUrl).pathname.split('/')[2] : `template-${templateSlug}`,
     owner: 'mastra-ai',
-    branch: selectedProvider,
+    branch,
   });
 
   // Fetch agent builder workflow info for step pre-population
@@ -273,7 +277,7 @@ export default function Template() {
         const repo = template.githubUrl || `https://github.com/mastra-ai/template-${template.slug}`;
         const templateParams = {
           repo,
-          ref: selectedProvider || 'main',
+          ref: branch,
           slug: template.slug,
           variables: variables as Record<string, string>,
         };

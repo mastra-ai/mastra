@@ -5,9 +5,10 @@ import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, getBundlerOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import type { Plugin, RollupWatcherEvent } from 'rollup';
+import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
+import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -18,6 +19,11 @@ export class DevBundler extends Bundler {
   }
 
   getEnvFiles(): Promise<string[]> {
+    // Skip loading .env files if MASTRA_SKIP_DOTENV is set
+    if (shouldSkipDotenvLoading()) {
+      return Promise.resolve([]);
+    }
+
     const possibleFiles = ['.env.development', '.env.local', '.env'];
     if (this.customEnvFile) {
       possibleFiles.unshift(this.customEnvFile);
@@ -96,8 +102,7 @@ export class DevBundler extends Bundler {
           }
         },
         plugins: [
-          // inputOptions.plugins is guaranteed to be Plugin[] by getWatcherInputOptions
-          ...((inputOptions.plugins as Plugin[]) || []),
+          ...(inputOptions.plugins as InputPluginOption[]),
           {
             name: 'env-watcher',
             buildStart() {

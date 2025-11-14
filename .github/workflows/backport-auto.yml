@@ -36,9 +36,9 @@ jobs:
       - name: Re-checkout with app token
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.base_ref }}
           token: ${{ steps.app-auth.outputs.token }}
           persist-credentials: true
+          fetch-depth: 0
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

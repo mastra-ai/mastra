@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, expect, it, vi } from 'vitest';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createContextPrecisionScorer } from './index';
 
 // Mock model for testing
@@ -90,9 +90,9 @@ describe('createContextPrecisionScorer', () => {
     }));
 
     const testRun = createAgentTestRun({
-      inputMessages: [createUIMessage({ id: '1', role: 'user', content: 'What is photosynthesis?' })],
+      inputMessages: [createTestMessage({ id: '1', role: 'user', content: 'What is photosynthesis?' })],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: '2',
           role: 'assistant',
           content: 'Photosynthesis is the process by which plants convert sunlight into energy.',
@@ -156,9 +156,9 @@ describe('createContextPrecisionScorer', () => {
     }));
 
     const testRun = createAgentTestRun({
-      inputMessages: [createUIMessage({ id: '1', role: 'user', content: 'What are the benefits of exercise?' })],
+      inputMessages: [createTestMessage({ id: '1', role: 'user', content: 'What are the benefits of exercise?' })],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: '2',
           role: 'assistant',
           content: 'Regular exercise improves cardiovascular health and mental wellbeing.',
@@ -200,9 +200,9 @@ describe('createContextPrecisionScorer', () => {
     });
 
     const testRun = createAgentTestRun({
-      inputMessages: [createUIMessage({ id: '1', role: 'user', content: 'What are the benefits of exercise?' })],
+      inputMessages: [createTestMessage({ id: '1', role: 'user', content: 'What are the benefits of exercise?' })],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: '2',
           role: 'assistant',
           content: 'Regular exercise improves cardiovascular health and mental wellbeing.',
@@ -245,8 +245,10 @@ describe('createContextPrecisionScorer', () => {
     }));
 
     const testRun = createAgentTestRun({
-      inputMessages: [createUIMessage({ id: '1', role: 'user', content: 'What is photosynthesis?' })],
-      output: [createUIMessage({ id: '2', role: 'assistant', content: 'Photosynthesis converts sunlight to energy.' })],
+      inputMessages: [createTestMessage({ id: '1', role: 'user', content: 'What is photosynthesis?' })],
+      output: [
+        createTestMessage({ id: '2', role: 'assistant', content: 'Photosynthesis converts sunlight to energy.' }),
+      ],
     });
 
     // Mock the run method
@@ -276,8 +278,8 @@ describe('createContextPrecisionScorer', () => {
     });
 
     const testRun = createAgentTestRun({
-      inputMessages: [createUIMessage({ id: '1', role: 'user', content: 'Test query' })],
-      output: [createUIMessage({ id: '2', role: 'assistant', content: 'Test response' })],
+      inputMessages: [createTestMessage({ id: '1', role: 'user', content: 'Test query' })],
+      output: [createTestMessage({ id: '2', role: 'assistant', content: 'Test response' })],
     });
 
     const result = await scorer.run(testRun);

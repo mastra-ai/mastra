@@ -1,6 +1,4 @@
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'path';
-import { copy } from 'fs-extra';
+import { join } from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -53,14 +51,19 @@ vi.mock('@mastra/deployer', () => {
     constructor() {}
     _bundle = mockBundle;
     writePackageJson = mockWritePackageJson;
+
+    getAllToolPaths = () => ['/test/project/src/mastra/tools'];
+  }
+
+  // Use a class for FileService constructor (Vitest v4 requirement)
+  class MockFileService {
+    getFirstExistingFile = vi.fn();
+    getFirstExistingFileOrUndefined = vi.fn();
   }
 
   return {
     Deployer: MockDeployer,
-    FileService: vi.fn().mockImplementation(() => ({
-      getFirstExistingFile: vi.fn(),
-      getFirstExistingFileOrUndefined: vi.fn(),
-    })),
+    FileService: MockFileService,
   };
 });
 
@@ -82,7 +85,6 @@ describe('CloudDeployer', () => {
     // @ts-ignore - accessing protected method for testing
     deployer._bundle = mockBundle;
 
-    vi.mocked(copy).mockResolvedValue(undefined);
     vi.mocked(installDeps).mockResolvedValue(undefined);
     vi.mocked(getMastraEntryFile).mockReturnValue('/test/src/mastra/index.ts');
     vi.mocked(getAuthEntrypoint).mockReturnValue('// auth entrypoint code');
@@ -106,19 +108,6 @@ describe('CloudDeployer', () => {
   describe('deploy', () => {
     it('should be implemented but do nothing', async () => {
       await expect(deployer.deploy('/output')).resolves.toBeUndefined();
-    });
-  });
-
-  describe('writeInstrumentationFile', () => {
-    it('should copy instrumentation template to output directory', async () => {
-      const outputDirectory = '/test/output';
-      await deployer.writeInstrumentationFile(outputDirectory);
-
-      const __dirname = dirname(fileURLToPath(import.meta.url));
-      expect(copy).toHaveBeenCalledWith(
-        join(__dirname, '../templates', 'instrumentation-template.js'),
-        join(outputDirectory, 'instrumentation.mjs'),
-      );
     });
   });
 
@@ -257,11 +246,6 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('mastra.storage.init()');
       expect(entry).toContain('new LibSQLStore');
       expect(entry).toContain('new LibSQLVector');
-
-      // Check for hooks registration
-      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
-      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
-
       // Check for server creation
       expect(entry).toContain(
         'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
@@ -307,14 +291,6 @@ describe('CloudDeployer', () => {
       // @ts-ignore - accessing protected method for testing
       await expect(deployer.installDependencies(outputDirectory)).rejects.toThrow('Install failed');
     });
-
-    it('should handle copy error in writeInstrumentationFile', async () => {
-      const outputDirectory = '/test/output';
-
-      vi.mocked(copy).mockRejectedValue(new Error('Copy failed'));
-
-      await expect(deployer.writeInstrumentationFile(outputDirectory)).rejects.toThrow('Copy failed');
-    });
   });
 
   describe('integration scenarios', () => {
@@ -332,14 +308,10 @@ describe('CloudDeployer', () => {
       // Write package.json
       await deployer.writePackageJson(outputDirectory, dependencies);
 
-      // Write instrumentation
-      await deployer.writeInstrumentationFile(outputDirectory);
-
       // Verify calls
       expect(getMastraEntryFile).toHaveBeenCalled();
       expect(mockBundle).toHaveBeenCalled();
       expect(writePackageJsonSpy).toHaveBeenCalled();
-      expect(copy).toHaveBeenCalled();
     });
 
     it('should handle different process.cwd scenarios', async () => {

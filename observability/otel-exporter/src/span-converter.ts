@@ -1,16 +1,16 @@
 /**
- * Convert Mastra AI spans to OpenTelemetry spans
+ * Convert Mastra Spans to OpenTelemetry spans
  */
 
 import type {
-  AnyExportedAISpan,
+  AnyExportedSpan,
   ModelGenerationAttributes,
   AgentRunAttributes,
   ToolCallAttributes,
   MCPToolCallAttributes,
   WorkflowRunAttributes,
 } from '@mastra/core/observability';
-import { AISpanType } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { SpanKind } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import type { InstrumentationScope } from '@opentelemetry/core';
@@ -19,17 +19,17 @@ import { MastraReadableSpan } from './mastra-span.js';
 
 // Map Mastra span types to OpenTelemetry span kinds following OTEL conventions
 // Only non-INTERNAL mappings are specified - all others default to SpanKind.INTERNAL
-const SPAN_KIND_MAPPING: Partial<Record<AISpanType, SpanKind>> = {
+const SPAN_KIND_MAPPING: Partial<Record<SpanType, SpanKind>> = {
   // Model operations are CLIENT spans (calling external AI services)
-  [AISpanType.MODEL_GENERATION]: SpanKind.CLIENT,
-  [AISpanType.MODEL_CHUNK]: SpanKind.CLIENT,
+  [SpanType.MODEL_GENERATION]: SpanKind.CLIENT,
+  [SpanType.MODEL_CHUNK]: SpanKind.CLIENT,
 
   // MCP tool calls are CLIENT (external service calls)
-  [AISpanType.MCP_TOOL_CALL]: SpanKind.CLIENT,
+  [SpanType.MCP_TOOL_CALL]: SpanKind.CLIENT,
 
   // Root spans for agent/workflow are SERVER (entry points)
-  [AISpanType.AGENT_RUN]: SpanKind.SERVER,
-  [AISpanType.WORKFLOW_RUN]: SpanKind.SERVER,
+  [SpanType.AGENT_RUN]: SpanKind.SERVER,
+  [SpanType.WORKFLOW_RUN]: SpanKind.SERVER,
 };
 
 export class SpanConverter {
@@ -45,22 +45,22 @@ export class SpanConverter {
   }
 
   /**
-   * Convert a Mastra AI span to an OpenTelemetry ReadableSpan
+   * Convert a Mastra Span to an OpenTelemetry ReadableSpan
    * This preserves Mastra's trace and span IDs
    */
-  convertSpan(aiSpan: AnyExportedAISpan): MastraReadableSpan {
-    const spanKind = this.getSpanKind(aiSpan);
-    const attributes = this.buildAttributes(aiSpan);
-    const spanName = this.buildSpanName(aiSpan);
+  convertSpan(Span: AnyExportedSpan): MastraReadableSpan {
+    const spanKind = this.getSpanKind(Span);
+    const attributes = this.buildAttributes(Span);
+    const spanName = this.buildSpanName(Span);
 
     // Create a new span with OTEL-compliant naming
-    const otelSpan = { ...aiSpan, name: spanName };
+    const otelSpan = { ...Span, name: spanName };
 
     return new MastraReadableSpan(
       otelSpan,
       attributes,
       spanKind,
-      aiSpan.parentSpanId, // Use the parentSpanId from the Mastra span directly
+      Span.parentSpanId, // Use the parentSpanId from the Mastra span directly
       this.resource,
       this.instrumentationLibrary,
     );
@@ -69,111 +69,111 @@ export class SpanConverter {
   /**
    * Get the appropriate SpanKind based on span type and context
    */
-  private getSpanKind(aiSpan: AnyExportedAISpan): SpanKind {
+  private getSpanKind(Span: AnyExportedSpan): SpanKind {
     // Root spans should be SERVER
-    if (aiSpan.isRootSpan) {
-      if (aiSpan.type === AISpanType.AGENT_RUN || aiSpan.type === AISpanType.WORKFLOW_RUN) {
+    if (Span.isRootSpan) {
+      if (Span.type === SpanType.AGENT_RUN || Span.type === SpanType.WORKFLOW_RUN) {
         return SpanKind.SERVER;
       }
     }
-    return SPAN_KIND_MAPPING[aiSpan.type] || SpanKind.INTERNAL;
+    return SPAN_KIND_MAPPING[Span.type] || SpanKind.INTERNAL;
   }
 
   /**
    * Build OTEL-compliant span name based on span type and attributes
    */
-  private buildSpanName(aiSpan: AnyExportedAISpan): string {
-    switch (aiSpan.type) {
-      case AISpanType.MODEL_GENERATION: {
-        const attrs = aiSpan.attributes as ModelGenerationAttributes;
+  private buildSpanName(Span: AnyExportedSpan): string {
+    switch (Span.type) {
+      case SpanType.MODEL_GENERATION: {
+        const attrs = Span.attributes as ModelGenerationAttributes;
         const operation = attrs?.resultType === 'tool_selection' ? 'tool_selection' : 'chat';
         const model = attrs?.model || 'unknown';
         return `${operation} ${model}`;
       }
 
-      case AISpanType.TOOL_CALL:
-      case AISpanType.MCP_TOOL_CALL: {
-        const toolAttrs = aiSpan.attributes as ToolCallAttributes | MCPToolCallAttributes;
+      case SpanType.TOOL_CALL:
+      case SpanType.MCP_TOOL_CALL: {
+        const toolAttrs = Span.attributes as ToolCallAttributes | MCPToolCallAttributes;
         const toolName = toolAttrs?.toolId || 'unknown';
         return `tool.execute ${toolName}`;
       }
 
-      case AISpanType.AGENT_RUN: {
-        const agentAttrs = aiSpan.attributes as AgentRunAttributes;
+      case SpanType.AGENT_RUN: {
+        const agentAttrs = Span.attributes as AgentRunAttributes;
         const agentId = agentAttrs?.agentId || 'unknown';
         return `agent.${agentId}`;
       }
 
-      case AISpanType.WORKFLOW_RUN: {
-        const workflowAttrs = aiSpan.attributes as WorkflowRunAttributes;
+      case SpanType.WORKFLOW_RUN: {
+        const workflowAttrs = Span.attributes as WorkflowRunAttributes;
         const workflowId = workflowAttrs?.workflowId || 'unknown';
         return `workflow.${workflowId}`;
       }
 
-      case AISpanType.WORKFLOW_STEP:
+      case SpanType.WORKFLOW_STEP:
         // Keep the original name as it's likely descriptive
-        return aiSpan.name;
+        return Span.name;
 
       default:
         // For other types, use a simplified version of the original name
-        return aiSpan.name;
+        return Span.name;
     }
   }
 
   /**
-   * Build OpenTelemetry attributes from Mastra AI span
+   * Build OpenTelemetry attributes from Mastra Span
    * Following OTEL Semantic Conventions for GenAI
    */
-  private buildAttributes(aiSpan: AnyExportedAISpan): Attributes {
+  private buildAttributes(Span: AnyExportedSpan): Attributes {
     const attributes: Attributes = {};
 
     // Add gen_ai.operation.name based on span type
-    attributes['gen_ai.operation.name'] = this.getOperationName(aiSpan);
+    attributes['gen_ai.operation.name'] = this.getOperationName(Span);
 
     // Add span kind semantic attribute
-    attributes['span.kind'] = this.getSpanKindString(aiSpan);
+    attributes['span.kind'] = this.getSpanKindString(Span);
 
     // Add span type for better visibility
-    attributes['mastra.span.type'] = aiSpan.type;
+    attributes['mastra.span.type'] = Span.type;
 
     // Add trace and span IDs for debugging
-    attributes['mastra.trace_id'] = aiSpan.traceId;
-    attributes['mastra.span_id'] = aiSpan.id;
-    if (aiSpan.parentSpanId) {
-      attributes['mastra.parent_span_id'] = aiSpan.parentSpanId;
+    attributes['mastra.trace_id'] = Span.traceId;
+    attributes['mastra.span_id'] = Span.id;
+    if (Span.parentSpanId) {
+      attributes['mastra.parent_span_id'] = Span.parentSpanId;
     }
 
     // Handle input/output based on span type
     // Always add input/output for Laminar compatibility
-    if (aiSpan.input !== undefined) {
-      const inputStr = typeof aiSpan.input === 'string' ? aiSpan.input : JSON.stringify(aiSpan.input);
+    if (Span.input !== undefined) {
+      const inputStr = typeof Span.input === 'string' ? Span.input : JSON.stringify(Span.input);
       // Add generic input for all providers
       attributes['input'] = inputStr;
 
       // Add specific attributes based on span type
-      if (aiSpan.type === AISpanType.MODEL_GENERATION) {
+      if (Span.type === SpanType.MODEL_GENERATION) {
         attributes['gen_ai.prompt'] = inputStr;
-      } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
+      } else if (Span.type === SpanType.TOOL_CALL || Span.type === SpanType.MCP_TOOL_CALL) {
         attributes['gen_ai.tool.input'] = inputStr;
       }
     }
 
-    if (aiSpan.output !== undefined) {
-      const outputStr = typeof aiSpan.output === 'string' ? aiSpan.output : JSON.stringify(aiSpan.output);
+    if (Span.output !== undefined) {
+      const outputStr = typeof Span.output === 'string' ? Span.output : JSON.stringify(Span.output);
       // Add generic output for all providers
       attributes['output'] = outputStr;
 
       // Add specific attributes based on span type
-      if (aiSpan.type === AISpanType.MODEL_GENERATION) {
+      if (Span.type === SpanType.MODEL_GENERATION) {
         attributes['gen_ai.completion'] = outputStr;
-      } else if (aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) {
+      } else if (Span.type === SpanType.TOOL_CALL || Span.type === SpanType.MCP_TOOL_CALL) {
         attributes['gen_ai.tool.output'] = outputStr;
       }
     }
 
     // Add model-specific attributes using OTEL semantic conventions
-    if (aiSpan.type === AISpanType.MODEL_GENERATION && aiSpan.attributes) {
-      const modelAttrs = aiSpan.attributes as ModelGenerationAttributes;
+    if (Span.type === SpanType.MODEL_GENERATION && Span.attributes) {
+      const modelAttrs = Span.attributes as ModelGenerationAttributes;
 
       // Model and provider
       if (modelAttrs.model) {
@@ -241,8 +241,8 @@ export class SpanConverter {
     }
 
     // Add tool-specific attributes using OTEL conventions
-    if ((aiSpan.type === AISpanType.TOOL_CALL || aiSpan.type === AISpanType.MCP_TOOL_CALL) && aiSpan.attributes) {
-      const toolAttrs = aiSpan.attributes as ToolCallAttributes | MCPToolCallAttributes;
+    if ((Span.type === SpanType.TOOL_CALL || Span.type === SpanType.MCP_TOOL_CALL) && Span.attributes) {
+      const toolAttrs = Span.attributes as ToolCallAttributes | MCPToolCallAttributes;
 
       // Tool identification
       if (toolAttrs.toolId) {
@@ -250,7 +250,7 @@ export class SpanConverter {
       }
 
       // MCP-specific attributes
-      if (aiSpan.type === AISpanType.MCP_TOOL_CALL) {
+      if (Span.type === SpanType.MCP_TOOL_CALL) {
         const mcpAttrs = toolAttrs as MCPToolCallAttributes;
         if (mcpAttrs.mcpServer) {
           attributes['mcp.server'] = mcpAttrs.mcpServer;
@@ -271,8 +271,8 @@ export class SpanConverter {
     }
 
     // Add agent-specific attributes
-    if (aiSpan.type === AISpanType.AGENT_RUN && aiSpan.attributes) {
-      const agentAttrs = aiSpan.attributes as AgentRunAttributes;
+    if (Span.type === SpanType.AGENT_RUN && Span.attributes) {
+      const agentAttrs = Span.attributes as AgentRunAttributes;
       if (agentAttrs.agentId) {
         attributes['agent.id'] = agentAttrs.agentId;
         attributes['gen_ai.agent.id'] = agentAttrs.agentId;
@@ -286,8 +286,8 @@ export class SpanConverter {
     }
 
     // Add workflow-specific attributes
-    if (aiSpan.type === AISpanType.WORKFLOW_RUN && aiSpan.attributes) {
-      const workflowAttrs = aiSpan.attributes as WorkflowRunAttributes;
+    if (Span.type === SpanType.WORKFLOW_RUN && Span.attributes) {
+      const workflowAttrs = Span.attributes as WorkflowRunAttributes;
       if (workflowAttrs.workflowId) {
         attributes['workflow.id'] = workflowAttrs.workflowId;
       }
@@ -297,21 +297,21 @@ export class SpanConverter {
     }
 
     // Add error information if present
-    if (aiSpan.errorInfo) {
+    if (Span.errorInfo) {
       attributes['error'] = true;
-      attributes['error.type'] = aiSpan.errorInfo.id || 'unknown';
-      attributes['error.message'] = aiSpan.errorInfo.message;
-      if (aiSpan.errorInfo.domain) {
-        attributes['error.domain'] = aiSpan.errorInfo.domain;
+      attributes['error.type'] = Span.errorInfo.id || 'unknown';
+      attributes['error.message'] = Span.errorInfo.message;
+      if (Span.errorInfo.domain) {
+        attributes['error.domain'] = Span.errorInfo.domain;
       }
-      if (aiSpan.errorInfo.category) {
-        attributes['error.category'] = aiSpan.errorInfo.category;
+      if (Span.errorInfo.category) {
+        attributes['error.category'] = Span.errorInfo.category;
       }
     }
 
     // Add metadata as custom attributes with proper typing
-    if (aiSpan.metadata) {
-      Object.entries(aiSpan.metadata).forEach(([key, value]) => {
+    if (Span.metadata) {
+      Object.entries(Span.metadata).forEach(([key, value]) => {
         // Skip if attribute already exists
         if (!attributes[key]) {
           // Ensure value is a valid OTEL attribute type
@@ -328,12 +328,12 @@ export class SpanConverter {
     }
 
     // Add timing information
-    if (aiSpan.startTime) {
-      attributes['mastra.start_time'] = aiSpan.startTime.toISOString();
+    if (Span.startTime) {
+      attributes['mastra.start_time'] = Span.startTime.toISOString();
     }
-    if (aiSpan.endTime) {
-      attributes['mastra.end_time'] = aiSpan.endTime.toISOString();
-      const duration = aiSpan.endTime.getTime() - aiSpan.startTime.getTime();
+    if (Span.endTime) {
+      attributes['mastra.end_time'] = Span.endTime.toISOString();
+      const duration = Span.endTime.getTime() - Span.startTime.getTime();
       attributes['mastra.duration_ms'] = duration;
     }
 
@@ -343,29 +343,29 @@ export class SpanConverter {
   /**
    * Get the operation name based on span type for gen_ai.operation.name
    */
-  private getOperationName(aiSpan: AnyExportedAISpan): string {
-    switch (aiSpan.type) {
-      case AISpanType.MODEL_GENERATION: {
-        const attrs = aiSpan.attributes as ModelGenerationAttributes;
+  private getOperationName(Span: AnyExportedSpan): string {
+    switch (Span.type) {
+      case SpanType.MODEL_GENERATION: {
+        const attrs = Span.attributes as ModelGenerationAttributes;
         return attrs?.resultType === 'tool_selection' ? 'tool_selection' : 'chat';
       }
-      case AISpanType.TOOL_CALL:
-      case AISpanType.MCP_TOOL_CALL:
+      case SpanType.TOOL_CALL:
+      case SpanType.MCP_TOOL_CALL:
         return 'tool.execute';
-      case AISpanType.AGENT_RUN:
+      case SpanType.AGENT_RUN:
         return 'agent.run';
-      case AISpanType.WORKFLOW_RUN:
+      case SpanType.WORKFLOW_RUN:
         return 'workflow.run';
       default:
-        return aiSpan.type.replace(/_/g, '.');
+        return Span.type.replace(/_/g, '.');
     }
   }
 
   /**
    * Get span kind as string for attribute
    */
-  private getSpanKindString(aiSpan: AnyExportedAISpan): string {
-    const kind = this.getSpanKind(aiSpan);
+  private getSpanKindString(Span: AnyExportedSpan): string {
+    const kind = this.getSpanKind(Span);
     switch (kind) {
       case SpanKind.SERVER:
         return 'server';

@@ -7,6 +7,7 @@ import { LibSQLStore } from "@mastra/libsql";
 
 export const memory = new Memory({
   storage: new LibSQLStore({
+    id: "ai-sdk-v5-storage",
     url: `file:./mastra.db`,
   }),
   options: {

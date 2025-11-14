@@ -527,16 +527,4 @@ export class AgentBuilder extends BaseResource {
       method: 'POST',
     });
   }
-
-  /**
-   * Sends an event to an agent builder action run.
-   * This calls `/api/agent-builder/:actionId/runs/:runId/send-event`.
-   */
-  async sendRunEvent(params: { runId: string; event: string; data: unknown }): Promise<{ message: string }> {
-    const url = `/api/agent-builder/${this.actionId}/runs/${params.runId}/send-event`;
-    return this.request(url, {
-      method: 'POST',
-      body: { event: params.event, data: params.data },
-    });
-  }
 }

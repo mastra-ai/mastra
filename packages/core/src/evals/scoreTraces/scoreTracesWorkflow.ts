@@ -3,7 +3,7 @@ import z from 'zod';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { InternalSpans } from '../../observability';
 import type { TracingContext } from '../../observability';
-import type { AISpanRecord, AITraceRecord, MastraStorage } from '../../storage';
+import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
 import type { ScoreRowData } from '../types';
@@ -107,13 +107,13 @@ export async function runScorerOnTarget({
   tracingContext: TracingContext;
 }) {
   // TODO: add storage api to get a single span
-  const trace = await storage.getAITrace(target.traceId);
+  const trace = await storage.getTrace(target.traceId);
 
   if (!trace) {
     throw new Error(`Trace not found for scoring, traceId: ${target.traceId}`);
   }
 
-  let span: AISpanRecord | undefined;
+  let span: SpanRecord | undefined;
   if (target.spanId) {
     span = trace.spans.find(span => span.spanId === target.spanId);
   } else {
@@ -168,8 +168,8 @@ function buildScorerRun({
 }: {
   scorerType?: string;
   tracingContext: TracingContext;
-  trace: AITraceRecord;
-  targetSpan: AISpanRecord;
+  trace: TraceRecord;
+  targetSpan: SpanRecord;
 }) {
   let runPayload: ScorerRun;
   if (scorerType === 'agent') {
@@ -192,7 +192,7 @@ async function attachScoreToSpan({
   scoreRecord,
 }: {
   storage: MastraStorage;
-  span: AISpanRecord;
+  span: SpanRecord;
   scoreRecord: ScoreRowData;
 }) {
   const existingLinks = span.links || [];
@@ -203,7 +203,7 @@ async function attachScoreToSpan({
     score: scoreRecord.score,
     createdAt: scoreRecord.createdAt,
   };
-  await storage.updateAISpan({
+  await storage.updateSpan({
     spanId: span.spanId,
     traceId: span.traceId,
     updates: { links: [...existingLinks, link] },

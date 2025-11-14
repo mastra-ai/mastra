@@ -3,7 +3,6 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  StorageGetMessagesArg,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
@@ -15,7 +14,6 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
-  resolveMessageLimit,
   serializeDate,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -33,6 +31,18 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   private ensureMetadata(metadata: Record<string, unknown> | string | undefined): Record<string, unknown> | undefined {
     if (!metadata) return undefined;
     return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+  }
+
+  /**
+   * Summarizes message content without exposing raw data (for logging).
+   * Returns type, length, and keys only to prevent PII leakage.
+   */
+  private summarizeMessageContent(content: unknown): { type: string; length?: number; keys?: string[] } {
+    if (!content) return { type: 'undefined' };
+    if (typeof content === 'string') return { type: 'string', length: content.length };
+    if (Array.isArray(content)) return { type: 'array', length: content.length };
+    if (typeof content === 'object') return { type: 'object', keys: Object.keys(content) };
+    return { type: typeof content };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -201,7 +211,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       return this.operations.getKey(TABLE_MESSAGES, { threadId, id: messageId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { message });
+      this.logger?.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { message });
       throw error;
     }
   }
@@ -211,7 +221,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       return this.operations.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Error getting thread messages key for thread ${threadId}:`, { message });
+      this.logger?.error(`Error getting thread messages key for thread ${threadId}:`, { message });
       throw error;
     }
   }
@@ -333,7 +343,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.error(`Error updating sorted order for key ${orderKey}:`, { message });
+        this.logger?.error(`Error updating sorted order for key ${orderKey}:`, { message });
         throw error; // Let caller handle the error
       } finally {
         // Clean up the queue if this was the last operation
@@ -357,7 +367,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const arr = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
       return Array.isArray(arr) ? arr : [];
     } catch (e) {
-      this.logger.error(`Error parsing order data for key ${orderKey}:`, { e });
+      this.logger?.error(`Error parsing order data for key ${orderKey}:`, { e });
       return [];
     }
   }
@@ -435,10 +445,12 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       for (const message of validatedMessages) {
         // Check if this message already exists in a different thread
         const existingMessage = await this.findMessageInAnyThread(message.id);
-        console.info(`Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`);
+        this.logger?.debug(
+          `Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`,
+        );
         if (existingMessage && existingMessage.threadId && existingMessage.threadId !== message.threadId) {
           // Message exists in a different thread, migrate it
-          console.info(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
+          this.logger?.debug(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);
           messageMigrationTasks.push(this.migrateMessage(message.id, existingMessage.threadId, message.threadId!));
         }
       }
@@ -477,10 +489,8 @@ export class MemoryStorageCloudflare extends MemoryStorage {
                   ...cleanMessage,
                   createdAt: serializeDate(cleanMessage.createdAt),
                 };
-                console.info(`Saving message ${message.id} with content:`, {
-                  content: serializedMessage.content,
-                  contentType: typeof serializedMessage.content,
-                  isArray: Array.isArray(serializedMessage.content),
+                this.logger?.debug(`Saving message ${message.id}`, {
+                  contentSummary: this.summarizeMessageContent(serializedMessage.content),
                 });
                 await this.operations.putKV({ tableName: TABLE_MESSAGES, key, value: serializedMessage });
               }),
@@ -605,7 +615,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const latestIds = await this.getLastN(threadMessagesKey, limit);
       latestIds.forEach(id => messageIds.add(id));
     } catch {
-      console.info(`No message order found for thread ${threadId}, skipping latest messages`);
+      this.logger?.debug(`No message order found for thread ${threadId}, skipping latest messages`);
     }
   }
 
@@ -651,115 +661,18 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           const data = await this.operations.getKV(TABLE_MESSAGES, key);
           if (!data) return null;
           const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          console.info(`Retrieved message ${id} from thread ${threadId} with content:`, {
-            content: parsed.content,
-            contentType: typeof parsed.content,
-            isArray: Array.isArray(parsed.content),
+          this.logger?.debug(`Retrieved message ${id} from thread ${threadId}`, {
+            contentSummary: this.summarizeMessageContent(parsed.content),
           });
           return parsed;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          this.logger.error(`Error retrieving message ${id}:`, { message });
+          this.logger?.error(`Error retrieving message ${id}:`, { message });
           return null;
         }
       }),
     );
     return messages.filter((msg): msg is MastraMessageV1 & { _index?: number } => msg !== null);
-  }
-
-  async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraDBMessage[] }> {
-    console.info(`getMessages called with threadId: ${threadId}`);
-
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
-    const messageIds = new Set<string>();
-    if (limit === 0 && !selectBy?.include?.length) return { messages: [] };
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      // Get included messages and recent messages in parallel
-      await Promise.all([
-        selectBy?.include?.length
-          ? this.getIncludedMessagesWithContext(threadId, selectBy.include, messageIds)
-          : Promise.resolve(),
-        limit > 0 ? this.getRecentMessages(threadId, limit, messageIds) : Promise.resolve(),
-      ]);
-
-      // Fetch and parse all messages from their respective threads
-      // Only use targetThreadId if we don't have include information (for cross-thread operations)
-      const targetThreadId = selectBy?.include?.length ? undefined : threadId;
-      const messages = await this.fetchAndParseMessagesFromMultipleThreads(
-        Array.from(messageIds),
-        selectBy?.include,
-        targetThreadId,
-      );
-      if (!messages.length) return { messages: [] };
-
-      // Sort messages
-      try {
-        const threadMessagesKey = this.getThreadMessagesKey(threadId);
-        const messageOrder = await this.getFullOrder(threadMessagesKey);
-        const orderMap = new Map(messageOrder.map((id, index) => [id, index]));
-
-        messages.sort((a, b) => {
-          const indexA = orderMap.get(a.id);
-          const indexB = orderMap.get(b.id);
-
-          if (indexA !== undefined && indexB !== undefined) return orderMap.get(a.id)! - orderMap.get(b.id)!;
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        });
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: 'CLOUDFLARE_STORAGE_SORT_MESSAGES_FAILED',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            text: `Error sorting messages for thread ${threadId} falling back to creation time`,
-            details: {
-              threadId,
-            },
-          },
-          error,
-        );
-        this.logger?.trackException(mastraError);
-        this.logger?.error(mastraError.toString());
-        messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      }
-
-      // Remove _index and ensure dates before returning, just like Upstash
-      const prepared = messages.map(({ _index, ...message }) => ({
-        ...message,
-        type: message.type === (`v2` as `text`) ? undefined : message.type,
-        createdAt: ensureDate(message.createdAt)!,
-      }));
-
-      const list = new MessageList({ threadId, resourceId }).add(
-        prepared as MastraMessageV1[] | MastraDBMessage[],
-        'memory',
-      );
-      return { messages: list.get.all.db() };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_STORAGE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Error retrieving messages for thread ${threadId}`,
-          details: {
-            threadId,
-            resourceId: resourceId ?? '',
-          },
-        },
-        error,
-      );
-      this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
-      return { messages: [] };
-    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -831,7 +744,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }
 
       // Determine sort field and direction
-      const { field, direction } = this.parseOrderBy(orderBy);
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
       const messageIds = new Set<string>();
 
@@ -924,8 +837,9 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         }
       }
 
-      // If perPage is 0, return empty array immediately
-      if (perPage === 0) {
+      // If perPage is 0 AND there are no include messages, return empty array immediately
+      // When include is provided, we still need to return those messages even with perPage: 0
+      if (perPage === 0 && (!include || include.length === 0)) {
         return {
           messages: [],
           total,
@@ -1008,7 +922,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Remove _index and ensure dates before returning
       const prepared = filteredMessages.map(({ _index, ...message }) => ({
         ...message,
-        type: message.type === (`v2` as `text`) ? undefined : message.type,
+        type: message.type !== ('v2' as string) ? message.type : undefined,
         createdAt: ensureDate(message.createdAt)!,
       }));
 
@@ -1016,17 +930,24 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
       let finalMessages = list.get.all.db();
 
-      // Sort final messages again to ensure correct order
+      // Sort final messages with type-aware comparator and stable tiebreaker
       finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aVal = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bVal = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
 
-        // Handle tiebreaker for stable sorting
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
+        // Handle undefined/null values (sort to end)
+        if (aVal == null && bVal == null) return a.id.localeCompare(b.id);
+        if (aVal == null) return 1;
+        if (bVal == null) return -1;
+
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          const cmp = direction === 'ASC' ? aVal - bVal : bVal - aVal;
+          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
         }
-
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        const cmp =
+          direction === 'ASC' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
       });
 
       // Calculate hasMore based on pagination window

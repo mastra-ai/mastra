@@ -1,5 +1,5 @@
-import type { AITracingEvent, AnyExportedAISpan, CreateSpanOptions } from '@mastra/core/observability';
-import { AISpanType, AITracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, CreateSpanOptions } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 
 import { fetchWithRetry } from '@mastra/core/utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,9 +22,9 @@ function createTestJWT(payload: { teamId: string; projectId: string }): string {
   return `${headerB64}.${payloadB64}.${signature}`;
 }
 
-function getMockSpan<TType extends AISpanType>(
+function getMockSpan<TType extends SpanType>(
   options: CreateSpanOptions<TType> & { id: string; traceId: string },
-): AnyExportedAISpan {
+): AnyExportedSpan {
   return {
     ...options,
     startTime: new Date(),
@@ -55,7 +55,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -63,54 +63,54 @@ describe('CloudExporter', () => {
     });
 
     it('should process SPAN_ENDED events', async () => {
-      const spanEndedEvent: AITracingEvent = {
-        type: AITracingEventType.SPAN_ENDED,
+      const spanEndedEvent: TracingEvent = {
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       };
 
       // Mock the internal buffer to verify span was added
       const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
 
-      await exporter.exportEvent(spanEndedEvent);
+      await exporter.exportTracingEvent(spanEndedEvent);
 
       expect(addToBufferSpy).toHaveBeenCalledWith(spanEndedEvent);
     });
 
     it('should ignore SPAN_STARTED events', async () => {
-      const spanStartedEvent: AITracingEvent = {
-        type: AITracingEventType.SPAN_STARTED,
+      const spanStartedEvent: TracingEvent = {
+        type: TracingEventType.SPAN_STARTED,
         exportedSpan: mockSpan,
       };
 
       const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
 
-      await exporter.exportEvent(spanStartedEvent);
+      await exporter.exportTracingEvent(spanStartedEvent);
 
       expect(addToBufferSpy).not.toHaveBeenCalled();
     });
 
     it('should ignore SPAN_UPDATED events', async () => {
-      const spanUpdatedEvent: AITracingEvent = {
-        type: AITracingEventType.SPAN_UPDATED,
+      const spanUpdatedEvent: TracingEvent = {
+        type: TracingEventType.SPAN_UPDATED,
         exportedSpan: mockSpan,
       };
 
       const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
 
-      await exporter.exportEvent(spanUpdatedEvent);
+      await exporter.exportTracingEvent(spanUpdatedEvent);
 
       expect(addToBufferSpy).not.toHaveBeenCalled();
     });
 
     it('should only increment buffer size for SPAN_ENDED events', async () => {
-      const events: AITracingEvent[] = [
-        { type: AITracingEventType.SPAN_STARTED, exportedSpan: mockSpan },
-        { type: AITracingEventType.SPAN_UPDATED, exportedSpan: mockSpan },
-        { type: AITracingEventType.SPAN_ENDED, exportedSpan: mockSpan },
+      const events: TracingEvent[] = [
+        { type: TracingEventType.SPAN_STARTED, exportedSpan: mockSpan },
+        { type: TracingEventType.SPAN_UPDATED, exportedSpan: mockSpan },
+        { type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan },
       ];
 
       for (const event of events) {
-        await exporter.exportEvent(event);
+        await exporter.exportTracingEvent(event);
       }
 
       // Access private buffer to check size
@@ -124,7 +124,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -142,8 +142,8 @@ describe('CloudExporter', () => {
     it('should set firstEventTime when adding first span to empty buffer', async () => {
       const beforeTime = Date.now();
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -157,8 +157,8 @@ describe('CloudExporter', () => {
 
     it('should not update firstEventTime when adding subsequent spans', async () => {
       // Add first span
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -170,8 +170,8 @@ describe('CloudExporter', () => {
 
       // Add second span
       const secondSpan = { ...mockSpan, id: 'span-456' };
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: secondSpan,
       });
 
@@ -185,23 +185,23 @@ describe('CloudExporter', () => {
 
       expect(buffer.totalSize).toBe(0);
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
       expect(buffer.totalSize).toBe(1);
 
       const secondSpan = { ...mockSpan, id: 'span-456' };
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: secondSpan,
       });
       expect(buffer.totalSize).toBe(2);
     });
 
     it('should add spans with correct structure to buffer', async () => {
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -243,19 +243,19 @@ describe('CloudExporter', () => {
     });
 
     it('should handle parent span references', async () => {
-      const parentSpan: AnyExportedAISpan = {
+      const parentSpan: AnyExportedSpan = {
         ...mockSpan,
         id: 'parent-span',
       };
 
-      const childSpan: AnyExportedAISpan = {
+      const childSpan: AnyExportedSpan = {
         ...mockSpan,
         id: 'child-span',
         parentSpanId: parentSpan.id,
       };
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: childSpan,
       });
 
@@ -270,7 +270,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -288,8 +288,8 @@ describe('CloudExporter', () => {
       const shouldFlushSpy = vi.spyOn(smallBatchExporter as any, 'shouldFlush');
 
       // Add first span - should not flush
-      await smallBatchExporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await smallBatchExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -298,8 +298,8 @@ describe('CloudExporter', () => {
 
       // Add second span - should trigger flush
       const secondSpan = { ...mockSpan, id: 'span-456' };
-      await smallBatchExporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await smallBatchExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: secondSpan,
       });
 
@@ -310,8 +310,8 @@ describe('CloudExporter', () => {
     it('should schedule flush for first event in empty buffer', async () => {
       const scheduleFlushSpy = vi.spyOn(exporter as any, 'scheduleFlush');
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -322,8 +322,8 @@ describe('CloudExporter', () => {
       const scheduleFlushSpy = vi.spyOn(exporter as any, 'scheduleFlush');
 
       // Add first span
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -331,8 +331,8 @@ describe('CloudExporter', () => {
 
       // Add second span - should not schedule again
       const secondSpan = { ...mockSpan, id: 'span-456' };
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: secondSpan,
       });
 
@@ -376,7 +376,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -394,8 +394,8 @@ describe('CloudExporter', () => {
     it('should set timer when scheduling flush', async () => {
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -422,8 +422,8 @@ describe('CloudExporter', () => {
     it('should trigger flush when timer expires', async () => {
       const flushSpy = vi.spyOn(exporter as any, 'flush').mockResolvedValue(undefined);
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -436,8 +436,8 @@ describe('CloudExporter', () => {
     it('should clear timer after flush', async () => {
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -454,8 +454,8 @@ describe('CloudExporter', () => {
       // Mock flush to throw error
       vi.spyOn(exporter as any, 'flush').mockRejectedValue(new Error('Flush failed'));
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -471,8 +471,8 @@ describe('CloudExporter', () => {
     it('should clear timer on flush and set flushTimer to null', async () => {
       const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -491,8 +491,8 @@ describe('CloudExporter', () => {
       expect((exporter as any).flushTimer).toBeNull();
 
       // Add event to buffer
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -540,7 +540,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -553,8 +553,8 @@ describe('CloudExporter', () => {
     });
 
     it('should call cloud API with correct URL and headers', async () => {
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -576,8 +576,8 @@ describe('CloudExporter', () => {
     });
 
     it('should send spans in correct format', async () => {
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -612,8 +612,8 @@ describe('CloudExporter', () => {
         endpoint: 'http://localhost:3000',
       });
 
-      await authExporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await authExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -634,8 +634,8 @@ describe('CloudExporter', () => {
       ];
 
       for (const exportedSpan of exportedSpans) {
-        await exporter.exportEvent({
-          type: AITracingEventType.SPAN_ENDED,
+        await exporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
           exportedSpan,
         });
       }
@@ -655,8 +655,8 @@ describe('CloudExporter', () => {
     it('should log successful flush', async () => {
       const loggerDebugSpy = vi.spyOn((exporter as any).logger, 'debug');
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -674,7 +674,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -705,8 +705,8 @@ describe('CloudExporter', () => {
         .mockRejectedValueOnce(new Error('Server error'))
         .mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
-      await retryExporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await retryExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -729,8 +729,8 @@ describe('CloudExporter', () => {
 
       mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
 
-      await customRetryExporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await customRetryExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -755,8 +755,8 @@ describe('CloudExporter', () => {
       // Mock fetchWithRetry to always fail after exhausting retries
       mockFetchWithRetry.mockRejectedValue(new Error('Persistent failure'));
 
-      await retryExporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await retryExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -775,8 +775,8 @@ describe('CloudExporter', () => {
       // Mock fetchWithRetry to fail
       mockFetchWithRetry.mockRejectedValue(new Error('API down'));
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -798,7 +798,7 @@ describe('CloudExporter', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
       name: 'test-span',
-      type: AISpanType.MODEL_GENERATION,
+      type: SpanType.MODEL_GENERATION,
       isEvent: false,
       traceId: 'trace-456',
       input: { prompt: 'test' },
@@ -818,8 +818,8 @@ describe('CloudExporter', () => {
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       // Set up a timer by adding an event
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
@@ -838,13 +838,13 @@ describe('CloudExporter', () => {
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       // Add events to buffer
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: { ...mockSpan, id: 'span-456' },
       });
 
@@ -881,8 +881,8 @@ describe('CloudExporter', () => {
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       // Add event to buffer
-      await exporter.exportEvent({
-        type: AITracingEventType.SPAN_ENDED,
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 

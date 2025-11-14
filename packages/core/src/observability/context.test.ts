@@ -1,5 +1,5 @@
 /**
- * AI Tracing Context Integration Tests
+ * Tracing Context Integration Tests
  *
  * Tests for automatic context propagation and proxy-based wrapping functionality
  */
@@ -40,28 +40,27 @@ class MockRun {
 class MockWorkflow {
   execute = vi.fn();
   createRun = vi.fn();
-  createRun = vi.fn();
   otherMethod = vi.fn().mockReturnValue('workflow-other-result');
 }
 
-class MockAISpan {
+class MockSpan {
   constructor(public isNoOp = false) {}
-  aiTracing = { name: 'mock-tracing' };
+  observabilityInstance = { name: 'mock-tracing' };
   createChildSpan = vi.fn();
 }
 
-class NoOpAISpan {
+class NoOpSpan {
   constructor() {}
-  // No aiTracing property to simulate NoOp
+  // No observabilityInstance property to simulate NoOp
 }
 
-describe('AI Tracing Context Integration', () => {
+describe('Tracing Context Integration', () => {
   let mockMastra: MockMastra;
   let mockAgent: MockAgent;
   let mockWorkflow: MockWorkflow;
   let mockRun: MockRun;
-  let mockSpan: MockAISpan;
-  let noOpSpan: NoOpAISpan;
+  let mockSpan: MockSpan;
+  let noOpSpan: NoOpSpan;
   let tracingContext: TracingContext;
   let noOpContext: TracingContext;
 
@@ -72,8 +71,8 @@ describe('AI Tracing Context Integration', () => {
     mockAgent = new MockAgent();
     mockWorkflow = new MockWorkflow();
     mockRun = new MockRun();
-    mockSpan = new MockAISpan();
-    noOpSpan = new NoOpAISpan();
+    mockSpan = new MockSpan();
+    noOpSpan = new NoOpSpan();
 
     // Mock agent, workflow, and run returns
     mockMastra.getAgent.mockReturnValue(mockAgent);
@@ -81,7 +80,6 @@ describe('AI Tracing Context Integration', () => {
     mockMastra.getWorkflow.mockReturnValue(mockWorkflow);
     mockMastra.getWorkflowById.mockReturnValue(mockWorkflow);
     mockWorkflow.createRun.mockReturnValue(mockRun);
-    mockWorkflow.createRun.mockResolvedValue(mockRun);
 
     tracingContext = { currentSpan: mockSpan as any };
     noOpContext = { currentSpan: noOpSpan as any };
@@ -277,8 +275,8 @@ describe('AI Tracing Context Integration', () => {
 
     it('should handle NoOp spans correctly', () => {
       // Test different ways a NoOp span might be identified
-      const noOpSpan1 = new NoOpAISpan();
-      const noOpSpan2 = { constructor: { name: 'NoOpAISpan' }, aiTracing: null } as any;
+      const noOpSpan1 = new NoOpSpan();
+      const noOpSpan2 = { constructor: { name: 'NoOpSpan' }, observabilityInstance: null } as any;
       const noOpSpan3 = { __isNoOp: true } as any;
 
       const wrapped1 = wrapMastra(mockMastra as any, { currentSpan: noOpSpan1 as any });

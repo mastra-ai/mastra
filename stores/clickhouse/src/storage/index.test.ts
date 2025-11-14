@@ -16,6 +16,6 @@ const TEST_CONFIG: ClickhouseConfig = {
   // },
 };
 
-const storage = new ClickhouseStore(TEST_CONFIG);
+const storage = new ClickhouseStore({ ...TEST_CONFIG, id: 'clickhouse-test' });
 
 createTestSuite(storage);

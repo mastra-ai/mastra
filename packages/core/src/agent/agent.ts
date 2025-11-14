@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { WritableStream } from 'stream/web';
-import type { TextPart, UIMessage } from '@internal/ai-sdk-v4/message';
-import type { StreamObjectResult } from '@internal/ai-sdk-v4/model';
+import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { ZodSchema } from 'zod';
@@ -27,7 +26,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { AISpanType, getOrCreateSpan } from '../observability';
+import { SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessor, OutputProcessor } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
 import { RequestContext } from '../request-context';
@@ -1066,6 +1065,53 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     // Mastra will be passed to the LLM when it's created in getLLM()
+
+    // Auto-register tools with the Mastra instance
+    if (this.#tools && typeof this.#tools === 'object') {
+      Object.entries(this.#tools).forEach(([key, tool]) => {
+        try {
+          // Only add tools that have an id property (ToolAction type)
+          if (tool && typeof tool === 'object' && 'id' in tool) {
+            // Use tool's intrinsic ID to avoid collisions across agents
+            const toolKey = typeof (tool as any).id === 'string' ? (tool as any).id : key;
+            mastra.addTool(tool as any, toolKey);
+          }
+        } catch (error) {
+          // Tool might already be registered, that's okay
+          if (error instanceof MastraError && error.id !== 'MASTRA_ADD_TOOL_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register input processors with the Mastra instance
+    if (this.#inputProcessors && Array.isArray(this.#inputProcessors)) {
+      this.#inputProcessors.forEach(processor => {
+        try {
+          mastra.addProcessor(processor);
+        } catch (error) {
+          // Processor might already be registered, that's okay
+          if (error instanceof MastraError && error.id !== 'MASTRA_ADD_PROCESSOR_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
+
+    // Auto-register output processors with the Mastra instance
+    if (this.#outputProcessors && Array.isArray(this.#outputProcessors)) {
+      this.#outputProcessors.forEach(processor => {
+        try {
+          mastra.addProcessor(processor);
+        } catch (error) {
+          // Processor might already be registered, that's okay
+          if (error instanceof MastraError && error.id !== 'MASTRA_ADD_PROCESSOR_DUPLICATE_KEY') {
+            throw error;
+          }
+        }
+      });
+    }
   }
 
   /**
@@ -1394,12 +1440,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     if (!memory) {
       return { messages: [] };
     }
-    return memory.rememberMessages({
+
+    const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
+    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
+      return { messages: [] };
+    }
+
+    return memory.recall({
       threadId,
       resourceId,
-      config: memoryConfig,
+      perPage: threadConfig.lastMessages,
+      threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-      vectorMessageSearch,
+      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
     });
   }
 
@@ -1625,7 +1678,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           outputSchema: agentOutputSchema,
           mastra: this.#mastra,
           // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
-          // manually wrap agent tools with ai tracing, so that we can pass the
+          // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
             try {
@@ -1784,7 +1837,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           outputSchema: workflow.outputSchema,
           mastra: this.#mastra,
           // BREAKING CHANGE v1.0: New tool signature - first param is inputData, second is context
-          // manually wrap workflow tools with ai tracing, so that we can pass the
+          // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             try {
@@ -2094,13 +2147,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     const scorerInput: ScorerRunInputForAgent = {
-      inputMessages: messageList.getPersisted.input.ui(),
-      rememberedMessages: messageList.getPersisted.remembered.ui(),
+      inputMessages: messageList.getPersisted.input.db(),
+      rememberedMessages: messageList.getPersisted.remembered.db(),
       systemMessages: messageList.getSystemMessages(),
       taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
-    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.ui();
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.db();
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
@@ -2292,10 +2345,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const runId = options.runId || this.#mastra?.generateId() || randomUUID();
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
 
-    // Set AI Tracing context
+    // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
-    const agentAISpan = getOrCreateSpan({
-      type: AISpanType.AGENT_RUN,
+    const agentSpan = getOrCreateSpan({
+      type: SpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
       input: options.messages,
       attributes: {
@@ -2353,7 +2406,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       resourceId,
       runId,
       requestContext,
-      agentAISpan: agentAISpan!,
+      agentSpan: agentSpan!,
       methodType,
       instructions,
       memoryConfig,
@@ -2367,7 +2420,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     });
 
     const run = await executionWorkflow.createRun();
-    const result = await run.start({ tracingContext: { currentSpan: agentAISpan } });
+    const result = await run.start({ tracingContext: { currentSpan: agentSpan } });
 
     return result;
   }
@@ -2385,7 +2438,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     memoryConfig,
     outputText,
     requestContext,
-    agentAISpan,
+    agentSpan,
     runId,
     messageList,
     threadExists,
@@ -2477,7 +2530,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               this.genTitle(
                 userMessage,
                 requestContext,
-                { currentSpan: agentAISpan },
+                { currentSpan: agentSpan },
                 titleModel,
                 titleInstructions,
               ).then(title => {
@@ -2546,10 +2599,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       structuredOutput,
       overrideScorers,
-      tracingContext: { currentSpan: agentAISpan },
+      tracingContext: { currentSpan: agentSpan },
     });
 
-    agentAISpan?.end({
+    agentSpan?.end({
       output: {
         text: result.text,
         object: result.object,

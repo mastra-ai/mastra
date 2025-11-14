@@ -117,9 +117,9 @@ describe('BenchmarkStore', () => {
       expect(restoredThread).toBeTruthy();
       expect(restoredThread?.title).toBe('Test Thread');
 
-      const restoredMessages = await store2.getMessages({ threadId: 'test-thread-1' });
-      expect(restoredMessages).toHaveLength(1);
-      expect(restoredMessages[0].content).toBe('Hello');
+      const result = await store2.listMessages({ threadId: 'test-thread-1' });
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].content).toMatchObject({ text: 'Hello' });
     });
 
     it('should throw error if file does not exist', async () => {
@@ -184,24 +184,22 @@ describe('BenchmarkStore', () => {
         ],
       });
 
-      // Query using selectBy.include to get messages from different threads
-      const messages = await store.getMessages({
+      // Query using include to get messages from different threads
+      const result = await store.listMessages({
         threadId: 'thread-1',
-        selectBy: {
-          include: [
-            {
-              id: 'msg-2',
-              threadId: 'thread-2', // Different thread!
-              withPreviousMessages: 0,
-              withNextMessages: 1,
-            },
-          ],
-        },
+        include: [
+          {
+            id: 'msg-2',
+            threadId: 'thread-2', // Different thread!
+            withPreviousMessages: 0,
+            withNextMessages: 1,
+          },
+        ],
       });
 
-      expect(messages).toHaveLength(2);
-      expect(messages[0].content).toBe('Message in thread 2');
-      expect(messages[1].content).toBe('Response in thread 2');
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].content).toMatchObject({ text: 'Message in thread 2' });
+      expect(result.messages[1].content).toMatchObject({ text: 'Response in thread 2' });
     });
   });
 
@@ -260,15 +258,7 @@ describe('BenchmarkStore', () => {
 
   describe('getting messages', () => {
     it('should throw when threadId is an empty string or whitespace only', async () => {
-      await expect(() => store.getMessages({ threadId: '' })).rejects.toThrowError(
-        'threadId must be a non-empty string',
-      );
-
       await expect(() => store.listMessages({ threadId: '' })).rejects.toThrowError(
-        'threadId must be a non-empty string',
-      );
-
-      await expect(() => store.getMessages({ threadId: '   ' })).rejects.toThrowError(
         'threadId must be a non-empty string',
       );
 
