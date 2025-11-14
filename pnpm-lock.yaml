@@ -1513,6 +1513,9 @@ importers:
       '@expo/devcert':
         specifier: ^1.2.0
         version: 1.2.0
+      '@internal/playground':
+        specifier: workspace:*
+        version: link:../playground
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../deployer
@@ -1565,9 +1568,6 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
-      '@internal/playground':
-        specifier: workspace:*
-        version: link:../playground
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
@@ -28250,14 +28250,10 @@ snapshots:
 
   path-to-regexp@0.1.12: {}
 
-<<<<<<< HEAD
   path-to-regexp@3.3.0: {}
 
-  path-to-regexp@6.3.0: {}
-=======
   path-to-regexp@6.3.0:
     optional: true
->>>>>>> 570f2a13df6ffcec9f9209141c04cc8c55726347
 
   path-to-regexp@8.3.0: {}
 
