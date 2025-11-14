@@ -3,6 +3,10 @@ title: "Reference: Cloudflare D1 Storage | Storage"
 description: Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import SchemaManagement from "./_schema-management.mdx";
+
 # Cloudflare D1 Storage
 
 The Cloudflare D1 storage implementation provides a serverless SQL database solution using Cloudflare D1, supporting relational operations and transactional consistency.
@@ -15,28 +19,49 @@ npm install @mastra/cloudflare-d1@beta
 
 ## Usage
 
+D1Store can be configured in two ways: using Workers bindings or the REST API.
+
+<Tabs>
+<TabItem value="workers" label="Workers Binding (Recommended)">
+
+Use this approach when running in Cloudflare Workers:
+
 ```typescript copy showLineNumbers
 import { D1Store } from "@mastra/cloudflare-d1";
 
-type Env = {
-  // Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
-  D1Database: D1Database;
+// In your Cloudflare Worker
+export default {
+  async fetch(request: Request, env: { D1Database: D1Database }) {
+    const storage = new D1Store({
+      id: 'd1-storage',
+      binding: env.D1Database,
+      tablePrefix: "dev_", // Optional: isolate tables per environment
+    });
+    
+    // Use storage...
+  },
 };
+```
 
-// --- Example 1: Using Workers Binding ---
-const storageWorkers = new D1Store({
-  binding: D1Database, // D1Database binding provided by the Workers runtime
-  tablePrefix: "dev_", // Optional: isolate tables per environment
-});
+</TabItem>
+<TabItem value="rest" label="REST API">
 
-// --- Example 2: Using REST API ---
-const storageRest = new D1Store({
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
-  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
-  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
+Use this approach for Node.js or other non-Workers environments:
+
+```typescript copy showLineNumbers
+import { D1Store } from "@mastra/cloudflare-d1";
+
+const storage = new D1Store({
+  id: 'd1-storage',
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!,
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!,
   tablePrefix: "dev_", // Optional: isolate tables per environment
 });
 ```
+
+</TabItem>
+</Tabs>
 
 And add the following to your `wrangler.toml` or `wrangler.jsonc` file:
 
@@ -52,69 +77,89 @@ database_id = "db-id"
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance",
+      isOptional: false,
+    },
+    {
       name: "binding",
       type: "D1Database",
-      description: "Cloudflare D1 Workers binding (for Workers runtime)",
+      description: "Cloudflare D1 Workers binding (for Workers runtime). Required when using Workers Binding API.",
       isOptional: true,
     },
     {
       name: "accountId",
       type: "string",
-      description: "Cloudflare Account ID (for REST API)",
+      description: "Cloudflare Account ID (for REST API). Required when using REST API.",
       isOptional: true,
     },
     {
       name: "databaseId",
       type: "string",
-      description: "Cloudflare D1 Database ID (for REST API)",
+      description: "Cloudflare D1 Database ID (for REST API). Required when using REST API.",
       isOptional: true,
     },
     {
       name: "apiToken",
       type: "string",
-      description: "Cloudflare API Token (for REST API)",
+      description: "Cloudflare API Token (for REST API). Required when using REST API.",
       isOptional: true,
     },
     {
       name: "tablePrefix",
       type: "string",
       description:
-        "Optional prefix for all table names (useful for environment isolation)",
+        "Optional prefix for all table names (useful for environment isolation). Only letters, numbers, and underscores are allowed.",
       isOptional: true,
     },
   ]}
 />
 
-## Additional Notes
+## Storage Domains
 
-### Using Storage Domains
+D1Store supports the following domains:
 
-D1Store implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+- **`memory`** - Threads, messages, and resources
+- **`evals`** - Score storage and evaluation data
+- **`workflows`** - Workflow run snapshots and state
+
+**Note:** The `observability` domain is not currently supported by D1Store. Use another storage adapter for observability features.
+
+To access domain-specific operations, use `getStore()`:
 
 ```typescript copy
 const storage = new D1Store({
-  binding: D1Database,
+  id: 'd1-storage',
+  binding: env.D1Database, // or use REST API config
 });
 
-// Access domain stores
+// Access memory domain for threads and messages
 const memoryStore = await storage.getStore('memory');
+
+const threads = await memoryStore.listThreads({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
+});
+
+// Access workflows domain for workflow snapshots
 const workflowsStore = await storage.getStore('workflows');
+
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
+
+// Access evals domain for scores
+const evalsStore = await storage.getStore('evals');
+
+const scores = await evalsStore.listScoresByScorerId({
+  scorerId: 'my-scorer',
+  pagination: { page: 0, perPage: 50 },
+});
 ```
 
 See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
 
-### Schema Management
-
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
-
-- `threads`: Stores conversation threads
-- `messages`: Stores individual messages
-- `metadata`: Stores additional metadata for threads and messages
-
-### Transactions & Consistency
-
-Cloudflare D1 provides transactional guarantees for single-row operations. This means that multiple operations can be executed as a single, all-or-nothing unit of work.
-
-### Table Creation & Migrations
-
-Tables are created automatically when storage is initialized (and can be isolated per environment using the `tablePrefix` option), but advanced schema changes—such as adding columns, changing data types, or modifying indexes—require manual migration and careful planning to avoid data loss.
+<SchemaManagement />
