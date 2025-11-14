@@ -5,7 +5,8 @@ description: Documentation for the Cloudflare D1 SQL storage implementation in M
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
-import SchemaManagement from "./_schema-management.mdx";
+import SchemaManagementNoObservability from "./_schema-management-no-observability.mdx";
+import StorageDomainsNoObservability from "./_storage-domains-no-observability.mdx";
 
 # Cloudflare D1 Storage
 
@@ -120,11 +121,7 @@ database_id = "db-id"
 
 D1Store supports the following domains:
 
-- **`memory`** - Threads, messages, and resources
-- **`evals`** - Score storage and evaluation data
-- **`workflows`** - Workflow run snapshots and state
-
-**Note:** The `observability` domain is not currently supported by D1Store. Use another storage adapter for observability features.
+<StorageDomainsNoObservability />
 
 To access domain-specific operations, use `getStore()`:
 
@@ -162,4 +159,4 @@ const scores = await evalsStore.listScoresByScorerId({
 
 See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
 
-<SchemaManagement />
+<SchemaManagementNoObservability />

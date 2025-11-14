@@ -3,6 +3,11 @@ title: "Reference: Cloudflare Storage | Storage"
 description: Documentation for the Cloudflare KV storage implementation in Mastra.
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import StorageDomainsNoObservability from "./_storage-domains-no-observability.mdx";
+import SchemaManagementNoObservability from "./_schema-management-no-observability.mdx";
+
 # Cloudflare Storage
 
 The Cloudflare KV storage implementation provides a globally distributed, serverless key-value store solution using Cloudflare Workers KV.
@@ -15,100 +20,167 @@ npm install @mastra/cloudflare@beta
 
 ## Usage
 
+CloudflareStore can be configured in two ways: using Workers bindings (recommended for Cloudflare Workers) or the REST API (for Node.js or other environments).
+
+<Tabs>
+<TabItem value="workers" label="Workers Binding (Recommended)">
+
+Use this approach when running in Cloudflare Workers:
+
+```typescript copy showLineNumbers
+import { CloudflareStore } from "@mastra/cloudflare";
+import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCORERS } from "@mastra/core/storage";
+
+// In your Cloudflare Worker
+export default {
+  async fetch(request: Request, env: { 
+    [TABLE_THREADS]: KVNamespace;
+    [TABLE_MESSAGES]: KVNamespace;
+    [TABLE_WORKFLOW_SNAPSHOT]: KVNamespace;
+    [TABLE_SCORERS]: KVNamespace;
+  }) {
+    const storage = new CloudflareStore({
+      id: 'cloudflare-storage',
+      bindings: {
+        [TABLE_THREADS]: env[TABLE_THREADS],
+        [TABLE_MESSAGES]: env[TABLE_MESSAGES],
+        [TABLE_WORKFLOW_SNAPSHOT]: env[TABLE_WORKFLOW_SNAPSHOT],
+        [TABLE_SCORERS]: env[TABLE_SCORERS],
+      },
+      keyPrefix: "dev_", // Optional: isolate keys per environment
+    });
+    
+    // Use storage...
+  },
+};
+```
+
+</TabItem>
+<TabItem value="rest" label="REST API">
+
+Use this approach for Node.js or other non-Workers environments:
+
 ```typescript copy showLineNumbers
 import { CloudflareStore } from "@mastra/cloudflare";
 
-// --- Example 1: Using Workers Binding ---
-const storageWorkers = new CloudflareStore({
-  bindings: {
-    threads: THREADS_KV, // KVNamespace binding for threads table
-    messages: MESSAGES_KV, // KVNamespace binding for messages table
-    // Add other tables as needed
-  },
-  keyPrefix: "dev_", // Optional: isolate keys per environment
-});
-
-// --- Example 2: Using REST API ---
-const storageRest = new CloudflareStore({
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
-  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
+const storage = new CloudflareStore({
+  id: 'cloudflare-storage',
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!,
+  apiToken: process.env.CLOUDFLARE_API_TOKEN!,
   namespacePrefix: "dev_", // Optional: isolate namespaces per environment
 });
 ```
+
+</TabItem>
+</Tabs>
 
 ## Parameters
 
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance",
+      isOptional: false,
+    },
+    {
       name: "bindings",
-      type: "Record<string, KVNamespace>",
-      description: "Cloudflare Workers KV bindings (for Workers runtime)",
+      type: "Record<TABLE_NAMES, KVNamespace>",
+      description: "Cloudflare Workers KV bindings (for Workers runtime). Required when using Workers Binding API. Must include bindings for TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, and TABLE_SCORERS.",
       isOptional: true,
     },
     {
       name: "accountId",
       type: "string",
-      description: "Cloudflare Account ID (for REST API)",
+      description: "Cloudflare Account ID (for REST API). Required when using REST API.",
       isOptional: true,
     },
     {
       name: "apiToken",
       type: "string",
-      description: "Cloudflare API Token (for REST API)",
+      description: "Cloudflare API Token (for REST API). Required when using REST API.",
       isOptional: true,
     },
     {
       name: "namespacePrefix",
       type: "string",
       description:
-        "Optional prefix for all namespace names (useful for environment isolation)",
+        "Optional prefix for all namespace names (useful for environment isolation). Used with REST API.",
       isOptional: true,
     },
     {
       name: "keyPrefix",
       type: "string",
       description:
-        "Optional prefix for all keys (useful for environment isolation)",
+        "Optional prefix for all keys (useful for environment isolation). Used with Workers Binding API.",
       isOptional: true,
     },
   ]}
 />
 
-#### Additional Notes
+## Storage Domains
 
-### Using Storage Domains
+CloudflareStore supports the following domains:
 
-CloudflareStore implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+<StorageDomainsNoObservability />
+
+To access domain-specific operations, use `getStore()`:
 
 ```typescript copy
-const storage = new CloudflareStore({
-  bindings: {
-    threads: THREADS_KV,
-    messages: MESSAGES_KV,
-  },
+// Access memory domain for threads and messages
+const memoryStore = await storage.getStore('memory');
+
+const threads = await memoryStore.listThreads({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
 });
 
-// Access domain stores
-const memoryStore = await storage.getStore('memory');
+// Access workflows domain for workflow snapshots
 const workflowsStore = await storage.getStore('workflows');
+
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
+
+// Access evals domain for scores
+const evalsStore = await storage.getStore('evals');
+
+const scores = await evalsStore.listScoresByScorerId({
+  scorerId: 'my-scorer',
+  pagination: { page: 0, perPage: 50 },
+});
 ```
 
 See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
 
-### Schema Management
 
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
+### Key Structure
 
-- `threads`: Stores conversation threads
-- `messages`: Stores individual messages
-- `metadata`: Stores additional metadata for threads and messages
+Cloudflare KV storage uses a two-level structure: **KV namespaces** (one per table) and **keys** within those namespaces.
 
-### Consistency & Propagation
+**Key Format:**
+Keys follow the pattern: `{prefix}{tableName}:{id}` or `{prefix}{tableName}:{threadId}:{messageId}` for messages, where the prefix includes a `:` separator.
 
-Cloudflare KV is an eventually consistent store, meaning that data may not be immediately available across all regions after a write.
+**Examples:**
+- Threads: `dev_:mastra_threads:thread_123` (with `keyPrefix: "dev_"`)
+- Messages: `dev_:mastra_messages:thread_123:msg_456`
+- Workflows: `dev_:mastra_workflow_snapshot:myWorkflow:run_123`
+- Scores: `dev_:mastra_scorers:score_789`
 
-### Key Structure & Namespacing
+**Workers Binding API:**
+- Each table maps to a separate KV namespace (e.g., `mastra_threads`, `mastra_messages`)
+- `keyPrefix` is prepended to all keys within namespaces with a `:` separator
+  - Example: With `keyPrefix: "dev_"`, keys become `dev_:mastra_threads:thread_123`
+  - Format: `{keyPrefix}:{tableName}:{id}`
+- Namespaces are created at deploy time via `wrangler.toml` bindings
+- The namespace name itself is the table name (e.g., `mastra_threads`)
 
-Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (e.g., `threads:threadId`).
-For Workers deployments, `keyPrefix` is used to isolate data within a namespace; for REST API deployments, `namespacePrefix` is used to isolate entire namespaces between environments or applications.
+**REST API:**
+- `namespacePrefix` is used in two ways:
+  1. **Namespace names**: Prefixed with `{namespacePrefix}_` (e.g., `dev_mastra_threads`)
+  2. **Keys within namespaces**: Prefixed with `{namespacePrefix}:` (e.g., `dev:mastra_threads:thread_123`)
+- Namespaces are created automatically if they don't exist
+- Note the different separators: `_` for namespace names, `:` for keys

@@ -3,6 +3,9 @@ title: "Reference: Upstash Storage | Storage"
 description: Documentation for the Upstash storage implementation in Mastra.
 ---
 
+import StorageDomainsNoObservability from "./_storage-domains-no-observability.mdx";
+import SchemaManagementNoObservability from "./_schema-management-no-observability.mdx";
+
 # Upstash Storage
 
 The Upstash storage implementation provides a serverless-friendly storage solution using Upstash's Redis-compatible key-value store.
@@ -60,11 +63,7 @@ const storage = new UpstashStore({
 
 Upstash storage supports the following domains:
 
-- **`memory`** - Threads, messages, and resources
-- **`evals`** - Score storage and evaluation data
-- **`workflows`** - Workflow run snapshots and state
-
-**Note:** The `observability` domain is not currently supported by Upstash storage. Use another storage adapter for observability features.
+<StorageDomainsNoObservability />
 
 To access domain-specific operations, use `getStore()`:
 

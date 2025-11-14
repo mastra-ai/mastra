@@ -3,6 +3,9 @@ title: "Reference: LanceDB Storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
 ---
 
+import StorageDomainsNoObservability from "./_storage-domains-no-observability.mdx";
+import SchemaManagementNoObservability from "./_schema-management-no-observability.mdx";
+
 # LanceDB Storage
 
 The LanceDB storage implementation provides a high-performance storage solution using the LanceDB database system, which excels at handling both traditional data storage and vector operations.
@@ -21,13 +24,13 @@ npm install @mastra/lance@beta
 import { LanceStorage } from "@mastra/lance";
 
 // Connect to a local database
-const storage = await LanceStorage.create("my-storage", "/path/to/db");
+const storage = await LanceStorage.create("storage-id", "MyStorage", "/path/to/db");
 
 // Connect to a LanceDB cloud database
-const storage = await LanceStorage.create("my-storage", "db://host:port");
+const storage = await LanceStorage.create("storage-id", "MyStorage", "db://host:port");
 
 // Connect to a cloud database with custom options
-const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
+const storage = await LanceStorage.create("storage-id", "MyStorage", "s3://bucket/db", {
   storageOptions: { timeout: "60s" },
 });
 ```
@@ -38,6 +41,12 @@ const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance",
+      isOptional: false,
+    },
     {
       name: "name",
       type: "string",
@@ -61,31 +70,46 @@ const storage = await LanceStorage.create("my-storage", "s3://bucket/db", {
   ]}
 />
 
-## Additional Notes
+## Storage Domains
 
-### Using Storage Domains
+LanceStorage supports the following domains:
 
-LanceStorage implements the domain-based storage architecture. To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`:
+<StorageDomainsNoObservability />
+
+To access domain-specific operations, use `getStore()`:
 
 ```typescript copy
-const storage = await LanceStorage.create("my-storage", "/path/to/db");
+const storage = await LanceStorage.create("storage-id", "MyStorage", "/path/to/db");
 
-// Access domain stores
+// Access memory domain for threads and messages
 const memoryStore = await storage.getStore('memory');
+
+const threads = await memoryStore.listThreads({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
+});
+
+// Access workflows domain for workflow snapshots
 const workflowsStore = await storage.getStore('workflows');
+
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
+
+// Access evals domain for scores
+const evalsStore = await storage.getStore('evals');
+
+const scores = await evalsStore.listScoresByScorerId({
+  scorerId: 'my-scorer',
+  pagination: { page: 0, perPage: 50 },
+});
 ```
 
 See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
 
-### Schema Management
-
-The LanceStorage implementation automatically handles schema creation and updates. It maps Mastra's schema types to Apache Arrow data types, which are used by LanceDB internally:
-
-- `text`, `uuid` → Utf8
-- `int`, `integer` → Int32
-- `float` → Float32
-- `jsonb`, `json` → Utf8 (serialized)
-- `binary` → Binary
+<SchemaManagementNoObservability />
 
 ### Deployment Options
 
@@ -103,13 +127,3 @@ LanceDB storage can be configured for different deployment scenarios:
   ```
   s3://bucket/db
   ```
-
-### Table Management
-
-LanceStorage provides methods for managing tables:
-
-- Create tables with custom schemas
-- Drop tables
-- Clear tables (delete all records)
-- Load records by key
-- Insert single and batch records
