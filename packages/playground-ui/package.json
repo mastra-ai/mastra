@@ -59,7 +59,7 @@
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.38.6",
-    "@dagrejs/dagre": "^1.1.5",
+    "@dagrejs/dagre": "^1.1.8",
     "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.3",
