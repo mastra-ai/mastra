@@ -314,34 +314,44 @@ export class MessageList {
 
         let messages = [...systemMessages, ...modelMessages];
 
-        messages = messages.map(message => {
-          if (message.role === 'user') {
-            if (typeof message.content === 'string') {
+        // Check if any messages have image/file content that needs processing
+        const hasImageOrFileContent = modelMessages.some(
+          message =>
+            message.role === 'user' &&
+            typeof message.content !== 'string' &&
+            message.content.some(part => part.type === 'image' || part.type === 'file'),
+        );
+
+        if (hasImageOrFileContent) {
+          messages = messages.map(message => {
+            if (message.role === 'user') {
+              if (typeof message.content === 'string') {
+                return {
+                  role: 'user' as const,
+                  content: [{ type: 'text' as const, text: message.content }],
+                  providerOptions: message.providerOptions,
+                } as AIV5Type.ModelMessage;
+              }
+
+              const convertedContent = message.content
+                .map(part => {
+                  if (part.type === 'image' || part.type === 'file') {
+                    return convertImageFilePart(part, downloadedAssets);
+                  }
+                  return part;
+                })
+                .filter(part => part.type !== 'text' || part.text !== '');
+
               return {
                 role: 'user' as const,
-                content: [{ type: 'text' as const, text: message.content }],
+                content: convertedContent,
                 providerOptions: message.providerOptions,
               } as AIV5Type.ModelMessage;
             }
 
-            const convertedContent = message.content
-              .map(part => {
-                if (part.type === 'image' || part.type === 'file') {
-                  return convertImageFilePart(part, downloadedAssets);
-                }
-                return part;
-              })
-              .filter(part => part.type !== 'text' || part.text !== '');
-
-            return {
-              role: 'user' as const,
-              content: convertedContent,
-              providerOptions: message.providerOptions,
-            } as AIV5Type.ModelMessage;
-          }
-
-          return message;
-        });
+            return message;
+          });
+        }
 
         messages = ensureGeminiCompatibleMessages(messages);
 
