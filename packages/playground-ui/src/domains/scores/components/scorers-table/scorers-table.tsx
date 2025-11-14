@@ -49,10 +49,14 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
     return <EmptyScorersTable />;
   }
 
-  const filteredRows = rows.filter(row => row.original.scorer.config.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredRows = rows.filter(
+    row =>
+      row.original.scorer.config?.id?.toLowerCase().includes(search.toLowerCase()) ||
+      row.original.scorer.config?.name?.toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
-    <>
+    <div>
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers" />
       </SearchbarWrapper>
@@ -82,7 +86,7 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
           </Table>
         </ScrollableContainer>
       )}
-    </>
+    </div>
   );
 }
 

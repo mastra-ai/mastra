@@ -6,17 +6,15 @@ import type {
   LanguageModelV2ResponseMetadata,
   LanguageModelV2,
   LanguageModelV2StreamPart,
-} from '@ai-sdk/provider';
-import type { LanguageModelV1LogProbs } from '@ai-sdk/provider-v4';
-import type { Span } from '@opentelemetry/api';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai';
-import type { FinishReason, LanguageModelRequestMetadata, TelemetrySettings } from 'ai-v4';
+} from '@ai-sdk/provider-v5';
+import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { TracingContext } from '../ai-tracing/types';
+import type { TracingContext } from '../observability';
 import type { OutputProcessor } from '../processors';
-import type { WorkflowStreamEvent } from '../workflows/types';
+import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
 
 export enum ChunkFrom {
@@ -205,7 +203,7 @@ interface StartPayload {
   [key: string]: unknown;
 }
 
-interface StepStartPayload {
+export interface StepStartPayload {
   messageId?: string;
   request: {
     body?: string;
@@ -334,6 +332,15 @@ interface RoutingAgentEndPayload {
   selectionReason: string;
   iteration: number;
   runId: string;
+  usage: LanguageModelV2Usage;
+}
+
+interface RoutingAgentTextDeltaPayload {
+  text: string;
+}
+
+interface RoutingAgentTextStartPayload {
+  runId: string;
 }
 
 interface AgentExecutionStartPayload {
@@ -357,6 +364,7 @@ interface AgentExecutionEndPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  usage: LanguageModelV2Usage;
 }
 
 interface WorkflowExecutionStartPayload {
@@ -382,6 +390,7 @@ interface WorkflowExecutionEndPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
+  usage: LanguageModelV2Usage;
 }
 
 interface ToolExecutionStartPayload {
@@ -428,6 +437,7 @@ interface NetworkFinishPayload {
   threadId?: string;
   threadResourceId?: string;
   isOneOff: boolean;
+  usage: LanguageModelV2Usage;
 }
 
 interface ToolCallApprovalPayload {
@@ -442,8 +452,16 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
 }
 
+export type DataChunkType = {
+  type: `data-${string}`;
+  data: any;
+  id?: string;
+};
+
 export type NetworkChunkType =
   | (BaseChunkType & { type: 'routing-agent-start'; payload: RoutingAgentStartPayload })
+  | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
+  | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
   | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
   | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
@@ -453,11 +471,11 @@ export type NetworkChunkType =
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload })
-  | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: unknown })
-  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: object });
+  | (BaseChunkType & { type: `agent-execution-event-${string}`; payload: AgentChunkType })
+  | (BaseChunkType & { type: `workflow-execution-event-${string}`; payload: WorkflowStreamEvent });
 
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
-export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
+export type AgentChunkType<OUTPUT extends OutputSchema = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
   | (BaseChunkType & { type: 'text-delta'; payload: TextDeltaPayload })
@@ -497,11 +515,94 @@ export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
     })
   | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
-  | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
-  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
-  | (BaseChunkType & WorkflowStreamEvent)
-  | NetworkChunkType;
+  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload });
+
+export type WorkflowStreamEvent =
+  | (BaseChunkType & {
+      type: 'workflow-start';
+      payload: {
+        workflowId: string;
+      };
+    })
+  | (BaseChunkType & {
+      type: 'workflow-finish';
+      payload: {
+        workflowStatus: WorkflowRunStatus;
+        output: {
+          usage: {
+            inputTokens: number;
+            outputTokens: number;
+            totalTokens: number;
+          };
+        };
+        metadata: Record<string, any>;
+      };
+    })
+  | (BaseChunkType & {
+      type: 'workflow-canceled';
+      payload: {};
+    })
+  | (BaseChunkType & {
+      type: 'workflow-step-start';
+      id: string;
+      payload: {
+        id: string;
+        stepCallId: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    })
+  | (BaseChunkType & {
+      type: 'workflow-step-finish';
+      payload: {
+        id: string;
+        metadata: Record<string, any>;
+      };
+    })
+  | (BaseChunkType & {
+      type: 'workflow-step-suspended';
+      payload: {
+        id: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    })
+  | (BaseChunkType & {
+      type: 'workflow-step-waiting';
+      payload: {
+        id: string;
+        payload: Record<string, any>;
+        startedAt: number;
+        status: WorkflowStepStatus;
+      };
+    })
+  | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
+  | (BaseChunkType & {
+      type: 'workflow-step-result';
+      payload: {
+        id: string;
+        stepCallId: string;
+        status: WorkflowStepStatus;
+        output?: Record<string, any>;
+        payload?: Record<string, any>;
+        resumePayload?: Record<string, any>;
+        suspendPayload?: Record<string, any>;
+      };
+    });
+
+// Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
+export type TypedChunkType<OUTPUT extends OutputSchema = undefined> =
+  | AgentChunkType<OUTPUT>
+  | WorkflowStreamEvent
+  | NetworkChunkType
+  | (DataChunkType & { from: never; runId: never; metadata?: BaseChunkType['metadata']; payload: never });
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT extends OutputSchema = undefined> = TypedChunkType<OUTPUT>;
@@ -564,8 +665,6 @@ export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Prom
 
 export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
-  rootSpan?: Span;
-  telemetry_settings?: TelemetrySettings;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback;
   onStepFinish?: MastraOnStepFinishCallback;

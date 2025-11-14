@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import type { Processor } from './index';
@@ -7,7 +7,8 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
   it('should filter intermediate finish chunks and maintain state during tool execution', async () => {
     const capturedChunks: { type: string; accumulatedTypes: string[] }[] = [];
     class StateTrackingProcessor implements Processor {
-      name = 'state-tracking-processor';
+      readonly id = 'state-tracking-processor';
+      readonly name = 'State Tracking Processor';
 
       async processOutputStream({ part, streamParts }: any) {
         capturedChunks.push({
@@ -87,7 +88,8 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
     });
 
     const agent = new Agent({
-      name: 'test-agent',
+      id: 'test-agent',
+      name: 'Test Agent',
       instructions: 'Test agent with tools',
       model: mockModel as any,
       tools: {

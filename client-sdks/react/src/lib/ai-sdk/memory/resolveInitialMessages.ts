@@ -61,7 +61,16 @@ interface ChildMessage {
 export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMessage[] => {
   return messages.map(message => {
     // Check if message contains network execution data
-    const networkPart = message.parts.find(part => part.type === 'text' && part.text.includes('"isNetwork":true'));
+    const networkPart = message.parts.find(
+      (part): part is { type: 'text'; text: string } =>
+        typeof part === 'object' &&
+        part !== null &&
+        'type' in part &&
+        part.type === 'text' &&
+        'text' in part &&
+        typeof part.text === 'string' &&
+        part.text.includes('"isNetwork":true'),
+    );
 
     if (networkPart && networkPart.type === 'text') {
       try {
@@ -157,4 +166,38 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
     // Return original message if it's not a network message
     return message;
   });
+};
+
+export const resolveToChildMessages = (messages: MastraUIMessage[]): ChildMessage[] => {
+  const assistantMessage = messages.find(message => message.role === 'assistant');
+
+  if (!assistantMessage) return [];
+
+  const parts = assistantMessage.parts;
+
+  let childMessages: ChildMessage[] = [];
+
+  for (const part of parts) {
+    const toolPart = part as any;
+    if (part.type.startsWith('tool-')) {
+      const toolName = part.type.substring('tool-'.length);
+      const isWorkflow = toolName.startsWith('workflow-');
+      childMessages.push({
+        type: 'tool',
+        toolCallId: toolPart.toolCallId,
+        toolName: toolName,
+        args: toolPart.input,
+        toolOutput: isWorkflow ? { ...toolPart.output?.result, runId: toolPart.output?.runId } : toolPart.output,
+      });
+    }
+
+    if (part.type === 'text') {
+      childMessages.push({
+        type: 'text',
+        content: toolPart.text,
+      });
+    }
+  }
+
+  return childMessages;
 };

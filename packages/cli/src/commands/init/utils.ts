@@ -3,6 +3,7 @@ import child_process from 'node:child_process';
 import util from 'node:util';
 import path from 'path';
 import * as p from '@clack/prompts';
+import type { ModelRouterModelId } from '@mastra/core/llm/model';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
@@ -11,34 +12,55 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import {
-  cursorGlobalMCPConfigPath,
-  globalMCPIsAlreadyInstalled,
-  windsurfGlobalMCPConfigPath,
-} from './mcp-docs-server-install';
+import { cursorGlobalMCPConfigPath, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
+import type { Editor } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'mistral';
-export type Components = 'agents' | 'workflows' | 'tools';
+export const LLMProvider = ['openai', 'anthropic', 'groq', 'google', 'cerebras', 'mistral'] as const;
+export const COMPONENTS = ['agents', 'workflows', 'tools', 'scorers'] as const;
 
-export const getModelIdentifier = (llmProvider: LLMProvider) => {
-  if (llmProvider === 'openai') {
-    return `'openai/gpt-4o-mini'`;
-  } else if (llmProvider === 'anthropic') {
-    return `'anthropic/claude-3-5-sonnet-20241022'`;
+export type LLMProvider = (typeof LLMProvider)[number];
+export type Component = (typeof COMPONENTS)[number];
+
+/**
+ * Type-guard to check if a value is a valid LLMProvider
+ */
+export function isValidLLMProvider(value: string): value is LLMProvider {
+  return LLMProvider.includes(value as LLMProvider);
+}
+
+/**
+ * Type-guard to check if a value contains only valid Components
+ */
+export function areValidComponents(values: string[]): values is Component[] {
+  return values.every(value => COMPONENTS.includes(value as Component));
+}
+
+export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
+  let model: ModelRouterModelId = 'openai/gpt-4o';
+
+  if (llmProvider === 'anthropic') {
+    model = 'anthropic/claude-sonnet-4-5';
   } else if (llmProvider === 'groq') {
-    return `'groq/llama-3.3-70b-versatile'`;
+    model = 'groq/llama-3.3-70b-versatile';
   } else if (llmProvider === 'google') {
-    return `'google/gemini-2.5-pro'`;
+    model = 'google/gemini-2.5-pro';
   } else if (llmProvider === 'cerebras') {
-    return `'cerebras/llama-3.3-70b'`;
+    model = 'cerebras/llama-3.3-70b';
   } else if (llmProvider === 'mistral') {
-    return `'mistral/mistral-medium-2508'`;
+    model = 'mistral/mistral-medium-2508';
   }
+
+  return model;
 };
 
-export async function writeAgentSample(llmProvider: LLMProvider, destPath: string, addExampleTool: boolean) {
+export async function writeAgentSample(
+  llmProvider: LLMProvider,
+  destPath: string,
+  addExampleTool: boolean,
+  addScorers: boolean,
+) {
   const modelString = getModelIdentifier(llmProvider);
 
   const instructions = `
@@ -60,14 +82,44 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
+${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelString},
+  model: '${modelString}',
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
+  ${
+    addScorers
+      ? `scorers: {
+    toolCallAppropriateness: {
+      scorer: scorers.toolCallAppropriatenessScorer,
+      sampling: {
+        type: 'ratio',
+        rate: 1,
+      },
+    },
+    completeness: {
+      scorer: scorers.completenessScorer,
+      sampling: {
+        type: 'ratio',
+        rate: 1,
+      },
+    },
+    translation: {
+      scorer: scorers.translationScorer,
+      sampling: {
+        type: 'ratio',
+        rate: 1,
+      },
+    },
+  },`
+      : ''
+  }
   memory: new Memory({
     storage: new LibSQLStore({
+      id: "memory-storage",
       url: "file:../mastra.db", // path is relative to the .mastra/output directory
     })
   })
@@ -283,19 +335,117 @@ export async function writeToolSample(destPath: string) {
   await fileService.copyStarterFile('tools.ts', destPath);
 }
 
+export async function writeScorersSample(llmProvider: LLMProvider, destPath: string) {
+  const modelString = getModelIdentifier(llmProvider);
+  const content = `import { z } from 'zod';
+import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
+import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
+import { getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
+import { createScorer } from '@mastra/core/evals';
+
+export const toolCallAppropriatenessScorer = createToolCallAccuracyScorerCode({
+  expectedTool: 'weatherTool',
+  strictMode: false,
+});
+
+export const completenessScorer = createCompletenessScorer();
+
+// Custom LLM-judged scorer: evaluates if non-English locations are translated appropriately
+export const translationScorer = createScorer({
+  id: 'translation-quality-scorer',
+  name: 'Translation Quality',
+  description: 'Checks that non-English location names are translated and used correctly',
+  type: 'agent',
+  judge: {
+    model: '${modelString}',
+    instructions:
+      'You are an expert evaluator of translation quality for geographic locations. ' +
+      'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
+      'Be lenient with transliteration differences and diacritics. ' +
+      'Return only the structured JSON matching the provided schema.',
+  },
+})
+  .preprocess(({ run }) => {
+    const userText = getUserMessageFromRunInput(run.input) || '';
+    const assistantText = getAssistantMessageFromRunOutput(run.output) || '';
+    return { userText, assistantText };
+  })
+  .analyze({
+    description: 'Extract location names and detect language/translation adequacy',
+    outputSchema: z.object({
+      nonEnglish: z.boolean(),
+      translated: z.boolean(),
+      confidence: z.number().min(0).max(1).default(1),
+      explanation: z.string().default(''),
+    }),
+    createPrompt: ({ results }) => \`
+            You are evaluating if a weather assistant correctly handled translation of a non-English location.
+            User text:
+            """
+            \${results.preprocessStepResult.userText}
+            """
+            Assistant response:
+            """
+            \${results.preprocessStepResult.assistantText}
+            """
+            Tasks:
+            1) Identify if the user mentioned a location that appears non-English.
+            2) If non-English, check whether the assistant used a correct English translation of that location in its response.
+            3) Be lenient with transliteration differences (e.g., accents/diacritics).
+            Return JSON with fields:
+            {
+            "nonEnglish": boolean,
+            "translated": boolean,
+            "confidence": number, // 0-1
+            "explanation": string
+            }
+        \`,
+  })
+  .generateScore(({ results }) => {
+    const r = (results as any)?.analyzeStepResult || {};
+    if (!r.nonEnglish) return 1; // If not applicable, full credit
+    if (r.translated) return Math.max(0, Math.min(1, 0.7 + 0.3 * (r.confidence ?? 1)));
+    return 0; // Non-English but not translated
+  })
+  .generateReason(({ results, score }) => {
+    const r = (results as any)?.analyzeStepResult || {};
+    return \`Translation scoring: nonEnglish=\${r.nonEnglish ?? false}, translated=\${r.translated ?? false}, confidence=\${r.confidence ?? 0}. Score=\${score}. \${r.explanation ?? ''}\`;
+  });
+
+export const scorers = {
+  toolCallAppropriatenessScorer,
+  completenessScorer,
+  translationScorer,
+};`;
+
+  const formattedContent = await prettier.format(content, {
+    parser: 'typescript',
+    singleQuote: true,
+  });
+
+  await fs.writeFile(destPath, formattedContent);
+}
+
 export async function writeCodeSampleForComponents(
   llmprovider: LLMProvider,
-  component: Components,
+  component: Component,
   destPath: string,
-  importComponents: Components[],
+  importComponents: Component[],
 ) {
   switch (component) {
     case 'agents':
-      return writeAgentSample(llmprovider, destPath, importComponents.includes('tools'));
+      return writeAgentSample(
+        llmprovider,
+        destPath,
+        importComponents.includes('tools'),
+        importComponents.includes('scorers'),
+      );
     case 'tools':
       return writeToolSample(destPath);
     case 'workflows':
       return writeWorkflowSample(destPath);
+    case 'scorers':
+      return writeScorersSample(llmprovider, destPath);
     default:
       return '';
   }
@@ -312,11 +462,13 @@ export const writeIndexFile = async ({
   addAgent,
   addExample,
   addWorkflow,
+  addScorers,
 }: {
   dirPath: string;
   addExample: boolean;
   addWorkflow: boolean;
   addAgent: boolean;
+  addScorers: boolean;
 }) => {
   const indexPath = dirPath + '/index.ts';
   const destPath = path.join(indexPath);
@@ -325,12 +477,13 @@ export const writeIndexFile = async ({
     const filteredExports = [
       addWorkflow ? `workflows: { weatherWorkflow },` : '',
       addAgent ? `agents: { weatherAgent },` : '',
+      addScorers ? `scorers: { toolCallAppropriatenessScorer, completenessScorer, translationScorer },` : '',
     ].filter(Boolean);
     if (!addExample) {
       await fs.writeFile(
         destPath,
         `
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 export const mastra = new Mastra()
         `,
@@ -344,12 +497,15 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { Observability } from '@mastra/observability';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
+${addScorers ? `import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } from './scorers/weather-scorer';` : ''}
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
   storage: new LibSQLStore({
+    id: "mastra-storage",
     // stores observability, scores, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
@@ -357,14 +513,10 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  telemetry: {
-    // Telemetry is deprecated and will be removed in the Nov 4th release
-    enabled: false, 
-  },
-  observability: {
-    // Enables DefaultExporter and CloudExporter for AI tracing
-    default: { enabled: true }, 
-  },
+  observability: new Observability({
+    // Enables DefaultExporter and CloudExporter for tracing
+    default: { enabled: true },
+    }),
 });
 `,
     );
@@ -383,56 +535,47 @@ export const checkInitialization = async (dirPath: string) => {
 };
 
 export const checkAndInstallCoreDeps = async (addExample: boolean) => {
-  const depService = new DepsService();
-  const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
-  const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
+  const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies' });
+  let packages: Array<{ name: string; version: string }> = [];
 
-  if (needsCore) {
-    await installCoreDeps('@mastra/core');
-  }
-
-  if (needsZod) {
-    // TODO: Once the switch to AI SDK v5 is complete, this needs to be updated
-    await installCoreDeps('zod', '^3');
-  }
-
-  if (addExample) {
-    const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
-
-    if (needsLibsql) {
-      await installCoreDeps('@mastra/libsql');
-    }
-  }
-};
-
-const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
-export async function installCoreDeps(pkg: string, version = 'latest') {
   try {
-    const confirm = await p.confirm({
-      message: `You do not have the ${pkg} package installed. Would you like to install it?`,
-      initialValue: false,
-    });
-
-    if (p.isCancel(confirm)) {
-      p.cancel('Installation Cancelled');
-      process.exit(0);
-    }
-
-    if (!confirm) {
-      p.cancel('Installation Cancelled');
-      process.exit(0);
-    }
+    const depService = new DepsService();
 
     spinner.start();
 
-    const depsService = new DepsService();
+    const needsCore = (await depService.checkDependencies(['@mastra/core'])) !== `ok`;
+    const needsCli = (await depService.checkDependencies(['mastra'])) !== `ok`;
+    const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
-    await depsService.installPackages([`${pkg}@${version}`]);
-    spinner.success(`${pkg} installed successfully`);
+    if (needsCore) {
+      packages.push({ name: '@mastra/core', version: 'latest' });
+    }
+
+    if (needsCli) {
+      packages.push({ name: 'mastra', version: 'latest' });
+    }
+
+    if (needsZod) {
+      packages.push({ name: 'zod', version: '^4' });
+    }
+
+    if (addExample) {
+      const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
+
+      if (needsLibsql) {
+        packages.push({ name: '@mastra/libsql', version: 'latest' });
+      }
+    }
+
+    if (packages.length > 0) {
+      await depService.installPackages(packages.map(pkg => `${pkg.name}@${pkg.version}`));
+    }
+
+    spinner.success('Successfully installed Mastra core dependencies');
   } catch (err) {
-    console.error(err);
+    spinner.error(`Failed to install core dependencies: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
-}
+};
 
 export const getAPIKey = async (provider: LLMProvider) => {
   let key = 'OPENAI_API_KEY';
@@ -487,9 +630,9 @@ export const createMastraDir = async (directory: string): Promise<{ ok: true; di
 
 export const writeCodeSample = async (
   dirPath: string,
-  component: Components,
+  component: Component,
   llmProvider: LLMProvider,
-  importComponents: Components[],
+  importComponents: Component[],
 ) => {
   const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
@@ -500,7 +643,7 @@ export const writeCodeSample = async (
   }
 };
 
-const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
+export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
   { value: 'openai', label: 'OpenAI', hint: 'recommended' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'groq', label: 'Groq' },
@@ -565,10 +708,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         return undefined;
       },
       configureEditorWithDocsMCP: async () => {
-        const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
-        const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
-        const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
-
         const editor = await p.select({
           message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
           options: [
@@ -576,35 +715,23 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             {
               value: 'cursor',
               label: 'Cursor (project only)',
-              hint: cursorIsAlreadyInstalled ? `Already installed globally` : undefined,
             },
             {
               value: 'cursor-global',
               label: 'Cursor (global, all projects)',
-              hint: cursorIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'windsurf',
               label: 'Windsurf',
-              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'vscode',
               label: 'VSCode',
-              hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
             },
-          ],
+          ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
         if (editor === `skip`) return undefined;
-        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
-          p.log.message(`\nWindsurf is already installed, skipping.`);
-          return undefined;
-        }
-        if (editor === `vscode` && vscodeIsAlreadyInstalled) {
-          p.log.message(`\nVSCode is already installed, skipping.`);
-          return undefined;
-        }
 
         if (editor === `cursor`) {
           p.log.message(

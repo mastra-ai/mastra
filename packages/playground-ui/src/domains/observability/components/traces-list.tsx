@@ -1,5 +1,5 @@
 import { EntryList, getShortId } from '@/components/ui/elements';
-import { AISpanRecord } from '@mastra/core';
+import { SpanRecord } from '@mastra/core/storage';
 import { format, isToday } from 'date-fns';
 
 export const tracesListColumns = [
@@ -11,10 +11,15 @@ export const tracesListColumns = [
   { name: 'status', label: 'Status', size: '3rem' },
 ];
 
+type Trace = Pick<SpanRecord, 'traceId' | 'name'> & {
+  attributes?: Record<string, any> | null;
+  createdAt: Date | string;
+};
+
 type TracesListProps = {
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
-  traces?: AISpanRecord[];
+  traces?: Trace[];
   errorMsg?: string;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;

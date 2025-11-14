@@ -1,9 +1,7 @@
 ---
-title: "Reference: CLI Commands"
+title: "Reference: CLI Commands | CLI"
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 ---
-
-import { Callout } from "nextra/components";
 
 # CLI Commands
 
@@ -11,9 +9,9 @@ You can use the Command-Line Interface (CLI) provided by Mastra to develop, buil
 
 ## `mastra dev`
 
-Starts a server which exposes a [local dev playground](/docs/server-db/local-dev-playground) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
+Starts a server which exposes [Studio](/docs/v1/getting-started/studio) and REST endpoints for your agents, tools, and workflows. You can visit [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui) for an overview of all available endpoints once `mastra dev` is running.
 
-You can also [configure the server](/docs/server-db/local-dev-playground#configuration).
+You can also [configure the server](/docs/v1/getting-started/studio#configuration).
 
 ### Flags
 
@@ -21,15 +19,15 @@ The command accepts [common flags][common-flags] and the following additional fl
 
 #### `--https`
 
-Enable local HTTPS support. [Learn more](/docs/server-db/local-dev-playground#local-https).
+Enable local HTTPS support. [Learn more](/docs/v1/getting-started/studio#local-https).
 
 #### `--inspect`
 
-Start the development server in inspect mode, helpful for debugging. This can't be used together with `--inspect-brk`.
+Start the development server in inspect mode, helpful for debugging. Optionally specify a custom host and port (e.g., `--inspect=0.0.0.0:9229` for Docker). This can't be used together with `--inspect-brk`.
 
 #### `--inspect-brk`
 
-Start the development server in inspect mode and break at the beginning of the script. This can't be used together with `--inspect`.
+Start the development server in inspect mode and break at the beginning of the script. Optionally specify a custom host and port (e.g., `--inspect-brk=0.0.0.0:9229`). This can't be used together with `--inspect`.
 
 #### `--custom-args`
 
@@ -87,7 +85,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/docs/deployment/serverless-platforms) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/docs/v1/deployment/cloud-providers) you need to install the correct deployer in order to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -105,11 +103,13 @@ MASTRA_CONCURRENCY=2 mastra build
 
 ## `mastra start`
 
-<Callout type="info">
-You need to run `mastra build` before using `mastra start`.
-</Callout>
+:::info
 
-Starts a local server to serve your built Mastra application in production mode. By default, [OTEL Tracing](/docs/observability/otel-tracing) is enabled.
+You need to run `mastra build` before using `mastra start`.
+
+:::
+
+Starts a local server to serve your built Mastra application in production mode. By default, [OTEL Tracing](/docs/v1/observability/tracing/overview) is enabled.
 
 ### Flags
 
@@ -121,7 +121,7 @@ The path to your built Mastra output directory. Defaults to `.mastra/output`.
 
 #### `--no-telemetry`
 
-Disable the [OTEL Tracing](/docs/observability/otel-tracing).
+Disable the [OTEL Tracing](/docs/v1/observability/tracing/overview).
 
 ## `mastra lint`
 
@@ -133,7 +133,7 @@ It accepts [common flags][common-flags].
 
 The `mastra scorers` command provides management capabilities for evaluation scorers that measure the quality, accuracy, and performance of AI-generated outputs.
 
-Read the [Scorers overview](/docs/scorers/overview) to learn more.
+Read the [Scorers overview](/docs/v1/evals/overview) to learn more.
 
 ### `add`
 
@@ -173,7 +173,7 @@ The directory where Mastra files should be saved to. Defaults to `src`.
 
 #### `--components`
 
-Comma-separated list of components to add. For each component a new folder will be created. Defaults to `['agents', 'tools', 'workflows']`.
+Comma-separated list of components to add. For each component a new folder will be created. Choose from: `"agents" | "tools" | "workflows" | "scorers"`. Defaults to `['agents', 'tools', 'workflows']`.
 
 #### `--llm`
 
@@ -203,9 +203,15 @@ Configure your code editor with Mastra's MCP server. Choose from: `"cursor" | "c
 
 The path to your Mastra folder. Defaults to `src/mastra`.
 
+### `--debug`
+
+**Available in:** `dev`, `build`
+
+Enable verbose logging for Mastra's internals. Defaults to `false`.
+
 ### `--env`
 
-**Available in:** `dev`, `build`, `start`
+**Available in:** `dev`, `start`
 
 Custom environment variables file to include. By default, includes `.env.development`, `.env.local`, and `.env`.
 

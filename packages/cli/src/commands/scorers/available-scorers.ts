@@ -9,7 +9,7 @@ export const AVAILABLE_SCORERS: ScorerTemplate[] = [
     category: 'output-quality',
     type: 'llm',
     filename: 'answer-relevancy-scorer.ts',
-    content: `import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/llm';
+    content: `import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -27,7 +27,7 @@ export const answerRelevancyScorer = createAnswerRelevancyScorer({
     category: 'accuracy-and-reliability',
     type: 'llm',
     filename: 'bias-scorer.ts',
-    content: `import { createBiasScorer } from '@mastra/evals/scorers/llm';
+    content: `import { createBiasScorer } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -45,7 +45,7 @@ export const biasScorer = createBiasScorer({
     category: 'context-quality',
     type: 'llm',
     filename: 'context-precision-scorer.ts',
-    content: `import { createContextPrecisionScorer } from '@mastra/evals/scorers/llm';
+    content: `import { createContextPrecisionScorer } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -63,7 +63,7 @@ export const contextPrecisionScorer = createContextPrecisionScorer({
     category: 'context-quality',
     type: 'llm',
     filename: 'context-relevance-scorer.ts',
-    content: `import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/llm';
+    content: `import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -81,7 +81,7 @@ export const contextRelevanceScorer = createContextRelevanceScorerLLM({
     category: 'accuracy-and-reliability',
     type: 'llm',
     filename: 'faithfulness-scorer.ts',
-    content: `import { createFaithfulnessScorer } from '@mastra/evals/scorers/llm';
+    content: `import { createFaithfulnessScorer } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -99,7 +99,7 @@ export const faithfulnessScorer = createFaithfulnessScorer({
     category: 'accuracy-and-reliability',
     type: 'llm',
     filename: 'hallucination-scorer.ts',
-    content: `import { createHallucinationScorer } from '@mastra/evals/scorers/llm';
+    content: `import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -117,7 +117,7 @@ export const hallucinationScorer = createHallucinationScorer({
     category: 'accuracy-and-reliability',
     type: 'llm',
     filename: 'llm-tool-call-accuracy-scorer.ts',
-    content: `import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/llm';
+    content: `import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -149,7 +149,7 @@ export const toolCallAccuracyScorer = createToolCallAccuracyScorerLLM({
     category: 'output-quality',
     type: 'llm',
     filename: 'toxicity-scorer.ts',
-    content: `import { createToxicityScorer } from '@mastra/evals/scorers/llm';
+    content: `import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -167,7 +167,7 @@ export const toxicityScorer = createToxicityScorer({
     category: 'accuracy-and-reliability',
     type: 'llm',
     filename: 'noise-sensitivity-scorer.ts',
-    content: `import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/llm';
+    content: `import { createNoiseSensitivityScorerLLM } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -190,7 +190,7 @@ export const noiseSensitivityScorer = createNoiseSensitivityScorerLLM({
     category: 'output-quality',
     type: 'llm',
     filename: 'prompt-alignment-scorer.ts',
-    content: `import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/llm';
+    content: `import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/prebuilt';
 import { createOpenAI } from '@ai-sdk/openai';
 
 const openai = createOpenAI({
@@ -212,7 +212,7 @@ export const promptAlignmentScorer = createPromptAlignmentScorerLLM({
     category: 'output-quality',
     type: 'code',
     filename: 'completeness-scorer.ts',
-    content: `import { createCompletenessScorer } from '@mastra/evals/scorers/code';
+    content: `import { createCompletenessScorer } from '@mastra/evals/scorers/prebuilt';
 
 export const completenessScorer = createCompletenessScorer();`,
   },
@@ -223,7 +223,7 @@ export const completenessScorer = createCompletenessScorer();`,
     category: 'accuracy-and-reliability',
     type: 'code',
     filename: 'content-similarity-scorer.ts',
-    content: `import { createContentSimilarityScorer } from '@mastra/evals/scorers/code';
+    content: `import { createContentSimilarityScorer } from '@mastra/evals/scorers/prebuilt';
 
 export const contentSimilarityScorer = createContentSimilarityScorer({
   ignoreCase: true, // Whether to ignore case differences
@@ -237,7 +237,7 @@ export const contentSimilarityScorer = createContentSimilarityScorer({
     category: 'output-quality',
     type: 'code',
     filename: 'keyword-coverage-scorer.ts',
-    content: `import { createKeywordCoverageScorer } from '@mastra/evals/scorers/code';
+    content: `import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt';
 
 export const keywordCoverageScorer = createKeywordCoverageScorer();`,
   },
@@ -248,7 +248,7 @@ export const keywordCoverageScorer = createKeywordCoverageScorer();`,
     category: 'accuracy-and-reliability',
     type: 'code',
     filename: 'textual-difference-scorer.ts',
-    content: `import { createTextualDifferenceScorer } from '@mastra/evals/scorers/code';
+    content: `import { createTextualDifferenceScorer } from '@mastra/evals/scorers/prebuilt';
 
 export const textualDifferenceScorer = createTextualDifferenceScorer();`,
   },
@@ -259,7 +259,7 @@ export const textualDifferenceScorer = createTextualDifferenceScorer();`,
     category: 'output-quality',
     type: 'code',
     filename: 'tone-scorer.ts',
-    content: `import { createToneScorer } from '@mastra/evals/scorers/code';
+    content: `import { createToneScorer } from '@mastra/evals/scorers/prebuilt';
 
 export const toneScorer = createToneScorer();`,
   },
@@ -270,7 +270,7 @@ export const toneScorer = createToneScorer();`,
     category: 'accuracy-and-reliability',
     type: 'code',
     filename: 'code-tool-call-accuracy-scorer.ts',
-    content: `import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/code';
+    content: `import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
 
 export const codeToolCallAccuracyScorer = createToolCallAccuracyScorerCode({
   expectedTool: 'weather-tool', // The tool that should be called

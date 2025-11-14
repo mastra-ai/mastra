@@ -24,18 +24,7 @@ export interface AgentsTableProps {
 export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const projectData: AgentTableData[] = useMemo(
-    () =>
-      Object.keys(agents).map(key => {
-        const agent = agents[key];
-
-        return {
-          id: key,
-          ...agent,
-        };
-      }),
-    [agents],
-  );
+  const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
 
   const table = useReactTable({
     data: projectData,
@@ -53,7 +42,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
   const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <>
+    <div>
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search agents" placeholder="Search agents" />
       </SearchbarWrapper>
@@ -86,7 +75,7 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
           </TooltipProvider>
         </ScrollableContainer>
       )}
-    </>
+    </div>
   );
 }
 

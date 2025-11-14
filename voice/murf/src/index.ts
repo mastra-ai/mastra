@@ -97,49 +97,47 @@ export class MurfVoice extends MastraVoice {
   ): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
-    return this.traced(async () => {
-      const response = await this.client
-        .post('v1/speech/generate', {
-          json: {
-            voiceId: (options?.speaker || this.defaultVoice) as MurfVoiceId,
-            text,
-            modelVersion: this.speechModel?.name,
-            ...this.properties,
-            ...options?.properties,
-          },
-        })
-        .json<SpeechCreateResponse>();
+    const response = await this.client
+      .post('v1/speech/generate', {
+        json: {
+          voiceId: (options?.speaker || this.defaultVoice) as MurfVoiceId,
+          text,
+          modelVersion: this.speechModel?.name,
+          ...this.properties,
+          ...options?.properties,
+        },
+      })
+      .json<SpeechCreateResponse>();
 
-      // Create a PassThrough stream for the audio
-      const stream = new PassThrough();
+    // Create a PassThrough stream for the audio
+    const stream = new PassThrough();
 
-      // Get the audio file as a stream
-      const audioResponse = await fetch(response.audioFile);
-      if (!audioResponse.body) {
-        throw new Error('No response body received');
-      }
+    // Get the audio file as a stream
+    const audioResponse = await fetch(response.audioFile);
+    if (!audioResponse.body) {
+      throw new Error('No response body received');
+    }
 
-      // Process the stream
-      const reader = audioResponse.body.getReader();
-      (async () => {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              stream.end();
-              break;
-            }
-            stream.write(value);
+    // Process the stream
+    const reader = audioResponse.body.getReader();
+    (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            stream.end();
+            break;
           }
-        } catch (error) {
-          stream.destroy(error as Error);
+          stream.write(value);
         }
-      })().catch(error => {
+      } catch (error) {
         stream.destroy(error as Error);
-      });
+      }
+    })().catch(error => {
+      stream.destroy(error as Error);
+    });
 
-      return stream;
-    }, 'voice.murf.speak')();
+    return stream;
   }
 
   /**
@@ -159,14 +157,12 @@ export class MurfVoice extends MastraVoice {
   }
 
   async getSpeakers() {
-    return this.traced(async () => {
-      return MURF_VOICES.map(voice => ({
-        voiceId: voice,
-        name: voice,
-        language: voice.split('-')[0],
-        gender: 'neutral',
-      }));
-    }, 'voice.murf.getSpeakers')();
+    return MURF_VOICES.map(voice => ({
+      voiceId: voice,
+      name: voice,
+      language: voice.split('-')[0],
+      gender: 'neutral',
+    }));
   }
 }
 

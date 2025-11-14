@@ -49,24 +49,17 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
   /**
    * Creates a new PineconeVector client.
+   * @param id - The unique identifier for this vector store instance.
    * @param apiKey - The API key for Pinecone.
    * @param environment - The environment for Pinecone.
    */
-  constructor({ apiKey, environment }: { apiKey: string; environment?: string }) {
-    super();
+  constructor({ id, apiKey, environment }: { id: string; apiKey: string; environment?: string }) {
+    super({ id });
     const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
     if (environment) {
       opts['controllerHostUrl'] = environment;
     }
-    const baseClient = new Pinecone(opts);
-    const telemetry = this.__getTelemetry();
-    this.client =
-      telemetry?.traceClass(baseClient, {
-        spanNamePrefix: 'pinecone-vector',
-        attributes: {
-          'vector.type': 'pinecone',
-        },
-      }) ?? baseClient;
+    this.client = new Pinecone(opts);
   }
 
   get indexSeparator(): string {

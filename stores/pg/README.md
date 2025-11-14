@@ -17,11 +17,53 @@ npm install @mastra/pg
 
 ### Vector Store
 
+#### Basic Configuration
+
+PgVector supports multiple connection methods:
+
+**1. Connection String (Recommended)**
+
 ```typescript
 import { PgVector } from '@mastra/pg';
 
-const vectorStore = new PgVector({ connectionString: 'postgresql://user:pass@localhost:5432/db' });
+const vectorStore = new PgVector({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+});
+```
 
+**2. Host/Port/Database Configuration**
+
+```typescript
+const vectorStore = new PgVector({
+  host: 'localhost',
+  port: 5432,
+  database: 'mydb',
+  user: 'postgres',
+  password: 'password',
+});
+```
+
+> **Note:** PgVector also supports advanced configurations like Google Cloud SQL Connector via `pg.ClientConfig`.
+
+#### Advanced Options
+
+```typescript
+const vectorStore = new PgVector({
+  connectionString: 'postgresql://user:pass@localhost:5432/db',
+  schemaName: 'custom_schema', // Use custom schema (default: public)
+  max: 30, // Max pool connections (default: 20)
+  idleTimeoutMillis: 60000, // Idle timeout (default: 30000)
+  pgPoolOptions: {
+    // Additional pg pool options
+    connectionTimeoutMillis: 5000,
+    allowExitOnIdle: true,
+  },
+});
+```
+
+#### Usage Example
+
+```typescript
 // Create a new table with vector support
 await vectorStore.createIndex({
   indexName: 'my_vectors',
@@ -73,36 +115,70 @@ const store = new PostgresStore({
 
 // Create a thread
 await store.saveThread({
-  id: 'thread-123',
-  resourceId: 'resource-456',
-  title: 'My Thread',
-  metadata: { key: 'value' },
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
 });
 
 // Add messages to thread
-await store.saveMessages([
-  {
-    id: 'msg-789',
-    threadId: 'thread-123',
-    role: 'user',
-    type: 'text',
-    content: [{ type: 'text', text: 'Hello' }],
-  },
-]);
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
 
 // Query threads and messages
-const savedThread = await store.getThread('thread-123');
-const messages = await store.getMessages('thread-123');
+const savedThread = await store.getThreadById({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
 
-The PostgreSQL store can be initialized with either:
+### Connection Methods
 
-- `connectionString`: PostgreSQL connection string (for vector store)
-- Configuration object with host, port, database, user, and password (for storage)
+Both `PgVector` and `PostgresStore` support multiple connection methods:
 
-Connection pool settings:
+1. **Connection String**
+
+   ```typescript
+   {
+     connectionString: 'postgresql://user:pass@localhost:5432/db';
+   }
+   ```
+
+2. **Host/Port/Database**
+   ```typescript
+   {
+     host: 'localhost',
+     port: 5432,
+     database: 'mydb',
+     user: 'postgres',
+     password: 'password'
+   }
+   ```
+
+> **Advanced:** Also supports `pg.ClientConfig` for use cases like Google Cloud SQL Connector with IAM authentication.
+
+### Optional Configuration
+
+- `schemaName`: Custom PostgreSQL schema (default: `public`)
+- `ssl`: Enable SSL or provide custom SSL options (`true` | `false` | `ConnectionOptions`)
+- `max`: Maximum pool connections (default: `20`)
+- `idleTimeoutMillis`: Idle connection timeout (default: `30000`)
+- `pgPoolOptions`: Additional pg pool options (PgVector only)
+
+### Default Connection Pool Settings
 
 - Maximum connections: 20
 - Idle timeout: 30 seconds
@@ -259,12 +335,55 @@ The system automatically detects configuration changes and only rebuilds indexes
 
 ## Storage Methods
 
-- `saveThread(thread)`: Create or update a thread
-- `getThread(threadId)`: Get a thread by ID
-- `deleteThread(threadId)`: Delete a thread and its messages
-- `saveMessages(messages)`: Save multiple messages in a transaction
-- `getMessages(threadId)`: Get all messages for a thread
+### Thread Operations
+
+- `saveThread({ thread })`: Create or update a thread
+- `getThreadById({ threadId })`: Get a thread by ID
+- `updateThread({ id, title, metadata })`: Update thread title and/or metadata
+- `deleteThread({ threadId })`: Delete a thread and its messages
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
+
+### Message Operations
+
+- `saveMessages({ messages })`: Save multiple messages in a transaction
+- `listMessages({ threadId, resourceId?, perPage?, page?, orderBy?, filter? })`: Get messages for a thread with pagination
+- `listMessagesById({ messageIds })`: Get specific messages by their IDs
+- `updateMessages({ messages })`: Update existing messages
 - `deleteMessages(messageIds)`: Delete specific messages
+
+### Resource Operations
+
+- `getResourceById({ resourceId })`: Get a resource by ID
+- `saveResource({ resource })`: Create or save a resource
+- `updateResource({ resourceId, workingMemory })`: Update resource working memory
+
+### Workflow Operations
+
+- `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state
+- `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
+- `listWorkflowRuns({ workflowName, pagination })`: List workflow runs with pagination
+- `getWorkflowRunById({ workflowName, runId })`: Get a specific workflow run
+- `updateWorkflowState({ workflowName, runId, state })`: Update workflow state
+- `updateWorkflowResults({ workflowName, runId, results })`: Update workflow results
+
+### AI Observability Operations
+
+- `createSpan(span)`: Create a single AI span
+- `batchCreateSpans({ records })`: Create multiple AI spans
+- `updateSpan({ traceId, spanId, updates })`: Update an AI span
+- `batchUpdateSpans({ updates })`: Update multiple AI spans
+- `getTrace(traceId)`: Get an trace by ID
+- `getTracesPaginated({ ...filters, pagination })`: Get paginated traces with filtering
+- `batchDeleteTraces({ traceIds })`: Delete multiple traces
+
+### Evaluation/Scoring Operations
+
+- `getScoreById({ id })`: Get a score by ID
+- `saveScore(score)`: Save an evaluation score
+- `listScoresByScorerId({ scorerId, pagination })`: List scores by scorer with pagination
+- `listScoresByRunId({ runId, pagination })`: List scores by run with pagination
+- `listScoresByEntityId({ entityId, entityType, pagination })`: List scores by entity with pagination
+- `listScoresBySpan({ traceId, spanId, pagination })`: List scores by span with pagination
 
 ## Index Management
 

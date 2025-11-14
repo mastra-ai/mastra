@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Processor } from '../processors/index';
 import { Agent } from './index';
@@ -10,7 +10,8 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
 
   // Test processor that replaces "SENSITIVE" with "[REDACTED]"
   class RedactionProcessor implements Processor {
-    name = 'redaction-processor';
+    readonly id = 'redaction-processor';
+    readonly name = 'Redaction Processor';
 
     async processOutputStream({ part }: any) {
       // Handle both internal format (payload.text) and AISDK format (text)
@@ -93,6 +94,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
 
   it('should apply processOutputStream transformations to both stream and final messages', async () => {
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'Test agent',
       model: mockModel as any,
@@ -124,6 +126,7 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
 
   it('should maintain consistency between stream and stored messages after fix', async () => {
     const agent = new Agent({
+      id: 'test-agent',
       name: 'test-agent',
       instructions: 'Test agent',
       model: mockModel as any,

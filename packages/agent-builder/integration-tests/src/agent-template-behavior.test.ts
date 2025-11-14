@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { AgentBuilder } from '../../src/index';
 
@@ -38,8 +38,8 @@ describe.skip('agent-builder merge template via agent prompt (real template)', (
   const targetRepo = join(tempRoot, 'project-under-test');
   const realTemplateGit = 'https://github.com/mastra-ai/template-pdf-questions';
 
-  const runtimeContext = new RuntimeContext();
-  runtimeContext.set('targetPath', targetRepo);
+  const requestContext = new RequestContext();
+  requestContext.set('targetPath', targetRepo);
 
   beforeAll(() => {
     // Copy the fixture mastra project into temp directory
@@ -79,7 +79,7 @@ Template repository: ${realTemplateGit}`;
     // Call the agent with natural language
     const response = await agent.generate(prompt, {
       maxSteps: 5,
-      runtimeContext,
+      requestContext,
     });
 
     // Verify files were actually created in the target project

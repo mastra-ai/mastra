@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-exporter",
-  "version": "0.0.4-alpha.0",
+  "version": "1.0.0-beta.0",
   "description": "OpenTelemetry observability exporter for Mastra - supports OTLP, Zipkin, and multiple cloud providers",
   "type": "module",
   "main": "dist/index.js",
@@ -31,6 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
+    "@mastra/observability": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.1.0",
     "@opentelemetry/resources": "^2.1.0",
@@ -39,7 +40,7 @@
     "@opentelemetry/semantic-conventions": "^1.37.0"
   },
   "optionalDependencies": {
-    "@grpc/grpc-js": "^1.14.0",
+    "@grpc/grpc-js": "^1.14.1",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
@@ -50,17 +51,19 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.19.0",
-    "eslint": "^9.36.0",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@grpc/grpc-js": "^1.13.4",
-    "@mastra/core": ">=0.21.0-0 <0.22.0-0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.205.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.205.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.205.0",
     "@opentelemetry/exporter-zipkin": "^2.1.0"
   },
@@ -89,5 +92,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

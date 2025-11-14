@@ -1,7 +1,7 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 
 export const webSummarizationAgent = new Agent({
+  id: 'web-summarization-agent',
   name: 'Web Content Summarization Agent',
   description: 'An agent that summarizes web content from search results to prevent token limit issues',
   instructions: `
@@ -79,5 +79,5 @@ Format your summaries with:
 
 Always provide summaries that capture the core value of the web content without losing critical details.
   `,
-  model: openai('gpt-4.1-mini'), // Efficient model for summarization
+  model: process.env.MODEL || 'openai/gpt-4.1-mini', // Efficient model for summarization
 });

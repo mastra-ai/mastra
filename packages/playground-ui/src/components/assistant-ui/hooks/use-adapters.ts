@@ -16,14 +16,14 @@ export const useAdapters = (agentId: string) => {
   const [isReady, setIsReady] = useState(false);
   const [speechAdapter, setSpeechAdapter] = useState<SpeechSynthesisAdapter | undefined>(undefined);
   const baseClient = useMastraClient();
-  const { runtimeContext } = usePlaygroundStore();
+  const { requestContext } = usePlaygroundStore();
 
   useEffect(() => {
     const check = async () => {
       const agent = baseClient.getAgent(agentId);
 
       try {
-        await agent.voice.getSpeakers(runtimeContext);
+        await agent.voice.getSpeakers(requestContext);
         setSpeechAdapter(new VoiceAttachmentAdapter(agent as unknown as Agent));
         setIsReady(true);
       } catch {

@@ -6,14 +6,15 @@ import type { PostgresStoreConfig } from '../shared/config';
 import { PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
+  id: 'test-postgres-store',
   host: process.env.POSTGRES_HOST || 'localhost',
   port: Number(process.env.POSTGRES_PORT) || 5434,
   database: process.env.POSTGRES_DB || 'postgres',
   user: process.env.POSTGRES_USER || 'postgres',
   password: process.env.POSTGRES_PASSWORD || 'postgres',
-};
+} as PostgresStoreConfig;
 
-export const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
+export const connectionString = `postgresql://${(TEST_CONFIG as any).user}:${(TEST_CONFIG as any).password}@${(TEST_CONFIG as any).host}:${(TEST_CONFIG as any).port}/${(TEST_CONFIG as any).database}`;
 
 export function pgTests() {
   let store: PostgresStore;
@@ -265,6 +266,7 @@ export function pgTests() {
         it('should fail when user lacks CREATE privilege', async () => {
           const restrictedDB = new PostgresStore({
             ...TEST_CONFIG,
+            id: 'restricted-db-no-create',
             user: schemaRestrictedUser,
             password: restrictedPassword,
             schemaName: testSchema,
@@ -297,6 +299,7 @@ export function pgTests() {
         it('should fail with schema creation error when saving thread', async () => {
           const restrictedDB = new PostgresStore({
             ...TEST_CONFIG,
+            id: 'restricted-db-thread',
             user: schemaRestrictedUser,
             password: restrictedPassword,
             schemaName: testSchema,
@@ -329,39 +332,305 @@ export function pgTests() {
       });
     });
 
+    describe('Function Namespace in Schema', () => {
+      const testSchema = 'schema_fn_test';
+      let testStore: PostgresStore;
+
+      beforeAll(async () => {
+        // Use a temp connection to set up schema
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
+        try {
+          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+          await tempDb.none(`CREATE SCHEMA ${testSchema}`);
+          // Drop the function from public schema if it exists from other tests
+          await tempDb.none(`DROP FUNCTION IF EXISTS public.trigger_set_timestamps() CASCADE`);
+        } finally {
+          tempPgp.end();
+        }
+
+        testStore = new PostgresStore({
+          ...TEST_CONFIG,
+          id: 'schema-fn-test-store',
+          schemaName: testSchema,
+        });
+        await testStore.init();
+      });
+
+      afterAll(async () => {
+        await testStore?.close();
+
+        // Use a temp connection to clean up
+        const tempPgp = pgPromise();
+        const tempDb = tempPgp(connectionString);
+
+        try {
+          await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+        } finally {
+          tempPgp.end();
+        }
+      });
+
+      it('should create trigger function in the correct schema namespace', async () => {
+        const SpansSchema = {
+          id: { type: 'text', primaryKey: true, nullable: false },
+          name: { type: 'text', nullable: true },
+          createdAt: { type: 'timestamp', nullable: false },
+          updatedAt: { type: 'timestamp', nullable: false },
+        } as Record<string, StorageColumn>;
+
+        await testStore.createTable({
+          tableName: 'mastra_ai_spans' as TABLE_NAMES,
+          schema: SpansSchema,
+        });
+
+        // Verify trigger function exists in the correct schema
+        const functionInfo = await testStore.db.oneOrNone(
+          `SELECT p.proname, n.nspname
+           FROM pg_proc p
+           JOIN pg_namespace n ON p.pronamespace = n.oid
+           WHERE n.nspname = $1 AND p.proname = 'trigger_set_timestamps'`,
+          [testSchema],
+        );
+
+        expect(functionInfo).toBeDefined();
+        expect(functionInfo?.proname).toBe('trigger_set_timestamps');
+        expect(functionInfo?.nspname).toBe(testSchema);
+
+        // Verify function does NOT exist in public schema
+        const publicFunction = await testStore.db.oneOrNone(
+          `SELECT p.proname, n.nspname
+           FROM pg_proc p
+           JOIN pg_namespace n ON p.pronamespace = n.oid
+           WHERE n.nspname = 'public' AND p.proname = 'trigger_set_timestamps'`,
+        );
+
+        expect(publicFunction).toBeNull();
+      });
+    });
+
+    describe('Timestamp Fallback Handling', () => {
+      let testThreadId: string;
+      let testResourceId: string;
+      let testMessageId: string;
+
+      beforeAll(async () => {
+        store = new PostgresStore(TEST_CONFIG);
+        await store.init();
+      });
+      afterAll(async () => {
+        try {
+          await store.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        testThreadId = `thread-${Date.now()}`;
+        testResourceId = `resource-${Date.now()}`;
+        testMessageId = `msg-${Date.now()}`;
+      });
+
+      it('should use createdAtZ over createdAt for messages when both exist', async () => {
+        // Create a thread first
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Directly insert a message with both createdAt and createdAtZ where they differ
+        const createdAtValue = new Date('2024-01-01T10:00:00Z');
+        const createdAtZValue = new Date('2024-01-01T15:00:00Z'); // 5 hours later - clearly different
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [testMessageId, testThreadId, 'Test message', 'user', 'v2', testResourceId, createdAtValue, createdAtZValue],
+        );
+
+        // Test listMessagesById
+        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        expect(messagesByIdResult.messages.length).toBe(1);
+        expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesByIdResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+
+        // Test listMessages
+        const messagesResult = await store.listMessages({
+          threadId: testThreadId,
+        });
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
+        expect(messagesResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
+      });
+
+      it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
+        // Create a thread first
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Directly insert a message with only createdAt (simulating old records)
+        const createdAtValue = new Date('2024-01-01T10:00:00Z');
+
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [testMessageId, testThreadId, 'Legacy message', 'user', 'v2', testResourceId, createdAtValue],
+        );
+
+        // Test listMessagesById
+        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        expect(messagesByIdResult.messages.length).toBe(1);
+        expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+
+        // Test listMessages
+        const messagesResult = await store.listMessages({
+          threadId: testThreadId,
+        });
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
+      });
+
+      it('should have consistent timestamp handling between threads and messages', async () => {
+        // Create a thread first with a known createdAt timestamp
+        const threadCreatedAt = new Date('2024-01-01T10:00:00Z');
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        thread.createdAt = threadCreatedAt;
+        await store.saveThread({ thread });
+
+        // Save a message through the normal API with a different timestamp
+        const messageCreatedAt = new Date('2024-01-01T12:00:00Z');
+        await store.saveMessages({
+          messages: [
+            {
+              id: testMessageId,
+              threadId: testThreadId,
+              resourceId: testResourceId,
+              role: 'user',
+              content: { format: 2, parts: [{ type: 'text', text: 'Test' }], content: 'Test' },
+              createdAt: messageCreatedAt,
+            },
+          ],
+        });
+
+        // Get thread
+        const retrievedThread = await store.getThreadById({ threadId: testThreadId });
+        expect(retrievedThread).toBeTruthy();
+        expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
+        expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
+
+        // Get messages
+        const messagesResult = await store.listMessages({ threadId: testThreadId });
+        expect(messagesResult.messages.length).toBe(1);
+        expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
+        expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
+      });
+
+      it('should handle included messages with correct timestamp fallback', async () => {
+        // Create a thread
+        const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
+        await store.saveThread({ thread });
+
+        // Create multiple messages
+        const msg1Id = `${testMessageId}-1`;
+        const msg2Id = `${testMessageId}-2`;
+        const msg3Id = `${testMessageId}-3`;
+
+        const date1 = new Date('2024-01-01T10:00:00Z');
+        const date2 = new Date('2024-01-01T11:00:00Z');
+        const date2Z = new Date('2024-01-01T16:00:00Z'); // Different from date2
+        const date3 = new Date('2024-01-01T12:00:00Z');
+
+        // Insert messages with different createdAt/createdAtZ combinations
+        // msg1: has createdAtZ (should use it)
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg1Id, testThreadId, 'Message 1', 'user', 'v2', testResourceId, date1, date1],
+        );
+
+        // msg2: has NULL createdAtZ (should fallback to createdAt)
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [msg2Id, testThreadId, 'Message 2', 'assistant', 'v2', testResourceId, date2],
+        );
+
+        // msg3: has both createdAt and createdAtZ with different values (should use createdAtZ)
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg3Id, testThreadId, 'Message 3', 'user', 'v2', testResourceId, date3, date2Z],
+        );
+
+        // Test listMessages with include
+        const messagesResult = await store.listMessages({
+          threadId: testThreadId,
+          include: [
+            {
+              id: msg2Id,
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        });
+
+        expect(messagesResult.messages.length).toBe(3);
+
+        // Find each message and verify correct timestamps
+        const message1 = messagesResult.messages.find(m => m.id === msg1Id);
+        expect(message1).toBeDefined();
+        expect(message1?.createdAt).toBeInstanceOf(Date);
+        expect(message1?.createdAt.getTime()).toBe(date1.getTime());
+
+        const message2 = messagesResult.messages.find(m => m.id === msg2Id);
+        expect(message2).toBeDefined();
+        expect(message2?.createdAt).toBeInstanceOf(Date);
+        expect(message2?.createdAt.getTime()).toBe(date2.getTime());
+
+        const message3 = messagesResult.messages.find(m => m.id === msg3Id);
+        expect(message3).toBeDefined();
+        expect(message3?.createdAt).toBeInstanceOf(Date);
+        // Should use createdAtZ (date2Z), not createdAt (date3)
+        expect(message3?.createdAt.getTime()).toBe(date2Z.getTime());
+        expect(message3?.createdAt.getTime()).not.toBe(date3.getTime());
+      });
+    });
+
     describe('Validation', () => {
       const validConfig = TEST_CONFIG as any;
 
       describe('Connection String Config', () => {
         it('throws if connectionString is empty', () => {
-          expect(() => new PostgresStore({ connectionString: '' })).toThrow();
-          expect(() => new PostgresStore({ ...validConfig, connectionString: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', connectionString: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, connectionString: '' })).toThrow();
         });
         it('does not throw on non-empty connection string', () => {
-          expect(() => new PostgresStore({ connectionString })).not.toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', connectionString })).not.toThrow();
         });
       });
 
       describe('TCP Host Config', () => {
         it('throws if host is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, host: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, host: '' })).toThrow();
           const { host, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('throws if database is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, database: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, database: '' })).toThrow();
           const { database, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('throws if user is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, user: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, user: '' })).toThrow();
           const { user, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('throws if password is missing or empty', () => {
-          expect(() => new PostgresStore({ ...validConfig, password: '' })).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, password: '' })).toThrow();
           const { password, ...rest } = validConfig;
-          expect(() => new PostgresStore(rest as any)).toThrow();
+          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
         });
         it('does not throw on valid config (host-based)', () => {
           expect(() => new PostgresStore(validConfig)).not.toThrow();
@@ -371,6 +640,7 @@ export function pgTests() {
       describe('Cloud SQL Connector Config', () => {
         it('accepts config with stream property (Cloud SQL connector)', () => {
           const connectorConfig = {
+            id: 'cloud-sql-connector-store',
             user: 'test-user',
             database: 'test-db',
             ssl: { rejectUnauthorized: false },
@@ -381,6 +651,7 @@ export function pgTests() {
 
         it('accepts config with password function (IAM auth)', () => {
           const iamConfig = {
+            id: 'iam-auth-store',
             user: 'test-user',
             database: 'test-db',
             host: 'localhost', // This could be present but ignored when password is a function
@@ -393,6 +664,7 @@ export function pgTests() {
 
         it('accepts generic pg ClientConfig', () => {
           const clientConfig = {
+            id: 'generic-client-config-store',
             user: 'test-user',
             database: 'test-db',
             application_name: 'test-app',
@@ -403,15 +675,94 @@ export function pgTests() {
         });
       });
 
+      describe('SSL Configuration', () => {
+        it('accepts connectionString with ssl: true', () => {
+          expect(() => new PostgresStore({ id: 'ssl-true-store', connectionString, ssl: true })).not.toThrow();
+        });
+
+        it('accepts connectionString with ssl object', () => {
+          expect(
+            () =>
+              new PostgresStore({
+                id: 'ssl-object-store',
+                connectionString,
+                ssl: { rejectUnauthorized: false },
+              }),
+          ).not.toThrow();
+        });
+
+        it('accepts host config with ssl: true', () => {
+          const config = {
+            id: 'host-ssl-true-store',
+            ...validConfig,
+            ssl: true,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+
+        it('accepts host config with ssl object', () => {
+          const config = {
+            id: 'host-ssl-object-store',
+            ...validConfig,
+            ssl: { rejectUnauthorized: false },
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
+      describe('Pool Options', () => {
+        it('accepts max and idleTimeoutMillis with connectionString', () => {
+          const config = {
+            id: 'pool-options-connection-store',
+            connectionString,
+            max: 30,
+            idleTimeoutMillis: 60000,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+
+        it('accepts max and idleTimeoutMillis with host config', () => {
+          const config = {
+            id: 'pool-options-host-store',
+            ...validConfig,
+            max: 30,
+            idleTimeoutMillis: 60000,
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
+      describe('Schema Configuration', () => {
+        it('accepts schemaName with connectionString', () => {
+          expect(
+            () =>
+              new PostgresStore({
+                id: 'custom-schema-connection-store',
+                connectionString,
+                schemaName: 'custom_schema',
+              }),
+          ).not.toThrow();
+        });
+
+        it('accepts schemaName with host config', () => {
+          const config = {
+            id: 'custom-schema-host-store',
+            ...validConfig,
+            schemaName: 'custom_schema',
+          };
+          expect(() => new PostgresStore(config)).not.toThrow();
+        });
+      });
+
       describe('Invalid Config', () => {
         it('throws on invalid config (missing required fields)', () => {
-          expect(() => new PostgresStore({ user: 'test' } as any)).toThrow(
+          expect(() => new PostgresStore({ id: 'test-store', user: 'test' } as any)).toThrow(
             /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
           );
         });
 
         it('throws on completely empty config', () => {
-          expect(() => new PostgresStore({} as any)).toThrow(
+          expect(() => new PostgresStore({ id: 'test-store' } as any)).toThrow(
             /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
           );
         });

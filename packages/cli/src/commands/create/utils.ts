@@ -163,8 +163,8 @@ export const createMastraProject = async ({
 
     s.start(`Installing ${pm} dependencies`);
     try {
-      await exec(`${pm} ${installCommand} zod@^3`);
-      await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
+      await exec(`${pm} ${installCommand} zod@^4`);
+      await exec(`${pm} ${installCommand} -D typescript @types/node`);
       await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",

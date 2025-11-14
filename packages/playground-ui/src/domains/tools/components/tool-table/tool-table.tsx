@@ -43,7 +43,7 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
   const filteredRows = rows.filter(row => row.original.id.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <>
+    <div>
       <SearchbarWrapper>
         <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
       </SearchbarWrapper>
@@ -62,13 +62,13 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
               </Thead>
               <Tbody>
                 {filteredRows.map(row => {
-                  const firstAgent = row.original.agents[0];
-                  const link = firstAgent
-                    ? paths.agentToolLink(firstAgent.id, row.original.id)
-                    : paths.toolLink(row.original.id);
-
                   return (
-                    <Row key={row.id} onClick={() => navigate(link)}>
+                    <Row
+                      key={row.id}
+                      onClick={() => {
+                        navigate(paths.toolLink(row.original.id));
+                      }}
+                    >
                       {row.getVisibleCells().map(cell => (
                         <React.Fragment key={cell.id}>
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -82,7 +82,7 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
           </TooltipProvider>
         </ScrollableContainer>
       )}
-    </>
+    </div>
   );
 }
 

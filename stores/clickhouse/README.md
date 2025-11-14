@@ -26,29 +26,32 @@ const store = new ClickhouseStore({
 
 // Create a thread
 await store.saveThread({
-  id: 'thread-123',
-  resourceId: 'resource-456',
-  title: 'My Thread',
-  metadata: { key: 'value' },
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  thread: {
+    id: 'thread-123',
+    resourceId: 'resource-456',
+    title: 'My Thread',
+    metadata: { key: 'value' },
+    createdAt: new Date(),
+  },
 });
 
 // Add messages to thread
-await store.saveMessages([
-  {
-    id: 'msg-789',
-    threadId: 'thread-123',
-    role: 'user',
-    type: 'text',
-    content: [{ type: 'text', text: 'Hello' }],
-    createdAt: new Date(),
-  },
-]);
+await store.saveMessages({
+  messages: [
+    {
+      id: 'msg-789',
+      threadId: 'thread-123',
+      role: 'user',
+      content: { content: 'Hello' },
+      resourceId: 'resource-456',
+      createdAt: new Date(),
+    },
+  ],
+});
 
 // Query threads and messages
 const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.getMessages({ threadId: 'thread-123' });
+const { messages } = await store.listMessages({ threadId: 'thread-123' });
 
 // Clean up
 await store.close();
@@ -89,21 +92,44 @@ The store uses different table engines for different types of data:
 
 ### Thread Operations
 
-- `saveThread(thread)`: Create or update a thread
+- `saveThread({ thread })`: Create or update a thread
 - `getThreadById({ threadId })`: Get a thread by ID
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
 - `updateThread({ id, title, metadata })`: Update thread title and metadata
 - `deleteThread({ threadId })`: Delete a thread and its messages
 
 ### Message Operations
 
-- `saveMessages(messages)`: Save multiple messages
-- `getMessages({ threadId, selectBy? })`: Get messages for a thread with optional filtering
-- `deleteMessages(messageIds)`: Delete specific messages
+- `saveMessages({ messages })`: Save multiple messages
+- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
+- `updateMessages({ messages })`: Update existing messages
+
+### Resource Operations
+
+- `getResourceById({ resourceId })`: Get a resource by ID
+- `saveResource({ resource })`: Create or save a resource
+- `updateResource({ resourceId, workingMemory })`: Update resource working memory
 
 ### Workflow Operations
 
 - `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state
 - `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
+- `listWorkflowRuns({ workflowName, pagination })`: List workflow runs with pagination
+- `getWorkflowRunById({ workflowName, runId })`: Get a specific workflow run
+
+### Evaluation/Scoring Operations
+
+- `getScoreById({ id })`: Get a score by ID
+- `saveScore(score)`: Save an evaluation score
+- `listScoresByScorerId({ scorerId, pagination })`: List scores by scorer with pagination
+- `listScoresByRunId({ runId, pagination })`: List scores by run with pagination
+- `listScoresByEntityId({ entityId, entityType, pagination })`: List scores by entity with pagination
+- `listScoresBySpan({ traceId, spanId, pagination })`: List scores by span with pagination
+
+### Operations Not Currently Supported
+
+- `deleteMessages(messageIds)`: Message deletion is not supported in ClickHouse
+- AI Observability (traces/spans): Not currently supported
 
 ## Data Types
 

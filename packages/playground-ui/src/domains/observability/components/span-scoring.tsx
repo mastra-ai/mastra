@@ -65,7 +65,10 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
           <SelectField
             name={'select-scorer'}
             placeholder="Select a scorer..."
-            options={scorerList.map(scorer => ({ label: scorer.name, value: scorer.name }))}
+            options={scorerList.map(scorer => ({
+              label: scorer.name || scorer.id,
+              value: scorer.id || scorer.name || '',
+            }))}
             onValueChange={handleScorerChange}
             value={selectedScorer || ''}
             className="min-w-[20rem]"

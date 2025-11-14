@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "0.3.5-alpha.0",
+  "version": "1.0.0-beta.0",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -26,23 +26,25 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.21.2",
+    "@lancedb/lancedb": "^0.22.2",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:^",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.19.0",
-    "eslint": "^9.36.0",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <0.22.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
     "dist",
@@ -56,5 +58,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

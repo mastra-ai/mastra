@@ -108,6 +108,7 @@ describe('CloudDeployer Server Runtime', () => {
 
       // Check LibSQL setup
       expect(entry).toContain('const storage = new LibSQLStore({');
+      expect(entry).toContain('id: "mastra-cloud-storage-libsql"');
       expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
@@ -116,27 +117,6 @@ describe('CloudDeployer Server Runtime', () => {
 
       expect(entry).toContain('await storage.init()');
       expect(entry).toContain('mastra?.setStorage(storage)');
-      expect(entry).toContain('mastra?.memory?.setStorage(storage)');
-      expect(entry).toContain('mastra?.memory?.setVector(vector)');
-    });
-
-    it('should register hooks for generation and evaluation', () => {
-      // @ts-ignore - accessing private method for testing
-      const entry = deployer.getEntry();
-
-      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
-      expect(entry).toContain('evaluate({');
-      expect(entry).toContain('agentName,');
-      expect(entry).toContain('input,');
-      expect(entry).toContain('metric,');
-      expect(entry).toContain('output,');
-      expect(entry).toContain('runId,');
-      expect(entry).toContain('globalRunId: runId,');
-      expect(entry).toContain('instructions,');
-
-      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
-      expect(entry).toContain('await mastra.storage.insert({');
-      expect(entry).toContain('tableName: MastraStorage.TABLE_EVALS');
     });
 
     it('should create node server with correct configuration', () => {
@@ -198,8 +178,6 @@ describe('CloudDeployer Server Runtime', () => {
       expect(entry).toContain('mastra?.getLogger()');
       expect(entry).toContain('mastra?.storage');
       expect(entry).toContain('mastra?.setStorage');
-      expect(entry).toContain('mastra?.memory?.setStorage');
-      expect(entry).toContain('mastra?.memory?.setVector');
     });
 
     it('should skip HTTP transport in CI environment', () => {

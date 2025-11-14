@@ -5,7 +5,7 @@ import { Agent } from '@mastra/core/agent';
 import type { Processor } from '@mastra/core/processors';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('Output Processor Memory Persistence Integration', () => {
@@ -18,6 +18,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     dbPath = join(await mkdtemp(join(tmpdir(), 'output-processor-test-')), 'test.db');
 
     storage = new LibSQLStore({
+      id: 'output-processor-test-storage',
       url: `file:${dbPath}`,
     });
 
@@ -27,9 +28,7 @@ describe('Output Processor Memory Persistence Integration', () => {
       options: {
         lastMessages: 10,
         semanticRecall: false,
-        threads: {
-          generateTitle: false,
-        },
+        generateTitle: false,
       },
     });
   });
@@ -41,7 +40,8 @@ describe('Output Processor Memory Persistence Integration', () => {
 
   // Create a PII redaction processor
   class PIIRedactionProcessor implements Processor {
-    readonly name = 'pii-redaction-processor';
+    readonly id = 'pii-redaction-processor';
+    readonly name = 'PII Redaction Processor';
 
     // Process complete messages after generation
     async processOutputResult({
@@ -125,6 +125,7 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Create an agent with the PII redaction processor
     const agent = new Agent({
+      id: 'test-agent-pii',
       name: 'test-agent-pii',
       model: mockModel,
       instructions: 'You are a helpful assistant',
@@ -161,9 +162,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const savedMessages = await storage.getMessages({
+    const { messages: savedMessages } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message
@@ -208,6 +208,7 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Create an agent with the PII redaction processor
     const agent = new Agent({
+      id: 'test-agent-pii',
       name: 'test-agent-pii',
       model: mockModel,
       instructions: 'You are a helpful assistant',
@@ -244,9 +245,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const savedMessages = await storage.getMessages({
+    const { messages: savedMessages } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message
@@ -273,7 +273,8 @@ describe('Output Processor Memory Persistence Integration', () => {
   it('should chain multiple output processors and persist the result', async () => {
     // First processor: Add a warning prefix
     class WarningPrefixProcessor implements Processor {
-      readonly name = 'warning-prefix';
+      readonly id = 'warning-prefix';
+      readonly name = 'Warning Prefix Processor';
 
       async processOutputResult({
         messages,
@@ -324,7 +325,8 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Second processor: Convert to uppercase
     class UppercaseProcessor implements Processor {
-      readonly name = 'uppercase';
+      readonly id = 'uppercase';
+      readonly name = 'Uppercase Processor';
 
       async processOutputResult({
         messages,
@@ -391,6 +393,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent-chain',
       name: 'test-agent-chain',
       model: mockModel,
       instructions: 'You are a helpful assistant',
@@ -420,9 +423,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve from storage
-    const savedMessages = await storage.getMessages({
+    const { messages: savedMessages } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     const assistantMessage = savedMessages.find((m: any) => m.role === 'assistant');
@@ -435,7 +437,8 @@ describe('Output Processor Memory Persistence Integration', () => {
   it('should persist processed messages when refreshing conversation', async () => {
     // This tests the original bug scenario - refreshing should show processed messages
     class SensitiveDataRedactor implements Processor {
-      readonly name = 'sensitive-data-redactor';
+      readonly id = 'sensitive-data-redactor';
+      readonly name = 'Sensitive Data Redactor';
 
       async processOutputResult({
         messages,
@@ -514,6 +517,7 @@ describe('Output Processor Memory Persistence Integration', () => {
     });
 
     const agent = new Agent({
+      id: 'test-agent-refresh',
       name: 'test-agent-refresh',
       model: mockModel,
       instructions: 'You are a helpful assistant',
@@ -543,9 +547,8 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Simulate page refresh - retrieve messages from storage
-    const messagesAfterRefresh = await storage.getMessages({
+    const { messages: messagesAfterRefresh } = await storage.listMessages({
       threadId,
-      format: 'v2',
     });
 
     // Find the assistant message

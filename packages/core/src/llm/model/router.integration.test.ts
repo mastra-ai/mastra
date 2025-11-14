@@ -64,6 +64,7 @@ describe('ModelRouter Integration Tests', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -89,6 +90,7 @@ describe('ModelRouter Integration Tests', () => {
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
@@ -108,13 +110,16 @@ describe('ModelRouter Integration Tests', () => {
 
   describe.each(testConfigs)('$provider/$model', ({ provider, model, envVar }) => {
     const modelId = `${provider}/${model}` as const;
+    const isGemini = modelId.includes('gemini-2.0-flash-exp');
+    const skipInCI = process.env.CI === 'true' && isGemini;
 
-    it('should generate text response', async () => {
+    it.skipIf(skipInCI)('should generate text response', async () => {
       if (!process.env[envVar]) {
         throw new Error(`${envVar} not set - required for ${provider} integration tests`);
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: modelId,
@@ -128,12 +133,13 @@ describe('ModelRouter Integration Tests', () => {
       expect(response.text.toLowerCase()).toContain('hello');
     });
 
-    it('should handle tool calling', async () => {
+    it.skipIf(skipInCI)('should handle tool calling', async () => {
       if (!process.env[envVar]) {
         throw new Error(`${envVar} not set - required for ${provider} integration tests`);
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: modelId,
@@ -154,12 +160,13 @@ describe('ModelRouter Integration Tests', () => {
       expect(toolCalls[0].payload.args).toHaveProperty('location');
     });
 
-    it('should support system messages via instructions', async () => {
+    it.skipIf(skipInCI)('should support system messages via instructions', async () => {
       if (!process.env[envVar]) {
         throw new Error(`${envVar} not set - required for ${provider} integration tests`);
       }
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a pirate. Always respond like a pirate.',
         model: modelId,
@@ -175,29 +182,34 @@ describe('ModelRouter Integration Tests', () => {
       expect(hasPirateWord).toBe(true);
     });
 
-    it('should support streaming', async () => {
-      if (!process.env[envVar]) {
-        throw new Error(`${envVar} not set - required for ${provider} integration tests`);
-      }
+    it.skipIf(skipInCI)(
+      'should support streaming',
+      async () => {
+        if (!process.env[envVar]) {
+          throw new Error(`${envVar} not set - required for ${provider} integration tests`);
+        }
 
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: modelId,
-      });
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'test-agent',
+          instructions: 'You are a helpful assistant.',
+          model: modelId,
+        });
 
-      const { textStream } = await agent.stream('Count from 1 to 3');
+        const { textStream } = await agent.stream('Count from 1 to 3');
 
-      const chunks: string[] = [];
-      for await (const chunk of textStream) {
-        chunks.push(chunk);
-      }
+        const chunks: string[] = [];
+        for await (const chunk of textStream) {
+          chunks.push(chunk);
+        }
 
-      expect(chunks.length).toBeGreaterThan(0);
-      const fullText = chunks.join('');
-      expect(fullText).toBeDefined();
-      expect(typeof fullText).toBe('string');
-    });
+        expect(chunks.length).toBeGreaterThan(0);
+        const fullText = chunks.join('');
+        expect(fullText).toBeDefined();
+        expect(typeof fullText).toBe('string');
+      },
+      { timeout: 30000 },
+    );
   });
 
   describe('Model ID Validation', () => {
@@ -212,6 +224,7 @@ describe('ModelRouter Integration Tests', () => {
         expect(
           () =>
             new Agent({
+              id: 'test-agent',
               name: 'test-agent',
               instructions: 'test',
               model: id,
