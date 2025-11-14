@@ -1,9 +1,9 @@
 import type { IMastraLogger } from '@mastra/core/logger';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
 import type { MastraDBMessage } from '@mastra/core/memory';
+import type { InputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
-import type { InputProcessor } from '@mastra/core/processors';
 
 export interface WorkingMemoryTemplate {
   format: 'markdown' | 'json';
