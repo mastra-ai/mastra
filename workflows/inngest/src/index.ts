@@ -3,6 +3,7 @@ import { ReadableStream, WritableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, wrapMastra } from '@mastra/core/observability';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
@@ -1154,7 +1155,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   protected async fmtReturnValue<TOutput>(
-    emitter: Emitter,
+    _emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
@@ -1166,12 +1167,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
     } else if (lastOutput.status === 'failed') {
-      base.error =
-        error instanceof Error
-          ? (error?.stack ?? error.message)
-          : lastOutput?.error instanceof Error
-            ? lastOutput.error.message
-            : (lastOutput.error ?? error ?? 'Unknown error');
+      const errorSource = error || lastOutput.error;
+      const errorInstance = getErrorFromUnknown(errorSource, {
+        serializeStack: false,
+        fallbackMessage: 'Unknown workflow error',
+      });
+      base.error = errorInstance;
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
@@ -1665,16 +1666,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         startedAt: number;
         endedAt?: number;
         payload: any;
-        error?: string;
+        error?: Error;
         resumedAt?: number;
         resumePayload?: any;
         suspendPayload?: any;
         suspendedAt?: number;
       };
-      stepResults: Record<
-        string,
-        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
-      >;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       executionContext: ExecutionContext;
     };
 
@@ -1686,7 +1684,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           startedAt: number;
           endedAt?: number;
           payload: any;
-          error?: string;
+          error?: Error;
           resumedAt?: number;
           resumePayload?: any;
           suspendPayload?: any;
@@ -1767,10 +1765,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
           };
         } catch (e) {
-          const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } = {
+          const fallbackErrorMessage = `Step ${step.id} failed`;
+          const error = getErrorFromUnknown(e, { serializeStack: false, fallbackMessage: fallbackErrorMessage });
+
+          const stepFailure: StepFailure<any, any, any, any> = {
             status: 'failed',
             payload: inputData,
-            error: e instanceof Error ? e.message : String(e),
+            error,
             endedAt: Date.now(),
             startedAt,
             resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
@@ -1779,9 +1780,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
           execResults = stepFailure;
 
-          const fallbackErrorMessage = `Step ${step.id} failed`;
-          stepSpan?.error({ error: new Error(execResults.error ?? fallbackErrorMessage) });
-          throw new RetryAfterError(execResults.error ?? fallbackErrorMessage, executionContext.retryConfig.delay, {
+          stepSpan?.error({ error });
+          throw new RetryAfterError(error.message, executionContext.retryConfig.delay, {
             cause: execResults,
           });
         }
@@ -1838,16 +1838,29 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return { result: execResults, executionContext, stepResults };
       });
     } catch (e) {
-      const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
-        e instanceof Error
-          ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
-          : {
-              status: 'failed' as const,
-              error: e instanceof Error ? e.message : String(e),
-              payload: inputData,
-              startedAt,
-              endedAt: Date.now(),
-            };
+      const error = getErrorFromUnknown(e, { serializeStack: false });
+
+      // TODO: do we need to use the error.cause here as the stepFailure instead?
+      // ? since we added the execResult to the error cause on line 1780
+
+      const stepFailure: StepFailure<any, any, any, any> = {
+        status: 'failed' as const,
+        error,
+        payload: inputData,
+        startedAt,
+        endedAt: Date.now(),
+      };
+
+      // const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
+      //   e instanceof Error
+      //     ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
+      //     : {
+      //         status: 'failed' as const,
+      //         error: e instanceof Error ? e.message : String(e),
+      //         payload: inputData,
+      //         startedAt,
+      //         endedAt: Date.now(),
+      //       };
 
       stepRes = {
         result: stepFailure,
@@ -1906,7 +1919,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     executionContext: ExecutionContext;
     workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
     result?: Record<string, any>;
-    error?: string | Error;
+    error?: Error;
     requestContext: RequestContext;
   }) {
     await this.inngestStep.run(
