@@ -1,9 +1,9 @@
 ---
-title: "Testing your agents with evals | Scorers"
-description: "Understanding how to evaluate and measure AI agent quality using Mastra evals."
+title: "Evals Overview | Evals"
+description: "Overview of evals in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance."
 ---
 
-# Testing your agents with evals
+# Evals Overview
 
 :::info Scorers
 This documentation refers to the legacy evals API. For the latest scorer features, see [Scorers](/docs/scorers/overview).
@@ -15,7 +15,7 @@ Evals are automated tests that evaluate Agents outputs using model-graded, rule-
 
 Evals can be run in the cloud, capturing real-time results. But evals can also be part of your CI/CD pipeline, allowing you to test and monitor your agents over time.
 
-## Types of Evals
+## Types of evals
 
 There are different kinds of evals, each serving a specific purpose. Here are some common types:
 
@@ -31,7 +31,7 @@ To access Mastra's evals feature install the `@mastra/evals` package.
 npm install @mastra/evals@latest
 ```
 
-## Getting Started
+## Getting started
 
 Evals need to be added to an agent. Here's an example using the summarization, content similarity, and tone consistency metrics:
 
@@ -60,7 +60,7 @@ export const myAgent = new Agent({
 
 You can view eval results in the Mastra dashboard when using `mastra dev`.
 
-## Beyond Automated Testing
+## Beyond automated testing
 
 While automated evals are valuable, high-performing AI teams often combine them with:
 
@@ -68,11 +68,11 @@ While automated evals are valuable, high-performing AI teams often combine them 
 2. **Human Review**: Regular review of production data and traces
 3. **Continuous Monitoring**: Track eval metrics over time to detect regressions
 
-## Understanding Eval Results
+## Understanding eval results
 
 Each eval metric measures a specific aspect of your agent's output. Here's how to interpret and improve your results:
 
-### Understanding Scores
+### Understanding scores
 
 For any metric:
 
@@ -81,7 +81,7 @@ For any metric:
 3. Compare scores across different inputs and contexts
 4. Track changes over time to spot trends
 
-### Improving Results
+### Improving results
 
 When scores aren't meeting your targets:
 
@@ -90,7 +90,7 @@ When scores aren't meeting your targets:
 3. Simplify your prompts - Break complex tasks into smaller steps
 4. Add guardrails - Include specific rules for tricky cases
 
-### Maintaining Quality
+### Maintaining quality
 
 Once you're hitting your targets:
 
@@ -99,8 +99,8 @@ Once you're hitting your targets:
 3. Test edge cases - Add examples that cover unusual scenarios
 4. Fine-tune - Look for ways to improve efficiency
 
-See [Textual Evals](/docs/scorers/evals-old-api/textual-evals) for more info on what evals can do.
+See [Textual Evals](/docs/scorers/evals-legacy/textual-evals) for more info on what evals can do.
 
-For more info on how to create your own evals, see the [Custom Evals](/docs/scorers/evals-old-api/custom-eval) guide.
+For more info on how to create your own evals, see the [Custom Evals](/docs/scorers/evals-legacy/custom-eval) guide.
 
-For running evals in your CI pipeline, see the [Running in CI](/docs/scorers/evals-old-api/running-in-ci) guide.
+For running evals in your CI pipeline, see the [Running in CI](/docs/scorers/evals-legacy/running-in-ci) guide.

@@ -97,7 +97,7 @@ export function workflowRoute({
         throw new Error(`Workflow ${workflowToUse} not found`);
       }
 
-      const run = await workflowObj.createRun({ runId, resourceId, ...rest });
+      const run = await workflowObj.createRunAsync({ runId, resourceId, ...rest });
 
       const stream = resumeData ? run.resumeStream({ resumeData, ...rest }) : run.stream({ inputData, ...rest });
 

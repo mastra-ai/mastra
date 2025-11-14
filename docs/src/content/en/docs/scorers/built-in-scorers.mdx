@@ -7,9 +7,11 @@ description: "Overview of Mastra's ready-to-use scorers for evaluating AI output
 
 Mastra provides a comprehensive set of built-in scorers for evaluating AI outputs. These scorers are optimized for common evaluation scenarios and are ready to use in your agents and workflows.
 
-## Available Scorers
+To create your own scorers, please see the [Custom Scorers](/docs/scorers/custom-scorers) documentation.
 
-### Accuracy and Reliability
+## Available scorers
+
+### Accuracy and reliability
 
 These scorers evaluate how correct, truthful, and complete your agent's answers are:
 
@@ -23,7 +25,7 @@ These scorers evaluate how correct, truthful, and complete your agent's answers 
 - [`tool-call-accuracy`](/reference/scorers/tool-call-accuracy): Evaluates whether the LLM selects the correct tool from available options (`0-1`, higher is better)
 - [`prompt-alignment`](/reference/scorers/prompt-alignment): Measures how well agent responses align with user prompt intent, requirements, completeness, and format (`0-1`, higher is better)
 
-### Context Quality
+### Context quality
 
 These scorers evaluate the quality and relevance of context used in generating responses:
 
@@ -40,7 +42,7 @@ Both context scorers support:
 - **Static context**: Pre-defined context arrays
 - **Dynamic context extraction**: Extract context from runs using custom functions (ideal for RAG systems, vector databases, etc.)
 
-### Output Quality
+### Output quality
 
 These scorers evaluate adherence to format, style, and safety requirements:
 

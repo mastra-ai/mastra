@@ -13,9 +13,9 @@ Textual evals use an LLM-as-judge methodology to evaluate agent outputs. This ap
 
 Each eval focuses on specific quality aspects and returns a score between 0 and 1, providing quantifiable metrics for non-deterministic AI outputs.
 
-Mastra provides several eval metrics for assessing Agent outputs. Mastra is not limited to these metrics, and you can also [define your own evals](/docs/scorers/evals-old-api/custom-eval).
+Mastra provides several eval metrics for assessing Agent outputs. Mastra is not limited to these metrics, and you can also [define your own evals](/docs/scorers/evals-legacy/custom-eval).
 
-## Why Use Textual Evals?
+## Why use textual evals?
 
 Textual evals help ensure your agent:
 
@@ -24,9 +24,9 @@ Textual evals help ensure your agent:
 - Follows output requirements
 - Maintains consistent quality over time
 
-## Available Metrics
+## Available metrics
 
-### Accuracy and Reliability
+### Accuracy and reliability
 
 These metrics evaluate how correct, truthful, and complete your agent's answers are:
 
@@ -37,7 +37,7 @@ These metrics evaluate how correct, truthful, and complete your agent's answers 
 - [`answer-relevancy`](/reference/evals/answer-relevancy): Assesses how well responses address the original query
 - [`textual-difference`](/reference/evals/textual-difference): Measures textual differences between strings
 
-### Understanding Context
+### Understanding context
 
 These metrics evaluate how well your agent uses provided context:
 
@@ -46,7 +46,7 @@ These metrics evaluate how well your agent uses provided context:
 - [`context-relevancy`](/reference/evals/context-relevancy): Measures use of appropriate context pieces
 - [`contextual-recall`](/reference/evals/contextual-recall): Assesses completeness of context usage
 
-### Output Quality
+### Output quality
 
 These metrics evaluate adherence to format and style requirements:
 
