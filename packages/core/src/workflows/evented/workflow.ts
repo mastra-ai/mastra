@@ -360,6 +360,7 @@ export class EventedWorkflow<
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
+        validateInputs: this.options?.validateInputs,
         workflowEngineType: this.engineType,
       });
 
@@ -522,9 +523,14 @@ export class EventedRun<
       | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-      typeof step === 'string' ? step : step?.id,
-    );
+    let steps: string[] = [];
+    if (typeof params.step === 'string') {
+      steps = params.step.split('.');
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    }
 
     if (steps.length === 0) {
       throw new Error('No steps provided to resume');
