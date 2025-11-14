@@ -104,8 +104,19 @@ export class MastraStorage extends MastraBase {
 
   id: string;
   stores?: StorageDomains;
+  default?: MastraStorage;
 
-  constructor({ id, name, stores }: { id: string; name: string; stores?: StorageDomains }) {
+  constructor({
+    id,
+    name,
+    stores,
+    default: defaultStore,
+  }: {
+    id: string;
+    name: string;
+    stores?: StorageDomains;
+    default?: MastraStorage;
+  }) {
     if (!id || typeof id !== 'string' || id.trim() === '') {
       throw new Error(`${name}: id must be provided and cannot be empty.`);
     }
@@ -114,6 +125,7 @@ export class MastraStorage extends MastraBase {
       name,
     });
     this.id = id;
+    this.default = defaultStore;
 
     if (stores) {
       this.stores = stores;
@@ -130,23 +142,34 @@ export class MastraStorage extends MastraBase {
     indexManagement?: boolean;
     listScoresBySpan?: boolean;
   } {
+    // Merge supports from default store if available
+    const defaultSupports = this.default?.supports;
     return {
-      selectByIncludeResourceScope: false,
-      resourceWorkingMemory: false,
-      hasColumn: false,
-      createTable: false,
-      deleteMessages: false,
-      observabilityInstance: false,
-      indexManagement: false,
-      listScoresBySpan: false,
+      selectByIncludeResourceScope: defaultSupports?.selectByIncludeResourceScope ?? false,
+      resourceWorkingMemory: defaultSupports?.resourceWorkingMemory ?? false,
+      hasColumn: defaultSupports?.hasColumn ?? false,
+      createTable: defaultSupports?.createTable ?? false,
+      deleteMessages: defaultSupports?.deleteMessages ?? false,
+      observabilityInstance: defaultSupports?.observabilityInstance ?? false,
+      indexManagement: defaultSupports?.indexManagement ?? false,
+      listScoresBySpan: defaultSupports?.listScoresBySpan ?? false,
     };
   }
 
   /**
    * Get access to the underlying storage domains for advanced operations
+   * Falls back to the default store if the domain is not explicitly provided
    */
   public async getStore<K extends keyof StorageDomains>(id: K): Promise<StorageDomains[K] | undefined> {
-    return this.stores?.[id];
+    // First check if the domain is explicitly provided
+    if (this.stores?.[id]) {
+      return this.stores[id];
+    }
+    // Fall back to default store if available
+    if (this.default) {
+      return await this.default.getStore(id);
+    }
+    return undefined;
   }
 
   async init(): Promise<void> {
@@ -157,24 +180,21 @@ export class MastraStorage extends MastraBase {
 
     const initTasks: Promise<void>[] = [];
 
-    // Initialize memory domain (threads, messages, resources)
-    if (this.stores?.memory) {
-      initTasks.push(this.stores.memory.init());
-    }
+    // Initialize each domain, preferring explicit stores over default store
+    const domains: (keyof StorageDomains)[] = ['memory', 'workflows', 'evals', 'observability'];
 
-    // Initialize workflows domain (workflow snapshots)
-    if (this.stores?.workflows) {
-      initTasks.push(this.stores.workflows.init());
-    }
-
-    // Initialize scores domain (evals)
-    if (this.stores?.evals) {
-      initTasks.push(this.stores.evals.init());
-    }
-
-    // Initialize observability domain (traces, spans)
-    if (this.stores?.observability) {
-      initTasks.push(this.stores.observability.init());
+    for (const domain of domains) {
+      // If explicitly provided, use that
+      if (this.stores?.[domain]) {
+        initTasks.push(this.stores[domain]!.init());
+      }
+      // Otherwise, check if default store has this domain
+      else if (this.default) {
+        const defaultDomain = await this.default.getStore(domain);
+        if (defaultDomain) {
+          initTasks.push(defaultDomain.init());
+        }
+      }
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);
