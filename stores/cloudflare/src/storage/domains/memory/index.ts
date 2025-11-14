@@ -445,7 +445,9 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       for (const message of validatedMessages) {
         // Check if this message already exists in a different thread
         const existingMessage = await this.findMessageInAnyThread(message.id);
-        this.logger?.debug(`Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`);
+        this.logger?.debug(
+          `Checking message ${message.id}: existing=${existingMessage?.threadId}, new=${message.threadId}`,
+        );
         if (existingMessage && existingMessage.threadId && existingMessage.threadId !== message.threadId) {
           // Message exists in a different thread, migrate it
           this.logger?.debug(`Migrating message ${message.id} from ${existingMessage.threadId} to ${message.threadId}`);

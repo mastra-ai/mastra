@@ -15,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CloudflareWorkersConfig } from './types';
 import { CloudflareStore } from './index';
 
-
 describe('Logger Verification - No PII Leakage', () => {
   let mf: Miniflare;
   let store: CloudflareStore;
@@ -24,7 +23,14 @@ describe('Logger Verification - No PII Leakage', () => {
     mf = new Miniflare({
       script: 'export default {};',
       modules: true,
-      kvNamespaces: [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, TABLE_WORKFLOW_SNAPSHOT, TABLE_TRACES, TABLE_SCORERS],
+      kvNamespaces: [
+        TABLE_THREADS,
+        TABLE_MESSAGES,
+        TABLE_RESOURCES,
+        TABLE_WORKFLOW_SNAPSHOT,
+        TABLE_TRACES,
+        TABLE_SCORERS,
+      ],
     });
 
     const kvBindings = {
@@ -96,14 +102,10 @@ describe('Logger Verification - No PII Leakage', () => {
     expect(consoleInfoSpy).not.toHaveBeenCalled();
 
     // CRITICAL: Verify SENSITIVE_DATA never appeared in any console output
-    const allConsoleCalls = [
-      ...consoleLogSpy.mock.calls,
-      ...consoleInfoSpy.mock.calls,
-    ].flat();
+    const allConsoleCalls = [...consoleLogSpy.mock.calls, ...consoleInfoSpy.mock.calls].flat();
 
-    const hasLeakedPII = allConsoleCalls.some(arg =>
-      String(arg).includes('123-45-6789') ||
-      String(arg).includes('secret123')
+    const hasLeakedPII = allConsoleCalls.some(
+      arg => String(arg).includes('123-45-6789') || String(arg).includes('secret123'),
     );
 
     expect(hasLeakedPII).toBe(false);
