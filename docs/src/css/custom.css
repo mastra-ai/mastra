@@ -1,84 +1,4 @@
-/**
- * Any CSS included here will be global. The classic template
- * bundles Infima by default. Infima is a CSS framework designed to
- * work well for content-centric websites.
- */
-
-/* =====================================================================
-   COLOR MAPPING: Docusaurus → Nextra (globals.css)
-   =====================================================================
-
-   This mapping shows how Docusaurus variables correspond to the
-   Nextra docs colors from globals.css
-
-   LIGHT MODE MAPPINGS:
-   =====================================================================
-
-   GREEN ACCENTS:
-   --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
-   --mastra-green-accent-2       → --light-green-accent-2: hsla(125, 66%, 50%, 1)
-   --mastra-green-muted          → --light-green-muted: #84d291
-   --mastra-green-code           → --light-green-code: #177326
-   --ifm-color-primary           → --light-green-accent: #0d8020
-
-   TEXT COLORS (darkest to lightest):
-   --mastra-text-primary         → --light-color-text-6: #0a0a0a
-   --mastra-text-secondary       → --light-color-text-5: #141414
-   --mastra-text-tertiary        → --light-color-text-4: #5f5f5f
-   --mastra-text-quaternary      → --light-color-text-3: #7f7e7e
-   --mastra-text-muted           → --light-color-text-2: #8f8f8f
-   --mastra-text-muted-2         → --light-color-text-1: #929292
-
-   SURFACE/BACKGROUND COLORS:
-   --ifm-background-color        → --light-color-surface-15: #fafafa
-   --mastra-surface-1            → --light-color-surface-1: #f0f0f0
-   --mastra-surface-2            → --light-color-surface-2: #f2f2f2
-   --mastra-surface-3            → --light-color-surface-3: #ededed
-   --mastra-surface-4            → --light-color-surface-4: #ebebeb
-   --mastra-surface-5            → --light-color-surface-5: hsla(0, 0%, 88%, 0.9)
-
-   BORDER COLORS:
-   --border                      → --light-border-muted: #ccc
-   --border-subtle               → --border: hsla(0, 0%, 80%, 1)
-   --border-code                 → --light-border-code: #b8b8b8
-   --border-secondary            → --border-2: hsla(0, 0%, 72%, 1)
-
-   =====================================================================
-
-   DARK MODE MAPPINGS:
-   =====================================================================
-
-   GREEN ACCENTS:
-   --mastra-green-accent         → --color-accent-green: hsl(143, 97%, 54%)
-   --mastra-green-accent-2       → hsla(125, 66%, 50%, 1)
-   --ifm-color-primary           → hsl(143, 97%, 54%)
-
-   TEXT COLORS (lightest to darkest):
-   --mastra-text-primary         → --color-primary: #ffffff
-   --mastra-text-secondary       → --color-el-4: #e6e6e6
-   --mastra-text-tertiary        → --color-el-3: #939393
-   --mastra-text-quaternary      → --color-el-2: #707070
-
-   SURFACE/BACKGROUND COLORS:
-   --ifm-background-color        → --primary-bg: #050505
-   --ifm-background-surface      → --secondary-bg: #121212
-   --ifm-code-background         → --tertiary-bg: #171717
-   --mastra-surface-1            → --color-surface-3: hsla(0, 0%, 8%, 1)
-   --mastra-surface-2            → --color-surface-4: hsla(0, 0%, 10%, 1)
-   --mastra-surface-3            → #121212
-   --mastra-surface-4            → #171717
-   --mastra-surface-5            → --color-surface-5: hsla(0, 0%, 18%, 0.9)
-
-   BORDER COLORS:
-   --mastra-border               → --border: #343434
-   --mastra-border-subtle        → --color-borders-1: hsla(0, 0%, 19%, 1)
-   --mastra-border-code          → --color-borders-2: hsla(0, 0%, 26%, 1)
-
-   =====================================================================
-*/
-
-/* Import Google Fonts */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+@import "./fonts.css";
 @import "tailwindcss";
 
 @custom-variant dark (&:is([data-theme="dark"] *));
@@ -161,7 +81,7 @@
   --ifm-footer-background-color: #050505;
   --ifm-code-background: var(--mastra-surface-2);
 
-  --ifm-navbar-height: calc(58px);
+  --ifm-navbar-height: 47px;
 
   /* Code blocks */
   --docusaurus-highlighted-code-line-bg: color-mix(
@@ -176,6 +96,8 @@
   --prism-color-function: #9829c7;
   --prism-color-comment: #939393;
   --prism-color-variable: #0a0a0a;
+  --prism-color-inserted: #177326;
+  --prism-color-deleted: #d81717;
 
   /* Border radius */
   --ifm-global-radius: 0.5rem;
@@ -252,6 +174,8 @@
   --prism-color-function: #d06bee;
   --prism-color-comment: #939393;
   --prism-color-variable: #fff;
+  --prism-color-inserted: #62f69d;
+  --prism-color-deleted: #d81717;
 
   /* Override Docusaurus text colors for dark mode */
   --ifm-font-color-base: var(--mastra-text-secondary);
@@ -409,6 +333,260 @@ span[class*="categoryLinkLabel"] {
   position: relative;
 }
 
+h2:has(code) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+h1 code,
+h2 code,
+h3 code,
+h4 code,
+h5 code,
+h6 code {
+  font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
+  border-radius: 10px;
+}
+
+/* ==================== LINKS ==================== */
+article a {
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--mastra-green-muted);
+  color: var(--mastra-text-primary);
+}
+
+article a:hover {
+  color: var(--mastra-green-accent-2);
+  text-decoration-color: var(--mastra-green-accent-2);
+}
+
+[data-theme="dark"] .markdown a {
+  text-decoration-color: var(--mastra-green-accent);
+  color: var(--mastra-green-accent);
+}
+
+[data-theme="dark"] article a:hover {
+  color: var(--mastra-green-accent-2);
+}
+
+/* Pre with title above - remove top border radius */
+div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+#docs-search-results {
+  scrollbar-width: none;
+}
+
+p {
+  @apply tracking-[-0.09px] leading-[1.6];
+}
+
+.docusaurus-mt-lg {
+  overflow-x: hidden;
+}
+
+/* Hide sidebar items with sidebar-hidden class */
+.sidebar-hidden {
+  display: none !important;
+}
+
+/* Code block overrides */
+.language-diff .inserted {
+  color: var(--prism-color-inserted) !important;
+}
+
+.language-diff .deleted {
+  color: var(--prism-color-deleted) !important;
+}
+
+/* ==================== DROPDOWN ANIMATIONS ==================== */
+@keyframes slideDownAndFade {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUpAndFade {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideLeftAndFade {
+  from {
+    opacity: 0;
+    transform: translateX(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideRightAndFade {
+  from {
+    opacity: 0;
+    transform: translateX(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Data attribute animation triggers */
+[data-side="bottom"][data-slot="dropdown-menu-content"] {
+  animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-side="top"][data-slot="dropdown-menu-content"] {
+  animation: slideUpAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-side="left"][data-slot="dropdown-menu-content"] {
+  animation: slideLeftAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-side="right"][data-slot="dropdown-menu-content"] {
+  animation: slideRightAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Fallback for when side is not specified */
+[data-state="open"][data-slot="dropdown-menu-content"]:not([data-side]) {
+  animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px var(--ifm-background-color) inset !important;
+  /* you might also set text-fill colour if needed */
+  -webkit-text-fill-color: #000 !important;
+}
+
+.menu,
+pre,
+[class*="tableOfContents"],
+[role="log"],
+.tabs,
+.toc-wrapper {
+  padding-inline: 0 !important;
+  scrollbar-width: thin;
+  scrollbar-color: #dedede transparent;
+}
+
+[data-theme="dark"] {
+  .menu,
+  pre,
+  [class*="tableOfContents"],
+  [role="log"],
+  .tabs,
+  .toc-wrapper {
+    scrollbar-color: #2a2a2a transparent;
+    scrollbar-width: thin;
+  }
+}
+
+iframe,
+img,
+video {
+  border-radius: 12px;
+  max-width: 100%;
+}
+
+/* ==================== CODE BLOCKS ==================== */
+.theme-code-block.theme-code-block {
+  box-shadow: none;
+  background: none;
+}
+
+pre {
+  --prism-background-color: var(--mastra-surface-2);
+  background: var(--mastra-surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+pre * {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+code {
+  --bg-color: var(--mastra-surface-5);
+  font-family: var(--ifm-font-family-monospace);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  border: 1px solid color-mix(in oklab, #000 4%, transparent);
+  background: color-mix(in oklab, #000 3%, transparent);
+  padding: 0.12em 0.25em;
+}
+
+[data-theme="dark"] code {
+  background: color-mix(in oklab, #fff 10%, transparent);
+  border-color: color-mix(in oklab, #fff 10%, transparent);
+}
+
+pre code {
+  font-size: 13px;
+  line-height: 1.6;
+  background: transparent !important;
+  border: none !important;
+  padding: 0;
+  color: var(--mastra-text-muted);
+}
+
+[data-theme="dark"] pre code {
+  background: transparent;
+}
+
+/* Code block title bar */
+div[class*="codeBlockTitle"] {
+  border: 0.5px solid var(--border);
+  border-bottom: none;
+  background: var(--mastra-surface-2);
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  font-size: 0.875rem;
+  color: var(--mastra-text-tertiary);
+  font-family: var(--ifm-font-family-monospace);
+}
+
+[data-theme="dark"] div[class*="codeBlockTitle"] {
+  border-color: var(--border);
+  background: #171717;
+  color: var(--mastra-text-tertiary);
+}
+
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
@@ -421,30 +599,10 @@ span[class*="categoryLinkLabel"] {
   /* use a container query to define behaviour below this point */
   /* min-width: 69rem; */
   /* } */
-  .menu,
-  pre,
-  [class*="tableOfContents"],
-  .tabs,
-  .toc-wrapper {
-    padding-inline: 0 !important;
-    scrollbar-width: thin;
-    scrollbar-color: #dedede transparent;
-  }
 
   .table-of-contents__left-border {
     border: none;
     padding-inline-start: 0;
-  }
-
-  [data-theme="dark"] {
-    .menu,
-    pre,
-    [class*="tableOfContents"],
-    .tabs,
-    .toc-wrapper {
-      scrollbar-color: #2a2a2a transparent;
-      scrollbar-width: thin;
-    }
   }
 
   /* ======= BreadCrumbs ==================== */
@@ -510,28 +668,6 @@ span[class*="categoryLinkLabel"] {
     }
   }
 
-  h2:has(code) {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  h2 code,
-  h3 code,
-  h4 code,
-  h5 code,
-  h6 code {
-    font-size: calc(var(--ifm-h2-font-size) - 0.25rem);
-    border-radius: 10px;
-  }
-
-  iframe,
-  img,
-  video {
-    border-radius: 12px;
-    max-width: 100%;
-  }
-
   ul {
     list-style: disc;
   }
@@ -570,81 +706,6 @@ span[class*="categoryLinkLabel"] {
     &::after {
       content: "";
     }
-  }
-
-  /* ==================== CODE BLOCKS ==================== */
-  .theme-code-block.theme-code-block {
-    box-shadow: none;
-    background: none;
-  }
-
-  pre {
-    --prism-background-color: var(--mastra-surface-2);
-    background: var(--mastra-surface-2);
-    border: 0.5px solid var(--border);
-    border-radius: 12px;
-    max-width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  pre * {
-    font-size: 13px;
-    font-weight: 500;
-  }
-
-  code {
-    --bg-color: : var(--mastra-surface-5);
-    font-family: var(--ifm-font-family-monospace);
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    border: 1px solid color-mix(in oklab, #000 4%, transparent);
-    background: color-mix(in oklab, #000 3%, transparent);
-    padding: 0.12em 0.25em;
-  }
-
-  [data-theme="dark"] code {
-    background: color-mix(in oklab, #fff 10%, transparent);
-    border-color: color-mix(in oklab, #fff 10%, transparent);
-  }
-
-  pre code {
-    font-size: 13px;
-    line-height: 1.6;
-    background: transparent;
-    border: none;
-    padding: 0;
-    color: var(--mastra-text-muted);
-  }
-
-  [data-theme="dark"] pre code {
-    background: transparent;
-  }
-
-  /* Code block title bar */
-  div[class*="codeBlockTitle"] {
-    border: 0.5px solid var(--border);
-    border-bottom: none;
-    background: var(--mastra-surface-2);
-    border-top-left-radius: 0.5rem;
-    border-top-right-radius: 0.5rem;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    font-size: 0.875rem;
-    color: var(--mastra-text-tertiary);
-    font-family: var(--ifm-font-family-monospace);
-  }
-
-  [data-theme="dark"] div[class*="codeBlockTitle"] {
-    border-color: var(--border);
-    background: #171717;
-    color: var(--mastra-text-tertiary);
-  }
-
-  /* Pre with title above - remove top border radius */
-  div[class*="codeBlockTitle"] + div[class*="codeBlockContent"] pre {
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
   }
 
   /* Highlighted lines in code blocks */
@@ -766,30 +827,6 @@ span[class*="categoryLinkLabel"] {
   .footer__copyright {
     color: var(--mastra-text-tertiary);
     font-size: 0.8125rem;
-  }
-
-  /* ==================== LINKS ==================== */
-  article a {
-    font-weight: 500;
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 2px;
-    text-decoration-color: var(--mastra-green-muted);
-    color: var(--mastra-text-primary);
-  }
-
-  article a:hover {
-    color: var(--mastra-green-accent-2);
-    text-decoration-color: var(--mastra-green-accent-2);
-  }
-
-  [data-theme="dark"] .markdown a {
-    text-decoration-color: var(--mastra-green-accent);
-    color: var(--mastra-green-accent);
-  }
-
-  [data-theme="dark"] article a:hover {
-    color: var(--mastra-green-accent-2);
   }
 
   /* ==================== TYPOGRAPHY ==================== */
@@ -977,88 +1014,6 @@ span[class*="categoryLinkLabel"] {
     appearance: none;
   }
 
-  /* ==================== DROPDOWN ANIMATIONS ==================== */
-  @keyframes slideDownAndFade {
-    from {
-      opacity: 0;
-      transform: translateY(-2px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes slideUpAndFade {
-    from {
-      opacity: 0;
-      transform: translateY(2px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes slideLeftAndFade {
-    from {
-      opacity: 0;
-      transform: translateX(2px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  @keyframes slideRightAndFade {
-    from {
-      opacity: 0;
-      transform: translateX(-2px);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  /* Data attribute animation triggers */
-  [data-side="bottom"][data-slot="dropdown-menu-content"] {
-    animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  [data-side="top"][data-slot="dropdown-menu-content"] {
-    animation: slideUpAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  [data-side="left"][data-slot="dropdown-menu-content"] {
-    animation: slideLeftAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  [data-side="right"][data-slot="dropdown-menu-content"] {
-    animation: slideRightAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  /* Fallback for when side is not specified */
-  [data-state="open"][data-slot="dropdown-menu-content"]:not([data-side]) {
-    animation: slideDownAndFade 400ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  input:-webkit-autofill,
-  input:-webkit-autofill:hover,
-  input:-webkit-autofill:focus,
-  textarea:-webkit-autofill,
-  textarea:-webkit-autofill:hover,
-  textarea:-webkit-autofill:focus {
-    -webkit-box-shadow: 0 0 0px 1000px var(--ifm-background-color) inset !important;
-    /* you might also set text-fill colour if needed */
-    -webkit-text-fill-color: #000 !important;
-  }
-
   .grecaptcha-badge {
     visibility: hidden;
   }
@@ -1161,22 +1116,25 @@ span[class*="categoryLinkLabel"] {
    Since --chatbot-sidebar-open is set on document.documentElement (:root),
    we use attribute selectors instead to check for the inline style. */
 
-  /* html[style*="--chatbot-sidebar-open: 1"] #toc-column {
+  /*html[style*="--chatbot-sidebar-open: 1"] #toc-column {
     display: none;
+  }*/
+
+  #doc-item-container {
+    container-name: doc;
   }
 
-  html[style*="--chatbot-sidebar-open: 0"] #doc-item-container {
-    max-width: 100% !important;
-  } */
+  @container doc (max-width: 984px) {
+    #toc-column {
+      display: none !important;
+    }
+  }
 
   #doc-item-container {
     max-width: 64rem;
     margin: 0 auto;
   }
 
-  /* #toc-column {
-  display: none;
-} */
   .card__grid a {
     color: var(--mastra-text-secondary);
   }
@@ -1201,17 +1159,11 @@ span[class*="categoryLinkLabel"] {
       }
     }
   }
-}
 
-#docs-search-results {
-  scrollbar-width: none;
-}
+  .docusaurus-mt-lg {
+    overflow-x: revert;
+  }
 
-p {
-  @apply tracking-[-0.09px] leading-[1.6];
-}
-
-@media (min-width: 997px) {
   .theme-doc-sidebar-item-link.theme-doc-sidebar-item-link-level-1 > a {
     padding-inline-start: 0.5rem;
   }
@@ -1251,7 +1203,12 @@ p {
     border-radius: 8px;
   }
 
-  .theme-doc-sidebar-item-link-level-3,
+  .theme-doc-sidebar-item-link-level-3 {
+    .menu__link--active::before {
+      inset-inline-start: calc(0.25rem * 1);
+    }
+  }
+
   .theme-doc-sidebar-item-link-level-4 {
     .menu__link--active::before {
       inset-inline-start: 0px;
@@ -1271,8 +1228,12 @@ p {
   }
 
   .theme-doc-sidebar-container.theme-doc-sidebar-container {
-    padding-inline-start: 1rem;
+    padding-inline-start: 0rem;
     border-right: var(--border-sm) solid var(--border);
+  }
+
+  [class*="sidebar"]:has(> .menu) {
+    padding-inline-start: 1rem;
   }
 
   .theme-doc-toc-desktop.theme-doc-toc-desktop {
@@ -1280,7 +1241,7 @@ p {
   }
 
   .toc-wrapper {
-    @apply sticky overflow-y-auto;
+    @apply overflow-y-auto sticky;
     top: calc(var(--ifm-navbar-height) + 1rem);
     max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
   }
@@ -1304,19 +1265,24 @@ p {
     padding-inline-start: 0.65rem;
     margin-block-end: calc(0.25rem * 1.5);
   }
-}
 
-.docusaurus-mt-lg {
-  overflow-x: hidden;
-}
-
-@media (min-width: 997px) {
-  .docusaurus-mt-lg {
-    overflow-x: revert;
+  .theme-doc-sidebar-item-link-level-3 > a {
+    margin-inline-start: -0.25rem;
   }
-}
 
-/* Hide sidebar items with sidebar-hidden class */
-.sidebar-hidden {
-  display: none !important;
+  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible {
+    margin-inline-start: 0.18rem;
+  }
+
+  .theme-doc-sidebar-item-category-level-2 > .menu__list-item-collapsible a {
+    &::after {
+      right: 16.5%;
+    }
+  }
+
+  .theme-doc-sidebar-item-category-level-3 > .menu__list-item-collapsible a {
+    &::after {
+      right: 20.4%;
+    }
+  }
 }

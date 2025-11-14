@@ -8,7 +8,7 @@ export async function changelog() {
 
   const workflow = mastra.getWorkflow('changelog');
 
-  const run = await workflow.createRunAsync();
+  const run = await workflow.createRun();
   const { start } = run;
 
   const res = await start({

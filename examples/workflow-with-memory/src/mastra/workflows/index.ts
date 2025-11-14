@@ -10,8 +10,8 @@ const stepOne = new Step({
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const doubledValue = context.inputValue * 2;
+  execute: async inputData => {
+    const doubledValue = inputData.inputValue * 2;
     return { doubledValue };
   },
 });
@@ -25,8 +25,8 @@ const stepTwo = new Step({
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const incrementedValue = context.valueToIncrement + 1;
+  execute: async inputData => {
+    const incrementedValue = inputData.valueToIncrement + 1;
     return { incrementedValue };
   },
 });
@@ -40,8 +40,8 @@ const stepThree = new Step({
   outputSchema: z.object({
     squaredValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const squaredValue = context.valueToSquare * context.valueToSquare;
+  execute: async inputData => {
+    const squaredValue = inputData.valueToSquare * inputData.valueToSquare;
     return { squaredValue };
   },
 });
@@ -55,8 +55,8 @@ const stepFour = new Step({
   outputSchema: z.object({
     rootValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    return { rootValue: Math.sqrt(context.valueToRoot) };
+  execute: async inputData => {
+    return { rootValue: Math.sqrt(inputData.valueToRoot) };
   },
 });
 
@@ -69,8 +69,8 @@ const stepFive = new Step({
   outputSchema: z.object({
     tripledValue: z.number(),
   }),
-  execute: async ({ context }) => {
-    const tripledValue = context.inputValue * 3;
+  execute: async inputData => {
+    const tripledValue = inputData.inputValue * 3;
     return { tripledValue };
   },
 });
@@ -84,9 +84,9 @@ const stepSix = new Step({
   outputSchema: z.object({
     rawText: z.string(),
   }),
-  execute: async ({ context }) => {
-    console.log(context.inputValue);
-    return { rawText: context.inputValue.toString() };
+  execute: async inputData => {
+    console.log(inputData.inputValue);
+    return { rawText: inputData.inputValue.toString() };
   },
 });
 

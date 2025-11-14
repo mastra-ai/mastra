@@ -33,14 +33,12 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v5
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22.x'
-          cache: 'pnpm'
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Install dependencies
-        run: npm install @octokit/rest fs-extra dotenv
+        run: pnpm add -w --no-lockfile @octokit/rest fs-extra dotenv --no-lockfile
 
       - name: Run Template Sync Script
         env:

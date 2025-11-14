@@ -10,6 +10,7 @@ describe('provider-defined tools', () => {
     const search = google.tools.googleSearch({});
 
     const agent = new Agent({
+      id: 'minimal-agent',
       name: 'minimal-agent',
       instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
       model: 'google/gemini-2.5-flash',
@@ -36,6 +37,7 @@ describe('provider-defined tools', () => {
 
   it('should handle Google URL context tool', async () => {
     const agent = new Agent({
+      id: 'test-google-url-agent',
       name: 'test-google-url-agent',
       instructions: 'You are a helpful AI assistant.',
       model: google('gemini-2.0-flash-exp'),
@@ -50,6 +52,7 @@ describe('provider-defined tools', () => {
 
   it('should handle Google code execution tool', async () => {
     const agent = new Agent({
+      id: 'test-google-code-agent',
       name: 'test-google-code-agent',
       instructions: 'You are a helpful AI assistant.',
       model: google('gemini-2.0-flash-exp'),
@@ -66,7 +69,8 @@ describe('provider-defined tools', () => {
     const tool = openai.tools.webSearch({});
 
     const agent = new Agent({
-      name: 'minimal-agent',
+      id: 'test-openai-web-search-agent',
+      name: 'test-openai-web-search-agent',
       instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
       model: 'openai/gpt-4o-mini',
       tools: { search: tool },
@@ -98,6 +102,7 @@ describe('provider-defined tools', () => {
     const tool = anthropic.tools.webSearch_20250305({});
 
     const agent = new Agent({
+      id: 'minimal-agent',
       name: 'minimal-agent',
       instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
       model: 'anthropic/claude-haiku-4-5-20251001',
@@ -128,6 +133,7 @@ describe('provider-defined tools', () => {
     const tool = anthropic.tools.codeExecution_20250522({});
 
     const agent = new Agent({
+      id: 'test-anthropic-skills-agent',
       name: 'minimal-agent',
       instructions: 'You are a search assistant.',
       model: 'anthropic/claude-haiku-4-5-20251001',

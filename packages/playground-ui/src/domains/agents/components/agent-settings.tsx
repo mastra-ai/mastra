@@ -16,11 +16,12 @@ import { AgentAdvancedSettings } from './agent-advanced-settings';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import clsx from 'clsx';
 import { Checkbox } from '@/components/ui/checkbox';
+import { useAgent } from '../hooks/use-agent';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export interface AgentSettingsProps {
-  modelVersion: string;
-  hasMemory?: boolean;
-  hasSubAgents?: boolean;
+  agentId: string;
 }
 
 const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasSubAgents: boolean }) => {
@@ -60,8 +61,22 @@ const NetworkCheckbox = ({ hasMemory, hasSubAgents }: { hasMemory: boolean; hasS
   );
 };
 
-export const AgentSettings = ({ modelVersion, hasMemory = false, hasSubAgents = false }: AgentSettingsProps) => {
+export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
+  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { settings, setSettings, resetAll } = useAgentSettings();
+
+  if (isLoading || isMemoryLoading) {
+    return <Skeleton className="h-full" />;
+  }
+
+  if (!agent) {
+    return <div>Agent not found</div>;
+  }
+
+  const hasMemory = Boolean(memory?.result);
+  const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
+  const modelVersion = agent.modelVersion;
 
   let radioValue;
 

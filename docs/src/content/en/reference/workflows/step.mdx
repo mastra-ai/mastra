@@ -1,5 +1,5 @@
 ---
-title: "Reference: Step Class | Workflows | Mastra Docs"
+title: "Reference: Step Class | Workflows"
 description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
 ---
 
@@ -136,11 +136,11 @@ const step1 = createStep({
       description: "Current run id",
     },
     {
-      name: "runtimeContext",
-      type: "RuntimeContext",
+      name: "requestContext",
+      type: "RequestContext",
       isOptional: true,
       description:
-        "Runtime context for dependency injection and contextual information.",
+        "Request Context for dependency injection and contextual information.",
     },
     {
       name: "runCount",
@@ -154,5 +154,5 @@ const step1 = createStep({
 
 ## Related
 
-- [Control flow](/docs/workflows/control-flow)
-- [Using agents and tools](/docs/workflows/agents-and-tools)
+- [Control flow](/docs/v1/workflows/control-flow)
+- [Using agents and tools](/docs/v1/workflows/agents-and-tools)

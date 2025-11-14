@@ -3,16 +3,38 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import type { AgentGenerateOptions } from '@mastra/core/agent';
+import type { AgentGenerateOptions, MastraDBMessage } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
-import type { MastraMessageV1 } from '@mastra/core/memory';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import type { ToolCallPart } from 'ai';
+import type { ToolCallPart, ToolResultPart, TextPart } from 'ai';
 import { config } from 'dotenv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+
+// Helper to extract text content from MastraDBMessage
+function getTextContent(message: any): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  if (message.content?.parts && Array.isArray(message.content.parts)) {
+    // Concatenate all text parts
+    const textParts = message.content.parts.filter((p: any) => p.type === 'text' && p.text).map((p: any) => p.text);
+    if (textParts.length > 0) {
+      return textParts.join(' ');
+    }
+  }
+  // Fallback: check if content has a direct text property
+  if (message.content?.text) {
+    return message.content.text;
+  }
+  // Fallback: check if content.content exists (nested structure)
+  if (message.content?.content && typeof message.content.content === 'string') {
+    return message.content.content;
+  }
+  return '';
+}
 import { z } from 'zod';
 
 const resourceId = 'test-resource';
@@ -28,14 +50,76 @@ const createTestThread = (title: string, metadata = {}) => ({
   updatedAt: new Date(),
 });
 
-const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraMessageV1 => {
+const createTestMessage = (threadId: string, content: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage => {
   messageCounter++;
   return {
     id: randomUUID(),
     threadId,
-    content,
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text: content }],
+    },
     role,
-    type: 'text',
+    createdAt: new Date(Date.now() + messageCounter * 1000),
+    resourceId,
+  };
+};
+
+const createToolCallMessage = (threadId: string, toolName: string, args: Record<string, any> = {}): MastraDBMessage => {
+  messageCounter++;
+  const toolCallId = randomUUID();
+  return {
+    id: randomUUID(),
+    threadId,
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId,
+            toolName,
+            args,
+            result: {},
+          },
+        },
+      ],
+    },
+    role: 'assistant',
+    createdAt: new Date(Date.now() + messageCounter * 1000),
+    resourceId,
+  };
+};
+
+const createToolResultMessage = (
+  threadId: string,
+  toolName: string,
+  toolCallId: string,
+  result: any,
+  extraParts: (TextPart | ToolCallPart | ToolResultPart)[] = [],
+): MastraDBMessage => {
+  messageCounter++;
+  return {
+    id: randomUUID(),
+    threadId,
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId,
+            toolName,
+            args: {},
+            result,
+          },
+          ...extraParts,
+        },
+      ],
+    },
+    role: 'assistant',
     createdAt: new Date(Date.now() + messageCounter * 1000),
     resourceId,
   };
@@ -62,10 +146,12 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       // Create memory instance with working memory enabled
@@ -108,6 +194,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -157,16 +244,17 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await memory.saveMessages({ messages, format: 'v2' });
+      await memory.saveMessages({ messages });
 
-      const remembered = await memory.rememberMessages({
+      const remembered = await memory.recall({
         threadId: thread.id,
-        config: { lastMessages: 10 },
+        perPage: 10,
       });
 
       // Working memory tags should be stripped from the messages
-      expect(remembered.messages[1].content).not.toContain('<working_memory>');
-      expect(remembered.messages[1].content).toContain('Hello John!');
+      const content = getTextContent(remembered.messages[1]);
+      expect(content).not.toContain('<working_memory>');
+      expect(content).toContain('Hello John!');
     });
 
     it('should respect working memory enabled/disabled setting', async () => {
@@ -175,10 +263,12 @@ describe('Working Memory Tests', () => {
       // Create memory instance with working memory disabled
       const disabledMemory = new Memory({
         storage: new LibSQLStore({
+          id: 'disabled-memory-storage',
           url: `file:${dbPath}`,
         }),
         vector: new LibSQLVector({
           connectionUrl: `file:${dbPath}`,
+          id: 'test-vector',
         }),
         embedder: openai.embedding('text-embedding-3-small'),
         options: {
@@ -216,7 +306,7 @@ describe('Working Memory Tests', () => {
         ),
       ];
 
-      await disabledMemory.saveMessages({ messages, format: 'v2' });
+      await disabledMemory.saveMessages({ messages });
 
       // Working memory should be null when disabled
       const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
@@ -229,6 +319,7 @@ describe('Working Memory Tests', () => {
 
     it('should handle LLM responses with working memory using tool calls', async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -254,6 +345,7 @@ describe('Working Memory Tests', () => {
 
     it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
       const agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -303,22 +395,20 @@ describe('Working Memory Tests', () => {
         expect(workingMemory).toContain('**Location**: Vancouver Island');
       }
 
-      const history = await memory.query({
+      const history = await memory.recall({
         threadId: thread.id,
         resourceId,
-        selectBy: {
-          last: 20,
-        },
+        perPage: 20,
       });
 
       const memoryArgs: string[] = [];
 
       for (const message of history.messages) {
-        if (message.role === `assistant`) {
-          for (const part of message.content) {
+        if (message.role === `assistant` && message.content.parts) {
+          for (const part of message.content.parts) {
             if (typeof part === `string`) continue;
-            if (part.type === `tool-call` && part.toolName === `updateWorkingMemory`) {
-              memoryArgs.push((part.args as any).memory);
+            if (part.type === `tool-invocation` && part.toolInvocation?.toolName === `updateWorkingMemory`) {
+              memoryArgs.push((part.toolInvocation.args as any).memory);
             }
           }
         }
@@ -345,65 +435,27 @@ describe('Working Memory Tests', () => {
       const messages = [
         createTestMessage(threadId, 'User says something'),
         // Pure tool-call message (should be removed)
-        {
-          id: randomUUID(),
-          threadId,
-          role: 'assistant',
-          type: 'tool-call',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              // ...other fields as needed
-            },
-          ],
-          toolNames: ['updateWorkingMemory'],
-          createdAt: new Date(),
-          resourceId,
-        },
-        // Mixed content: tool-call + text (tool-call part should be filtered, text kept)
-        {
-          id: randomUUID(),
-          threadId,
-          role: 'assistant',
-          type: 'text',
-          content: [
-            {
-              type: 'tool-call',
-              toolName: 'updateWorkingMemory',
-              args: { memory: 'should not persist' },
-            },
-            {
-              type: 'text',
-              text: 'Normal message',
-            },
-          ],
-          createdAt: new Date(),
-          resourceId,
-        },
+        createToolCallMessage(threadId, 'updateWorkingMemory', { key: 'value', data: 'test' }),
+        // Mixed content: tool-invocation + text (tool-invocation part should be filtered, text kept)
+
+        createToolResultMessage(threadId, 'updateWorkingMemory', randomUUID(), { memory: 'should not persist' }, [
+          { type: 'text', text: 'Normal message' },
+        ]),
+
         // Pure text message (should be kept)
-        {
-          id: randomUUID(),
-          threadId,
-          role: 'assistant',
-          type: 'text',
-          content: 'Another normal message',
-          createdAt: new Date(),
-          resourceId,
-        },
+        createTestMessage(threadId, 'Another normal message', 'assistant'),
       ];
 
       // Save messages
-      const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[], format: 'v2' });
+      const { messages: saved } = await memory.saveMessages({ messages });
 
-      // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
+      // Should not include any updateWorkingMemory tool-invocation messages (pure or mixed)
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
-            Array.isArray(m.content.parts) &&
+            m.content.parts &&
             m.content.parts.some(
-              c => c.type === 'tool-invocation' && c.toolInvocation.toolName === `updateWorkingMemory`,
+              p => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'updateWorkingMemory',
             ),
         ),
       ).toBe(false);
@@ -412,28 +464,23 @@ describe('Working Memory Tests', () => {
       const assistantMessages = saved.filter(m => m.role === 'assistant');
       expect(
         assistantMessages.every(m => {
-          // TODO: seems like saveMessages says it returns MastraMessageV2 but it's returning V1
-          return JSON.stringify(m).includes(`updateWorkingMemory`);
+          return !JSON.stringify(m).includes(`updateWorkingMemory`);
         }),
-      ).toBe(false);
-      // working memory should not be present
+      ).toBe(true);
+
+      // Pure text message should be present
+      expect(
+        saved.some(
+          m => m.content.parts && m.content.parts.some(p => p.type === 'text' && p.text === 'Another normal message'),
+        ),
+      ).toBe(true);
+
+      // User message should be present
       expect(
         saved.some(
           m =>
-            (m.type === 'tool-call' || m.type === 'tool-result') &&
-            Array.isArray(m.content) &&
-            m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+            m.content.parts && m.content.parts.some(p => p.type === 'text' && p.text?.includes('User says something')),
         ),
-      ).toBe(false);
-
-      // TODO: again seems like we're getting V1 here but types say V2
-      // It actually should return V1 for now (CoreMessage compatible)
-
-      // Pure text message should be present
-      expect(saved.some(m => m.content.content === 'Another normal message')).toBe(true);
-      // User message should be present
-      expect(
-        saved.some(m => typeof m.content.content === 'string' && m.content.content.includes('User says something')),
       ).toBe(true);
     });
   });
@@ -446,6 +493,7 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
 
@@ -471,6 +519,7 @@ describe('Working Memory Tests', () => {
       });
       expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
       agent = new Agent({
+        id: 'memory-test-agent',
         name: 'Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
         model: openai('gpt-4o'),
@@ -516,10 +565,12 @@ describe('Working Memory Tests', () => {
       beforeEach(async () => {
         const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
         storage = new LibSQLStore({
+          id: 'test-storage',
           url: `file:${dbPath}`,
         });
         vector = new LibSQLVector({
           connectionUrl: `file:${dbPath}`,
+          id: 'test-vector',
         });
 
         memory = new Memory({
@@ -553,6 +604,7 @@ describe('Working Memory Tests', () => {
         expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
         agent = new Agent({
+          id: 'memory-test-agent',
           name: 'Memory Test Agent',
           instructions: `You are a helpful AI agent. Always add working memory tags to remember user information.
           
@@ -676,10 +728,12 @@ describe('Working Memory Tests', () => {
     beforeEach(async () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-jsonschema-test-${Date.now()}`)), 'test.db');
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       const jsonSchema: JSONSchema7 = {
@@ -729,6 +783,7 @@ describe('Working Memory Tests', () => {
       expect(await memory.getWorkingMemory({ threadId: thread.id, resourceId })).toBeNull();
 
       agent = new Agent({
+        id: 'jsonschema-memory-test-agent',
         name: 'JSONSchema Memory Test Agent',
         instructions: 'You are a helpful AI agent. Always update working memory with user information.',
         model: openai('gpt-4o'),
@@ -879,10 +934,12 @@ describe('Working Memory Tests', () => {
       console.log('dbPath', dbPath);
 
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       // Create memory instance with resource-scoped working memory enabled
@@ -1242,10 +1299,12 @@ describe('Working Memory Tests', () => {
       const dbPath = join(await mkdtemp(join(tmpdir(), `memory-thread-working-test-`)), 'test.db');
 
       storage = new LibSQLStore({
+        id: 'test-storage',
         url: `file:${dbPath}`,
       });
       vector = new LibSQLVector({
         connectionUrl: `file:${dbPath}`,
+        id: 'test-vector',
       });
 
       // Create memory instance with thread-scoped working memory (explicitly set)

@@ -1,11 +1,9 @@
-import BrowserOnly from "@docusaurus/BrowserOnly";
 import { useDoc } from "@docusaurus/plugin-content-docs/client";
 import { ThemeClassNames } from "@docusaurus/theme-common";
-import { CopyPageButton } from "@site/src/components/copy-page-button";
+import { cn } from "@site/src/css/utils";
 import type { Props } from "@theme/DocItem/Content";
 import Heading from "@theme/Heading";
 import MDXContent from "@theme/MDXContent";
-import { cn } from "@site/src/css/utils";
 import { type ReactNode } from "react";
 
 /**
@@ -30,22 +28,10 @@ function useSyntheticTitle(): string | null {
 
 export default function DocItemContent({ children }: Props): ReactNode {
   const syntheticTitle = useSyntheticTitle();
-  const { frontMatter } = useDoc();
-  const shouldShowCopyButton = !frontMatter.hide_table_of_contents;
-
   return (
     <div
       className={cn(ThemeClassNames.docs.docMarkdown, "markdown @container")}
     >
-      {shouldShowCopyButton && (
-        <div className="relative hidden @[600px]:block">
-          <div className="absolute top-0 right-0">
-            <BrowserOnly fallback={<div />}>
-              {() => <CopyPageButton />}
-            </BrowserOnly>
-          </div>
-        </div>
-      )}
       {syntheticTitle && (
         <header>
           <Heading as="h1">{syntheticTitle}</Heading>

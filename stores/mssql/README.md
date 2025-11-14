@@ -27,6 +27,7 @@ MSSQLStore supports multiple connection methods:
 import { MSSQLStore } from '@mastra/mssql';
 
 const store = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString:
     'Server=localhost,1433;Database=mastra;User Id=sa;Password=yourPassword;Encrypt=true;TrustServerCertificate=true',
 });
@@ -36,6 +37,7 @@ const store = new MSSQLStore({
 
 ```typescript
 const store = new MSSQLStore({
+  id: 'mssql-storage',
   server: 'localhost',
   port: 1433,
   database: 'mastra',
@@ -49,6 +51,7 @@ const store = new MSSQLStore({
 
 ```typescript
 const store = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString:
     'Server=localhost,1433;Database=mastra;User Id=sa;Password=yourPassword;Encrypt=true;TrustServerCertificate=true',
   schemaName: 'custom_schema', // Use custom schema (default: dbo)
@@ -98,10 +101,14 @@ await store.saveMessages({
 
 // Query threads and messages
 const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.getMessages({ threadId: 'thread-123' });
+const messages = await store.listMessages({ threadId: 'thread-123' });
 ```
 
 ## Configuration
+
+### Identifier
+
+- `id`: Unique identifier for this store instance (required)
 
 ### Connection Methods
 
@@ -111,6 +118,7 @@ MSSQLStore supports multiple connection methods:
 
    ```typescript
    {
+     id: 'mssql-storage',
      connectionString: 'Server=localhost,1433;Database=mastra;User Id=sa;Password=yourPassword;Encrypt=true;TrustServerCertificate=true';
    }
    ```
@@ -118,6 +126,7 @@ MSSQLStore supports multiple connection methods:
 2. **Server/Port/Database**
    ```typescript
    {
+     id: 'mssql-storage',
      server: 'localhost',
      port: 1433,
      database: 'mastra',
@@ -161,7 +170,7 @@ MSSQLStore supports multiple connection methods:
   - Rich metadata support
   - Update working memory and metadata independently
 
-- **AI Tracing & Observability**
+- **Tracing & Observability**
   - Trace AI agent execution with spans
   - Query traces with pagination and filtering
   - Batch operations for high-volume tracing
@@ -209,14 +218,13 @@ MSSQLStore supports multiple connection methods:
 - `getThreadById({ threadId })`: Get a thread by ID
 - `updateThread({ id, title, metadata })`: Update thread title and metadata
 - `deleteThread({ threadId })`: Delete a thread and its messages
-- `getThreadsByResourceIdPaginated({ resourceId, page, perPage, orderBy?, sortDirection? })`: Get paginated threads for a resource
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
 
 ### Messages
 
-- `saveMessages({ messages, format? })`: Save multiple messages with atomic transaction (supports v1 and v2 formats)
-- `getMessages({ threadId, format? })`: Get all messages for a thread
-- `getMessagesById({ messageIds, format? })`: Get messages by their IDs
-- `getMessagesPaginated({ threadId, format?, page?, perPage? })`: Get paginated messages for a thread
+- `saveMessages({ messages })`: Save multiple messages with atomic transaction
+- `listMessagesById({ messageIds })`: Get messages by their IDs
+- `listMessages({ threadId, resourceId?, page?, perPage?, orderBy?, filter? })`: Get paginated messages for a thread with filtering and sorting
 - `updateMessages({ messages })`: Update existing messages with atomic transaction
 - `deleteMessages(messageIds)`: Delete specific messages with atomic transaction
 
@@ -226,15 +234,15 @@ MSSQLStore supports multiple connection methods:
 - `getResourceById({ resourceId })`: Get a resource by ID
 - `updateResource({ resourceId, workingMemory?, metadata? })`: Update resource working memory and metadata
 
-### AI Tracing & Observability
+### Tracing & Observability
 
-- `createAISpan(span)`: Create an AI trace span
-- `updateAISpan({ spanId, traceId, updates })`: Update an existing span
-- `getAITrace(traceId)`: Get complete trace with all spans
-- `getAITracesPaginated({ filters?, pagination? })`: Query traces with pagination and filters
-- `batchCreateAISpans({ records })`: Batch create multiple spans
-- `batchUpdateAISpans({ records })`: Batch update multiple spans
-- `batchDeleteAITraces({ traceIds })`: Batch delete traces
+- `createSpan(span)`: Create a trace span
+- `updateSpan({ spanId, traceId, updates })`: Update an existing span
+- `getTrace(traceId)`: Get complete trace with all spans
+- `getTracesPaginated({ filters?, pagination? })`: Query traces with pagination and filters
+- `batchCreateSpans({ records })`: Batch create multiple spans
+- `batchUpdateSpans({ records })`: Batch update multiple spans
+- `batchDeleteTraces({ traceIds })`: Batch delete traces
 
 ### Index Management
 
@@ -249,17 +257,17 @@ MSSQLStore supports multiple connection methods:
 - `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow execution state
 - `updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext })`: Update step results (transaction + row locking)
 - `updateWorkflowState({ workflowName, runId, opts })`: Update workflow run status (transaction + row locking)
-- `getWorkflowRuns({ workflowName?, fromDate?, toDate?, limit?, offset?, resourceId? })`: Query workflow runs
+- `listWorkflowRuns({ workflowName?, fromDate?, toDate?, limit?, offset?, resourceId? })`: Query workflow runs
 - `getWorkflowRunById({ runId, workflowName? })`: Get specific workflow run
 
 ### Scores & Evaluation
 
 - `saveScore(score)`: Save evaluation score
 - `getScoreById({ id })`: Get score by ID
-- `getScoresByScorerId({ scorerId, pagination, entityId?, entityType?, source? })`: Get scores by scorer
-- `getScoresByRunId({ runId, pagination })`: Get scores for a run
-- `getScoresByEntityId({ entityId, entityType, pagination })`: Get scores for an entity
-- `getScoresBySpan({ traceId, spanId, pagination })`: Get scores for a trace span
+- `listScoresByScorerId({ scorerId, pagination, entityId?, entityType?, source? })`: Get scores by scorer
+- `listScoresByRunId({ runId, pagination })`: Get scores for a run
+- `listScoresByEntityId({ entityId, entityType, pagination })`: Get scores for an entity
+- `listScoresBySpan({ traceId, spanId, pagination })`: Get scores for a trace span
 
 ### Traces (Legacy)
 

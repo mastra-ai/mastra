@@ -1,4 +1,4 @@
-import { createToneScorer } from '@mastra/evals/scorers/code';
+import { createToneScorer } from '@mastra/evals/scorers/prebuilt';
 
 // Configure the metric
 const metric = createToneScorer();

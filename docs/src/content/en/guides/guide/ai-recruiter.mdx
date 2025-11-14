@@ -14,9 +14,9 @@ You'll create a workflow that gathers information from a candidate's resume, the
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
-- An API key from a supported [Model Provider](/models)
-- An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models/v1)
+- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
 
 ## Building the Workflow
 
@@ -61,6 +61,7 @@ import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const recruiter = new Agent({
+  id: "recruiter-agent",
   name: "Recruiter Agent",
   instructions: `You are a recruiter.`,
   model: openai("gpt-4o-mini"),
@@ -214,7 +215,7 @@ export const mastra = new Mastra({
 
 ## Testing the Workflow
 
-You can test your workflow inside Mastra's [playground](/docs/getting-started/studio) by starting the development server:
+You can test your workflow inside [Studio](/docs/v1/getting-started/studio) by starting the development server:
 
 ```bash copy
 mastra dev
@@ -228,12 +229,12 @@ Knowledgeable Software Engineer with more than 10 years of experience in softwar
 
 After entering the resume text, press the **Run** button. You should now see two status boxes (`GatherCandidateInfo` and `AskAboutSpecialty`) which contain the output of the workflow steps.
 
-You can also test the workflow programmatically by calling [`.createRunAsync()`](/reference/workflows/workflow-methods/create-run) and [`.start()`](/reference/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
+You can also test the workflow programmatically by calling [`.createRun()`](/reference/v1/workflows/workflow-methods/create-run) and [`.start()`](/reference/v1/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
 
 ```ts copy title="src/test-workflow.ts"
 import { mastra } from "./mastra";
 
-const run = await mastra.getWorkflow("candidateWorkflow").createRunAsync();
+const run = await mastra.getWorkflow("candidateWorkflow").createRun();
 
 const res = await run.start({
   inputData: {
