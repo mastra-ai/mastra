@@ -147,22 +147,21 @@ export class OpenAIVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-    const audio = await this.traced(async () => {
-      const response = await this.speechClient!.audio.speech.create({
-        model: this.speechModel?.name ?? 'tts-1',
-        voice: (options?.speaker ?? this.speaker) as OpenAIVoiceId,
-        response_format: options?.responseFormat ?? 'mp3',
-        input,
-        speed: options?.speed || 1.0,
-      });
+    const { speaker, responseFormat, speed, ...otherOptions } = options || {};
 
-      const passThrough = new PassThrough();
-      const buffer = Buffer.from(await response.arrayBuffer());
-      passThrough.end(buffer);
-      return passThrough;
-    }, 'voice.openai.speak')();
+    const response = await this.speechClient!.audio.speech.create({
+      model: this.speechModel?.name ?? 'tts-1',
+      voice: (speaker ?? this.speaker) as OpenAIVoiceId,
+      response_format: responseFormat ?? 'mp3',
+      input,
+      speed: speed || 1.0,
+      ...otherOptions,
+    });
 
-    return audio;
+    const passThrough = new PassThrough();
+    const buffer = Buffer.from(await response.arrayBuffer());
+    passThrough.end(buffer);
+    return passThrough;
   }
 
   /**
@@ -208,19 +207,15 @@ export class OpenAIVoice extends MastraVoice {
     }
     const audioBuffer = Buffer.concat(chunks);
 
-    const text = await this.traced(async () => {
-      const { filetype, ...otherOptions } = options || {};
-      const file = new File([audioBuffer], `audio.${filetype || 'mp3'}`);
+    const { filetype, ...otherOptions } = options || {};
+    const file = new File([audioBuffer], `audio.${filetype || 'mp3'}`);
 
-      const response = await this.listeningClient!.audio.transcriptions.create({
-        model: this.listeningModel?.name || 'whisper-1',
-        file: file as any,
-        ...otherOptions,
-      });
+    const response = await this.listeningClient!.audio.transcriptions.create({
+      model: this.listeningModel?.name || 'whisper-1',
+      file: file as any,
+      ...otherOptions,
+    });
 
-      return response.text;
-    }, 'voice.openai.listen')();
-
-    return text;
+    return response.text;
   }
 }

@@ -1,6 +1,13 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import {
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  safelyParseJSON,
+} from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import type { StoreOperationsCloudflare } from '../operations';
 
@@ -14,7 +21,7 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
   deserialized.metadata = safelyParseJSON(row.metadata);
   deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
+  deserialized.requestContext = safelyParseJSON(row.requestContext);
   deserialized.entity = safelyParseJSON(row.entity);
 
   return deserialized as ScoreRowData;
@@ -52,13 +59,27 @@ export class ScoresStorageCloudflare extends ScoresStorage {
   }
 
   async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+    let parsedScore: ValidatedSaveScorePayload;
+    try {
+      parsedScore = saveScorePayloadSchema.parse(score);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { scoreId: score.id },
+        },
+        error,
+      );
+    }
+
     try {
       const id = crypto.randomUUID();
-      const { input, ...rest } = score;
 
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
-      for (const [key, value] of Object.entries(rest)) {
+      for (const [key, value] of Object.entries(parsedScore)) {
         if (value !== null && value !== undefined) {
           if (typeof value === 'object') {
             serializedRecord[key] = JSON.stringify(value);
@@ -98,7 +119,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -140,16 +161,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -170,7 +194,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
@@ -195,16 +219,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -225,7 +252,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -252,16 +279,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -278,6 +308,66 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       );
       this.logger.trackException(mastraError);
       this.logger.error(mastraError.toString());
+      return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
+    }
+  }
+
+  async listScoresBySpan({
+    traceId,
+    spanId,
+    pagination,
+  }: {
+    traceId: string;
+    spanId: string;
+    pagination: StoragePagination;
+  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    try {
+      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const scores: ScoreRowData[] = [];
+
+      for (const { name: key } of keys) {
+        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        if (score && score.traceId === traceId && score.spanId === spanId) {
+          scores.push(transformScoreRow(score));
+        }
+      }
+
+      // Sort by createdAt desc
+      scores.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const total = scores.length;
+      const end = perPageInput === false ? scores.length : start + perPage;
+      const pagedScores = scores.slice(start, end);
+
+      return {
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+        scores: pagedScores,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SPAN_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to get scores by span: traceId=${traceId}, spanId=${spanId}`,
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }

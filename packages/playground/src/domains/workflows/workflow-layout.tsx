@@ -1,29 +1,25 @@
-import { useLocation, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import {
   WorkflowRunProvider,
   Header,
   HeaderTitle,
   MainContentLayout,
-  MastraResizablePanel,
   MainContentContent,
   useWorkflow,
-  useWorkflowRuns,
+  WorkflowRunList,
+  WorkflowInformation,
+  useWorkflowRunExecutionResult,
+  Skeleton,
 } from '@mastra/playground-ui';
 
-import { Skeleton } from '@/components/ui/skeleton';
-
-import { cn } from '@/lib/utils';
-
 import { WorkflowHeader } from './workflow-header';
-import { WorkflowInformation } from './workflow-information';
+import { WorkflowRunState } from '@mastra/core/workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
-  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
-  const { data: runs } = useWorkflowRuns(workflowId!);
-  const location = useLocation();
-  const isGraphPage = location.pathname.includes('/graph');
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
+  const { data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId ?? '', runId ?? '');
 
   if (isWorkflowLoading) {
     return (
@@ -37,26 +33,31 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  const run = runs?.runs.find(run => run.runId === runId);
+  const snapshot =
+    runExecutionResult && runId
+      ? ({
+          context: {
+            input: runExecutionResult?.payload,
+            ...runExecutionResult?.steps,
+          } as any,
+          status: runExecutionResult?.status,
+          result: runExecutionResult?.result,
+          error: runExecutionResult?.error,
+          runId,
+          serializedStepGraph: runExecutionResult?.serializedStepGraph,
+        } as WorkflowRunState)
+      : undefined;
 
   return (
-    <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
+    <WorkflowRunProvider snapshot={snapshot}>
       <MainContentLayout>
         <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} runId={runId} />
-        <MainContentContent isDivided={isGraphPage} className={isGraphPage ? 'flex overflow-y-hidden' : 'block'}>
+        <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
+          <WorkflowRunList workflowId={workflowId!} runId={runId} />
+
           {children}
 
-          <MastraResizablePanel
-            defaultWidth={20}
-            minimumWidth={20}
-            maximumWidth={60}
-            className={cn(
-              'flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-[#121212] [&>div:first-child]:-left-[1px] [&>div:first-child]:-right-[1px] [&>div:first-child]:w-[1px] [&>div:first-child]:bg-[#424242] [&>div:first-child]:hover:w-[2px] [&>div:first-child]:active:w-[2px]',
-              { hidden: !isGraphPage },
-            )}
-          >
-            <WorkflowInformation workflowId={workflowId!} />
-          </MastraResizablePanel>
+          <WorkflowInformation workflowId={workflowId!} initialRunId={runId} />
         </MainContentContent>
       </MainContentLayout>
     </WorkflowRunProvider>

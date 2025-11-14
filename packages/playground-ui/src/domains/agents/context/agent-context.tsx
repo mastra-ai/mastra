@@ -14,11 +14,13 @@ export const AgentSettingsContext = createContext<AgentContextType>({} as AgentC
 export interface AgentSettingsProviderProps {
   children: ReactNode;
   agentId: string;
+  defaultSettings?: AgentSettings;
 }
 
-export function AgentSettingsProvider({ children, agentId }: AgentSettingsProviderProps) {
+export function AgentSettingsProvider({ children, agentId, defaultSettings }: AgentSettingsProviderProps) {
   const { settings, setSettings, resetAll } = useAgentSettingsState({
     agentId,
+    defaultSettings,
   });
 
   return (

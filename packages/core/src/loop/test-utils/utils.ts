@@ -5,6 +5,7 @@ import type {
 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream, mockId } from 'ai-v5/test';
 import type { ModelManagerModelConfig } from '../../stream/types';
+import { MessageList } from '../../agent/message-list';
 
 export const mockDate = new Date('2024-01-01T00:00:00Z');
 
@@ -16,6 +17,7 @@ export const defaultSettings = () =>
       generateId: mockId({ prefix: 'id' }),
       currentDate: () => new Date(0),
     },
+    agentId: 'agent-id',
     onError: () => {},
   }) as const;
 
@@ -290,3 +292,15 @@ export const modelWithReasoning = new MockLanguageModelV2({
     ]),
   }),
 });
+
+export const createMessageListWithUserMessage = () => {
+  const messageList = new MessageList();
+  messageList.add(
+    {
+      role: 'user',
+      content: [{ type: 'text', text: 'test-input' }],
+    },
+    'input',
+  );
+  return messageList;
+};

@@ -5,9 +5,9 @@ import { copyFile, readFile } from 'fs/promises';
 import { createRequire } from 'module';
 import { dirname, basename, extname, resolve, join } from 'path';
 import { promisify } from 'util';
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { RequestContext } from '@mastra/core/request-context';
 import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
 
@@ -417,14 +417,14 @@ export const isValidMastraLanguageModel = (model: any): model is MastraLanguageM
 };
 
 // Helper function to resolve target path with smart defaults
-export const resolveTargetPath = (inputData: any, runtimeContext: any): string => {
+export const resolveTargetPath = (inputData: any, requestContext: any): string => {
   // If explicitly provided, use it
   if (inputData.targetPath) {
     return inputData.targetPath;
   }
 
-  // Check runtime context
-  const contextPath = runtimeContext.get('targetPath');
+  // Check request context
+  const contextPath = requestContext.get('targetPath');
   if (contextPath) {
     return contextPath;
   }
@@ -641,31 +641,13 @@ export const createModelInstance = async (
           return google(modelId);
         },
       },
-      v2: {
-        openai: async () => {
-          const { openai } = await import('@ai-sdk/openai-v5');
-          return openai(modelId);
-        },
-        anthropic: async () => {
-          const { anthropic } = await import('@ai-sdk/anthropic-v5');
-          return anthropic(modelId);
-        },
-        groq: async () => {
-          const { groq } = await import('@ai-sdk/groq-v5');
-          return groq(modelId);
-        },
-        xai: async () => {
-          const { xai } = await import('@ai-sdk/xai-v5');
-          return xai(modelId);
-        },
-        google: async () => {
-          const { google } = await import('@ai-sdk/google-v5');
-          return google(modelId);
-        },
-      },
     };
 
-    const providerFn = providerMap[version][provider as keyof (typeof providerMap)[typeof version]];
+    const providerFn =
+      version === `v1`
+        ? providerMap[version][provider as keyof (typeof providerMap)[typeof version]]
+        : () => new ModelRouterLanguageModel(`${provider}/${modelId}`);
+
     if (!providerFn) {
       console.error(`Unsupported provider: ${provider}`);
       return null;
@@ -680,20 +662,20 @@ export const createModelInstance = async (
   }
 };
 
-// Helper function to resolve model from runtime context with AI SDK version detection
+// Helper function to resolve model from request context with AI SDK version detection
 export const resolveModel = async ({
-  runtimeContext,
-  defaultModel = openai_v5('gpt-4.1'),
+  requestContext,
+  defaultModel = 'openai/gpt-4.1',
   projectPath,
 }: {
-  runtimeContext: RuntimeContext;
-  defaultModel?: MastraLanguageModel;
+  requestContext: RequestContext;
+  defaultModel?: MastraLanguageModel | string;
   projectPath?: string;
 }): Promise<MastraLanguageModel> => {
-  // First try to get model from runtime context
-  const modelFromContext = runtimeContext.get('model');
+  // First try to get model from request context
+  const modelFromContext = requestContext.get('model');
   if (modelFromContext) {
-    console.info('Using model from runtime context');
+    console.info('Using model from request context');
     // Type check to ensure it's a MastraLanguageModel
     if (isValidMastraLanguageModel(modelFromContext)) {
       return modelFromContext;
@@ -703,8 +685,8 @@ export const resolveModel = async ({
     );
   }
 
-  // Check for selected model info in runtime context
-  const selectedModel = runtimeContext.get('selectedModel') as { provider: string; modelId: string } | undefined;
+  // Check for selected model info in request context
+  const selectedModel = requestContext.get('selectedModel') as { provider: string; modelId: string } | undefined;
   if (selectedModel?.provider && selectedModel?.modelId && projectPath) {
     console.info(`Resolving selected model: ${selectedModel.provider}/${selectedModel.modelId}`);
 
@@ -715,11 +697,11 @@ export const resolveModel = async ({
     const modelInstance = await createModelInstance(selectedModel.provider, selectedModel.modelId, version);
     if (modelInstance) {
       // Store resolved model back in context for other steps to use
-      runtimeContext.set('model', modelInstance);
+      requestContext.set('model', modelInstance);
       return modelInstance;
     }
   }
 
   console.info('Using default model');
-  return defaultModel;
+  return typeof defaultModel === `string` ? new ModelRouterLanguageModel(defaultModel) : defaultModel;
 };

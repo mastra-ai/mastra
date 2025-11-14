@@ -67,15 +67,22 @@ export class Deps extends MastraBase {
       root: dir,
     });
 
+    let packCmd = 'pack';
     let destinationFlag = `--pack-destination ${destination}`;
     if (this.packageManager === 'yarn') {
       // %s includes an '@' at the start of packages names with an '@'
       // so we need to use our sanitizedName instead.
       destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
     }
+    if (this.packageManager === 'bun') {
+      // bun uses `pm pack` instead of `pack`
+      packCmd = 'pm pack';
+      // bun uses --destination instead of --pack-destination
+      destinationFlag = `--destination ${destination}`;
+    }
 
     return cpLogger({
-      cmd: `${this.packageManager} pack ${destinationFlag}`,
+      cmd: `${this.packageManager} ${packCmd} ${destinationFlag}`,
       args: [],
       env: {
         PATH: process.env.PATH!,

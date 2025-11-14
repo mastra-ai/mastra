@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { pdfContentExtractorTool } from '../tools/pdf-content-extractor-tool';
 import { contentAnalyzerTool } from '../tools/content-analyzer-tool';
@@ -10,11 +9,13 @@ import { Memory } from '@mastra/memory';
 // Initialize memory with LibSQLStore for persistence
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: 'flash-card-creator-agent-storage',
     url: 'file:../mastra.db',
   }),
 });
 
 export const flashCardCreatorAgent = new Agent({
+  id: 'flash-card-creator-agent',
   name: 'Flash Card Creator',
   description: 'Creates educational flash cards from PDF documents',
   instructions: `
@@ -35,7 +36,7 @@ Keep flash cards:
 
 Use the available tools to process PDFs and generate flash cards efficiently.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     pdfContentExtractorTool,
     contentAnalyzerTool,

@@ -31,26 +31,14 @@ export class QdrantVector extends MastraVector {
 
   /**
    * Creates a new QdrantVector client.
+   * @param id - The unique identifier for this vector store instance.
    * @param url - The URL of the Qdrant server.
    * @param apiKey - The API key for Qdrant.
    * @param https - Whether to use HTTPS.
    */
-  constructor({ url, apiKey, https, ...rest }: QdrantClientParams) {
-    super();
-    const baseClient = new QdrantClient({
-      url,
-      apiKey,
-      https,
-      ...rest,
-    });
-    const telemetry = this.__getTelemetry();
-    this.client =
-      telemetry?.traceClass(baseClient, {
-        spanNamePrefix: 'qdrant-vector',
-        attributes: {
-          'vector.type': 'qdrant',
-        },
-      }) ?? baseClient;
+  constructor({ id, ...qdrantParams }: QdrantClientParams & { id: string }) {
+    super({ id });
+    this.client = new QdrantClient(qdrantParams);
   }
 
   async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {

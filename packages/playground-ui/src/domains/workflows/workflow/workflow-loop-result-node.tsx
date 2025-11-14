@@ -16,7 +16,12 @@ export type LoopResultNode = Node<
 export function WorkflowLoopResultNode({ data }: NodeProps<LoopResultNode>) {
   const { result } = data;
   return (
-    <div className={cn('bg-mastra-bg-8 rounded-md w-[274px]')}>
+    <div
+      data-testid="workflow-loop-result-node"
+      data-workflow-step-status={result ? 'success' : 'failed'}
+      className={cn('bg-mastra-bg-8 rounded-md w-[274px]')}
+      data-workflow-node
+    >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
       <div className="p-2">
         <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2">

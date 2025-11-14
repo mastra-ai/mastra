@@ -12,6 +12,7 @@ import { openai } from "@ai-sdk/openai";
 // Create a memory instance with a custom working memory template
 const memory = new Memory({
   storage: new LibSQLStore({
+    id: "learning-memory-storage",
     url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }), // Storage for message history
   vector: new LibSQLVector({

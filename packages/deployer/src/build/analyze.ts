@@ -11,17 +11,51 @@ import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/w
 import type { DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
+import { getPackageInfo } from 'local-pkg';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { findNativePackageModule } from './utils';
+
+type ErrorId = 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD';
+
+function throwExternalDependencyError({
+  errorId,
+  moduleName,
+  packageName,
+  messagePrefix,
+}: {
+  errorId: ErrorId;
+  moduleName: string;
+  packageName: string;
+  messagePrefix: string;
+}): never {
+  throw new MastraError({
+    id: errorId,
+    domain: ErrorDomain.DEPLOYER,
+    category: ErrorCategory.USER,
+    details: {
+      importFile: moduleName,
+      packageName: packageName,
+    },
+    text: `${messagePrefix} \`${packageName}\` to your externals.
+
+export const mastra = new Mastra({
+  bundler: {
+    externals: ["${packageName}"],
+  }
+})`,
+  });
+}
 
 /**
  * Validates the bundled output by attempting to import each generated module.
- * Tracks invalid chunks and external dependencies that couldn't be bundled.
+ * Tracks external dependencies that couldn't be bundled.
  *
  * @param output - Bundle output from rollup
  * @param reverseVirtualReferenceMap - Map to resolve virtual module names back to original deps
  * @param outputDir - Directory containing the bundled files
  * @param logger - Logger instance for debugging
  * @param workspaceMap - Map of workspace packages that gets directly passed through for later consumption
- * @returns Analysis result containing invalid chunks and dependency mappings
+ * @returns Analysis result containing dependency mappings
  */
 async function validateOutput(
   {
@@ -42,7 +76,6 @@ async function validateOutput(
   logger: IMastraLogger,
 ) {
   const result = {
-    invalidChunks: new Set<string>(),
     dependencies: new Map<string, string>(),
     externalDependencies: new Set<string>(),
     workspaceMap,
@@ -74,12 +107,49 @@ async function validateOutput(
         await validate(join(projectRoot, file.fileName));
       }
     } catch (err) {
-      result.invalidChunks.add(file.fileName);
-      if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
-        const reference = reverseVirtualReferenceMap.get(file.name)!;
-        const dep = reference.startsWith('@') ? reference.split('/').slice(0, 2).join('/') : reference.split('/')[0];
+      if (err instanceof Error) {
+        let moduleName: string | undefined | null = null;
+        let errorConfig: {
+          id: ErrorId;
+          messagePrefix: string;
+        } | null = null;
 
-        result.externalDependencies.add(dep!);
+        if (err.message.includes('[ERR_MODULE_NOT_FOUND]')) {
+          // This is the preferred way to get the module name that caused the issue
+          const moduleIdName = file.moduleIds.length >= 2 ? file.moduleIds[file.moduleIds.length - 2] : undefined;
+          // For some reason some virtual modules are quite sparse on their details, so name (e.g. '.mastra/.build/puppeteer') is a good enough fallback
+          const fallbackName = file.name.split('/').pop();
+
+          moduleName = moduleIdName ?? fallbackName;
+          errorConfig = {
+            id: 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND',
+            messagePrefix: "Mastra wasn't able to build your project. Please add",
+          };
+        } else if (err.message.includes('Error: No native build was found for ')) {
+          moduleName = findNativePackageModule(file.moduleIds);
+          errorConfig = {
+            id: 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD',
+            messagePrefix: 'We found a binary dependency in your bundle. Please add',
+          };
+        }
+
+        if (moduleName && errorConfig) {
+          const pkgInfo = await getPackageInfo(moduleName);
+          const packageName = pkgInfo?.packageJson?.name;
+
+          if (packageName) {
+            throwExternalDependencyError({
+              errorId: errorConfig.id,
+              moduleName,
+              packageName,
+              messagePrefix: errorConfig.messagePrefix,
+            });
+          } else {
+            logger.debug(`Could not determine the module name for file ${file.fileName}`);
+          }
+        }
+
+        logger.debug(`Error while validating module ${file.fileName}: ${err.message}`);
       }
     }
   }

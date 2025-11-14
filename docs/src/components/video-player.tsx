@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState, useRef } from "react";
 
 interface VideoPlayerProps {
@@ -18,7 +16,7 @@ export const VideoPlayer = ({ src }: VideoPlayerProps) => {
   };
 
   return (
-    <div className="relative min-h-[400px] h-full w-full">
+    <div className="relative min-h-[400px] h-full w-full mb-6">
       {showPlayButton ? (
         <button
           onClick={handlePlay}
@@ -26,7 +24,7 @@ export const VideoPlayer = ({ src }: VideoPlayerProps) => {
             background:
               "linear-gradient(243deg,hsla(0,0%,100%,.3),hsla(0,0%,100%,0))",
           }}
-          className="group absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transform rounded-[20px] px-8 py-4 backdrop-blur transition-transform hover:scale-110 hover:!bg-white"
+          className="group cursor-pointer absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transform rounded-[12px] px-8 py-4 backdrop-blur transition-transform hover:scale-110 hover:!bg-white"
           aria-label="Play video"
         >
           <div className=" text-white transition-colors group-hover:text-black">

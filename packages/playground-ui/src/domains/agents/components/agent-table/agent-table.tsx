@@ -6,13 +6,15 @@ import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { ScrollableContainer } from '@/components/scrollable-container';
 import { Skeleton } from '@/components/ui/skeleton';
 import { columns } from './columns';
 import { AgentTableData } from './types';
 import { useLinkComponent } from '@/lib/framework';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
 
 export interface AgentsTableProps {
   agents: Record<string, GetAgentResponse>;
@@ -20,27 +22,9 @@ export interface AgentsTableProps {
 }
 
 export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
+  const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const projectData: AgentTableData[] = useMemo(
-    () =>
-      Object.keys(agents).map(key => {
-        const agent = agents[key];
-
-        return {
-          id: key,
-          name: agent.name,
-          instructions: agent.instructions,
-          provider: agent.provider,
-          branch: undefined,
-          executedAt: undefined,
-          repoUrl: undefined,
-          tools: agent.tools,
-          modelId: agent.modelId,
-          link: paths.agentLink(key),
-        };
-      }),
-    [agents],
-  );
+  const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
 
   const table = useReactTable({
     data: projectData,
@@ -48,47 +32,59 @@ export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
     getCoreRowModel: getCoreRowModel(),
   });
 
-  if (isLoading) return <AgentsTableSkeleton />;
-
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && !isLoading) {
     return <EmptyAgentsTable />;
   }
 
+  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <ScrollableContainer>
-      <Table>
-        <Thead className="sticky top-0">
-          {ths.headers.map(header => (
-            <Th key={header.id} style={{ width: header.index === 0 ? 'auto' : header.column.getSize() }}>
-              {flexRender(header.column.columnDef.header, header.getContext())}
-            </Th>
-          ))}
-        </Thead>
-        <Tbody>
-          {rows.map(row => (
-            <Row key={row.id} onClick={() => navigate(row.original.link)}>
-              {row.getVisibleCells().map(cell => (
-                <React.Fragment key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </React.Fragment>
-              ))}
-            </Row>
-          ))}
-        </Tbody>
-      </Table>
-    </ScrollableContainer>
+    <div>
+      <SearchbarWrapper>
+        <Searchbar onSearch={setSearch} label="Search agents" placeholder="Search agents" />
+      </SearchbarWrapper>
+
+      {isLoading ? (
+        <AgentsTableSkeleton />
+      ) : (
+        <ScrollableContainer>
+          <TooltipProvider>
+            <Table>
+              <Thead className="sticky top-0">
+                {ths.headers.map(header => (
+                  <Th key={header.id} style={{ width: header.column.getSize() ?? 'auto' }}>
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                  </Th>
+                ))}
+              </Thead>
+              <Tbody>
+                {filteredRows.map(row => (
+                  <Row key={row.id} onClick={() => navigate(paths.agentLink(row.original.id))}>
+                    {row.getVisibleCells().map(cell => (
+                      <React.Fragment key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </React.Fragment>
+                    ))}
+                  </Row>
+                ))}
+              </Tbody>
+            </Table>
+          </TooltipProvider>
+        </ScrollableContainer>
+      )}
+    </div>
   );
 }
 
-export const AgentsTableSkeleton = () => (
+const AgentsTableSkeleton = () => (
   <Table>
     <Thead>
       <Th>Name</Th>
-      <Th width={160}>Model</Th>
-      <Th width={160}>Tools</Th>
+      <Th>Model</Th>
+      <Th>Attached entities</Th>
     </Thead>
     <Tbody>
       {Array.from({ length: 3 }).map((_, index) => (
@@ -96,10 +92,10 @@ export const AgentsTableSkeleton = () => (
           <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          <Cell width={160}>
+          <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
-          <Cell width={160}>
+          <Cell>
             <Skeleton className="h-4 w-1/2" />
           </Cell>
         </Row>
@@ -108,7 +104,7 @@ export const AgentsTableSkeleton = () => (
   </Table>
 );
 
-export const EmptyAgentsTable = () => (
+const EmptyAgentsTable = () => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<AgentCoinIcon />}

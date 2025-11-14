@@ -109,18 +109,18 @@ describe('MCP Server Registry Client Methods', () => {
       );
     });
 
-    it('should fetch MCP servers with limit and offset parameters', async () => {
+    it('should fetch MCP servers with perPage and page parameters', async () => {
       const mockResponse: McpServerListResponse = {
         servers: [mockServerInfo1],
         total_count: 2,
-        next: '/api/mcp/v0/servers?limit=1&offset=1',
+        next: '/api/mcp/v0/servers?perPage=1&page=1',
       };
       mockFetchResponse(mockResponse);
 
-      const result = await client.getMcpServers({ limit: 1, offset: 0 });
+      const result = await client.getMcpServers({ perPage: 1, page: 0 });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/mcp/v0/servers?limit=1&offset=0`,
+        `${clientOptions.baseUrl}/api/mcp/v0/servers?perPage=1&page=0`,
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),

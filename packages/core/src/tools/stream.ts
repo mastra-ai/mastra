@@ -1,6 +1,9 @@
 import { WritableStream } from 'stream/web';
+import type { DataChunkType } from '../stream/types';
 
 export class ToolStream<T> extends WritableStream<T> {
+  originalStream?: WritableStream;
+
   constructor(
     {
       prefix,
@@ -42,6 +45,7 @@ export class ToolStream<T> extends WritableStream<T> {
         }
       },
     });
+    this.originalStream = originalStream;
   }
 
   async write(data: any) {
@@ -51,6 +55,15 @@ export class ToolStream<T> extends WritableStream<T> {
       await writer.write(data);
     } finally {
       writer.releaseLock();
+    }
+  }
+
+  async custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T) {
+    const writer = this.originalStream?.getWriter();
+    try {
+      await writer?.write(data);
+    } finally {
+      writer?.releaseLock();
     }
   }
 }

@@ -1,0 +1,11 @@
+{
+  "name": "apps-mastra",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@internal/a": "workspace:*",
+    "@internal/shared": "workspace:*"
+  }
+}

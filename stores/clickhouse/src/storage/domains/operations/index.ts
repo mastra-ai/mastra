@@ -1,6 +1,6 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from '../utils';
 import { COLUMN_TYPES, TABLE_ENGINES, transformRow } from '../utils';
@@ -51,6 +51,10 @@ export class StoreOperationsClickhouse extends StoreOperations {
         .map(([name, def]) => {
           const constraints = [];
           if (!def.nullable) constraints.push('NOT NULL');
+          // Add DEFAULT '{}' for metadata columns to prevent empty string issues
+          if (name === 'metadata' && def.type === 'text' && def.nullable) {
+            constraints.push("DEFAULT '{}'");
+          }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
           return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
@@ -74,8 +78,8 @@ export class StoreOperationsClickhouse extends StoreOperations {
               ${columns}
             )
             ENGINE = ${TABLE_ENGINES[tableName] ?? 'MergeTree()'}
-            PRIMARY KEY (createdAt, ${tableName === TABLE_EVALS ? 'run_id' : 'id'})
-            ORDER BY (createdAt, ${tableName === TABLE_EVALS ? 'run_id' : 'id'})
+            PRIMARY KEY (createdAt, ${'id'})
+            ORDER BY (createdAt, ${'id'})
             ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
             SETTINGS index_granularity = 8192
           `;

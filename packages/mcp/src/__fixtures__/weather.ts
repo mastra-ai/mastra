@@ -30,9 +30,9 @@ const weatherToolDefinition = createTool({
   id: 'getWeather',
   description: 'Get current weather for a location',
   inputSchema: weatherInputSchema,
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const weatherData = await getWeather(context.location);
+      const weatherData = await getWeather(input.location);
       return {
         content: [
           {

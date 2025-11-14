@@ -13,9 +13,11 @@ import type {
   UpdateVectorParams,
 } from '@mastra/core/vector';
 import { Mutex } from 'async-mutex';
-import pg from 'pg';
+import * as pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
+import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -69,42 +71,50 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   private schemaSetupComplete: boolean | undefined = undefined;
   private cacheWarmupPromise: Promise<void> | null = null;
 
-  constructor({
-    connectionString,
-    schemaName,
-    pgPoolOptions,
-  }: {
-    connectionString: string;
-    schemaName?: string;
-    pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-  }) {
+  constructor(config: PgVectorConfig & { id: string }) {
     try {
-      if (!connectionString || connectionString.trim() === '') {
-        throw new Error(
-          'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
-        );
+      validateConfig('PgVector', config);
+      super({ id: config.id });
+
+      this.schema = config.schemaName;
+
+      let poolConfig: pg.PoolConfig;
+
+      if (isConnectionStringConfig(config)) {
+        poolConfig = {
+          connectionString: config.connectionString,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        };
+      } else if (isCloudSqlConfig(config)) {
+        poolConfig = {
+          ...config,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        } as pg.PoolConfig;
+      } else if (isHostConfig(config)) {
+        poolConfig = {
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          ssl: config.ssl,
+          max: config.max ?? 20,
+          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          connectionTimeoutMillis: 2000,
+          ...config.pgPoolOptions,
+        };
+      } else {
+        throw new Error('PgVector: invalid configuration provided');
       }
-      super();
 
-      this.schema = schemaName;
-
-      const basePool = new pg.Pool({
-        connectionString,
-        max: 20, // Maximum number of clients in the pool
-        idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
-        connectionTimeoutMillis: 2000, // Fail fast if can't connect
-        ...pgPoolOptions,
-      });
-
-      const telemetry = this.__getTelemetry();
-
-      this.pool =
-        telemetry?.traceClass(basePool, {
-          spanNamePrefix: 'pg-vector',
-          attributes: {
-            'vector.type': 'postgres',
-          },
-        }) ?? basePool;
+      this.pool = new pg.Pool(poolConfig);
 
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
@@ -136,7 +146,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            schemaName: schemaName ?? '',
+            schemaName: 'schemaName' in config ? (config.schemaName ?? '') : '',
           },
         },
         error,
@@ -428,7 +438,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           const schemaCheck = await client.query(
             `
             SELECT EXISTS (
-              SELECT 1 FROM information_schema.schemata 
+              SELECT 1 FROM information_schema.schemata
               WHERE schema_name = $1
             )
           `,
@@ -686,8 +696,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 
         indexSQL = `
-          CREATE INDEX IF NOT EXISTS ${vectorIndexName} 
-          ON ${tableName} 
+          CREATE INDEX IF NOT EXISTS ${vectorIndexName}
+          ON ${tableName}
           USING hnsw (embedding ${metricOp})
           WITH (
             m = ${m},

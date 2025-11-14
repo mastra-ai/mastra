@@ -93,7 +93,7 @@ interface TxtEntryProps {
 export const TxtEntry = ({ data }: TxtEntryProps) => {
   const [open, setOpen] = useState(false);
 
-  // assistant-ui wraps txt related files with somethign like <attachment name=text.txt>
+  // assistant-ui wraps txt related files with something like <attachment name=text.txt>
   // We remove the <attachment> tag and everything inside it
   const formattedContent = data.replace(/<attachment[^>]*>/, '').replace(/<\/attachment>/g, '');
 

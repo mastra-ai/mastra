@@ -10,8 +10,8 @@ export const pageObserveTool = createTool({
     instruction: z.string().describe('What to observe (e.g., "find the sign in button")'),
   }),
   outputSchema: z.array(z.any()).describe('Array of observable actions'),
-  execute: async ({ context }) => {
-    return await performWebObservation(context.url, context.instruction);
+  execute: async input => {
+    return await performWebObservation(input.url, input.instruction);
   },
 });
 

@@ -1,0 +1,73 @@
+@import 'tailwindcss' prefix(mastra);
+
+:root {
+  --color-accent1: #1afb6f;
+  --color-accent2: #ff4931;
+  --color-accent3: #267ad2;
+  --color-accent4: #9e57b3;
+  --color-accent5: #4a9df2;
+  --color-accent6: #ecb047;
+}
+
+@theme {
+  --color-text1: #5c5c5c;
+  --color-text2: #707070;
+  --color-text3: #939393;
+  --color-text4: #a9a9a9;
+  --color-text5: #e6e6e6;
+  --color-text6: #ffffff;
+
+  --color-surface1: #000000;
+  --color-surface2: #0f0f0f;
+  --color-surface3: #141414;
+  --color-surface4: #1a1a1a;
+  --color-surface5: rgba(46, 46, 46, 0.9);
+  --color-accent1: var(--color-accent1);
+  --color-accent2: var(--color-accent2);
+  --color-accent3: var(--color-accent3);
+  --color-accent4: var(--color-accent4);
+  --color-accent5: var(--color-accent5);
+  --color-accent6: var(--color-accent6);
+
+  --color-border1: rgba(48, 48, 48, 1);
+  --color-border2: rgba(66, 66, 66, 1);
+
+  --default-border-width: 0.5px;
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mastra-tooltip-enter {
+  animation: tooltip-fade-in 0.2s ease-in-out;
+}
+
+.mastra-list {
+  padding-right: 8px;
+  /* Firefox */
+  scrollbar-width: thin;
+
+  /* Make sure element is scrollable */
+  overflow-y: auto;
+}
+
+/* WebKit browsers */
+.mastra-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.mastra-list::-webkit-scrollbar-track {
+  border-radius: 4px;
+}
+
+.mastra-list::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+}

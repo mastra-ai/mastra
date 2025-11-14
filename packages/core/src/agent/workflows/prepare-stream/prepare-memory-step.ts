@@ -1,11 +1,11 @@
 import deepEqual from 'fast-deep-equal';
 import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
+import type { Span, SpanType } from '../../../observability';
+import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
@@ -41,10 +41,9 @@ interface PrepareMemoryStepOptions<
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'streamVNext' | 'generateVNext';
-  format?: FORMAT;
+  requestContext: RequestContext;
+  agentSpan: Span<SpanType.AGENT_RUN>;
+  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
@@ -59,7 +58,7 @@ export function createPrepareMemoryStep<
   threadFromArgs,
   resourceId,
   runId,
-  runtimeContext,
+  requestContext,
   instructions,
   memoryConfig,
   memory,
@@ -89,9 +88,10 @@ export function createPrepareMemoryStep<
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'user');
         const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-          runtimeContext,
+          requestContext,
           tracingContext,
           messageList,
+          inputProcessorOverrides: options.inputProcessors,
         });
         return {
           threadExists: false,
@@ -160,19 +160,28 @@ export function createPrepareMemoryStep<
 
       const config = memory.getMergedThreadConfig(memoryConfig || {});
       const hasResourceScopeSemanticRecall =
-        typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === 'resource';
-      let [memoryMessages, memorySystemMessage] = await Promise.all([
+        (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== 'thread') ||
+        config?.semanticRecall === true;
+      let [memoryResult, memorySystemMessage] = await Promise.all([
         existingThread || hasResourceScopeSemanticRecall
           ? capabilities.getMemoryMessages({
               resourceId,
               threadId: threadObject.id,
               vectorMessageSearch: new MessageList().add(options.messages, `user`).getLatestUserContent() || '',
               memoryConfig,
-              runtimeContext,
+              requestContext,
             })
-          : [],
-        memory.getSystemMessage({ threadId: threadObject.id, resourceId, memoryConfig }),
+          : { messages: [] },
+        memory.getSystemMessage({
+          threadId: threadObject.id,
+          resourceId,
+          memoryConfig: capabilities._agentNetworkAppend
+            ? { ...memoryConfig, workingMemory: { enabled: false } }
+            : memoryConfig,
+        }),
       ]);
+
+      const memoryMessages = memoryResult.messages;
 
       capabilities.logger.debug('Fetched messages from memory', {
         threadId: threadObject.id,
@@ -226,9 +235,10 @@ export function createPrepareMemoryStep<
         .add(options.messages, 'user');
 
       const { tripwireTriggered, tripwireReason } = await capabilities.runInputProcessors({
-        runtimeContext,
+        requestContext,
         tracingContext,
         messageList,
+        inputProcessorOverrides: options.inputProcessors,
       });
 
       const systemMessages = messageList.getSystemMessages();
@@ -263,7 +273,7 @@ export function createPrepareMemoryStep<
       // Add user-provided system message if present
       addSystemMessage(processedList, options.system, 'user-provided');
 
-      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.v2(), 'user');
+      processedList.add(processedMemoryMessages, 'memory').add(messageList.get.input.db(), 'user');
 
       return {
         thread: threadObject,
