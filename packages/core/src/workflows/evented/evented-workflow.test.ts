@@ -17,7 +17,7 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 const testStorage = new InMemoryStore();
 
 describe('Workflow', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks();
     const workflowsStore = await testStorage.getStore('workflows');
     await workflowsStore?.dropData();
