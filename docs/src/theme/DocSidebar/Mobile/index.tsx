@@ -1,13 +1,13 @@
-import React from 'react';
-import clsx from 'clsx';
+import React from "react";
+import clsx from "clsx";
 import {
   NavbarSecondaryMenuFiller,
   type NavbarSecondaryMenuComponent,
   ThemeClassNames,
-} from '@docusaurus/theme-common';
-import {useNavbarMobileSidebar} from '@docusaurus/theme-common/internal';
-import DocSidebarItems from '@theme/DocSidebarItems';
-import type {Props} from '@theme/DocSidebar/Mobile';
+} from "@docusaurus/theme-common";
+import { useNavbarMobileSidebar } from "@docusaurus/theme-common/internal";
+import DocSidebarItems from "@theme/DocSidebarItems";
+import type { Props } from "@theme/DocSidebar/Mobile";
 
 // eslint-disable-next-line react/function-component-definition
 const DocSidebarMobileSecondaryMenu: NavbarSecondaryMenuComponent<Props> = ({
@@ -16,16 +16,16 @@ const DocSidebarMobileSecondaryMenu: NavbarSecondaryMenuComponent<Props> = ({
 }) => {
   const mobileSidebar = useNavbarMobileSidebar();
   return (
-    <ul className={clsx(ThemeClassNames.docs.docSidebarMenu, 'menu__list')}>
+    <ul className={clsx(ThemeClassNames.docs.docSidebarMenu, "menu__list")}>
       <DocSidebarItems
         items={sidebar}
         activePath={path}
         onItemClick={(item) => {
           // Mobile sidebar should only be closed if the category has a link
-          if (item.type === 'category' && item.href) {
+          if (item.type === "category" && item.href) {
             mobileSidebar.toggle();
           }
-          if (item.type === 'link') {
+          if (item.type === "link") {
             mobileSidebar.toggle();
           }
         }}
