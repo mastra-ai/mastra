@@ -389,9 +389,10 @@ export class CoreToolBuilder extends MastraBase {
     let processedOutputSchema;
 
     if (this.getOutputSchema()) {
+      // Don't add any compat layers to outputSchema since it's never sent to the LLM
       processedOutputSchema = applyCompatLayer({
         schema: this.getOutputSchema(),
-        compatLayers: schemaCompatLayers,
+        compatLayers: [],
         mode: 'aiSdkSchema',
       });
     }
