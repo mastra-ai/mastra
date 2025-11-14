@@ -1,0 +1,50 @@
+## Storage Domains
+
+To access domain-specific operations (threads, messages, workflows, etc.), use `getStore()`.
+
+```typescript copy
+// Access memory domain for threads and messages
+const memoryStore = await storage.getStore('memory');
+
+const threads = await memoryStore.listThreads({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
+});
+  
+const messages = await memoryStore.listMessages({
+  threadId: 'thread-123',
+  page: 0,
+  perPage: 50,
+});
+
+
+// Access workflows domain for workflow snapshots
+const workflowsStore = await storage.getStore('workflows');
+
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
+
+
+// Access evals domain for scores
+const evalsStore = await storage.getStore('evals');
+
+const scores = await evalsStore.listScoresByScorerId({
+  scorerId: 'my-scorer',
+  pagination: { page: 0, perPage: 50 },
+});
+
+
+// Access observability domain for traces
+const observabilityStore = await storage.getStore('observability');
+
+const traces = await observabilityStore.listTraces({
+  page: 0,
+  perPage: 50,
+});
+```
+
+See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
+

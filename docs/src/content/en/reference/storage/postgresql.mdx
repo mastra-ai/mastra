@@ -3,6 +3,9 @@ title: "Reference: PostgreSQL Storage | Storage"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 ---
 
+import SchemaManagement from "./_schema-management.mdx";
+import UsingStorageDomains from "./_using-storage-domains.mdx";
+
 # PostgreSQL Storage
 
 The PostgreSQL storage implementation provides a production-ready storage solution using PostgreSQL databases.
@@ -87,91 +90,9 @@ const store5 = new PostgresStore({
 });
 ```
 
-## Storage Domains
+<UsingStorageDomains />
 
-To access domain-specific operations, use `getStore()`:
-
-```typescript copy
-import { PostgresStore } from "@mastra/pg";
-
-const storage = new PostgresStore({
-  id: 'pg-storage',
-  connectionString: process.env.DATABASE_URL,
-});
-
-// Access memory domain for threads and messages
-const memoryStore = await storage.getStore('memory');
-
-const threads = await memoryStore.listThreads({
-  resourceId: 'user-123',
-  page: 0,
-  perPage: 20,
-});
-  
-const messages = await memoryStore.listMessages({
-  threadId: 'thread-123',
-  page: 0,
-  perPage: 50,
-});
-
-
-// Access workflows domain for workflow snapshots
-const workflowsStore = await storage.getStore('workflows');
-
-const snapshot = await workflowsStore.getWorkflowSnapshot({
-  workflowId: 'my-workflow',
-  runId: 'run-123',
-});
-
-
-// Access evals domain for scores
-const evalsStore = await storage.getStore('evals');
-
-const scores = await evalsStore.listScoresByScorerId({
-  scorerId: 'my-scorer',
-  pagination: { page: 0, perPage: 50 },
-});
-
-
-// Access observability domain for traces
-const observabilityStore = await storage.getStore('observability');
-
-const traces = await observabilityStore.listTraces({
-  page: 0,
-  perPage: 50,
-});
-```
-
-See the [Storage overview](/docs/v1/server-db/storage) for more information about storage domains and composite storage.
-
-### Schema Management
-
-Schema creation and table management is handled automatically through each domain's `init()` method. When you call `storage.init()` (or when storage is initialized automatically), each domain creates its own tables:
-
-**Memory Domain** (`memory`):
-- `mastra_threads`: Stores conversation threads
-- `mastra_messages`: Stores individual messages
-- `mastra_resources`: Stores resource working memory data
-
-**Workflows Domain** (`workflows`):
-- `mastra_workflow_snapshot`: Stores workflow state and execution data
-
-**Evals Domain** (`evals`):
-- `mastra_scorers`: Stores scoring and evaluation data
-
-**Observability Domain** (`observability`):
-- `mastra_ai_spans`: Stores telemetry and tracing data
-
-Each domain's `init()` method is called automatically when the storage instance initializes. In composite storage setups, only domains that are explicitly provided or exist in the default store will be initialized. This allows you to selectively enable domains based on your needs.
-
-```typescript copy
-// Initialize storage - all configured domains will create their tables
-await storage.init();
-
-// Or access a domain store directly - it will initialize if needed
-const memoryStore = await storage.getStore('memory');
-// Memory domain tables are now created
-```
+<SchemaManagement />
 
 ## Index Management
 
