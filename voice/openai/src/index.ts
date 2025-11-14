@@ -1,7 +1,8 @@
 import { PassThrough } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
-import OpenAI, { type ClientOptions } from 'openai';
+import OpenAI from 'openai';
+import type { ClientOptions } from 'openai';
 
 type OpenAIVoiceId = 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' | 'ash' | 'coral' | 'sage';
 type OpenAIModel = 'tts-1' | 'tts-1-hd' | 'whisper-1';
@@ -76,7 +77,7 @@ export class OpenAIVoice extends MastraVoice {
     }
     this.speechClient = new OpenAI({
       apiKey: speechApiKey,
-      ...speechModel?.options
+      ...speechModel?.options,
     });
 
     const listeningApiKey = listeningModel?.apiKey || defaultApiKey;
@@ -85,7 +86,7 @@ export class OpenAIVoice extends MastraVoice {
     }
     this.listeningClient = new OpenAI({
       apiKey: listeningApiKey,
-      ...listeningModel?.options
+      ...listeningModel?.options,
     });
 
     if (!this.speechClient && !this.listeningClient) {
