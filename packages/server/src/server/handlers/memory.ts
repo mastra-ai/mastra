@@ -8,6 +8,41 @@ import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { ServerRoute } from '../server-adapter/routes';
+import {
+  threadIdPathParams,
+  getMemoryStatusQuerySchema,
+  getMemoryConfigQuerySchema,
+  listThreadsQuerySchema,
+  getThreadByIdQuerySchema,
+  listMessagesQuerySchema,
+  getWorkingMemoryQuerySchema,
+  getMemoryStatusNetworkQuerySchema,
+  listThreadsNetworkQuerySchema,
+  getThreadByIdNetworkQuerySchema,
+  listMessagesNetworkQuerySchema,
+  saveMessagesNetworkQuerySchema,
+  createThreadNetworkQuerySchema,
+  updateThreadNetworkQuerySchema,
+  deleteThreadNetworkQuerySchema,
+  deleteMessagesNetworkQuerySchema,
+  memoryStatusResponseSchema,
+  memoryConfigResponseSchema,
+  listThreadsResponseSchema,
+  getThreadByIdResponseSchema,
+  listMessagesResponseSchema,
+  getWorkingMemoryResponseSchema,
+  saveMessagesBodySchema,
+  createThreadBodySchema,
+  updateThreadBodySchema,
+  updateWorkingMemoryBodySchema,
+  deleteMessagesBodySchema,
+  searchMemoryQuerySchema,
+  saveMessagesResponseSchema,
+  updateWorkingMemoryResponseSchema,
+  searchMemoryResponseSchema,
+} from '../schemas/memory';
 
 interface MemoryContext extends Context {
   agentId?: string;
@@ -685,3 +720,285 @@ export async function searchMemoryHandler({
     return handleError(error, 'Error searching memory');
   }
 }
+
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
+
+export const GET_MEMORY_STATUS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/status',
+  responseType: 'json',
+  queryParamSchema: getMemoryStatusQuerySchema,
+  responseSchema: memoryStatusResponseSchema,
+  summary: 'Get memory status',
+  description: 'Returns the current status of the memory system including configuration and health information',
+  tags: ['Memory'],
+  handler: async ctx => await getMemoryStatusHandler(ctx),
+});
+
+export const GET_MEMORY_CONFIG_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/config',
+  responseType: 'json',
+  queryParamSchema: getMemoryConfigQuerySchema,
+  responseSchema: memoryConfigResponseSchema,
+  summary: 'Get memory configuration',
+  description: 'Returns the memory configuration for a specific agent or the system default',
+  tags: ['Memory'],
+  handler: async ctx => await getMemoryConfigHandler(ctx),
+});
+
+export const LIST_THREADS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads',
+  responseType: 'json',
+  queryParamSchema: listThreadsQuerySchema,
+  responseSchema: listThreadsResponseSchema,
+  summary: 'List memory threads',
+  description: 'Returns a paginated list of conversation threads filtered by resource ID',
+  tags: ['Memory'],
+  handler: async ctx => await listThreadsHandler(ctx as any),
+});
+
+export const GET_THREAD_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/:threadId',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: getThreadByIdQuerySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Get thread by ID',
+  description: 'Returns details for a specific conversation thread',
+  tags: ['Memory'],
+  handler: async ctx => await getThreadByIdHandler(ctx),
+});
+
+export const LIST_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/:threadId/messages',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: listMessagesQuerySchema,
+  responseSchema: listMessagesResponseSchema,
+  summary: 'List thread messages',
+  description: 'Returns a paginated list of messages in a conversation thread',
+  tags: ['Memory'],
+  handler: async ctx => await listMessagesHandler(ctx as any),
+});
+
+export const GET_WORKING_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/:threadId/working-memory',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: getWorkingMemoryQuerySchema,
+  responseSchema: getWorkingMemoryResponseSchema,
+  summary: 'Get working memory',
+  description: 'Returns the working memory state for a thread',
+  tags: ['Memory'],
+  handler: async ctx => await getWorkingMemoryHandler(ctx),
+});
+
+export const SAVE_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/memory/save-messages',
+  responseType: 'json',
+  bodySchema: saveMessagesBodySchema,
+  responseSchema: saveMessagesResponseSchema,
+  summary: 'Save messages',
+  description: 'Saves new messages to memory',
+  tags: ['Memory'],
+  handler: async ctx => await saveMessagesHandler(ctx as any),
+});
+
+export const CREATE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/memory/threads',
+  responseType: 'json',
+  bodySchema: createThreadBodySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Create thread',
+  description: 'Creates a new conversation thread',
+  tags: ['Memory'],
+  handler: async ctx => await createThreadHandler(ctx),
+});
+
+export const UPDATE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'PATCH',
+  path: '/api/memory/threads/:threadId',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  bodySchema: updateThreadBodySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Update thread',
+  description: 'Updates a conversation thread',
+  tags: ['Memory'],
+  handler: async ctx => await updateThreadHandler(ctx),
+});
+
+export const DELETE_THREAD_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'DELETE',
+  path: '/api/memory/threads/:threadId',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Delete thread',
+  description: 'Deletes a conversation thread',
+  tags: ['Memory'],
+  handler: async ctx => await deleteThreadHandler(ctx),
+});
+
+export const UPDATE_WORKING_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/memory/threads/:threadId/working-memory',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  bodySchema: updateWorkingMemoryBodySchema,
+  responseSchema: updateWorkingMemoryResponseSchema,
+  summary: 'Update working memory',
+  description: 'Updates the working memory state for a thread',
+  tags: ['Memory'],
+  handler: async ctx => await updateWorkingMemoryHandler(ctx),
+});
+
+export const DELETE_MESSAGES_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/memory/messages/delete',
+  responseType: 'json',
+  bodySchema: deleteMessagesBodySchema,
+  responseSchema: saveMessagesResponseSchema,
+  summary: 'Delete messages',
+  description: 'Deletes specific messages from memory',
+  tags: ['Memory'],
+  handler: async ctx => await deleteMessagesHandler(ctx),
+});
+
+export const SEARCH_MEMORY_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/search',
+  responseType: 'json',
+  queryParamSchema: searchMemoryQuerySchema,
+  responseSchema: searchMemoryResponseSchema,
+  summary: 'Search memory',
+  description: 'Searches across memory using semantic or text search',
+  tags: ['Memory'],
+  handler: async ctx => await searchMemoryHandler(ctx),
+});
+
+// Network routes (same handlers with /network/ prefix)
+export const GET_MEMORY_STATUS_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/network/status',
+  responseType: 'json',
+  queryParamSchema: getMemoryStatusNetworkQuerySchema,
+  responseSchema: memoryStatusResponseSchema,
+  summary: 'Get memory status (network)',
+  description: 'Returns the current status of the memory system (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await getMemoryStatusHandler(ctx),
+});
+
+export const LIST_THREADS_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/network/threads',
+  responseType: 'json',
+  queryParamSchema: listThreadsNetworkQuerySchema,
+  responseSchema: listThreadsResponseSchema,
+  summary: 'List memory threads (network)',
+  description: 'Returns a paginated list of conversation threads (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await listThreadsHandler(ctx as any),
+});
+
+export const GET_THREAD_BY_ID_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/network/threads/:threadId',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: getThreadByIdNetworkQuerySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Get thread by ID (network)',
+  description: 'Returns details for a specific conversation thread (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await getThreadByIdHandler(ctx),
+});
+
+export const LIST_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/memory/network/threads/:threadId/messages',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: listMessagesNetworkQuerySchema,
+  responseSchema: listMessagesResponseSchema,
+  summary: 'List thread messages (network)',
+  description: 'Returns a paginated list of messages in a conversation thread (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await listMessagesHandler(ctx as any),
+});
+
+export const SAVE_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/memory/network/save-messages',
+  responseType: 'json',
+  queryParamSchema: saveMessagesNetworkQuerySchema,
+  bodySchema: saveMessagesBodySchema,
+  responseSchema: saveMessagesResponseSchema,
+  summary: 'Save messages (network)',
+  description: 'Saves new messages to memory (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await saveMessagesHandler(ctx as any),
+});
+
+export const CREATE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/memory/network/threads',
+  responseType: 'json',
+  queryParamSchema: createThreadNetworkQuerySchema,
+  bodySchema: createThreadBodySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Create thread (network)',
+  description: 'Creates a new conversation thread (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await createThreadHandler(ctx),
+});
+
+export const UPDATE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'PATCH',
+  path: '/api/memory/network/threads/:threadId',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: updateThreadNetworkQuerySchema,
+  bodySchema: updateThreadBodySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Update thread (network)',
+  description: 'Updates a conversation thread (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await updateThreadHandler(ctx),
+});
+
+export const DELETE_THREAD_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'DELETE',
+  path: '/api/memory/network/threads/:threadId',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: deleteThreadNetworkQuerySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Delete thread (network)',
+  description: 'Deletes a conversation thread (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await deleteThreadHandler(ctx),
+});
+
+export const DELETE_MESSAGES_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/memory/network/messages/delete',
+  responseType: 'json',
+  queryParamSchema: deleteMessagesNetworkQuerySchema,
+  bodySchema: deleteMessagesBodySchema,
+  responseSchema: saveMessagesResponseSchema,
+  summary: 'Delete messages (network)',
+  description: 'Deletes specific messages from memory (network route)',
+  tags: ['Memory - Network'],
+  handler: async ctx => await deleteMessagesHandler(ctx),
+});

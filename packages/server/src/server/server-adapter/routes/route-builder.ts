@@ -1,44 +1,67 @@
+import type z from 'zod';
 import { generateRouteOpenAPI } from '../openapi-utils';
-import type { ServerRoute, ServerRouteHandler } from './index';
+import type { InferParams, ServerRoute, ServerRouteHandler } from './index';
 
-interface RouteConfig<TParams = Record<string, unknown>, TResponse = unknown> {
+interface RouteConfig<
+  TPathSchema extends z.ZodTypeAny | undefined = undefined,
+  TQuerySchema extends z.ZodTypeAny | undefined = undefined,
+  TBodySchema extends z.ZodTypeAny | undefined = undefined,
+  TResponse = unknown,
+> {
   method: ServerRoute['method'];
   path: string;
   responseType: 'stream' | 'json';
-  handler: ServerRouteHandler<TParams, TResponse>;
-  pathParamSchema?: ServerRoute['pathParamSchema'];
-  queryParamSchema?: ServerRoute['queryParamSchema'];
-  bodySchema?: ServerRoute['bodySchema'];
-  responseSchema?: ServerRoute['responseSchema'];
+  handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>, TResponse>;
+  pathParamSchema?: TPathSchema;
+  queryParamSchema?: TQuerySchema;
+  bodySchema?: TBodySchema;
+  responseSchema?: z.ZodTypeAny;
   summary?: string;
   description?: string;
   tags?: string[];
   deprecated?: boolean;
+  maxBodySize?: number;
 }
 
 /**
- * Creates a server route with auto-generated OpenAPI specification
+ * Creates a server route with auto-generated OpenAPI specification and type-safe handler inference.
+ *
+ * The handler parameters are automatically inferred from the provided schemas:
+ * - pathParamSchema: Infers path parameter types (e.g., :agentId)
+ * - queryParamSchema: Infers query parameter types
+ * - bodySchema: Infers request body types
+ * - Runtime context (mastra, requestContext, tools, taskStore) is always available
  *
  * @param config - Route configuration including schemas, handler, and metadata
  * @returns Complete ServerRoute with OpenAPI spec
  *
  * @example
  * ```typescript
- * const route = createRoute({
+ * export const getAgentRoute = createRoute({
  *   method: 'GET',
  *   path: '/api/agents/:agentId',
  *   responseType: 'json',
- *   handler: getAgentHandler,
- *   responseSchema: agentSchema,
+ *   pathParamSchema: z.object({ agentId: z.string() }),
+ *   responseSchema: serializedAgentSchema,
+ *   handler: async ({ agentId, mastra, requestContext }) => {
+ *     // agentId is typed as string
+ *     // mastra, requestContext, tools, taskStore are always available
+ *     return mastra.getAgent(agentId);
+ *   },
  *   summary: 'Get agent by ID',
  *   description: 'Returns details for a specific agent',
  *   tags: ['Agents'],
  * });
  * ```
  */
-export function createRoute<TParams = Record<string, unknown>, TResponse = unknown>(
-  config: RouteConfig<TParams, TResponse>,
-): ServerRoute<TParams, TResponse> {
+export function createRoute<
+  TPathSchema extends z.ZodTypeAny | undefined = undefined,
+  TQuerySchema extends z.ZodTypeAny | undefined = undefined,
+  TBodySchema extends z.ZodTypeAny | undefined = undefined,
+  TResponse = unknown,
+>(
+  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponse>,
+): ServerRoute<InferParams<TPathSchema, TQuerySchema, TBodySchema>, TResponse> {
   const { summary, description, tags, deprecated, ...baseRoute } = config;
 
   // Generate OpenAPI specification from the route config

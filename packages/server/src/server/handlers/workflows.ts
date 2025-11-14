@@ -7,6 +7,24 @@ import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { ServerRoute } from '../server-adapter/routes';
+import {
+  createWorkflowRunResponseSchema,
+  listWorkflowRunsQuerySchema,
+  listWorkflowsResponseSchema,
+  resumeBodySchema,
+  startAsyncWorkflowBodySchema,
+  streamWorkflowBodySchema,
+  workflowControlResponseSchema,
+  workflowExecutionResultSchema,
+  workflowIdPathParams,
+  workflowInfoSchema,
+  workflowRunPathParams,
+  workflowRunResponseSchema,
+  workflowRunsResponseSchema,
+} from '../schemas/workflows';
+import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -828,3 +846,237 @@ export async function cancelWorkflowRunHandler({
     return handleError(error, 'Error canceling workflow run');
   }
 }
+
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
+
+export const LIST_WORKFLOWS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/workflows',
+  responseType: 'json',
+  responseSchema: listWorkflowsResponseSchema,
+  summary: 'List all workflows',
+  description: 'Returns a list of all available workflows in the system',
+  tags: ['Workflows'],
+  handler: async ctx => await listWorkflowsHandler(ctx),
+});
+
+export const GET_WORKFLOW_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/workflows/:workflowId',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  responseSchema: workflowInfoSchema,
+  summary: 'Get workflow by ID',
+  description: 'Returns details for a specific workflow',
+  tags: ['Workflows'],
+  handler: async ctx => await getWorkflowByIdHandler(ctx),
+});
+
+export const LIST_WORKFLOW_RUNS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/workflows/:workflowId/runs',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: listWorkflowRunsQuerySchema,
+  responseSchema: workflowRunsResponseSchema,
+  summary: 'List workflow runs',
+  description: 'Returns a paginated list of execution runs for the specified workflow',
+  tags: ['Workflows'],
+  handler: async ctx => await listWorkflowRunsHandler(ctx),
+});
+
+export const GET_WORKFLOW_RUN_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/workflows/:workflowId/runs/:runId',
+  responseType: 'json',
+  pathParamSchema: workflowRunPathParams,
+  responseSchema: workflowRunResponseSchema,
+  summary: 'Get workflow run by ID',
+  description: 'Returns details for a specific workflow run',
+  tags: ['Workflows'],
+  handler: async ctx => await getWorkflowRunByIdHandler(ctx),
+});
+
+export const CREATE_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/create-run',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: optionalRunIdSchema,
+  responseSchema: createWorkflowRunResponseSchema,
+  summary: 'Create workflow run',
+  description: 'Creates a new workflow execution instance with an optional custom run ID',
+  tags: ['Workflows'],
+  handler: async ctx => await createWorkflowRunHandler(ctx),
+});
+
+export const STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/stream',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: streamWorkflowBodySchema,
+  summary: 'Stream workflow execution',
+  description: 'Executes a workflow and streams the results in real-time',
+  tags: ['Workflows'],
+  handler: async ctx => await streamWorkflowHandler(ctx),
+});
+
+export const STREAM_VNEXT_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/streamVNext',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: streamWorkflowBodySchema,
+  summary: 'Stream workflow execution (v2)',
+  description: 'Executes a workflow using the v2 streaming API and streams the results in real-time',
+  tags: ['Workflows'],
+  handler: async ctx => await streamWorkflowHandler(ctx),
+});
+
+export const RESUME_STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/resume-stream',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeBodySchema,
+  summary: 'Resume workflow stream',
+  description: 'Resumes a suspended workflow execution and continues streaming results',
+  tags: ['Workflows'],
+  handler: async ctx => await resumeStreamWorkflowHandler(ctx as any),
+});
+
+export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/workflows/:workflowId/runs/:runId/execution-result',
+  responseType: 'json',
+  pathParamSchema: workflowRunPathParams,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Get workflow execution result',
+  description: 'Returns the final execution result of a completed workflow run',
+  tags: ['Workflows'],
+  handler: async ctx => await getWorkflowRunExecutionResultHandler(ctx),
+});
+
+export const START_ASYNC_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/start-async',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: optionalRunIdSchema,
+  bodySchema: startAsyncWorkflowBodySchema,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Start workflow asynchronously',
+  description: 'Starts a workflow execution asynchronously without streaming results',
+  tags: ['Workflows'],
+  handler: async ctx => await startAsyncWorkflowHandler(ctx),
+});
+
+export const START_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/start',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: startAsyncWorkflowBodySchema,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Start specific workflow run',
+  description: 'Starts execution of a specific workflow run by ID',
+  tags: ['Workflows'],
+  handler: async ctx => await startWorkflowRunHandler(ctx),
+});
+
+export const OBSERVE_STREAM_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/observe',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  summary: 'Observe workflow stream',
+  description: 'Observes and streams updates from an already running workflow execution',
+  tags: ['Workflows'],
+  handler: async ctx => await observeStreamWorkflowHandler(ctx),
+});
+
+export const OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/observe-streamVNext',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  summary: 'Observe workflow stream (v2)',
+  description: 'Observes and streams updates from an already running workflow execution using v2 streaming API',
+  tags: ['Workflows'],
+  handler: async ctx => await observeStreamVNextWorkflowHandler(ctx),
+});
+
+export const RESUME_ASYNC_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/resume-async',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeBodySchema,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Resume workflow asynchronously',
+  description: 'Resumes a suspended workflow execution asynchronously without streaming',
+  tags: ['Workflows'],
+  handler: async ctx => await resumeAsyncWorkflowHandler(ctx as any),
+});
+
+export const RESUME_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/resume',
+  responseType: 'json',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeBodySchema,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Resume workflow',
+  description: 'Resumes a suspended workflow execution from a specific step',
+  tags: ['Workflows'],
+  handler: async ctx => await resumeWorkflowHandler(ctx as any),
+});
+
+export const CANCEL_WORKFLOW_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/runs/:runId/cancel',
+  responseType: 'json',
+  pathParamSchema: workflowRunPathParams,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Cancel workflow run',
+  description: 'Cancels an in-progress workflow execution',
+  tags: ['Workflows'],
+  handler: async ctx => await cancelWorkflowRunHandler(ctx),
+});
+
+// Legacy routes (deprecated)
+export const STREAM_LEGACY_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/stream-legacy',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: streamWorkflowBodySchema,
+  summary: '[DEPRECATED] Stream workflow with legacy format',
+  description: 'Legacy endpoint for streaming workflow execution. Use /api/workflows/:workflowId/stream instead.',
+  tags: ['Workflows', 'Legacy'],
+  handler: async ctx => await streamLegacyWorkflowHandler(ctx as any),
+});
+
+export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/workflows/:workflowId/observe-stream-legacy',
+  responseType: 'stream',
+  pathParamSchema: workflowIdPathParams,
+  queryParamSchema: runIdSchema,
+  summary: '[DEPRECATED] Observe workflow stream with legacy format',
+  description: 'Legacy endpoint for observing workflow stream. Use /api/workflows/:workflowId/observe instead.',
+  tags: ['Workflows', 'Legacy'],
+  handler: async ctx => await observeStreamLegacyWorkflowHandler(ctx as any),
+});

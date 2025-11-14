@@ -4,6 +4,17 @@ import { MastraError } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 import { HTTPException } from '../http-exception';
 import type { Context } from '../types';
+import {
+  agentIdPathParams,
+  voiceSpeakersResponseSchema,
+  generateSpeechBodySchema,
+  speakResponseSchema,
+  transcribeSpeechBodySchema,
+  transcribeSpeechResponseSchema,
+  getListenerResponseSchema,
+} from '../schemas/agents';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { ServerRoute } from '../server-adapter/routes';
 
 import { handleError } from './error';
 import { validateBody } from './utils';
@@ -167,3 +178,97 @@ export async function getListenerHandler({ mastra, agentId, requestContext }: Vo
     return handleError(error, 'Error getting listeners');
   }
 }
+
+// ============================================================================
+// Route Objects
+// ============================================================================
+
+export const GET_SPEAKERS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId/voice/speakers',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  responseSchema: voiceSpeakersResponseSchema,
+  summary: 'Get voice speakers',
+  description: 'Returns available voice speakers for the specified agent',
+  tags: ['Agents', 'Voice'],
+  handler: async ctx => await getSpeakersHandler(ctx as any),
+});
+
+export const GET_SPEAKERS_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId/speakers',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  responseSchema: voiceSpeakersResponseSchema,
+  summary: 'Get available speakers for an agent',
+  description: '[DEPRECATED] Use /api/agents/:agentId/voice/speakers instead. Get available speakers for an agent',
+  tags: ['Agents', 'Voice'],
+  handler: async ctx => await getSpeakersHandler(ctx as any),
+});
+
+export const GENERATE_SPEECH_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/voice/speak',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: generateSpeechBodySchema,
+  responseSchema: speakResponseSchema,
+  summary: 'Generate speech',
+  description: 'Generates speech audio from text using the agent voice configuration',
+  tags: ['Agents', 'Voice'],
+  handler: async ctx => await generateSpeechHandler(ctx as any),
+});
+
+export const GENERATE_SPEECH_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/speak',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: generateSpeechBodySchema,
+  responseSchema: speakResponseSchema,
+  summary: 'Convert text to speech',
+  description:
+    "[DEPRECATED] Use /api/agents/:agentId/voice/speak instead. Convert text to speech using the agent's voice provider",
+  tags: ['Agents', 'Voice'],
+  handler: async ctx => await generateSpeechHandler(ctx as any),
+});
+
+export const TRANSCRIBE_SPEECH_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/voice/listen',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: transcribeSpeechBodySchema,
+  responseSchema: transcribeSpeechResponseSchema,
+  summary: 'Transcribe speech',
+  description: 'Transcribes speech audio to text using the agent voice configuration',
+  tags: ['Agents', 'Voice'],
+  handler: async ctx => await transcribeSpeechHandler(ctx as any),
+});
+
+export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/listen',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: transcribeSpeechBodySchema,
+  responseSchema: transcribeSpeechResponseSchema,
+  summary: 'Convert speech to text',
+  description:
+    "[DEPRECATED] Use /api/agents/:agentId/voice/listen instead. Convert speech to text using the agent's voice provider. Additional provider-specific options can be passed as query parameters.",
+  tags: ['Agents', 'Voice'],
+  handler: async ctx => await transcribeSpeechHandler(ctx as any),
+});
+
+export const GET_LISTENER_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId/voice/listener',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  responseSchema: getListenerResponseSchema,
+  summary: 'Get voice listener',
+  description: 'Returns the voice listener configuration for the agent',
+  tags: ['Agents', 'Voice'],
+  handler: async ctx => await getListenerHandler(ctx as any),
+});

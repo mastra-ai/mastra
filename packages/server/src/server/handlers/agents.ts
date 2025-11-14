@@ -12,6 +12,25 @@ import type {
   StreamTextOnStepFinishCallback,
 } from '../../../../core/dist/llm/model/base.types';
 import { HTTPException } from '../http-exception';
+import {
+  agentIdPathParams,
+  listAgentsResponseSchema,
+  serializedAgentSchema,
+  agentExecutionBodySchema,
+  generateResponseSchema,
+  streamResponseSchema,
+  providersResponseSchema,
+  approveToolCallBodySchema,
+  declineToolCallBodySchema,
+  toolCallResponseSchema,
+  updateAgentModelBodySchema,
+  reorderAgentModelListBodySchema,
+  updateAgentModelInModelListBodySchema,
+  modelManagementResponseSchema,
+  modelConfigIdPathParams,
+} from '../schemas/agents';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { ServerRoute } from '../server-adapter/routes';
 import type { Context } from '../types';
 
 import { handleError } from './error';
@@ -953,3 +972,310 @@ export async function getProvidersHandler() {
     return handleError(error, 'error fetching providers');
   }
 }
+
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
+
+export const LIST_AGENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/agents',
+  responseType: 'json',
+  responseSchema: listAgentsResponseSchema,
+  summary: 'List all agents',
+  description: 'Returns a list of all available agents in the system',
+  tags: ['Agents'],
+  handler: async ({ mastra, requestContext }) => {
+    try {
+      const agents = mastra.listAgents();
+
+      const serializedAgentsMap = await Promise.all(
+        Object.entries(agents).map(async ([id, agent]) => {
+          return formatAgentList({ id, mastra, agent, requestContext });
+        }),
+      );
+
+      const serializedAgents = serializedAgentsMap.reduce<Record<string, (typeof serializedAgentsMap)[number]>>(
+        (acc, { id, ...rest }) => {
+          acc[id] = { id, ...rest };
+          return acc;
+        },
+        {},
+      );
+
+      return serializedAgents;
+    } catch (error) {
+      return handleError(error, 'Error getting agents');
+    }
+  },
+});
+
+export const GET_AGENT_BY_ID_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  responseSchema: serializedAgentSchema,
+  summary: 'Get agent by ID',
+  description: 'Returns details for a specific agent including configuration, tools, and memory settings',
+  tags: ['Agents'],
+  handler: async ({ agentId, mastra, requestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+      const isPlayground = false; // TODO: Get from context if needed
+      return formatAgent({ mastra, agent, requestContext, isPlayground });
+    } catch (error) {
+      return handleError(error, 'Error getting agent');
+    }
+  },
+});
+
+export const GENERATE_AGENT_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/generate',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Generate agent response',
+  description: 'Executes an agent with the provided messages and returns the complete response',
+  tags: ['Agents'],
+  handler: async ({ agentId, mastra, requestContext, ...params }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+
+      // UI Frameworks may send "client tools" in the body,
+      // but it interferes with llm providers tool handling, so we remove them
+      sanitizeBody(params, ['tools']);
+
+      const { messages, agentRequestContext, ...rest } = params as any;
+
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext.entries()),
+        ...Array.from(Object.entries(agentRequestContext ?? {})),
+      ]);
+
+      validateBody({ messages });
+
+      const result = await agent.generate(messages, {
+        ...rest,
+        requestContext: finalRequestContext,
+        abortSignal: undefined, // TODO: Get abortSignal from context if needed
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error generating from agent');
+    }
+  },
+});
+
+// Legacy routes (deprecated)
+export const GENERATE_LEGACY_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/generate-legacy',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: '[DEPRECATED] Generate with legacy format',
+  description: 'Legacy endpoint for generating agent responses. Use /api/agents/:agentId/generate instead.',
+  tags: ['Agents', 'Legacy'],
+  handler: async ctx => await generateLegacyHandler(ctx as any),
+});
+
+export const STREAM_GENERATE_LEGACY_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream-legacy',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: '[DEPRECATED] Stream with legacy format',
+  description: 'Legacy endpoint for streaming agent responses. Use /api/agents/:agentId/stream instead.',
+  tags: ['Agents', 'Legacy'],
+  handler: async ctx => await streamGenerateLegacyHandler(ctx as any),
+});
+
+export const GET_PROVIDERS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agents/providers',
+  responseType: 'json',
+  responseSchema: providersResponseSchema,
+  summary: 'List AI providers',
+  description: 'Returns a list of all configured AI model providers',
+  tags: ['Agents'],
+  handler: async () => await getProvidersHandler(),
+});
+
+export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/generate/vnext',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: generateResponseSchema,
+  summary: 'Generate a response from an agent',
+  description: 'Generate a response from an agent',
+  tags: ['Agents'],
+  handler: GENERATE_AGENT_ROUTE.handler,
+});
+
+export const STREAM_GENERATE_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream agent response',
+  description: 'Executes an agent with the provided messages and streams the response in real-time',
+  tags: ['Agents'],
+  handler: async ctx => await streamGenerateHandler(ctx as any),
+});
+
+export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream/vnext',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream a response from an agent',
+  description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
+  tags: ['Agents'],
+  handler: async ctx => await streamGenerateHandler(ctx as any),
+});
+
+export const APPROVE_TOOL_CALL_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/approve-tool-call',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: approveToolCallBodySchema,
+  responseSchema: toolCallResponseSchema,
+  summary: 'Approve tool call',
+  description: 'Approves a pending tool call and continues agent execution',
+  tags: ['Agents', 'Tools'],
+  handler: async ctx => await approveToolCallHandler(ctx as any),
+});
+
+export const DECLINE_TOOL_CALL_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/decline-tool-call',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: declineToolCallBodySchema,
+  responseSchema: toolCallResponseSchema,
+  summary: 'Decline tool call',
+  description: 'Declines a pending tool call and continues agent execution without executing the tool',
+  tags: ['Agents', 'Tools'],
+  handler: async ctx => await declineToolCallHandler(ctx as any),
+});
+
+export const STREAM_NETWORK_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/network',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream agent network',
+  description: 'Executes an agent network with multiple agents and streams the response',
+  tags: ['Agents'],
+  handler: async ctx => await streamNetworkHandler(ctx as any),
+});
+
+export const UPDATE_AGENT_MODEL_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/model',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: updateAgentModelBodySchema,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Update agent model',
+  description: 'Updates the AI model used by the agent',
+  tags: ['Agents', 'Models'],
+  handler: async ctx => await updateAgentModelHandler(ctx as any),
+});
+
+export const RESET_AGENT_MODEL_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/model/reset',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Reset agent model',
+  description: 'Resets the agent model to its original configuration',
+  tags: ['Agents', 'Models'],
+  handler: async ctx => await resetAgentModelHandler(ctx as any),
+});
+
+export const REORDER_AGENT_MODEL_LIST_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/models/reorder',
+  responseType: 'json',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: reorderAgentModelListBodySchema,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Reorder agent model list',
+  description: 'Reorders the model list for agents with multiple model configurations',
+  tags: ['Agents', 'Models'],
+  handler: async ctx => await reorderAgentModelListHandler(ctx as any),
+});
+
+export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/models/:modelConfigId',
+  responseType: 'json',
+  pathParamSchema: modelConfigIdPathParams,
+  bodySchema: updateAgentModelInModelListBodySchema,
+  responseSchema: modelManagementResponseSchema,
+  summary: 'Update model in model list',
+  description: 'Updates a specific model configuration in the agent model list',
+  tags: ['Agents', 'Models'],
+  handler: async ctx => await updateAgentModelInModelListHandler(ctx as any),
+});
+
+export const STREAM_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/streamVNext',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream a response from an agent',
+  description: '[DEPRECATED] This endpoint is deprecated. Please use /stream instead.',
+  tags: ['Agents'],
+  handler: async () => {
+    throw new Error('This endpoint is deprecated. Please use /stream instead.');
+  },
+});
+
+export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream/vnext/ui',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream UI messages from an agent',
+  description:
+    '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
+  tags: ['Agents'],
+  handler: async ctx => await streamUIMessageHandler(ctx as any),
+});
+
+export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/stream/ui',
+  responseType: 'stream',
+  pathParamSchema: agentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: streamResponseSchema,
+  summary: 'Stream UI messages from an agent',
+  description:
+    '[DEPRECATED] This endpoint is deprecated. Please use the @mastra/ai-sdk package for uiMessage transformations',
+  tags: ['Agents'],
+  handler: async ctx => await streamUIMessageHandler(ctx as any),
+});

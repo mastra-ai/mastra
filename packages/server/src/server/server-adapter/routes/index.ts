@@ -1,6 +1,9 @@
 import type { Mastra } from '@mastra/core';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { Tool } from '@mastra/core/tools';
 import type z from 'zod';
+import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
@@ -13,8 +16,31 @@ import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
 
+/**
+ * Runtime context fields that are always available to route handlers.
+ * These are injected by the server adapters (Express, Hono, etc.)
+ */
+export type RuntimeContext = {
+  mastra: Mastra;
+  requestContext: RequestContext;
+  tools: Record<string, Tool>;
+  taskStore: InMemoryTaskStore;
+};
+
+/**
+ * Utility type to infer parameters from Zod schemas.
+ * Merges path params, query params, and body params into a single type.
+ */
+export type InferParams<
+  TPathSchema extends z.ZodTypeAny | undefined,
+  TQuerySchema extends z.ZodTypeAny | undefined,
+  TBodySchema extends z.ZodTypeAny | undefined,
+> = (TPathSchema extends z.ZodTypeAny ? z.infer<TPathSchema> : {}) &
+  (TQuerySchema extends z.ZodTypeAny ? z.infer<TQuerySchema> : {}) &
+  (TBodySchema extends z.ZodTypeAny ? z.infer<TBodySchema> : {});
+
 export type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
-  params: TParams & { mastra: Mastra },
+  params: TParams & RuntimeContext,
 ) => Promise<TResponse>;
 
 export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> = Omit<
@@ -32,7 +58,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
 };
 
-export const SERVER_ROUTES: ServerRoute[] = [
+export const SERVER_ROUTES: ServerRoute<any, any>[] = [
   ...AGENTS_ROUTES,
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,

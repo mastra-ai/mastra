@@ -4,6 +4,18 @@ import { isVercelTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 import { HTTPException } from '../http-exception';
+import {
+  executeToolContextBodySchema,
+  executeToolResponseSchema,
+  listToolsResponseSchema,
+  serializedToolSchema,
+  toolIdPathParams,
+  agentToolPathParams,
+  executeToolBodySchema,
+} from '../schemas/agents';
+import { optionalRunIdSchema } from '../schemas/common';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { ServerRoute } from '../server-adapter/routes';
 import type { Context } from '../types';
 
 import { handleError } from './error';
@@ -209,3 +221,166 @@ export async function executeAgentToolHandler({
     return handleError(error, 'Error executing tool');
   }
 }
+
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
+
+export const LIST_TOOLS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/tools',
+  responseType: 'json',
+  responseSchema: listToolsResponseSchema,
+  summary: 'List all tools',
+  description: 'Returns a list of all available tools in the system',
+  tags: ['Tools'],
+  handler: async ({ tools }) => {
+    try {
+      if (!tools) {
+        return {};
+      }
+
+      const serializedTools = Object.entries(tools).reduce(
+        (acc, [id, _tool]) => {
+          const tool = _tool as any;
+          acc[id] = {
+            ...tool,
+            inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+            outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+          };
+          return acc;
+        },
+        {} as Record<string, any>,
+      );
+
+      return serializedTools;
+    } catch (error) {
+      return handleError(error, 'Error getting tools');
+    }
+  },
+});
+
+export const GET_TOOL_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/tools/:toolId',
+  responseType: 'json',
+  pathParamSchema: toolIdPathParams,
+  responseSchema: serializedToolSchema,
+  summary: 'Get tool by ID',
+  description: 'Returns details for a specific tool including its schema and configuration',
+  tags: ['Tools'],
+  handler: async ({ tools, toolId }) => {
+    try {
+      const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+
+      if (!tool) {
+        throw new HTTPException(404, { message: 'Tool not found' });
+      }
+
+      const serializedTool = {
+        ...tool,
+        inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+        outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+      };
+
+      return serializedTool;
+    } catch (error) {
+      return handleError(error, 'Error getting tool');
+    }
+  },
+});
+
+export const EXECUTE_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/tools/:toolId/execute',
+  responseType: 'json',
+  pathParamSchema: toolIdPathParams,
+  queryParamSchema: optionalRunIdSchema,
+  bodySchema: executeToolContextBodySchema,
+  responseSchema: executeToolResponseSchema,
+  summary: 'Execute tool',
+  description: 'Executes a specific tool with the provided input data',
+  tags: ['Tools'],
+  handler: async ({ mastra, runId, toolId, tools, requestContext, ...bodyParams }) => {
+    try {
+      if (!toolId) {
+        throw new HTTPException(400, { message: 'Tool ID is required' });
+      }
+
+      const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+
+      if (!tool) {
+        throw new HTTPException(404, { message: 'Tool not found' });
+      }
+
+      if (!tool?.execute) {
+        throw new HTTPException(400, { message: 'Tool is not executable' });
+      }
+
+      const { data, toolRequestContext } = bodyParams as {
+        data?: unknown;
+        toolRequestContext?: Record<string, unknown>;
+      };
+
+      validateBody({ data });
+
+      // Merge Context's requestContext with body's toolRequestContext
+      const finalRequestContext = new RequestContext<Record<string, unknown>>([
+        ...Array.from(requestContext?.entries() ?? []),
+        ...Array.from(Object.entries(toolRequestContext ?? {})),
+      ]);
+
+      if (isVercelTool(tool)) {
+        const result = await (tool as any).execute(data);
+        return result;
+      }
+
+      const result = await tool.execute(data!, {
+        mastra,
+        requestContext: finalRequestContext,
+        // TODO: Pass proper tracing context when server API supports tracing
+        tracingContext: { currentSpan: undefined },
+        ...(runId
+          ? {
+              workflow: {
+                runId,
+                suspend: async () => {},
+              },
+            }
+          : {}),
+      });
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error executing tool');
+    }
+  },
+});
+
+// ============================================================================
+// Agent Tool Routes
+// ============================================================================
+
+export const GET_AGENT_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agents/:agentId/tools/:toolId',
+  responseType: 'json',
+  pathParamSchema: agentToolPathParams,
+  responseSchema: serializedToolSchema,
+  summary: 'Get agent tool',
+  description: 'Returns details for a specific tool assigned to the agent',
+  tags: ['Agents', 'Tools'],
+  handler: async ctx => await getAgentToolHandler(ctx as any),
+});
+
+export const EXECUTE_AGENT_TOOL_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agents/:agentId/tools/:toolId/execute',
+  responseType: 'json',
+  pathParamSchema: agentToolPathParams,
+  bodySchema: executeToolBodySchema,
+  responseSchema: executeToolResponseSchema,
+  summary: 'Execute agent tool',
+  description: 'Executes a specific tool assigned to the agent with the provided input data',
+  tags: ['Agents', 'Tools'],
+  handler: async ctx => await executeAgentToolHandler(ctx as any),
+});

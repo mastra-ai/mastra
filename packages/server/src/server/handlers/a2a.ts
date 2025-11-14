@@ -16,6 +16,14 @@ import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
 import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { ServerRoute } from '../server-adapter/routes';
+import {
+  a2aAgentIdPathParams,
+  agentExecutionBodySchema,
+  agentCardResponseSchema,
+  agentExecutionResponseSchema,
+} from '../schemas/a2a';
 
 const messageSendParamsSchema = z.object({
   message: z.object({
@@ -410,3 +418,94 @@ export async function getAgentExecutionHandler({
     return normalizeError(error, requestId, taskId, logger);
   }
 }
+
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
+
+export const GET_AGENT_CARD_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/a2a/:agentId/card',
+  responseType: 'json',
+  pathParamSchema: a2aAgentIdPathParams,
+  responseSchema: agentCardResponseSchema,
+  summary: 'Get agent card',
+  description: 'Returns the agent card information for A2A protocol discovery',
+  tags: ['Agent-to-Agent'],
+  handler: async ({ mastra, agentId, requestContext }) => {
+    const executionUrl = `/a2a/${agentId}`;
+    const provider = {
+      organization: 'Mastra',
+      url: 'https://mastra.ai',
+    };
+    const version = '1.0';
+
+    const agent = mastra.getAgent(agentId as string);
+
+    if (!agent) {
+      throw new Error(`Agent with ID ${agentId} not found`);
+    }
+
+    const [instructions, tools] = await Promise.all([
+      agent.getInstructions({ requestContext }),
+      agent.listTools({ requestContext }),
+    ]);
+
+    const agentCard: AgentCard = {
+      name: agent.id || (agentId as string),
+      description: convertInstructionsToString(instructions),
+      url: executionUrl,
+      provider,
+      version,
+      capabilities: {
+        streaming: true,
+        pushNotifications: false,
+        stateTransitionHistory: false,
+      },
+      defaultInputModes: ['text'],
+      defaultOutputModes: ['text'],
+      skills: Object.entries(tools).map(([toolId, tool]) => ({
+        id: toolId,
+        name: toolId,
+        description: tool.description || `Tool: ${toolId}`,
+        tags: ['tool'],
+      })),
+    };
+
+    return agentCard;
+  },
+});
+
+export const AGENT_EXECUTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/a2a/:agentId/execute',
+  responseType: 'json',
+  pathParamSchema: a2aAgentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: agentExecutionResponseSchema,
+  summary: 'Execute agent',
+  description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
+  tags: ['Agent-to-Agent'],
+  handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
+    const {
+      id: requestId,
+      method,
+      params,
+    } = bodyParams as {
+      jsonrpc: '2.0';
+      id: string | number;
+      method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
+      params: MessageSendParams | TaskQueryParams | TaskIdParams;
+    };
+
+    return await getAgentExecutionHandler({
+      requestId: String(requestId),
+      mastra,
+      agentId: agentId as string,
+      requestContext,
+      method,
+      params,
+      taskStore,
+    });
+  },
+});

@@ -5,6 +5,25 @@ import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 import * as workflows from './workflows';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { ServerRoute } from '../server-adapter/routes';
+import {
+  actionIdPathParams,
+  actionRunPathParams,
+  createWorkflowRunResponseSchema,
+  listWorkflowRunsQuerySchema,
+  resumeAgentBuilderBodySchema,
+  streamAgentBuilderBodySchema,
+  startAsyncAgentBuilderBodySchema,
+  workflowExecutionResultSchema,
+  workflowControlResponseSchema,
+  workflowRunResponseSchema,
+  workflowRunsResponseSchema,
+  workflowInfoSchema,
+  listWorkflowsResponseSchema,
+  streamLegacyAgentBuilderBodySchema,
+} from '../schemas/agent-builder';
+import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
 
 interface AgentBuilderContext extends Context {
   actionId?: string;
@@ -189,3 +208,239 @@ export const cancelAgentBuilderActionRunHandler = createAgentBuilderWorkflowHand
   'Cancelling agent builder action run',
   'cancelAgentBuilderActionRunHandler',
 );
+
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
+
+export const LIST_AGENT_BUILDER_ACTIONS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agent-builder',
+  responseType: 'json',
+  responseSchema: listWorkflowsResponseSchema,
+  summary: 'List agent-builder actions',
+  description: 'Returns a list of all available agent-builder actions',
+  tags: ['Agent Builder'],
+  handler: async ctx => await getAgentBuilderActionsHandler(ctx),
+});
+
+export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agent-builder/:actionId',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  responseSchema: workflowInfoSchema,
+  summary: 'Get action by ID',
+  description: 'Returns details for a specific agent-builder action',
+  tags: ['Agent Builder'],
+  handler: async ctx => await getAgentBuilderActionByIdHandler(ctx),
+});
+
+export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agent-builder/:actionId/runs',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: listWorkflowRunsQuerySchema,
+  responseSchema: workflowRunsResponseSchema,
+  summary: 'List action runs',
+  description: 'Returns a paginated list of execution runs for the specified action',
+  tags: ['Agent Builder'],
+  handler: async ctx => await getAgentBuilderActionRunsHandler(ctx),
+});
+
+export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agent-builder/:actionId/runs/:runId',
+  responseType: 'json',
+  pathParamSchema: actionRunPathParams,
+  responseSchema: workflowRunResponseSchema,
+  summary: 'Get action run by ID',
+  description: 'Returns details for a specific action run',
+  tags: ['Agent Builder'],
+  handler: async ctx => await getAgentBuilderActionRunByIdHandler(ctx),
+});
+
+export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'GET',
+  path: '/api/agent-builder/:actionId/runs/:runId/execution-result',
+  responseType: 'json',
+  pathParamSchema: actionRunPathParams,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Get action execution result',
+  description: 'Returns the final execution result of a completed action run',
+  tags: ['Agent Builder'],
+  handler: async ctx => await getAgentBuilderActionRunExecutionResultHandler(ctx),
+});
+
+export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/create-run',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: optionalRunIdSchema,
+  responseSchema: createWorkflowRunResponseSchema,
+  summary: 'Create action run',
+  description: 'Creates a new action execution instance with an optional custom run ID',
+  tags: ['Agent Builder'],
+  handler: async ctx => await createAgentBuilderActionRunHandler(ctx),
+});
+
+export const STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/stream',
+  responseType: 'stream',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: streamLegacyAgentBuilderBodySchema,
+  summary: 'Stream action execution',
+  description: 'Executes an action and streams the results in real-time',
+  tags: ['Agent Builder'],
+  handler: async ctx => await streamAgentBuilderActionHandler(ctx),
+});
+
+export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/streamVNext',
+  responseType: 'stream',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: streamAgentBuilderBodySchema,
+  summary: 'Stream action execution (v2)',
+  description: 'Executes an action using the v2 streaming API and streams the results in real-time',
+  tags: ['Agent Builder'],
+  handler: async ctx => await streamVNextAgentBuilderActionHandler(ctx),
+});
+
+export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/start-async',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: optionalRunIdSchema,
+  bodySchema: startAsyncAgentBuilderBodySchema,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Start action asynchronously',
+  description: 'Starts an action execution asynchronously without streaming results',
+  tags: ['Agent Builder'],
+  handler: async ctx => await startAsyncAgentBuilderActionHandler(ctx),
+});
+
+export const START_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/start',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: startAsyncAgentBuilderBodySchema,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Start specific action run',
+  description: 'Starts execution of a specific action run by ID',
+  tags: ['Agent Builder'],
+  handler: async ctx => await startAgentBuilderActionRunHandler(ctx),
+});
+
+export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/observe',
+  responseType: 'stream',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  summary: 'Observe action stream',
+  description: 'Observes and streams updates from an already running action execution',
+  tags: ['Agent Builder'],
+  handler: async ctx => await observeStreamAgentBuilderActionHandler(ctx),
+});
+
+export const OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/observe-streamVNext',
+  responseType: 'stream',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  summary: 'Observe action stream (v2)',
+  description: 'Observes and streams updates from an already running action execution using v2 streaming API',
+  tags: ['Agent Builder'],
+  handler: async ctx => await observeStreamVNextAgentBuilderActionHandler(ctx),
+});
+
+export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/resume-async',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeAgentBuilderBodySchema,
+  responseSchema: workflowExecutionResultSchema,
+  summary: 'Resume action asynchronously',
+  description: 'Resumes a suspended action execution asynchronously without streaming',
+  tags: ['Agent Builder'],
+  handler: async ctx => await resumeAsyncAgentBuilderActionHandler(ctx as any),
+});
+
+export const RESUME_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/resume',
+  responseType: 'json',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeAgentBuilderBodySchema,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Resume action',
+  description: 'Resumes a suspended action execution from a specific step',
+  tags: ['Agent Builder'],
+  handler: async ctx => await resumeAgentBuilderActionHandler(ctx as any),
+});
+
+export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/resume-stream',
+  responseType: 'stream',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: resumeAgentBuilderBodySchema,
+  summary: 'Resume action stream',
+  description: 'Resumes a suspended action execution and continues streaming results',
+  tags: ['Agent Builder'],
+  handler: async ctx => await resumeStreamAgentBuilderActionHandler(ctx as any),
+});
+
+export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/runs/:runId/cancel',
+  responseType: 'json',
+  pathParamSchema: actionRunPathParams,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Cancel action run',
+  description: 'Cancels an in-progress action execution',
+  tags: ['Agent Builder'],
+  handler: async ctx => await cancelAgentBuilderActionRunHandler(ctx),
+});
+
+// Legacy routes (deprecated)
+export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/stream-legacy',
+  responseType: 'stream',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  bodySchema: streamLegacyAgentBuilderBodySchema,
+  summary: '[DEPRECATED] Stream agent-builder action with legacy format',
+  description:
+    'Legacy endpoint for streaming agent-builder action execution. Use /api/agent-builder/:actionId/stream instead.',
+  tags: ['Agent Builder', 'Legacy'],
+  handler: async ctx => await streamLegacyAgentBuilderActionHandler(ctx as any),
+});
+
+export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE: ServerRoute<any, any> = createRoute({
+  method: 'POST',
+  path: '/api/agent-builder/:actionId/observe-stream-legacy',
+  responseType: 'stream',
+  pathParamSchema: actionIdPathParams,
+  queryParamSchema: runIdSchema,
+  summary: '[DEPRECATED] Observe agent-builder action stream with legacy format',
+  description:
+    'Legacy endpoint for observing agent-builder action stream. Use /api/agent-builder/:actionId/observe instead.',
+  tags: ['Agent Builder', 'Legacy'],
+  handler: async ctx => await observeStreamLegacyAgentBuilderActionHandler(ctx as any),
+});
