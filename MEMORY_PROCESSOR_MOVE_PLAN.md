@@ -194,40 +194,30 @@ export { MessageHistory } from './message-history';
 
 ### 12. Add Dependencies to @mastra/memory
 
-**Decision**: Use existing `@mastra/memory` dependencies instead of adding new ones.
+**Decision**: ✅ Use `xxhash-wasm` + `lru-cache`
 
 - `@mastra/memory` already has `xxhash-wasm` (line 54 of package.json) which is used for hashing
-- `@mastra/memory` already has a simple `Map` for embedding caching
 - `SemanticRecall` currently uses `lru-cache` and `xxhashjs` from `@mastra/core`
 
-**Options**:
-1. **Option A (Recommended)**: Refactor `SemanticRecall` to use `xxhash-wasm` and a simple `Map` (consistent with existing `@mastra/memory` code)
-   - [ ] Update `SemanticRecall` to use `xxhash-wasm` instead of `xxhashjs`
-   - [ ] Update `SemanticRecall` to use `Map` instead of `lru-cache` (or keep LRU but add the dep)
-   - [ ] No new dependencies needed
-
-2. **Option B**: Add `lru-cache` and `xxhashjs` to `@mastra/memory`
-   - [ ] Add `lru-cache` to `@mastra/memory` dependencies
-   - [ ] Add `xxhashjs` to `@mastra/memory` dependencies
-   - [ ] Add `@types/lru-cache` to `@mastra/memory` devDependencies
-   - [ ] Add `@types/xxhashjs` to `@mastra/memory` devDependencies
-   - [ ] Run `pnpm install` to update lockfile
-
-**User Note**: _Double check, does memory already have similar deps we should use?_
-**Answer**: Yes! `@mastra/memory` has `xxhash-wasm` and uses `Map` for caching. We should decide whether to:
-- Use the existing approach (xxhash-wasm + Map), OR
-- Add lru-cache to @mastra/memory for better cache management
+**Actions**:
+- [ ] Add `lru-cache` to `@mastra/memory` dependencies
+- [ ] Add `@types/lru-cache` to `@mastra/memory` devDependencies
+- [ ] Refactor `SemanticRecall` to use `xxhash-wasm` instead of `xxhashjs`
+- [ ] Remove `xxhashjs` and `@types/xxhashjs` from `@mastra/core` dependencies (no longer needed)
+- [ ] Run `pnpm install` to update lockfile
 
 ### 13. Commit Strategy
 
 Individual commits for each logical change:
-1. `refactor: add lru-cache and xxhashjs dependencies to @mastra/memory`
-2. `refactor: move SemanticRecall processor to @mastra/memory`
-3. `refactor: move WorkingMemory processor to @mastra/memory`
-4. `refactor: move MessageHistory processor to @mastra/memory`
-5. `refactor: move processor instantiation logic to Memory class`
-6. `refactor: update exports and remove memory processors from @mastra/core`
-7. `test: verify all tests pass after processor move`
+1. `refactor: merge WorkingMemoryTemplateProvider into MastraMemory base class`
+2. `refactor: add lru-cache to @mastra/memory and refactor SemanticRecall to use xxhash-wasm`
+3. `refactor: move SemanticRecall processor to @mastra/memory`
+4. `refactor: move WorkingMemory processor to @mastra/memory`
+5. `refactor: move MessageHistory processor to @mastra/memory`
+6. `refactor: move processor instantiation logic to Memory class`
+7. `refactor: update exports and remove memory processors from @mastra/core`
+8. `refactor: remove xxhashjs from @mastra/core dependencies`
+9. `test: verify all tests pass after processor move`
 
 ## Questions to Resolve
 
