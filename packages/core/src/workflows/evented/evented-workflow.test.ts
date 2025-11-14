@@ -8,7 +8,6 @@ import { RequestContext } from '../../di';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { InMemoryStore } from '../../storage/inmemory';
 import { createTool } from '../../tools';
 import type { StreamEvent } from '../types';
@@ -20,7 +19,8 @@ const testStorage = new InMemoryStore();
 describe('Workflow', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    const workflowsStore = await testStorage.getStore('workflows');
+    await workflowsStore?.dropData();
   });
 
   describe('Streaming Legacy', () => {
