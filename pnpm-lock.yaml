@@ -2280,7 +2280,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.8(vitest@4.0.8)
       '@wong2/mcp-cli':
-        specifier: ^1.10.0
+        specifier: ^1.13.0
         version: 1.13.0
       cross-env:
         specifier: ^10.1.0
@@ -2344,7 +2344,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.8(vitest@4.0.8)
       '@wong2/mcp-cli':
-        specifier: ^1.10.0
+        specifier: ^1.13.0
         version: 1.13.0
       cross-env:
         specifier: ^10.1.0
