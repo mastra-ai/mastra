@@ -144,12 +144,12 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       return {
+        ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         type: 'provider-defined' as const,
         id: tool.id as `${string}.${string}`,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
         parameters: processedParameters,
-        ...(processedOutputSchema ? { outputSchema: processedOutputSchema } : {}),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -157,7 +157,7 @@ export class CoreToolBuilder extends MastraBase {
               this.logType,
             )
           : undefined,
-      };
+      } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
 
     return undefined;

@@ -154,7 +154,15 @@ export type StreamEvent =
   // vnext events
   | WorkflowStreamEvent;
 
-export type WorkflowRunStatus = 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'pending' | 'canceled';
+export type WorkflowRunStatus =
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'suspended'
+  | 'waiting'
+  | 'pending'
+  | 'canceled'
+  | 'bailed';
 
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
