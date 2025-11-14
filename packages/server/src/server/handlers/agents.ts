@@ -8,10 +8,6 @@ import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
 import type { z } from 'zod';
 
-import type {
-  StreamTextOnFinishCallback,
-  StreamTextOnStepFinishCallback,
-} from '../../../../core/dist/llm/model/base.types';
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
@@ -30,22 +26,12 @@ import {
   modelManagementResponseSchema,
   modelConfigIdPathParams,
 } from '../schemas/agents';
-import { createRoute } from '../server-adapter/routes/route-builder';
 import type { ServerRoute } from '../server-adapter/routes';
+import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
-
-type GetBody<
-  T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
-> = {
-  messages: Parameters<Agent[T]>[0];
-} & Parameters<Agent[T]>[1];
-
-type GetHITLBody<
-  T extends keyof Agent & { [K in keyof Agent]: Agent[K] extends (...args: any) => any ? K : never }[keyof Agent],
-> = Parameters<Agent[T]>[0];
 
 export interface SerializedProcessor {
   id: string;

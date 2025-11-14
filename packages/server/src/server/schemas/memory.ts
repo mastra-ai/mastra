@@ -1,11 +1,5 @@
 import z from 'zod';
-import {
-  paginationInfoSchema,
-  createPagePaginationSchema,
-  createOffsetPaginationSchema,
-  coreMessageSchema,
-  successResponseSchema,
-} from './common';
+import { paginationInfoSchema, createPagePaginationSchema, coreMessageSchema, successResponseSchema } from './common';
 
 // Path parameter schemas
 export const threadIdPathParams = z.object({

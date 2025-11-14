@@ -1,10 +1,5 @@
 import type { MastraVector, QueryResult, IndexStats } from '@mastra/core/vector';
 import { HTTPException } from '../http-exception';
-import type { Context } from '../types';
-
-import { handleError } from './error';
-import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
 import {
   vectorNamePathParams,
   vectorIndexPathParams,
@@ -18,6 +13,10 @@ import {
   describeIndexResponseSchema,
   deleteIndexResponseSchema,
 } from '../schemas/vectors';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { Context } from '../types';
+
+import { handleError } from './error';
 
 interface VectorContext extends Context {
   vectorName?: string;
