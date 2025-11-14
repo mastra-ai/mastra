@@ -16,6 +16,50 @@ import {
 
 type ToAISDKFrom = 'agent' | 'network' | 'workflow';
 
+/**
+ * Converts Mastra streams (workflow, agent network, or agent) to AI SDK v5 compatible streams.
+ *
+ * This function transforms various Mastra stream types into ReadableStream objects that are compatible
+ * with the AI SDK v5, enabling seamless integration with AI SDK's streaming capabilities.
+ *
+ *
+ * @param {MastraWorkflowStream | WorkflowRunOutput | MastraAgentNetworkStream | MastraModelOutput} stream
+ *   The Mastra stream to convert. Can be one of:
+ *   - MastraWorkflowStream: A workflow execution stream
+ *   - WorkflowRunOutput: The output of a workflow run
+ *   - MastraAgentNetworkStream: An agent network execution stream
+ *   - MastraModelOutput: An agent model output stream
+ *
+ * @param {Object} options - Conversion options
+ * @param {'workflow' | 'network' | 'agent'} options.from - The type of stream being converted. Defaults to 'agent'
+ * @param {string} [options.lastMessageId] - (Agent only) The ID of the last message in the conversation
+ * @param {boolean} [options.sendStart=true] - (Agent only) Whether to send start events. Defaults to true
+ * @param {boolean} [options.sendFinish=true] - (Agent only) Whether to send finish events. Defaults to true
+ * @param {boolean} [options.sendReasoning] - (Agent only) Whether to include reasoning in the output
+ * @param {boolean} [options.sendSources] - (Agent only) Whether to include sources in the output
+ *
+ * @returns {ReadableStream<InferUIMessageChunk<UIMessage>>} A ReadableStream compatible with AI SDK v5
+ *
+ * @example
+ * // Convert a workflow stream
+ * const workflowStream = await workflowRun.stream(...);
+ * const aiSDKStream = toAISdkV5Stream(workflowStream, { from: 'workflow' });
+ *
+ * @example
+ * // Convert an agent network stream
+ * const networkStream = await agentNetwork.network(...);
+ * const aiSDKStream = toAISdkV5Stream(networkStream, { from: 'network' });
+ *
+ * @example
+ * // Convert an agent stream with custom options
+ * const agentStream = await agent.stream(...);
+ * const aiSDKStream = toAISdkV5Stream(agentStream, {
+ *   from: 'agent',
+ *   lastMessageId: 'msg-123',
+ *   sendReasoning: true,
+ *   sendSources: true
+ * });
+ */
 export function toAISdkV5Stream<
   TOutput extends ZodType<any>,
   TInput extends ZodType<any>,
