@@ -46,14 +46,13 @@ export const weatherAgent = new Agent({
 `,
   model: ({ requestContext }) => {
     const fixture = requestContext.get('fixture') as Fixtures;
+
+    console.log({ fixture });
     const fixtureData = fixtures[fixture];
 
     return new aiTest.MockLanguageModelV2({
       doStream: async () => {
         count++;
-
-        console.log(`count`, count)
-        console.log(fixtureData)
 
         const chunk = fixtureData[count - 1] as Array<any>;
 

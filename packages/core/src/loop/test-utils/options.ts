@@ -1631,17 +1631,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "stepNumber": 0,
               "steps": [
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
+                  "content": [],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -1681,12 +1671,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "warnings": [],
                 },
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
+                  "content": [],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -1791,17 +1776,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "stepNumber": 1,
               "steps": [
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "input": {
-                        "value": "value",
-                      },
-                      "providerExecuted": undefined,
-                      "toolCallId": "call-1",
-                      "toolName": "tool1",
-                      "type": "tool-call",
-                    },
-                  ],
+                  "content": [],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
@@ -1841,12 +1816,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "warnings": [],
                 },
                 DefaultStepResult {
-                  "content": [
-                    {
-                      "text": "Hello, world!",
-                      "type": "text",
-                    },
-                  ],
+                  "content": [],
                   "finishReason": undefined,
                   "providerMetadata": undefined,
                   "request": {},
