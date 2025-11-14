@@ -11,7 +11,7 @@ This documentation refers to the legacy evals API. For the latest scorer feature
 
 Running evals in your CI pipeline helps bridge this gap by providing quantifiable metrics for measuring agent quality over time.
 
-## Setting Up CI Integration
+## Setting up CI integration
 
 We support any testing framework that supports ESM modules. For example, you can use [Vitest](https://vitest.dev/), [Jest](https://jestjs.io/) or [Mocha](https://mochajs.org/) to run evals in your CI/CD pipeline.
 
@@ -33,9 +33,9 @@ describe("My Agent", () => {
 
 You will need to configure a testSetup and globalSetup script for your testing framework to capture the eval results. It allows us to show these results in your mastra dashboard.
 
-## Framework Configuration
+## Framework configuration
 
-### Vitest Setup
+### Vitest setup
 
 Add these files to your project to run evals in your CI/CD pipeline:
 
@@ -67,7 +67,7 @@ export default defineConfig({
 });
 ```
 
-## Storage Configuration
+## Storage configuration
 
 To store eval results in Mastra Storage and capture results in the Mastra dashboard:
 
