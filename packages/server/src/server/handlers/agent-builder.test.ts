@@ -434,6 +434,7 @@ describe('Agent Builder Handlers', () => {
       });
 
       expect(result).toEqual({
+        activeStepsPath: {},
         error: undefined,
         status: 'success',
         result: { result: 'success' },
@@ -447,6 +448,7 @@ describe('Agent Builder Handlers', () => {
             payload: {},
           },
         },
+        serializedStepGraph: mockWorkflow.serializedStepGraph,
       });
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
         {

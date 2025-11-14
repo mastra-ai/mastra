@@ -135,6 +135,7 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}
+          suspendOutput={step?.suspendOutput}
           error={step?.error}
           mapConfig={mapConfig}
           onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}

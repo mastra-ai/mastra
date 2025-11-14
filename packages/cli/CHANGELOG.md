@@ -1,5 +1,17 @@
 # mastra
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Make MainSidebar toggle button sticky to bottom, always visible ([#9682](https://github.com/mastra-ai/mastra/pull/9682))
+
+- Fixes an error during `mastra create` with bun/yarn due to usage of `--save-dev`. Replaced with `-D` during installation. ([#9879](https://github.com/mastra-ai/mastra/pull/9879))
+
+- Updated dependencies [[`ac32ca9`](https://github.com/mastra-ai/mastra/commit/ac32ca968fb906f6c61fd7b4a194323bcb2f3daa), [`910db9e`](https://github.com/mastra-ai/mastra/commit/910db9e0312888495eb5617b567f247d03303814), [`e7266a2`](https://github.com/mastra-ai/mastra/commit/e7266a278db02035c97a5e9cd9d1669a6b7a535d)]:
+  - @mastra/deployer@1.0.0-beta.1
+  - @mastra/core@1.0.0-beta.1
+
 ## 1.0.0-beta.0
 
 ### Major Changes

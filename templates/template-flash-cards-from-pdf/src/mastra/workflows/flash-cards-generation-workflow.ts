@@ -69,15 +69,21 @@ const extractPdfContentStep = createStep({
 
     console.log('📄 Extracting content from PDF...');
 
-    const result = await pdfContentExtractorTool.execute({
-      mastra,
-      context: {
+    const result = await pdfContentExtractorTool.execute(
+      {
         pdfUrl,
         pdfData,
         filename,
       },
-      requestContext: requestContext || new RequestContext(),
-    });
+      {
+        mastra,
+        requestContext: requestContext || new RequestContext(),
+      },
+    );
+
+    if ('error' in result) {
+      throw new Error('Failed to extract PDF content: ' + result.error);
+    }
 
     return {
       educationalSummary: result.educationalSummary,
@@ -129,17 +135,23 @@ const generateFlashCardsStep = createStep({
 
     console.log(`🃏 Generating ${numberOfCards} flash cards...`);
 
-    const result = await flashCardGeneratorTool.execute({
-      mastra,
-      context: {
+    const result = await flashCardGeneratorTool.execute(
+      {
         concepts,
         definitions,
         facts,
         numberOfCards,
         subjectArea,
       },
-      requestContext: requestContext || new RequestContext(),
-    });
+      {
+        mastra,
+        requestContext: requestContext || new RequestContext(),
+      },
+    );
+
+    if ('error' in result) {
+      throw new Error('Failed to generate flash cards: ' + result.error);
+    }
 
     return result;
   },
@@ -191,9 +203,8 @@ const generateImagesStep = createStep({
       // Generate image for the first 3 cards only
       if (i < 3 && generateImages) {
         try {
-          const imageResult = await educationalImageTool.execute({
-            mastra,
-            context: {
+          const imageResult = await educationalImageTool.execute(
+            {
               concept: `${card.question} - ${card.answer}`,
               subjectArea,
               style: 'educational',
@@ -201,9 +212,17 @@ const generateImagesStep = createStep({
                 card.difficulty === 'easy' ? 'beginner' : card.difficulty === 'medium' ? 'intermediate' : 'advanced',
               size: '1024x1024',
             },
-            requestContext: requestContext || new RequestContext(),
-          });
-          imageUrl = imageResult.imageUrl;
+            {
+              mastra,
+              requestContext: requestContext || new RequestContext(),
+            },
+          );
+
+          if ('error' in imageResult) {
+            imageUrl = undefined;
+          } else {
+            imageUrl = imageResult.imageUrl;
+          }
           console.log(`✅ Generated image for card ${i + 1}`);
         } catch (error) {
           console.warn(`⚠️ Failed to generate image: ${error}`);

@@ -135,14 +135,23 @@ const extractContentStep = createStep({
 
       try {
         // Use the PDF content extractor tool
-        const extractionResult = await pdfContentExtractorTool.execute({
-          mastra,
-          context: {
+        const extractionResult = await pdfContentExtractorTool.execute(
+          {
             pdfUrl: contentInput,
             focusAreas: ['benefits', 'features', 'value-proposition'],
           },
-          requestContext: requestContext || new RequestContext(),
-        });
+          {
+            mastra,
+            requestContext: requestContext || new RequestContext(),
+          },
+        );
+
+        if ('error' in extractionResult) {
+          return {
+            processedContent: contentInput,
+            extractedData: undefined,
+          };
+        }
 
         return {
           processedContent: extractionResult.marketingSummary,
@@ -210,9 +219,8 @@ const generateAdCopyStep = createStep({
     const finalTargetAudience = targetAudience || extractedData?.targetAudience || 'General audience';
 
     try {
-      const adCopyResults = await adCopyGeneratorTool.execute({
-        mastra,
-        context: {
+      const adCopyResults = await adCopyGeneratorTool.execute(
+        {
           content: processedContent,
           platform: platform as 'facebook' | 'google' | 'instagram' | 'linkedin' | 'twitter' | 'tiktok' | 'generic',
           campaignType: campaignType as 'awareness' | 'consideration' | 'conversion' | 'retention',
@@ -221,15 +229,30 @@ const generateAdCopyStep = createStep({
           productType,
           keyBenefits,
         },
-        requestContext: requestContext || new RequestContext(),
-      });
+        {
+          mastra,
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
+
+      if ('error' in adCopyResults) {
+        return {
+          headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
+          body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
+          cta: 'Get Started Now',
+        };
+      }
 
       // Return just the first ad set for simplicity
-      const firstAdSet = adCopyResults.adSets[0] || {
-        headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
-        body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
-        cta: 'Get Started Now',
-      };
+      const firstAdSet = adCopyResults.adSets[0];
+
+      if (!firstAdSet) {
+        return {
+          headline: `Amazing ${productType || 'Product'} for ${finalTargetAudience}`,
+          body: `Discover how ${processedContent.substring(0, 50)}... can change everything.`,
+          cta: 'Get Started Now',
+        };
+      }
 
       return {
         headline: firstAdSet.headline,
@@ -275,9 +298,8 @@ const generateImageStep = createStep({
     try {
       const imagePrompt = `Professional promotional image for advertisement: ${headline}. ${body.substring(0, 100)}...`;
 
-      const imageResult = await imageGeneratorTool.execute({
-        mastra,
-        context: {
+      const imageResult = await imageGeneratorTool.execute(
+        {
           prompt: imagePrompt,
           style: imageStyle as 'photographic' | 'digital_art' | 'illustration' | 'minimalist' | 'vintage' | 'modern',
           platform:
@@ -286,8 +308,15 @@ const generateImageStep = createStep({
               : (platform as 'facebook' | 'instagram' | 'linkedin' | 'twitter' | 'generic') || 'generic',
           size: platform === 'instagram' ? '1024x1024' : '1792x1024',
         },
-        requestContext: requestContext || new RequestContext(),
-      });
+        {
+          mastra,
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
+
+      if ('error' in imageResult) {
+        return { imageUrl: undefined };
+      }
 
       console.log('✅ Generated promotional image');
       return { imageUrl: imageResult.imageUrl };

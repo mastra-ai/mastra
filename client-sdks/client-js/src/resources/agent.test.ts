@@ -1,4 +1,3 @@
-import type { WritableStream } from 'stream/web';
 import type { ToolsInput } from '@mastra/core/agent';
 import { RequestContext as RequestContextClass } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
@@ -17,15 +16,13 @@ class TestAgent extends Agent {
 
   public async processStreamResponse(
     params: StreamParams<any>,
-    writable: WritableStream<Uint8Array>,
+    controller: ReadableStreamDefaultController<Uint8Array>,
   ): Promise<Response> {
     this.lastProcessedParams = params;
-    const writer = writable.getWriter();
     const encoder = new TextEncoder();
-    // Write SSE-formatted data with valid JSON so that processMastraStream can parse it and invoke onChunk
-    void writer.write(encoder.encode('data: "test"\n\n')).then(() => {
-      return writer.close();
-    });
+    // Enqueue SSE-formatted data with valid JSON so that processMastraStream can parse it and invoke onChunk
+    controller.enqueue(encoder.encode('data: "test"\n\n'));
+    controller.close();
     return new Response(null, {
       status: 200,
       headers: { 'content-type': 'text/event-stream' },
@@ -460,9 +457,11 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       finishReason: 'tool-calls',
       toolCalls: [
         {
-          toolName: 'clientTool',
-          args: { test: 'args' },
-          toolCallId: 'tool-1',
+          payload: {
+            toolName: 'clientTool',
+            args: { test: 'args' },
+            toolCallId: 'tool-1',
+          },
         },
       ],
       response: {
@@ -539,9 +538,11 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
         finishReason: 'tool-calls',
         toolCalls: [
           {
-            toolName: 'clientTool',
-            args: { iteration: i + 1 },
-            toolCallId: `tool-${i + 1}`,
+            payload: {
+              toolName: 'clientTool',
+              args: { iteration: i + 1 },
+              toolCallId: `tool-${i + 1}`,
+            },
           },
         ],
         response: {

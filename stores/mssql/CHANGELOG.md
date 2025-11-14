@@ -1,5 +1,20 @@
 # @mastra/mssql
 
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Fixes MSSQL store test configuration and pagination issues: ([#9905](https://github.com/mastra-ai/mastra/pull/9905))
+
+  Adds missing id parameter to test configuration and updates documentation
+  Implements page validation to handle negative page numbers
+  Fixes sorting and pagination bugs in message listing (improves ORDER BY with seq_id secondary sort and corrects hasMore calculation)
+
+- Prevents double stringification for MSSQL jsonb columns by reusing incoming strings that already contain valid JSON while still stringifying other inputs as needed. ([#9901](https://github.com/mastra-ai/mastra/pull/9901))
+
+- Updated dependencies [[`465ac05`](https://github.com/mastra-ai/mastra/commit/465ac0526a91d175542091c675181f1a96c98c46)]:
+  - @mastra/core@1.0.0-beta.2
+
 ## 1.0.0-beta.0
 
 ### Major Changes

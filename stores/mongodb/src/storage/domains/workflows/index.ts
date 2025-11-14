@@ -130,6 +130,9 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       if (options.workflowName) {
         query['workflow_name'] = options.workflowName;
       }
+      if (options.status) {
+        query['snapshot.status'] = options.status;
+      }
       if (options.fromDate) {
         query['createdAt'] = { $gte: options.fromDate };
       }

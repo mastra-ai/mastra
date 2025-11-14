@@ -206,6 +206,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     perPage,
     page,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -215,6 +216,12 @@ export class WorkflowsPG extends WorkflowsStorage {
       if (workflowName) {
         conditions.push(`workflow_name = $${paramIndex}`);
         values.push(workflowName);
+        paramIndex++;
+      }
+
+      if (status) {
+        conditions.push(`snapshot::jsonb ->> 'status' = $${paramIndex}`);
+        values.push(status);
         paramIndex++;
       }
 
