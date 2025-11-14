@@ -16,7 +16,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CloudflareWorkersConfig } from './types';
 import { CloudflareStore } from './index';
 
-dotenv.config();
 
 describe('Logger Verification - No PII Leakage', () => {
   let mf: Miniflare;
