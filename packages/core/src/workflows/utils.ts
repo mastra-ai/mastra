@@ -1,6 +1,6 @@
 import { isEmpty } from 'radash';
 import type z from 'zod';
-import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import type { Step } from './step';
 
