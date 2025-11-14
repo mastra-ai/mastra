@@ -26,13 +26,7 @@ export interface WorkingMemoryConfig {
   logger?: IMastraLogger;
 }
 
-/**
- * Interface for getting working memory template dynamically.
- * This allows the processor to fetch schema-aware templates at runtime.
- */
-export interface WorkingMemoryTemplateProvider {
-  getWorkingMemoryTemplate(args: { threadId?: string; resourceId?: string }): Promise<WorkingMemoryTemplate | null>;
-}
+
 
 /**
  * WorkingMemory processor injects working memory data as a system message.
@@ -70,7 +64,9 @@ export class WorkingMemory implements InputProcessor {
       template?: WorkingMemoryTemplate;
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
-      templateProvider?: WorkingMemoryTemplateProvider;
+      templateProvider?: {
+        getWorkingMemoryTemplate(args: { threadId?: string; resourceId?: string }): Promise<WorkingMemoryTemplate | null>;
+      };
       logger?: IMastraLogger;
     },
   ) {

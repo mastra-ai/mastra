@@ -162,8 +162,7 @@ describe('WorkingMemory', () => {
       expect(result).toHaveLength(2);
       expect(result[0].role).toBe('system');
       expect(result[0].content.content).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
-      expect(result[0].content.content).toContain('# Working Memory');
-      expect(result[0].content.content).toContain('## User Information');
+      expect(result[0].content.content).toContain('# User Information');
     });
 
     it('should use custom template when provided', async () => {

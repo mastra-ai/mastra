@@ -7,7 +7,6 @@ import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
 import type { InputProcessor, OutputProcessor } from '../processors';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '../processors/processors';
-import type { WorkingMemoryTemplateProvider } from '../processors/processors/working-memory';
 import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
@@ -80,7 +79,7 @@ export const memoryDefaultOptions = {
  * - Working memory templates for structured conversation state
  * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
-export abstract class MastraMemory extends MastraBase implements WorkingMemoryTemplateProvider {
+export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
   protected _storage?: MastraStorage;
