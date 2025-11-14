@@ -866,6 +866,99 @@ Available examples:
 
 
 ---
+title: "Human in the Loop with Tools | Agents"
+description: Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
+---
+
+# Human in the Loop with Tools
+[EN] Source: https://mastra.ai/en/docs/agents/human-in-the-loop-with-tools
+
+Sometimes agents need human oversight before they can run potentially sensitive tools or long-running workflows. Mastra lets you pause tool execution to wait for approval, decline a tool call entirely, or suspend a tool mid-flight until the required data is available.
+
+## Tool approvals
+
+### Enforcing approval on every tool
+
+Pass `requireToolApproval: true` when calling `stream` (or `generate`) to automatically pause execution whenever the agent tries to invoke a tool. The stream closes until you explicitly approve or decline the tool call using the original run’s `runId`.
+
+```typescript {2,6} title="Require approval before executing any tool" showLineNumbers copy
+const stream = await myAgent.stream("Find the user with name - John Smith", {
+  requireToolApproval: true,
+});
+
+const approvedToolCallStream = await myAgent.approveToolCall({ runId: stream.runId });
+const declinedToolCallStream = await myAgent.declineToolCall({ runId: stream.runId });
+```
+
+### Requiring approval per tool
+
+You can also enforce approval on specific tools. Set `requireApproval: true` when creating a tool so the agent pauses only when it tries to invoke that tool.
+
+```typescript {8} title="Mark a tool as approval-only" showLineNumbers copy
+const findUserTool = createTool({
+  id: "Find user tool",
+  description: "Returns the name and email for a matching user",
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  execute: async (inputData) => {
+    return mockFindUser(inputData);
+  },
+  requireApproval: true,
+});
+```
+
+When the agent reaches this tool, it emits a tool-call event you can approve or decline with the same `approveToolCall` or `declineToolCall` helpers.
+
+## Tool suspension
+
+Sometimes a tool can’t finish immediately—maybe it’s waiting for external confirmation or extra input. You can suspend and later resume execution using `workflow.suspend`, `resumeStream`, and optional schemas that define what data is required at each step.
+
+```typescript {10,14} title="Suspend and resume a tool" showLineNumbers copy
+const findUserTool = createTool({
+  id: "Find user tool",
+  description: "Returns the name and email for a matching user",
+  inputSchema: z.object({
+    name: z.string(),
+  }),
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
+    name: z.string(),
+  }),
+  execute: async (inputData, { workflow }) => {
+    if (!workflow.resumeData) {
+      return workflow.suspend({ message: "Please provide the name of the user" });
+    }
+
+    return {
+      name: workflow?.resumeData?.name,
+      email: "test@test.com",
+    };
+  },
+});
+```
+
+To continue execution, call `resumeStream` with the run’s `runId` and the `resumeData` that satisfies the `resumeSchema`. The workflow resumes from the suspension point and the tool completes with the new data.
+
+```typescript {1} title="Resume a suspended tool call" showLineNumbers copy
+const resumedStream = await myAgent.resumeStream(
+  { name: "John Smith" },
+  { runId: stream.runId },
+);
+```
+
+## Related
+
+- [Using Tools](./using-tools)
+- [Agent Overview](./overview)
+- [Tools Overview](../tools-mcp/overview)
+- [Agent Memory](./agent-memory)
+- [Request Context](/docs/v1/server-db/request-context)
+- [Calling Agents](/examples/v1/agents/calling-agents)
+
+---
 title: "Agent Networks | Agents"
 description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 ---
@@ -33573,7 +33666,7 @@ Need help with the migration? Join our [Discord community](https://discord.gg/BT
 
 ## Migration Strategy
 
-### Update all Mastra packages
+### Update all Mastra packages to `beta` tag
 
 Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility.
 
@@ -34191,6 +34284,27 @@ npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::
+
+### `tool.execute` return type includes `ValidationError`
+
+The return type of `tool.execute` now includes `ValidationError` to handle validation failures. You must narrow the result type before accessing output schema properties to satisfy TypeScript's type checking.
+
+When calling `tool.execute`, check if the result contains an error before accessing output properties:
+
+```typescript
+const result = await tool.execute(inputData, context);
+
+if ('error' in result) {
+  // Handle validation error
+  console.error('Tool execution failed:', result.error);
+  return;
+}
+
+// Now TypeScript knows result is the success type
+console.log(result.yourOutputSchemaProperty);
+```
+
+This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.
 
 
 ---
@@ -35624,7 +35738,7 @@ Gateway providers aggregate multiple model providers and add features like cachi
 <CardGrid>
     <CardGridItem
       title="Netlify"
-      description="34 models"
+      description="40 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
@@ -35655,7 +35769,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 34 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 40 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -35707,6 +35821,7 @@ ANTHROPIC_API_KEY=ant-...
 | `gemini/gemini-2.0-flash` |
 | `gemini/gemini-2.0-flash-lite` |
 | `gemini/gemini-2.5-flash` |
+| `gemini/gemini-2.5-flash-image` |
 | `gemini/gemini-2.5-flash-image-preview` |
 | `gemini/gemini-2.5-flash-lite` |
 | `gemini/gemini-2.5-flash-lite-preview-09-2025` |
@@ -35721,10 +35836,15 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-4o` |
 | `openai/gpt-4o-mini` |
 | `openai/gpt-5` |
+| `openai/gpt-5-2025-08-07` |
 | `openai/gpt-5-codex` |
 | `openai/gpt-5-mini` |
+| `openai/gpt-5-mini-2025-08-07` |
 | `openai/gpt-5-nano` |
 | `openai/gpt-5-pro` |
+| `openai/gpt-5.1` |
+| `openai/gpt-5.1-2025-11-13` |
+| `openai/gpt-image-1` |
 | `openai/o3` |
 | `openai/o3-mini` |
 | `openai/o4-mini` |
@@ -36048,7 +36168,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 50+ AI providers and 912+ models through Mastra's model router."
+description: "Access 50+ AI providers and 922+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -36061,7 +36181,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 912 models from 50 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 922 models from 50 providers through a single API.
 
 ## Features
 
@@ -38730,8 +38850,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 16384,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": 0.55,
+    "outputCost": 2.25
   },
   {
     "model": "chutes/NousResearch/DeepHermes-3-Mistral-24B-Preview",
@@ -42429,7 +42549,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
 <CardGrid>
     <CardGridItem
       title="OpenAI"
-      description="31 models"
+      description="32 models"
       href="/models/v1/providers/openai"
       logo="https://models.dev/logos/openai.svg"
     />    <CardGridItem
@@ -42579,7 +42699,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="16 models"
+      description="19 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -44825,7 +44945,7 @@ npm install ollama-ai-provider-v2
 
 ---
 title: "OpenAI | Models | Mastra"
-description: "Use OpenAI models with Mastra. 31 models available."
+description: "Use OpenAI models with Mastra. 32 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -44836,7 +44956,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 [EN] Source: https://mastra.ai/en/models/providers/openai
 
-Access 31 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 32 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -45083,6 +45203,18 @@ for await (const chunk of stream) {
     "maxOutput": 272000,
     "inputCost": 15,
     "outputCost": 120
+  },
+  {
+    "model": "openai/gpt-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
   },
   {
     "model": "openai/o1",
@@ -45414,7 +45546,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 16 models available."
+description: "Use OpenCode Zen models with Mastra. 19 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -45424,7 +45556,7 @@ description: "Use OpenCode Zen models with Mastra. 16 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 16 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 19 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -45439,7 +45571,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode/an-gd4"
+  model: "opencode/alpha-doubao-seed-code"
 });
 
 // Generate a response
@@ -45463,7 +45595,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "opencode/an-gd4",
+    "model": "opencode/alpha-doubao-seed-code",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "opencode/alpha-gd4",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -45473,6 +45617,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.5,
     "outputCost": 2
+  },
+  {
+    "model": "opencode/alpha-kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 2.5
+  },
+  {
+    "model": "opencode/alpha-minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "opencode/big-pickle",
@@ -45591,8 +45759,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 400000,
     "maxOutput": 128000,
-    "inputCost": 0.05,
-    "outputCost": 0.4
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "opencode/gpt-5.1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
+  },
+  {
+    "model": "opencode/gpt-5.1-codex",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.25,
+    "outputCost": 10
   },
   {
     "model": "opencode/grok-code",
@@ -45619,30 +45811,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
-    "model": "opencode/kimi-k2-thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.6,
-    "outputCost": 2.5
-  },
-  {
-    "model": "opencode/minimax-m2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
     "model": "opencode/qwen3-coder",
     "imageInput": false,
     "audioInput": false,
@@ -45667,7 +45835,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/v1",
-    id: "opencode/an-gd4",
+    id: "opencode/alpha-doubao-seed-code",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -45686,7 +45854,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode/qwen3-coder"
-      : "opencode/an-gd4";
+      : "opencode/alpha-doubao-seed-code";
   }
 });
 ```
@@ -53028,11 +53196,11 @@ Enable local HTTPS support. [Learn more](/docs/v1/getting-started/studio#local-h
 
 #### `--inspect`
 
-Start the development server in inspect mode, helpful for debugging. This can't be used together with `--inspect-brk`.
+Start the development server in inspect mode, helpful for debugging. Optionally specify a custom host and port (e.g., `--inspect=0.0.0.0:9229` for Docker). This can't be used together with `--inspect-brk`.
 
 #### `--inspect-brk`
 
-Start the development server in inspect mode and break at the beginning of the script. This can't be used together with `--inspect`.
+Start the development server in inspect mode and break at the beginning of the script. Optionally specify a custom host and port (e.g., `--inspect-brk=0.0.0.0:9229`). This can't be used together with `--inspect`.
 
 #### `--custom-args`
 
