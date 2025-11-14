@@ -10,6 +10,8 @@ import type { ConditionFunction, ExecuteFunction, LoopConditionFunction, Step } 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
+export type WorkflowEngineType = string;
+
 export type Emitter = {
   emit: (event: string, data: any) => Promise<void>;
   on: (event: string, callback: (data: any) => void) => void;
@@ -25,6 +27,7 @@ export type StepSuccess<P, R, S, T> = {
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -32,12 +35,13 @@ export type StepSuccess<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
-export type StepFailure<P, R, S> = {
+export type StepFailure<P, R, S, T> = {
   status: 'failed';
   error: Error;
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -45,41 +49,44 @@ export type StepFailure<P, R, S> = {
   metadata?: StepMetadata;
 };
 
-export type StepSuspended<P, S> = {
+export type StepSuspended<P, S, T> = {
   status: 'suspended';
   payload: P;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   suspendedAt: number;
   metadata?: StepMetadata;
 };
 
-export type StepRunning<P, R, S> = {
+export type StepRunning<P, R, S, T> = {
   status: 'running';
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
+  suspendOutput?: T;
   startedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
   metadata?: StepMetadata;
 };
 
-export type StepWaiting<P, R, S> = {
+export type StepWaiting<P, R, S, T> = {
   status: 'waiting';
   payload: P;
   suspendPayload?: S;
   resumePayload?: R;
+  suspendOutput?: T;
   startedAt: number;
   metadata?: StepMetadata;
 };
 
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
-  | StepFailure<P, R, S>
-  | StepSuspended<P, S>
-  | StepRunning<P, R, S>
-  | StepWaiting<P, R, S>;
+  | StepFailure<P, R, S, T>
+  | StepSuspended<P, S, T>
+  | StepRunning<P, R, S, T>
+  | StepWaiting<P, R, S, T>;
 
 type SerializedStepFailure<P, R, S> = Omit<StepFailure<P, R, S>, 'error'> & {
   error: SerializedError;
@@ -177,6 +184,8 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 
 export interface WorkflowState {
   status: WorkflowRunStatus;
+  activeStepsPath: Record<string, number[]>;
+  serializedStepGraph: SerializedStepFlowEntry[];
   steps: Record<
     string,
     {
@@ -206,7 +215,8 @@ export interface WorkflowRunState {
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, SerializedStepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
-  activePaths: Array<unknown>;
+  activePaths: Array<number>;
+  activeStepsPath: Record<string, number[]>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

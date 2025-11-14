@@ -17,7 +17,7 @@ import type { ObservabilityEntrypoint } from '../observability';
 import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { Middleware, ServerConfig } from '../server/types';
-import type { MastraStorage } from '../storage';
+import type { MastraStorage, WorkflowRuns } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
@@ -1013,6 +1013,53 @@ export class Mastra<
     return workflow;
   }
 
+  public async listActiveWorkflowRuns(): Promise<WorkflowRuns> {
+    const storage = this.#storage;
+    if (!storage) {
+      this.#logger.debug('Cannot get active workflow runs. Mastra storage is not initialized');
+      return { runs: [], total: 0 };
+    }
+
+    // Get all workflows with default engine type
+    const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
+
+    // Collect all active runs for workflows with default engine type
+    const allRuns: WorkflowRuns['runs'] = [];
+    let allTotal = 0;
+
+    for (const workflow of defaultEngineWorkflows) {
+      const runningRuns = await workflow.listWorkflowRuns({ status: 'running' });
+      const waitingRuns = await workflow.listWorkflowRuns({ status: 'waiting' });
+
+      allRuns.push(...runningRuns.runs, ...waitingRuns.runs);
+      allTotal += runningRuns.total + waitingRuns.total;
+    }
+
+    return {
+      runs: allRuns,
+      total: allTotal,
+    };
+  }
+
+  public async restartAllActiveWorkflowRuns(): Promise<void> {
+    const activeRuns = await this.listActiveWorkflowRuns();
+    if (activeRuns.runs.length > 0) {
+      this.#logger.debug(
+        `Restarting ${activeRuns.runs.length} active workflow run${activeRuns.runs.length > 1 ? 's' : ''}`,
+      );
+    }
+    for (const runSnapshot of activeRuns.runs) {
+      const workflow = this.getWorkflowById(runSnapshot.workflowName);
+      try {
+        const run = await workflow.createRun({ runId: runSnapshot.runId });
+        await run.restart();
+        this.#logger.debug(`Restarted ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}`);
+      } catch (error) {
+        this.#logger.error(`Failed to restart ${runSnapshot.workflowName} workflow run ${runSnapshot.runId}: ${error}`);
+      }
+    }
+  }
+
   /**
    * Returns all registered scorers as a record keyed by their IDs.
    *
@@ -1529,6 +1576,9 @@ export class Mastra<
       logger: this.getLogger(),
       storage: this.getStorage(),
     });
+    if (!workflow.committed) {
+      workflow.commit();
+    }
     workflows[workflowKey] = workflow;
   }
 

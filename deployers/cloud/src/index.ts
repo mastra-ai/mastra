@@ -107,10 +107,6 @@ const combinedLogger = existingLogger ? new MultiLogger([logger, existingLogger]
 
 mastra.setLogger({ logger: combinedLogger });
 
-if (mastra?.storage) {
-  mastra.storage.init()
-}
-
 if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
   const { MastraStorage } = await import('@mastra/core/storage');
   logger.info('Using Mastra Cloud Storage: ' + process.env.MASTRA_STORAGE_URL)
@@ -127,6 +123,8 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
 
   await storage.init()
   mastra?.setStorage(storage)
+} else if (mastra?.storage) {
+  mastra.storage.init()
 }
 
 if (mastra?.getStorage()) {

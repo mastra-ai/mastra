@@ -123,6 +123,7 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
+          ...(stepResult ? { suspendOutput: stepResult } : {}),
         };
 
         if (suspended.payload) {

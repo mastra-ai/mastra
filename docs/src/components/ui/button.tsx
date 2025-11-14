@@ -31,8 +31,7 @@ const buttonVariants = cva(
         default: "font-normal",
         medium: "font-medium",
         "semi-bold": "font-semibold",
-        bold: "font-bold",
-        bolder: "font-extrabold",
+        bold: "font-semibold",
       },
     },
     defaultVariants: {

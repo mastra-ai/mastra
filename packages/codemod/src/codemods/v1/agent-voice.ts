@@ -1,4 +1,5 @@
 import { createTransformer } from '../lib/create-transformer';
+import { trackClassInstances } from '../lib/utils';
 
 /**
  * Transforms Agent voice method calls to use agent.voice namespace.
@@ -14,24 +15,8 @@ export default createTransformer((fileInfo, api, options, context) => {
   // Voice methods that should be moved to agent.voice
   const voiceMethods = new Set(['speak', 'listen', 'getSpeakers']);
 
-  // Track variable names that are Agent instances
-  const agentVariables = new Set<string>();
-
-  // Find all variable declarations with new Agent() assignments
-  root.find(j.VariableDeclarator).forEach(path => {
-    const node = path.node;
-
-    // Check if the init is a new Agent() expression
-    if (
-      node.init &&
-      node.init.type === 'NewExpression' &&
-      node.init.callee.type === 'Identifier' &&
-      node.init.callee.name === 'Agent' &&
-      node.id.type === 'Identifier'
-    ) {
-      agentVariables.add(node.id.name);
-    }
-  });
+  // Track Agent instances using shared utility
+  const agentVariables = trackClassInstances(j, root, 'Agent');
 
   // Early return if no Agent instances found
   if (agentVariables.size === 0) return;

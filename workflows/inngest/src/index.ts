@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { ReadableStream } from 'node:stream/web';
+import { ReadableStream, WritableStream } from 'node:stream/web';
 import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
@@ -40,6 +40,7 @@ import type {
   SuspendOptions,
   WorkflowStreamEvent,
   AgentStepOptions,
+  WorkflowEngineType,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import { NonRetriableError, RetryAfterError } from 'inngest';
@@ -136,6 +137,7 @@ export class InngestRun<
       };
       cleanup?: () => void;
       workflowSteps: Record<string, StepWithComponent>;
+      workflowEngineType: WorkflowEngineType;
     },
     inngest: Inngest,
   ) {
@@ -206,6 +208,7 @@ export class InngestRun<
         snapshot: {
           ...snapshot,
           status: 'canceled' as any,
+          value: snapshot.value,
         },
       });
     }
@@ -248,14 +251,15 @@ export class InngestRun<
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
         value: {},
         context: {} as any,
         activePaths: [],
         suspendedPaths: {},
+        activeStepsPath: {},
         resumeLabels: {},
         waitingPaths: {},
         timestamp: Date.now(),
-        status: 'running',
       },
     });
 
@@ -584,6 +588,8 @@ export class InngestWorkflow<
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
 
+    this.engineType = 'inngest';
+
     const flowControlEntries = Object.entries({ concurrency, rateLimit, throttle, debounce, priority }).filter(
       ([_, value]) => value !== undefined,
     );
@@ -671,6 +677,7 @@ export class InngestWorkflow<
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
           workflowSteps: this.steps,
+          workflowEngineType: this.engineType,
         },
         this.inngest,
       );
@@ -695,6 +702,7 @@ export class InngestWorkflow<
           value: {},
           context: {},
           activePaths: [],
+          activeStepsPath: {},
           waitingPaths: {},
           serializedStepGraph: this.serializedStepGraph,
           suspendedPaths: {},
@@ -1664,10 +1672,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         suspendPayload?: any;
         suspendedAt?: number;
       };
-      stepResults: Record<
-        string,
-        StepResult<any, any, any, any> | (Omit<StepFailure<any, any, any>, 'error'> & { error?: Error })
-      >;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       executionContext: ExecutionContext;
     };
 
@@ -1763,7 +1768,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           const fallbackErrorMessage = `Step ${step.id} failed`;
           const error = getErrorFromUnknown(e, { serializeStack: false, fallbackMessage: fallbackErrorMessage });
 
-          const stepFailure: Omit<StepFailure<any, any, any>, 'error'> & { error?: Error } = {
+          const stepFailure: StepFailure<any, any, any, any> = {
             status: 'failed',
             payload: inputData,
             error,
@@ -1785,6 +1790,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           execResults = {
             status: 'suspended',
             suspendPayload: suspended.payload,
+            ...(execResults.output ? { suspendOutput: execResults.output } : {}),
             payload: inputData,
             suspendedAt: Date.now(),
             startedAt,
@@ -1844,6 +1850,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         startedAt,
         endedAt: Date.now(),
       };
+
+      // const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
+      //   e instanceof Error
+      //     ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
+      //     : {
+      //         status: 'failed' as const,
+      //         error: e instanceof Error ? e.message : String(e),
+      //         payload: inputData,
+      //         startedAt,
+      //         endedAt: Date.now(),
+      //       };
 
       stepRes = {
         result: stepFailure,
@@ -1920,14 +1937,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           resourceId,
           snapshot: {
             runId,
+            status: workflowStatus,
             value: executionContext.state,
             context: stepResults as any,
-            activePaths: [],
+            activePaths: executionContext.executionPath,
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             waitingPaths: {},
             serializedStepGraph,
-            status: workflowStatus,
             result,
             error,
             // @ts-ignore
@@ -2099,6 +2117,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             workflowId,
             runId,
             executionPath: [...executionContext.executionPath, index],
+            activeStepsPath: executionContext.activeStepsPath,
             suspendedPaths: executionContext.suspendedPaths,
             resumeLabels: executionContext.resumeLabels,
             retryConfig: executionContext.retryConfig,
@@ -2118,12 +2137,16 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return result;
       }),
     );
-    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any>;
+    const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
     const hasSuspended = results.find(result => result.status === 'suspended');
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', suspendPayload: hasSuspended.suspendPayload };
+      execResults = {
+        status: 'suspended',
+        suspendPayload: hasSuspended.suspendPayload,
+        ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      };
     } else {
       execResults = {
         status: 'success',

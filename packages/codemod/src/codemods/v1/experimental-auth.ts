@@ -16,9 +16,10 @@ export default createTransformer((fileInfo, api, options, context) => {
       if (!configArg || configArg.type !== 'ObjectExpression') return;
 
       // Find experimental_auth property in the Mastra config object
-      configArg.properties?.forEach((prop: any) => {
+      configArg.properties?.forEach(prop => {
         if (
           (prop.type === 'Property' || prop.type === 'ObjectProperty') &&
+          prop.key &&
           prop.key.type === 'Identifier' &&
           prop.key.name === 'experimental_auth'
         ) {

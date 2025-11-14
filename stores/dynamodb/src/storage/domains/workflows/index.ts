@@ -92,7 +92,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         entity: 'workflow_snapshot', // Add entity type
         workflow_name: workflowName,
         run_id: runId,
-        snapshot: JSON.stringify(snapshot), // Stringify the snapshot object
+        snapshot: JSON.stringify(snapshot),
         createdAt: now,
         updatedAt: now,
         resourceId,
@@ -202,6 +202,12 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
         if (pageResults.data && pageResults.data.length > 0) {
           let pageFilteredData: WorkflowSnapshotDBItem[] = pageResults.data;
+
+          if (args?.status) {
+            pageFilteredData = pageFilteredData.filter((snapshot: WorkflowSnapshotDBItem) => {
+              return snapshot.snapshot.status === args.status;
+            });
+          }
 
           // Apply date filters if specified
           if (args?.fromDate || args?.toDate) {

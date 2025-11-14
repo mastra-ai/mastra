@@ -42,6 +42,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       snapshot = {
         context: {},
         activePaths: [],
+        activeStepsPath: {},
         timestamp: Date.now(),
         suspendedPaths: {},
         resumeLabels: {},
@@ -101,6 +102,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       snapshot = {
         context: {},
         activePaths: [],
+        activeStepsPath: {},
         timestamp: Date.now(),
         suspendedPaths: {},
         resumeLabels: {},
@@ -182,6 +184,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     perPage,
     page,
     resourceId,
+    status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     if (page !== undefined && page < 0) {
       throw new Error('page must be >= 0');
@@ -190,6 +193,29 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     let runs = Array.from(this.collection.values());
 
     if (workflowName) runs = runs.filter((run: any) => run.workflow_name === workflowName);
+    if (status) {
+      runs = runs.filter((run: any) => {
+        let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+        if (!snapshot) {
+          return false;
+        }
+
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          } catch (error) {
+            return false;
+          }
+        } else {
+          snapshot = JSON.parse(JSON.stringify(snapshot)) as WorkflowRunState;
+        }
+
+        return snapshot.status === status;
+      });
+    }
+
     if (fromDate && toDate) {
       runs = runs.filter(
         (run: any) =>

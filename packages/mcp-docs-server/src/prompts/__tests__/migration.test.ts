@@ -1,3 +1,4 @@
+import type { MCPRequestHandlerExtra } from '@mastra/mcp';
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { prepare } from '../../prepare-docs/prepare';
@@ -11,14 +12,14 @@ beforeAll(async () => {
 describe('migrationPromptMessages', () => {
   describe('listPrompts', () => {
     it('should return an array of migration prompts', async () => {
-      const prompts = await migrationPromptMessages.listPrompts({ extra: {} });
+      const prompts = await migrationPromptMessages.listPrompts({ extra: {} as MCPRequestHandlerExtra });
 
       expect(prompts).toBeInstanceOf(Array);
       expect(prompts.length).toBeGreaterThan(0);
     });
 
     it('should include upgrade-to-v1 prompt', async () => {
-      const prompts = await migrationPromptMessages.listPrompts({ extra: {} });
+      const prompts = await migrationPromptMessages.listPrompts({ extra: {} as MCPRequestHandlerExtra });
 
       const upgradePrompt = prompts.find(p => p.name === 'upgrade-to-v1');
       expect(upgradePrompt).toBeDefined();
@@ -28,7 +29,7 @@ describe('migrationPromptMessages', () => {
     });
 
     it('should include migration-checklist prompt', async () => {
-      const prompts = await migrationPromptMessages.listPrompts({ extra: {} });
+      const prompts = await migrationPromptMessages.listPrompts({ extra: {} as MCPRequestHandlerExtra });
 
       const checklistPrompt = prompts.find(p => p.name === 'migration-checklist');
       expect(checklistPrompt).toBeDefined();
@@ -37,14 +38,14 @@ describe('migrationPromptMessages', () => {
     });
 
     it('should define optional area argument for upgrade-to-v1', async () => {
-      const prompts = await migrationPromptMessages.listPrompts({ extra: {} });
+      const prompts = await migrationPromptMessages.listPrompts({ extra: {} as MCPRequestHandlerExtra });
 
       const upgradePrompt = prompts.find(p => p.name === 'upgrade-to-v1');
       const areaArg = upgradePrompt?.arguments?.find(a => a.name === 'area');
 
       expect(areaArg).toBeDefined();
       expect(areaArg?.required).toBe(false);
-      expect(areaArg?.description).toContain('agents');
+      expect(areaArg?.description).toContain('agent');
     });
   });
 
@@ -53,7 +54,7 @@ describe('migrationPromptMessages', () => {
       it('should return messages for general upgrade without area', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         expect(messages).toBeInstanceOf(Array);
@@ -66,18 +67,18 @@ describe('migrationPromptMessages', () => {
         expect(userMessage?.content.text).toContain('mastraMigration tool');
       });
 
-      it('should return messages for specific area: agents', async () => {
+      it('should return messages for specific area: agent', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
-          args: { area: 'agents' },
-          extra: {},
+          args: { area: 'agent' },
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         expect(messages).toBeInstanceOf(Array);
         expect(messages.length).toBeGreaterThan(0);
 
         const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('agents');
+        expect(userMessage?.content.text).toContain('agent');
         expect(userMessage?.content.text).toContain('mastraMigration tool');
       });
 
@@ -85,7 +86,7 @@ describe('migrationPromptMessages', () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
           args: { area: 'tools' },
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
@@ -96,7 +97,7 @@ describe('migrationPromptMessages', () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
           args: { area: 'workflows' },
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
@@ -107,7 +108,7 @@ describe('migrationPromptMessages', () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
           args: { area: 'memory' },
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
@@ -118,7 +119,7 @@ describe('migrationPromptMessages', () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
           args: { area: 'evals' },
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
@@ -129,7 +130,7 @@ describe('migrationPromptMessages', () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
           args: { area: 'mcp' },
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
@@ -140,47 +141,62 @@ describe('migrationPromptMessages', () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
           args: { area: 'vectors' },
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
         expect(userMessage?.content.text).toContain('vectors');
       });
 
-      it('should return messages for specific area: syncs', async () => {
+      it('should return messages for specific area: storage', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
-          args: { area: 'syncs' },
-          extra: {},
+          args: { area: 'storage' },
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('syncs');
+        expect(userMessage?.content.text).toContain('storage');
       });
 
-      it('should handle invalid area gracefully', async () => {
+      it('should handle invalid area by instructing to check with mastraMigration tool', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
           args: { area: 'invalid-area' },
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('Invalid area');
-        expect(userMessage?.content.text).toContain('agents');
-        expect(userMessage?.content.text).toContain('tools');
+        expect(userMessage?.content.text).toContain('invalid-area');
+        expect(userMessage?.content.text).toContain('mastraMigration tool');
+        expect(userMessage?.content.text).toContain('upgrade-to-v1/invalid-area');
+        expect(userMessage?.content.text).toContain('alternate form');
       });
 
-      it('should handle case-insensitive area names', async () => {
+      it('should handle any area name and pass it to mastraMigration tool', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
-          args: { area: 'AGENTS' },
-          extra: {},
+          args: { area: 'AGENT' },
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('AGENTS');
-        expect(userMessage?.content.text).not.toContain('Invalid area');
+        expect(userMessage?.content.text).toContain('AGENT');
+        expect(userMessage?.content.text).toContain('mastraMigration tool');
+        expect(userMessage?.content.text).toContain('upgrade-to-v1/AGENT');
+      });
+
+      it('should include instructions to try plural/singular variations', async () => {
+        const messages = await migrationPromptMessages.getPromptMessages!({
+          name: 'upgrade-to-v1',
+          args: { area: 'agents' },
+          extra: {} as MCPRequestHandlerExtra,
+        });
+
+        const userMessage = messages.find(m => m.role === 'user');
+        expect(userMessage?.content.text).toContain('alternate form');
+        expect(userMessage?.content.text).toContain('singular/plural');
+        expect(userMessage?.content.text).toContain('ends with');
       });
     });
 
@@ -188,7 +204,7 @@ describe('migrationPromptMessages', () => {
       it('should return messages for migration checklist', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'migration-checklist',
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         expect(messages).toBeInstanceOf(Array);
@@ -204,7 +220,7 @@ describe('migrationPromptMessages', () => {
       it('should request comprehensive checklist format', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'migration-checklist',
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
@@ -218,7 +234,7 @@ describe('migrationPromptMessages', () => {
         await expect(
           migrationPromptMessages.getPromptMessages!({
             name: 'unknown-prompt',
-            extra: {},
+            extra: {} as MCPRequestHandlerExtra,
           }),
         ).rejects.toThrow('Prompt not found');
       });
@@ -228,7 +244,7 @@ describe('migrationPromptMessages', () => {
         // For now, all prompts have handlers, so this is a safety check
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
         expect(messages).toBeDefined();
       });
@@ -238,7 +254,7 @@ describe('migrationPromptMessages', () => {
       it('should return properly structured PromptMessage objects', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         for (const message of messages) {
@@ -254,7 +270,7 @@ describe('migrationPromptMessages', () => {
       it('should return at least one user message', async () => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'migration-checklist',
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessages = messages.filter(m => m.role === 'user');
@@ -265,12 +281,12 @@ describe('migrationPromptMessages', () => {
 
   describe('prompt integration', () => {
     it('should reference mastraMigration tool in all prompts', async () => {
-      const prompts = await migrationPromptMessages.listPrompts({ extra: {} });
+      const prompts = await migrationPromptMessages.listPrompts({ extra: {} as MCPRequestHandlerExtra });
 
       for (const prompt of prompts) {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: prompt.name,
-          extra: {},
+          extra: {} as MCPRequestHandlerExtra,
         });
 
         const hasToolReference = messages.some(m => m.content.text.includes('mastraMigration'));
@@ -281,7 +297,7 @@ describe('migrationPromptMessages', () => {
     it('should provide actionable instructions', async () => {
       const messages = await migrationPromptMessages.getPromptMessages!({
         name: 'upgrade-to-v1',
-        extra: {},
+        extra: {} as MCPRequestHandlerExtra,
       });
 
       const userMessage = messages.find(m => m.role === 'user');

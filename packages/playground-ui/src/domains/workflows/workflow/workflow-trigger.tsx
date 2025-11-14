@@ -147,10 +147,10 @@ export function WorkflowTrigger({
 
   const suspendedSteps = Object.entries(streamResultToUse?.steps || {})
     .filter(([_, { status }]) => status === 'suspended')
-    .map(([stepId, { payload }]) => ({
+    .map(([stepId, { suspendPayload }]) => ({
       stepId,
       runId: innerRunId,
-      suspendPayload: payload,
+      suspendPayload,
       isLoading: false,
     }));
 
@@ -318,11 +318,22 @@ export function WorkflowTrigger({
                   .filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
                   .map(([stepId, step]) => {
                     const { status } = step;
-                    let output = {};
+                    let output = undefined;
+                    let suspendOutput = undefined;
+                    if (step.status === 'suspended') {
+                      suspendOutput = step.suspendOutput;
+                    }
                     if (step.status === 'success') {
                       output = step.output;
                     }
-                    return <WorkflowStatus key={stepId} stepId={stepId} status={status} result={output} />;
+                    return (
+                      <WorkflowStatus
+                        key={stepId}
+                        stepId={stepId}
+                        status={status}
+                        result={output ?? suspendOutput ?? {}}
+                      />
+                    );
                   })}
               </div>
             </div>
