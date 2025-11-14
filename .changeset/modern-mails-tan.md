@@ -1,5 +1,4 @@
 ---
-"@mastra/voice-google": patch
 "@mastra/voice-openai": patch
 ---
 
