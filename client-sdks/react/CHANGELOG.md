@@ -1,5 +1,12 @@
 # @mastra/react-hooks
 
+## 0.0.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`082393c`](https://github.com/mastra-ai/mastra/commit/082393c002f3751113a48da28e4c0ed3db9824d7)]:
+  - @mastra/client-js@0.16.10-alpha.0
+
 ## 0.0.15
 
 ### Patch Changes

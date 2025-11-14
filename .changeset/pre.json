@@ -82,5 +82,22 @@
     "@mastra/voice-speechify": "0.11.12",
     "@mastra/inngest": "0.18.4"
   },
-  "changesets": []
+  "changesets": [
+    "dry-peaches-stick",
+    "four-candies-add",
+    "funny-badgers-play",
+    "good-squids-worry",
+    "long-candles-explode",
+    "long-planes-drive",
+    "lovely-radios-clean",
+    "pretty-buses-invite",
+    "rich-taxis-jump",
+    "rich-weeks-repeat",
+    "salty-teeth-see",
+    "slick-dragons-pump",
+    "tame-bees-sit",
+    "tame-foxes-camp",
+    "two-donkeys-train",
+    "vast-banks-drive"
+  ]
 }
