@@ -1,11 +1,11 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { LanguageDetectionResult, TranslationResult } from './language-detector';
 import { LanguageDetector } from './language-detector';
 
-function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, role: 'user' | 'assistant' = 'user', id = 'test-id'): MastraDBMessage {
   return {
     id,
     role,
@@ -23,17 +23,31 @@ function createMockLanguageResult(
   confidence: number,
   isTarget: boolean,
   translation?: TranslationResult,
+  includeTranslation?: boolean,
 ): LanguageDetectionResult {
-  // For target languages, return empty object (minimal tokens)
+  // For target languages, return nulls (minimal tokens)
   if (isTarget) {
-    return {};
+    const result: LanguageDetectionResult = {
+      iso_code: null,
+      confidence: null,
+    };
+    if (includeTranslation) {
+      result.translated_text = null;
+    }
+    return result;
   }
 
-  return {
+  const result: LanguageDetectionResult = {
     iso_code: isoCode,
     confidence,
-    ...(translation && { translated_text: translation.translated_text }),
   };
+
+  // If includeTranslation is explicitly set, add translated_text (for 'translate' strategy)
+  if (includeTranslation !== undefined) {
+    result.translated_text = translation?.translated_text ?? null;
+  }
+
+  return result;
 }
 
 function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResult[]): MockLanguageModelV1 {
@@ -69,7 +83,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should use default target languages when none specified', () => {
@@ -79,7 +93,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should accept custom target languages', () => {
@@ -89,7 +103,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['Spanish', 'French', 'German'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should accept custom configuration options', () => {
@@ -105,7 +119,7 @@ describe('LanguageDetector', () => {
         translationQuality: 'speed',
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
   });
 
@@ -119,7 +133,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       const messages = [createTestMessage('Hello, how are you today?', 'user')];
 
@@ -149,7 +163,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       const messages = [createTestMessage('Hola, ¿cómo estás?', 'user')];
 
@@ -231,7 +245,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('Ciao, come stai?', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -296,7 +310,7 @@ describe('LanguageDetector', () => {
         target_language: 'English',
         confidence: 0.93,
       };
-      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.91, false, translation));
+      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.91, false, translation, true));
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -305,7 +319,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       const messages = [createTestMessage('Bonjour le monde', 'user', 'msg1')];
 
@@ -328,7 +342,7 @@ describe('LanguageDetector', () => {
     });
 
     it('should keep original when translation is not available', async () => {
-      const model = setupMockModel(createMockLanguageResult('Russian', 'ru', 0.85, false)); // No translation
+      const model = setupMockModel(createMockLanguageResult('Russian', 'ru', 0.85, false, undefined, true)); // No translation
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -336,7 +350,7 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const messages = [createTestMessage('Привет, как дела?', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -362,9 +376,9 @@ describe('LanguageDetector', () => {
         confidence: 0.95,
       };
       const model = setupMockModel([
-        createMockLanguageResult('English', 'en', 0.97, true),
-        createMockLanguageResult('Spanish', 'es', 0.93, false, translation),
-        createMockLanguageResult('Chinese', 'zh', 0.89, false), // No translation
+        createMockLanguageResult('English', 'en', 0.97, true, undefined, true),
+        createMockLanguageResult('Spanish', 'es', 0.93, false, translation, true),
+        createMockLanguageResult('Chinese', 'zh', 0.89, false, undefined, true), // No translation
       ]);
       const detector = new LanguageDetector({
         model,
@@ -474,7 +488,7 @@ describe('LanguageDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -498,7 +512,7 @@ describe('LanguageDetector', () => {
 
       const mockAbort = vi.fn();
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test',
         role: 'user',
         content: {
@@ -531,8 +545,8 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       const messages = [createTestMessage('Some text content', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -596,7 +610,7 @@ describe('LanguageDetector', () => {
         target_language: 'English',
         confidence: 0.95,
       };
-      const model = setupMockModel(createMockLanguageResult('Spanish', 'es', 0.91, false, translation));
+      const model = setupMockModel(createMockLanguageResult('Spanish', 'es', 0.91, false, translation, true));
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -638,7 +652,7 @@ describe('LanguageDetector', () => {
         targetLanguages: ['English'],
       });
 
-      expect(detector.name).toBe('language-detector');
+      expect(detector.id).toBe('language-detector');
     });
 
     it('should accept providerOptions in constructor', () => {
@@ -659,7 +673,7 @@ describe('LanguageDetector', () => {
 
   describe('translation quality settings', () => {
     it('should pass translation quality to agent prompt', async () => {
-      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.9, false));
+      const model = setupMockModel(createMockLanguageResult('French', 'fr', 0.9, false, undefined, true));
       const detector = new LanguageDetector({
         model,
         strategy: 'translate',
@@ -698,8 +712,8 @@ describe('LanguageDetector', () => {
       });
 
       const mockAbort = vi.fn();
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
-      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => { });
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const consoleInfoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
       const messages = [createTestMessage('Some text content here', 'user')];
       const result = await detector.processInput({ messages, abort: mockAbort as any });
@@ -752,5 +766,4 @@ describe('LanguageDetector', () => {
       expect((result[0].content.metadata as any)?.language_detection?.is_target_language).toBe(true);
     });
   });
-
 });

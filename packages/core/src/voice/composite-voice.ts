@@ -8,29 +8,11 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
   protected listenProvider?: MastraVoice;
   protected realtimeProvider?: MastraVoice;
 
-  constructor({
-    input,
-    output,
-    realtime,
-    speakProvider,
-    listenProvider,
-    realtimeProvider,
-  }: {
-    /** @deprecated use output instead */
-    speakProvider?: MastraVoice;
-    /** @deprecated use input instead */
-    listenProvider?: MastraVoice;
-    /** @deprecated use realtime instead */
-    realtimeProvider?: MastraVoice;
-
-    input?: MastraVoice;
-    output?: MastraVoice;
-    realtime?: MastraVoice;
-  }) {
+  constructor({ input, output, realtime }: { input?: MastraVoice; output?: MastraVoice; realtime?: MastraVoice }) {
     super();
-    this.speakProvider = output || speakProvider;
-    this.listenProvider = input || listenProvider;
-    this.realtimeProvider = realtime || realtimeProvider;
+    this.speakProvider = output;
+    this.listenProvider = input;
+    this.realtimeProvider = realtime;
   }
 
   /**

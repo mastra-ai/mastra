@@ -14,6 +14,7 @@ import type {
 import { MongoClient } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
+import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBVectorFilter } from './filter';
@@ -56,9 +57,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ uri, dbName, options }: { uri: string; dbName: string; options?: MongoClientOptions }) {
-    super();
-    this.client = new MongoClient(uri, options);
+  constructor({ id, uri, dbName, options }: { id: string; uri: string; dbName: string; options?: MongoClientOptions }) {
+    super({ id });
+    const client = new MongoClient(uri, {
+      ...options,
+      driverInfo: {
+        name: 'mastra-vector',
+        version: packageJson.version || '0.0.0',
+      },
+    });
+    this.client = client;
     this.db = this.client.db(dbName);
     this.collections = new Map();
   }

@@ -3,7 +3,7 @@ import { readFile, writeFile } from "fs/promises"
 import { existsSync } from "fs"
 import { join } from "path"
 import { ServerDefinition } from "@mcp/registry"
-import { MastraMCPClient } from "@mastra/mcp"
+import { MCPClient } from "@mastra/mcp"
 import { z } from "zod"
 
 // Basic configuration schema that applies regardless of server
@@ -204,7 +204,7 @@ export class MCPClient {
 		)
 	}
 
-	private mcpClientsById = new Map<string, MastraMCPClient>()
+	private mcpClientsById = new Map<string, MCPClient>()
 	public async getConnectedTools() {
 		const toolsets: Record<string, any> = {}
 		const configurations = await this.list()
@@ -225,17 +225,18 @@ export class MCPClient {
 
 			const mcpClient = exists
 				? this.mcpClientsById.get(id)!
-				: new MastraMCPClient({
-						name: server.name,
-						server: {
-							command: config.command,
-							args: [...(config.args || []), ...(config.runtimeArgs || [])],
-							env: config.env,
+				: new MCPClient({
+						servers: {
+							[server.name]: {
+								command: config.command,
+								args: [...(config.args || []), ...(config.runtimeArgs || [])],
+								env: config.env,
+							},
 						},
 					})
 
 			if (!exists) {
-				await mcpClient.connect()
+				// MCPClient connects automatically when tools are requested
 				this.mcpClientsById.set(id, mcpClient)
 				process.on(`exit`, () => {
 					mcpClient.disconnect()

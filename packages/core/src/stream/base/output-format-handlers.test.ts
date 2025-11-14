@@ -19,7 +19,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -47,6 +46,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '"email":"invalid"}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
       ];
       // @ts-expect-error - web/stream readable stream type error
@@ -87,7 +92,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -120,6 +124,49 @@ describe('output-format-handlers', () => {
       expect(objectResultChunk?.object).toEqual({ name: 'John', age: 30 });
     });
 
+    it('should validate on text-end chunk', async () => {
+      const schema = z.object({
+        name: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1', text: '{"name":"John"}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      // Verify text-end is emitted first
+      const textEndChunk = chunks.find(c => c?.type === 'text-end');
+      expect(textEndChunk).toBeDefined();
+
+      // Verify object-result is emitted after text-end
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ name: 'John' });
+
+      // Verify ordering: text-end comes before object-result
+      const textEndIndex = chunks.findIndex(c => c?.type === 'text-end');
+      const objectResultIndex = chunks.findIndex(c => c?.type === 'object-result');
+      expect(textEndIndex).toBeLessThan(objectResultIndex);
+    });
+
     it('should use zod transform and default values', async () => {
       const schema = z.object({
         name: z.string().transform(s => s.toUpperCase()),
@@ -128,7 +175,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -171,7 +217,6 @@ describe('output-format-handlers', () => {
       );
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -212,7 +257,6 @@ describe('output-format-handlers', () => {
       const schema = z.enum(['red', 'green', 'blue']);
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -250,7 +294,6 @@ describe('output-format-handlers', () => {
       const schema = z.enum(['red', 'green', 'blue']);
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -260,6 +303,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"result":"yellow"}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -292,7 +341,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -302,6 +350,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -333,7 +387,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -375,7 +428,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -384,7 +436,13 @@ describe('output-format-handlers', () => {
           type: 'text-delta',
           runId: 'test-run',
           from: ChunkFrom.AGENT,
-          payload: { id: '1', text: '{"email":"notanemail","score":150}' },
+          payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -415,7 +473,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -459,7 +516,6 @@ describe('output-format-handlers', () => {
       const aiSdkSchema = asSchema(zodSchema);
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema: aiSdkSchema },
       });
 
@@ -505,7 +561,6 @@ describe('output-format-handlers', () => {
       };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -549,7 +604,6 @@ describe('output-format-handlers', () => {
       };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -583,6 +637,139 @@ describe('output-format-handlers', () => {
     });
   });
 
+  describe('token extraction (preprocessText)', () => {
+    it('should extract JSON from LMStudio <|message|> token wrapper', async () => {
+      const schema = z.object({
+        primitiveId: z.string(),
+        primitiveType: z.string(),
+        prompt: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: '1',
+            text: '<|channel|>final <|constrain|>JSON<|message|>{"primitiveId":"weatherAgent","primitiveType":"agent","prompt":"What is the weather?"}',
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({
+        primitiveId: 'weatherAgent',
+        primitiveType: 'agent',
+        prompt: 'What is the weather?',
+      });
+    });
+
+    it('should extract JSON from multiline content in <|message|> wrapper', async () => {
+      const schema = z.object({
+        name: z.string(),
+        value: z.number(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: '1',
+            text: '<|channel|>final <|message|>{\n  "name": "test",\n  "value": 42\n}',
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ name: 'test', value: 42 });
+    });
+
+    it('should handle JSON wrapped in ```json code blocks', async () => {
+      const schema = z.object({
+        title: z.string(),
+        count: z.number(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: '1',
+            text: '```json\n{"title":"Test","count":5}\n```',
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ title: 'Test', count: 5 });
+    });
+  });
+
   describe('errorStrategy', () => {
     it('should emit error chunk when errorStrategy is not set', async () => {
       const schema = z.object({
@@ -591,7 +778,6 @@ describe('output-format-handlers', () => {
       });
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: { schema },
       });
 
@@ -601,6 +787,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -638,7 +830,6 @@ describe('output-format-handlers', () => {
       };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: {
           schema,
           errorStrategy: 'warn',
@@ -652,6 +843,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',
@@ -691,7 +888,6 @@ describe('output-format-handlers', () => {
       const fallbackValue = { name: 'Default', age: 0 };
 
       const transformer = createObjectStreamTransformer({
-        isLLMExecutionStep: true,
         structuredOutput: {
           schema,
           errorStrategy: 'fallback',
@@ -705,6 +901,12 @@ describe('output-format-handlers', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           payload: { id: '1', text: '{"name":"Jo","age":-5}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: '1' },
         },
         {
           type: 'finish',

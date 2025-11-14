@@ -7,7 +7,7 @@ import type {
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
-import type { AISDKV5OutputStream, MastraModelOutput, OutputSchema } from '@mastra/core/stream';
+import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
 import { AgentBuilderDefaults } from '../defaults';
@@ -31,7 +31,7 @@ import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
 // - Block: removing files, downgrading deps, changing TS target/module, modifying CI/CD secrets
 //
 // Usage with Mastra templates (see https://mastra.ai/api/templates.json):
-//   const run = await agentBuilderTemplateWorkflow.createRunAsync();
+//   const run = await agentBuilderTemplateWorkflow.createRun();
 //   const result = await run.start({
 //     inputData: {
 //       repo: 'https://github.com/mastra-ai/template-pdf-questions',
@@ -61,7 +61,7 @@ export class AgentBuilder extends Agent {
       model: config.model,
       tools: async () => {
         return {
-          ...(await AgentBuilderDefaults.getToolsForMode(config.projectPath, config.mode)),
+          ...(await AgentBuilderDefaults.listToolsForMode(config.projectPath, config.mode)),
           ...(config.tools || {}),
         };
       },
@@ -91,7 +91,7 @@ export class AgentBuilder extends Agent {
   ): Promise<any> => {
     const { maxSteps, ...baseOptions } = generateOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: generateOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: generateOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -126,7 +126,7 @@ export class AgentBuilder extends Agent {
   ): Promise<any> => {
     const { maxSteps, ...baseOptions } = streamOptions;
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -154,13 +154,13 @@ export class AgentBuilder extends Agent {
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  async stream<OUTPUT extends OutputSchema = undefined, FORMAT extends 'mastra' | 'aisdk' | undefined = undefined>(
+  async stream<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<FORMAT extends 'aisdk' ? AISDKV5OutputStream<OUTPUT> : MastraModelOutput<OUTPUT>> {
+    streamOptions?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
     const { ...baseOptions } = streamOptions || {};
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: streamOptions?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;
@@ -184,17 +184,13 @@ export class AgentBuilder extends Agent {
     return super.stream(messages, enhancedOptions);
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined, FORMAT extends 'aisdk' | 'mastra' = 'mastra'>(
+  async generate<OUTPUT extends OutputSchema = undefined>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT, FORMAT>,
-  ): Promise<
-    FORMAT extends 'aisdk'
-      ? Awaited<ReturnType<AISDKV5OutputStream<OUTPUT>['getFullOutput']>>
-      : Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>
-  > {
+    options?: AgentExecutionOptions<OUTPUT>,
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     const { ...baseOptions } = options || {};
 
-    const originalInstructions = await this.getInstructions({ runtimeContext: options?.runtimeContext });
+    const originalInstructions = await this.getInstructions({ requestContext: options?.requestContext });
     const additionalInstructions = baseOptions.instructions;
 
     let enhancedInstructions = originalInstructions as string;

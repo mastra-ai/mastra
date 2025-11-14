@@ -1,9 +1,9 @@
 import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
-import pRetry from 'p-retry';
+import { APICallError } from 'ai-v5';
+import type { ToolChoice, ToolSet } from 'ai-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
@@ -29,15 +29,8 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
     activeTools?: string[];
     abortSignal?: AbortSignal;
   };
-  modelStreamSpan: Span;
-  telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
-  modelSettings?: Omit<CallSettings, 'abortSignal'> & {
-    /**
-     * @deprecated Use top-level `abortSignal` instead.
-     */
-    abortSignal?: AbortSignal;
-  };
+  modelSettings?: LoopOptions['modelSettings'];
   onResult: OnResult;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /**
@@ -48,8 +41,6 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   shouldThrowError?: boolean;
 };
 
-let hasLoggedModelSettingsAbortSignalDeprecation = false;
-
 export function execute<OUTPUT extends OutputSchema = undefined>({
   runId,
   model,
@@ -59,24 +50,12 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   toolChoice,
   options,
   onResult,
-  modelStreamSpan,
-  telemetry_settings,
   includeRawChunks,
   modelSettings,
   structuredOutput,
   headers,
   shouldThrowError,
 }: ExecutionProps<OUTPUT>) {
-  // Deprecation warning for modelSettings.abortSignal
-  if (modelSettings?.abortSignal && !hasLoggedModelSettingsAbortSignalDeprecation) {
-    console.warn(
-      '[Deprecation Warning] Using `modelSettings.abortSignal` is deprecated. ' +
-        'Please use top-level `abortSignal` instead. ' +
-        'The `modelSettings.abortSignal` option will be removed in a future version.',
-    );
-    hasLoggedModelSettingsAbortSignalDeprecation = true;
-  }
-
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
     name: model.modelId,
@@ -88,12 +67,6 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     activeTools: options?.activeTools,
   });
 
-  if (modelStreamSpan && toolsAndToolChoice?.tools?.length && telemetry_settings?.recordOutputs !== false) {
-    modelStreamSpan.setAttributes({
-      'stream.prompt.tools': toolsAndToolChoice?.tools?.map(tool => JSON.stringify(tool)),
-    });
-  }
-
   const structuredOutputMode = structuredOutput?.schema
     ? structuredOutput?.model
       ? 'processor'
@@ -103,26 +76,58 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
 
   let prompt = inputMessages;
+
+  // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
   if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && structuredOutput?.jsonPromptInjection) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
       schema: responseFormat.schema,
     });
   }
+
+  // For processor mode (model provided for structuring agent), inject a custom prompt to inform the main agent about the structured output schema that the structuring agent will use
+  if (structuredOutputMode === 'processor' && responseFormat?.type === 'json' && responseFormat?.schema) {
+    // Add a system message to inform the main agent about what data it needs to generate
+    prompt = injectJsonInstructionIntoMessages({
+      messages: inputMessages,
+      schema: responseFormat.schema,
+      schemaPrefix: `Your response will be processed by another agent to extract structured data. Please ensure your response contains comprehensive information for all the following fields that will be extracted:\n`,
+      schemaSuffix: `\n\nYou don't need to format your response as JSON unless the user asks you to. Just ensure your natural language response includes relevant information for each field in the schema above.`,
+    });
+  }
+
+  /**
+   * Enable OpenAI's strict JSON schema mode to ensure schema compliance.
+   * Without this, OpenAI may omit required fields or violate type constraints.
+   * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
+   * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
+   */
+  const providerOptionsToUse =
+    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
+      ? {
+          ...(providerOptions ?? {}),
+          openai: {
+            strictJsonSchema: true,
+            ...(providerOptions?.openai ?? {}),
+          },
+        }
+      : providerOptions;
+
   const stream = v5.initialize({
     runId,
     onResult,
     createStream: async () => {
       try {
-        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'abortSignal']);
-        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
+        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers']);
+        const abortSignal = options?.abortSignal;
 
-        return await pRetry(
+        const pRetry = await import('p-retry');
+        return await pRetry.default(
           async () => {
             const streamResult = await model.doStream({
               ...toolsAndToolChoice,
               prompt,
-              providerOptions,
+              providerOptions: providerOptionsToUse,
               abortSignal,
               includeRawChunks,
               responseFormat:
@@ -139,11 +144,16 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
+            shouldRetry(context) {
+              if (APICallError.isInstance(context.error)) {
+                return context.error.isRetryable;
+              }
+              return true;
+            },
           },
         );
       } catch (error) {
-        console.error('Error creating stream', error);
-        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
+        const abortSignal = options?.abortSignal;
         if (isAbortError(error) && abortSignal?.aborted) {
           console.error('Abort error', error);
         }
@@ -157,10 +167,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             start: async controller => {
               controller.enqueue({
                 type: 'error',
-                error: {
-                  message: error instanceof Error ? error.message : JSON.stringify(error),
-                  stack: error instanceof Error ? error.stack : undefined,
-                },
+                error,
               });
               controller.close();
             },

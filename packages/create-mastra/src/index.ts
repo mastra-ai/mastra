@@ -40,7 +40,7 @@ program
     'Project name that will be used in package.json and as the project directory name.',
   )
   .option('--default', 'Quick start with defaults (src, OpenAI, examples)')
-  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
+  .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows, scorers)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras)')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
@@ -59,7 +59,7 @@ program
 
     if (args.default) {
       await create({
-        components: ['agents', 'tools', 'workflows'],
+        components: ['agents', 'tools', 'workflows', 'scorers'],
         llmProvider: 'openai',
         addExample: true,
         createVersionTag,

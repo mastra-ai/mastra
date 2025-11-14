@@ -114,7 +114,7 @@ const EmptyMCPTable = () => (
           className="w-full"
           variant="light"
           as="a"
-          href="https://mastra.ai/en/docs/getting-started/mcp-docs-server"
+          href="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
           target="_blank"
         >
           <Icon>

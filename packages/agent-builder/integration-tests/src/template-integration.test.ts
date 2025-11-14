@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, mkdirSync, rmSync, cpSync, existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { fetchMastraTemplates } from '../../src/utils';
 import { agentBuilderTemplateWorkflow } from '../../src/workflows';
@@ -112,7 +112,7 @@ describe('Template Workflow Integration Tests', () => {
     const templateWorkflow = mastraInstance.getWorkflow(`agentBuilderTemplateWorkflow`);
 
     // Run the merge template workflow
-    const workflowRun = await templateWorkflow.createRunAsync();
+    const workflowRun = await templateWorkflow.createRun();
     const result = await workflowRun.start({
       inputData: {
         repo: csvTemplate!.githubUrl,
@@ -309,7 +309,7 @@ describe('Template Workflow Integration Tests', () => {
     console.log('Testing duplicate template merge...');
 
     const templateWorkflow = mastraInstance.getWorkflow(`agentBuilderTemplateWorkflow`);
-    const workflowRun = await templateWorkflow.createRunAsync();
+    const workflowRun = await templateWorkflow.createRun();
     const result = await workflowRun.start({
       inputData: {
         repo: csvTemplate!.githubUrl,

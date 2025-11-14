@@ -113,10 +113,16 @@ await storage.saveMessages({
   ],
 });
 
-// Get thread messages
-const messages = await storage.getMessages({
+// Get thread messages with pagination
+const result = await storage.listMessages({
   threadId: thread.id,
+  page: 0,
+  perPage: 50,
 });
+
+console.log(result.messages); // MastraDBMessage[]
+console.log(result.total); // Total count
+console.log(result.hasMore); // Whether more pages exist
 ```
 
 ### Working with Workflow Snapshots

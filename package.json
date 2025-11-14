@@ -4,7 +4,9 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.29.7",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "^4.0.8",
+    "@vitest/ui": "^4.0.8",
     "changesets-changelog-github-local": "^1.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
@@ -13,7 +15,7 @@
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "catalog:"
   },
   "private": true,
   "scripts": {
@@ -59,11 +61,9 @@
     "test:schema-compat": "pnpm --filter ./packages/schema-compat test",
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
     "test:evals": "pnpm --filter ./packages/evals test",
-    "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
-    "test:evals:llm": "pnpm --filter ./packages/evals test src/metrics/llm",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
-    "test:observability": "pnpm --filter \"./observability/*\" test",
+    "test:observability": "node scripts/test-observability.cjs",
     "lint-staged": "lint-staged",
     "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint",
     "preinstall": "npx only-allow pnpm",
@@ -89,7 +89,7 @@
   },
   "resolutions": {
     "typescript": "^5.8.3",
-    "@types/node": "^20.17.57",
+    "@types/node": "22.13.17",
     "cookie": ">=0.7.2",
     "tmp": ">=0.2.5",
     "jsondiffpatch": ">=0.7.3"

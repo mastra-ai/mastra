@@ -2,11 +2,10 @@ import { Badge } from '@/ds/components/Badge';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { useLinkComponent } from '@/lib/framework';
-import { GetAgentResponse, GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
+import { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import { AgentMetadataSection } from './agent-metadata-section';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { AgentMetadataWrapper } from './agent-metadata-wrapper';
-import { ReactNode } from 'react';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useScorers } from '@/domains/scores';
 import { AgentIcon } from '@/ds/icons';
@@ -15,17 +14,19 @@ import { AgentMetadataModelSwitcher, AgentMetadataModelSwitcherProps } from './a
 import { AgentMetadataModelList, AgentMetadataModelListProps } from './agent-metadata-model-list';
 import { LoadingBadge } from '@/components/assistant-ui/tools/badges/loading-badge';
 import { Alert, AlertTitle, AlertDescription } from '@/ds/components/Alert';
+import { PromptEnhancer } from '../agent-information/agent-instructions-enhancer';
+import {
+  useReorderModelList,
+  useResetAgentModel,
+  useUpdateAgentModel,
+  useUpdateModelInModelList,
+} from '../../hooks/use-agents';
+import { useAgent } from '../../hooks/use-agent';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useMemory } from '@/domains/memory/hooks';
 
 export interface AgentMetadataProps {
   agentId: string;
-  agent: GetAgentResponse;
-  promptSlot: ReactNode;
-  hasMemoryEnabled: boolean;
-  modelProviders: string[];
-  modelVersion: string;
-  updateModel: AgentMetadataModelSwitcherProps['updateModel'];
-  updateModelInModelList: AgentMetadataModelListProps['updateModelInModelList'];
-  reorderModelList: AgentMetadataModelListProps['reorderModelList'];
 }
 
 export interface AgentMetadataNetworkListProps {
@@ -54,19 +55,25 @@ export const AgentMetadataNetworkList = ({ agents }: AgentMetadataNetworkListPro
   );
 };
 
-export const AgentMetadata = ({
-  agentId,
-  agent,
-  promptSlot,
-  hasMemoryEnabled,
-  updateModel,
-  modelProviders,
-  updateModelInModelList,
-  reorderModelList,
-  modelVersion,
-}: AgentMetadataProps) => {
+export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
+  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const { mutate: reorderModelList } = useReorderModelList(agentId);
+  const { mutateAsync: resetModel } = useResetAgentModel(agentId);
+  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const { mutateAsync: updateModel } = useUpdateAgentModel(agentId);
+  const hasMemoryEnabled = Boolean(memory?.result);
+
+  if (isLoading || isMemoryLoading) {
+    return <Skeleton className="h-full" />;
+  }
+
+  if (!agent) {
+    return <div>Agent not found</div>;
+  }
+
   const networkAgentsMap = agent.agents ?? {};
-  const networkAgents = Object.values(networkAgentsMap);
+  const networkAgents = Object.keys(networkAgentsMap).map(key => ({ ...networkAgentsMap[key], id: key }));
 
   const agentTools = agent.tools ?? {};
   const tools = Object.keys(agentTools).map(key => agentTools[key]);
@@ -80,7 +87,6 @@ export const AgentMetadata = ({
         <AgentMetadataSection title="Models">
           <AgentMetadataModelList
             modelList={agent.modelList}
-            modelProviders={modelProviders}
             updateModelInModelList={updateModelInModelList}
             reorderModelList={reorderModelList}
           />
@@ -89,7 +95,7 @@ export const AgentMetadata = ({
         <AgentMetadataSection
           title={'Model'}
           hint={
-            modelVersion === 'v2'
+            agent.modelVersion === 'v2'
               ? undefined
               : {
                   link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',
@@ -102,7 +108,7 @@ export const AgentMetadata = ({
             defaultProvider={agent.provider}
             defaultModel={agent.modelId}
             updateModel={updateModel}
-            modelProviders={modelProviders}
+            resetModel={resetModel}
           />
         </AgentMetadataSection>
       )}
@@ -173,7 +179,9 @@ export const AgentMetadata = ({
       <AgentMetadataSection title="Scorers">
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
-      <AgentMetadataSection title="System Prompt">{promptSlot}</AgentMetadataSection>
+      <AgentMetadataSection title="System Prompt">
+        <PromptEnhancer agentId={agentId} />
+      </AgentMetadataSection>
     </AgentMetadataWrapper>
   );
 };

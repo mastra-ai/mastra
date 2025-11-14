@@ -5,12 +5,13 @@ import {
   TABLE_SCORERS,
   type MastraStorage,
 } from '@mastra/core/storage';
-import { createMessagesPaginatedTest } from './messages-paginated';
+import { createListMessagesTest } from './messages-paginated';
 import { createThreadsTest } from './threads';
 import { createMessagesUpdateTest } from './messages-update';
 import { createMessagesBulkDeleteTest } from './messages-bulk-delete';
-// import { createResourcesTest } from './resources';
+import { createResourcesTest } from './resources';
 import { beforeAll } from 'vitest';
+import { createMessagesListTest } from './messages-list';
 
 export function createMemoryTest({ storage }: { storage: MastraStorage }) {
   beforeAll(async () => {
@@ -28,11 +29,13 @@ export function createMemoryTest({ storage }: { storage: MastraStorage }) {
 
   createThreadsTest({ storage });
 
-  createMessagesPaginatedTest({ storage });
+  createMessagesListTest({ storage });
+
+  createListMessagesTest({ storage });
 
   createMessagesUpdateTest({ storage });
 
   createMessagesBulkDeleteTest({ storage });
 
-  // createResourcesTest({ storage });
+  createResourcesTest({ storage });
 }

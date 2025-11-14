@@ -78,7 +78,7 @@ describe('MCP Server Logging', () => {
       },
     });
 
-    await config.getTools();
+    await config.listTools();
 
     // Verify weather logs went to weather handler only
     expect(weatherLogHandler).toHaveBeenCalled();
@@ -131,7 +131,7 @@ describe('MCP Server Logging', () => {
 
     // This should fail, but our logger should capture the error
     try {
-      await config.getTools();
+      await config.listTools();
     } catch {
       // Expected to fail
     }
@@ -167,7 +167,7 @@ describe('MCP Server Logging', () => {
     });
 
     try {
-      await config.getTools();
+      await config.listTools();
     } catch {
       // May fail, but we just care about logging
     }

@@ -1,10 +1,10 @@
 import { Icon } from '@/ds/icons';
 import clsx from 'clsx';
-import { AlertCircle, TriangleAlert } from 'lucide-react';
+import { AlertCircle, InfoIcon, TriangleAlert } from 'lucide-react';
 import React from 'react';
 import { Txt, TxtProps } from '../Txt';
 
-type AlertVariant = 'warning' | 'destructive';
+type AlertVariant = 'warning' | 'destructive' | 'info';
 
 export interface AlertProps {
   children: React.ReactNode;
@@ -14,11 +14,13 @@ export interface AlertProps {
 const variantClasses: Record<AlertVariant, string> = {
   warning: 'bg-yellow-900/20 border-sm border-yellow-200 text-yellow-200',
   destructive: 'bg-red-900/20 border-sm border-red-200 text-red-200',
+  info: 'bg-blue-900/20 border-sm border-blue-200 text-blue-200',
 };
 
 const variantIcons: Record<AlertVariant, React.FC<React.SVGProps<SVGSVGElement>>> = {
   warning: TriangleAlert,
   destructive: AlertCircle,
+  info: InfoIcon,
 };
 
 export const Alert = ({ children, variant = 'destructive' }: AlertProps) => {

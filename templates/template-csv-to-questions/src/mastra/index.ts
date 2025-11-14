@@ -1,3 +1,4 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
@@ -14,16 +15,17 @@ export const mastra = new Mastra({
     csvSummarizationAgent,
   },
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    id: 'mastra-storage',
+    // stores observability, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ':memory:',
   }),
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),
-  observability: {
+  observability: new Observability({
     default: {
       enabled: true,
     },
-  },
+  }),
 });
