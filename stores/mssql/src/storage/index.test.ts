@@ -5,6 +5,7 @@ import { MSSQLStore } from '.';
 import type { MSSQLConfig } from '.';
 
 const TEST_CONFIG: MSSQLConfig = {
+  id: process.env.MSSQL_STORE_ID || 'test-mssql-store',
   server: process.env.MSSQL_HOST || 'localhost',
   port: Number(process.env.MSSQL_PORT) || 1433,
   database: process.env.MSSQL_DB || 'master',

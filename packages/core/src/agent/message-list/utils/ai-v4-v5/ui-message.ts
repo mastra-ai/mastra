@@ -1,4 +1,4 @@
-import type { UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4/message';
+import type { UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import type { AIV5Type } from '../../types';
 
 export function hasAIV5UIMessageCharacteristics(msg: AIV5Type.UIMessage | UIMessageV4): msg is AIV5Type.UIMessage {

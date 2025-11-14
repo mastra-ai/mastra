@@ -9,25 +9,6 @@ Memory configuration now requires explicit parameters, and default settings have
 
 ## Changed
 
-### Required configuration parameters
-
-The Memory constructor now requires `storage`, `vector`, and `embedder` parameters. These parameters no longer have defaults. This change makes dependencies explicit and prevents unexpected behavior from implicit defaults.
-
-To migrate, explicitly provide `storage`, `vector`, and `embedder` when creating a Memory instance.
-
-```diff
-  import { Memory } from '@mastra/memory';
-+ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-+ import { fastembed } from '@mastra/fastembed';
-
-  const memory = new Memory({
--   // storage, vector, embedder were optional with defaults
-+   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
-+   vector: new LibSQLVector({ url: 'file:./mastra.db' }),
-+   embedder: fastembed,
-  });
-```
-
 ### Default settings for semantic recall and last messages
 
 Default settings have changed to more reasonable values based on usage patterns. The `lastMessages` default decreased from 40 to 10, `semanticRecall` is now disabled by default, and thread title generation is disabled by default. These changes improve performance and reduce unexpected LLM API calls.
@@ -98,7 +79,7 @@ To migrate, move `generateTitle` from the `threads` config to the top level of o
 
 ### Semantic recall default settings optimization
 
-The default settings for semantic recall have been optimized based on RAG research. The `topK` increased from 2 to 4, and `messageRange` changed from `{before: 2, after: 2}` to `{before: 1, after: 1}`. These changes provide better accuracy while only slightly increasing message count.
+The default settings for semantic recall have been optimized based on RAG research. The `topK` increased from 2 to 4, and `messageRange` changed from `{ before: 2, after: 2 }` to `{ before: 1, after: 1 }`. These changes provide better accuracy while only slightly increasing message count.
 
 To migrate, if you were relying on the previous defaults, explicitly set these values.
 
@@ -130,6 +111,16 @@ To migrate, rename `query()` to `recall()` and update code that expects the old 
 + const messages = result.messages;
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-query-to-recall .
+```
+
+:::
+
 ### `Memory.recall()` parameter changes
 
 The `Memory.recall()` method now uses `StorageListMessagesInput` format with pagination, and the `vectorMessageSearch` parameter has been renamed to `vectorSearchString`. These changes align the memory API with the storage pagination API and provide more consistent naming.
@@ -151,6 +142,16 @@ To migrate, update method name, query parameters, and the vector search paramete
   });
 ```
 
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-vector-search-param .
+```
+
+:::
+
 ### `MastraMessageV2` type renamed to `MastraDBMessage`
 
 The `MastraMessageV2` type has been renamed to `MastraDBMessage` for clarity. This change better describes the purpose of this type as the database message format.
@@ -164,7 +165,15 @@ To migrate, replace all instances of `MastraMessageV2` with `MastraDBMessage`.
 + function yourCustomFunction(input: MastraDBMessage) {}
 ```
 
+:::tip[Codemod]
 
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-message-v2-type .
+```
+
+:::
 
 ## Removed
 

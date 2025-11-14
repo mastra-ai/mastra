@@ -233,7 +233,7 @@ S3_PUBLIC_URL_BASE=https://mastra-generated-images.s3.amazonaws.com
 ## Dependencies
 
 - `@mastra/core`: Core Mastra framework
-- `@ai-sdk/openai`: OpenAI integration
+- `@ai-sdk/openai`: OpenAI integration for image generation
 - `@aws-sdk/client-s3`: S3-compatible cloud storage (for image uploads)
 - `@browserbasehq/stagehand`: Web browsing and content extraction
 - `pdf2json`: PDF text extraction

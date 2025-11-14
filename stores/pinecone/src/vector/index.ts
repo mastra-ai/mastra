@@ -49,11 +49,12 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
   /**
    * Creates a new PineconeVector client.
+   * @param id - The unique identifier for this vector store instance.
    * @param apiKey - The API key for Pinecone.
    * @param environment - The environment for Pinecone.
    */
-  constructor({ apiKey, environment }: { apiKey: string; environment?: string }) {
-    super();
+  constructor({ id, apiKey, environment }: { id: string; apiKey: string; environment?: string }) {
+    super({ id });
     const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
     if (environment) {
       opts['controllerHostUrl'] = environment;

@@ -1,3 +1,4 @@
+import type { WritableStream } from 'stream/web';
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet, StepResult, ModelMessage } from 'ai-v5';
 import z from 'zod';

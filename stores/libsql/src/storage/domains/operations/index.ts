@@ -1,6 +1,6 @@
 import type { Client, InValue } from '@libsql/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_AI_SPANS } from '@mastra/core/storage';
+import { TABLE_WORKFLOW_SNAPSHOT, StoreOperations, TABLE_SPANS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -71,7 +71,7 @@ export class StoreOperationsLibSQL extends StoreOperations {
       return stmnt;
     }
 
-    if (tableName === TABLE_AI_SPANS) {
+    if (tableName === TABLE_SPANS) {
       const stmnt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (
                     ${columns.join(',\n')},
                     PRIMARY KEY (traceId, spanId)

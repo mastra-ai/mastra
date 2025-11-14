@@ -15,6 +15,7 @@ export const mastra = new Mastra({
     financialAgent,
   },
   storage: new LibSQLStore({
+    id: "learning-memory-storage",
     url: ":memory:",
   }),
   logger: new PinoLogger({

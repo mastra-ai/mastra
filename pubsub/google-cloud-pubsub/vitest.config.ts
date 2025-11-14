@@ -5,10 +5,7 @@ export default defineConfig({
     globals: true,
     include: ['src/**/*.test.ts'],
     pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: true,
-      },
-    },
+    maxWorkers: 1,
+    isolate: false,
   },
 });

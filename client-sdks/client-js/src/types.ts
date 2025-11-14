@@ -23,8 +23,8 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
-  AITraceRecord,
-  AISpanRecord,
+  TraceRecord,
+  SpanRecord,
   PaginationInfo,
   WorkflowRun,
   WorkflowRuns,
@@ -79,6 +79,7 @@ export type NetworkStreamParams = {
 } & MultiPrimitiveExecutionOptions;
 
 export interface GetAgentResponse {
+  id: string;
   name: string;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
@@ -482,12 +483,12 @@ export interface TemplateInstallationRequest {
   variables?: Record<string, string>;
 }
 
-export interface GetAITraceResponse {
-  trace: AITraceRecord;
+export interface GetTraceResponse {
+  trace: TraceRecord;
 }
 
-export interface GetAITracesResponse {
-  spans: AISpanRecord[];
+export interface GetTracesResponse {
+  spans: SpanRecord[];
   pagination: PaginationInfo;
 }
 

@@ -1,5 +1,5 @@
 ---
-title: "Example: Retrieving Top-K Results | RAG | Mastra Docs"
+title: "Example: Retrieving Top-K Results | RAG"
 description: Example of using Mastra to query a vector database and retrieve semantically similar chunks.
 ---
 
@@ -29,6 +29,7 @@ const { embeddings } = await embedMany({
 });
 
 const pinecone = new PineconeVector({
+  id: 'pinecone-vector',
   apiKey: "your-api-key",
 });
 

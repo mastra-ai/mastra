@@ -11,11 +11,11 @@ import type {
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
-  AISpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
-  CreateAISpanRecord,
-  UpdateAISpanRecord,
+  SpanRecord,
+  TraceRecord,
+  TracesPaginatedArg,
+  CreateSpanRecord,
+  UpdateSpanRecord,
   StorageListWorkflowRunsInput,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
@@ -47,6 +47,7 @@ const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
 
   try {
     return MongoDBConnector.fromDatabaseConfig({
+      id: config.id,
       options: config.options,
       url: config.url,
       dbName: config.dbName,
@@ -88,7 +89,7 @@ export class MongoDBStore extends MastraStorage {
   }
 
   constructor(config: MongoDBConfig) {
-    super({ name: 'MongoDBStore' });
+    super({ id: config.id, name: 'MongoDBStore' });
 
     this.stores = {} as StorageDomains;
 
@@ -378,9 +379,9 @@ export class MongoDBStore extends MastraStorage {
   }
 
   /**
-   * AI Tracing/Observability
+   * Tracing/Observability
    */
-  async createAISpan(span: CreateAISpanRecord): Promise<void> {
+  async createSpan(span: CreateSpanRecord): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -389,17 +390,17 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.createAISpan(span);
+    return this.stores.observability.createSpan(span);
   }
 
-  async updateAISpan({
+  async updateSpan({
     spanId,
     traceId,
     updates,
   }: {
     spanId: string;
     traceId: string;
-    updates: Partial<UpdateAISpanRecord>;
+    updates: Partial<UpdateSpanRecord>;
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
@@ -409,10 +410,10 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.updateAISpan({ spanId, traceId, updates });
+    return this.stores.observability.updateSpan({ spanId, traceId, updates });
   }
 
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -421,12 +422,10 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.getAITrace(traceId);
+    return this.stores.observability.getTrace(traceId);
   }
 
-  async getAITracesPaginated(
-    args: AITracesPaginatedArg,
-  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -435,10 +434,10 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.getAITracesPaginated(args);
+    return this.stores.observability.getTracesPaginated(args);
   }
 
-  async batchCreateAISpans(args: { records: CreateAISpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -447,14 +446,14 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchCreateAISpans(args);
+    return this.stores.observability.batchCreateSpans(args);
   }
 
-  async batchUpdateAISpans(args: {
+  async batchUpdateSpans(args: {
     records: {
       traceId: string;
       spanId: string;
-      updates: Partial<UpdateAISpanRecord>;
+      updates: Partial<UpdateSpanRecord>;
     }[];
   }): Promise<void> {
     if (!this.stores.observability) {
@@ -465,10 +464,10 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchUpdateAISpans(args);
+    return this.stores.observability.batchUpdateSpans(args);
   }
 
-  async batchDeleteAITraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
         id: 'MONGODB_STORE_OBSERVABILITY_NOT_INITIALIZED',
@@ -477,6 +476,6 @@ export class MongoDBStore extends MastraStorage {
         text: 'Observability storage is not initialized',
       });
     }
-    return this.stores.observability.batchDeleteAITraces(args);
+    return this.stores.observability.batchDeleteTraces(args);
   }
 }

@@ -1,57 +1,57 @@
 import type {
-  AISpan,
-  AISpanTypeMap,
-  AnyAISpan,
+  Span,
+  SpanTypeMap,
+  AnySpan,
   ChildSpanOptions,
   ChildEventOptions,
   EndSpanOptions,
   ErrorSpanOptions,
   UpdateSpanOptions,
   CreateSpanOptions,
-  AITracing,
-  ExportedAISpan,
+  ObservabilityInstance,
+  ExportedSpan,
   TraceState,
   IModelSpanTracker,
   AIModelGenerationSpan,
 } from '@mastra/core/observability';
 
-import { AISpanType, InternalSpans } from '@mastra/core/observability';
+import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
 
 /**
  * Determines if a span type should be considered internal based on flags.
  * Returns false if flags are undefined.
  */
-function isSpanInternal(spanType: AISpanType, flags?: InternalSpans): boolean {
+function isSpanInternal(spanType: SpanType, flags?: InternalSpans): boolean {
   if (flags === undefined || flags === InternalSpans.NONE) {
     return false;
   }
 
   switch (spanType) {
     // Workflow-related spans
-    case AISpanType.WORKFLOW_RUN:
-    case AISpanType.WORKFLOW_STEP:
-    case AISpanType.WORKFLOW_CONDITIONAL:
-    case AISpanType.WORKFLOW_CONDITIONAL_EVAL:
-    case AISpanType.WORKFLOW_PARALLEL:
-    case AISpanType.WORKFLOW_LOOP:
-    case AISpanType.WORKFLOW_SLEEP:
-    case AISpanType.WORKFLOW_WAIT_EVENT:
+    case SpanType.WORKFLOW_RUN:
+    case SpanType.WORKFLOW_STEP:
+    case SpanType.WORKFLOW_CONDITIONAL:
+    case SpanType.WORKFLOW_CONDITIONAL_EVAL:
+    case SpanType.WORKFLOW_PARALLEL:
+    case SpanType.WORKFLOW_LOOP:
+    case SpanType.WORKFLOW_SLEEP:
+    case SpanType.WORKFLOW_WAIT_EVENT:
       return (flags & InternalSpans.WORKFLOW) !== 0;
 
     // Agent-related spans
-    case AISpanType.AGENT_RUN:
+    case SpanType.AGENT_RUN:
       return (flags & InternalSpans.AGENT) !== 0;
 
     // Tool-related spans
-    case AISpanType.TOOL_CALL:
-    case AISpanType.MCP_TOOL_CALL:
+    case SpanType.TOOL_CALL:
+    case SpanType.MCP_TOOL_CALL:
       return (flags & InternalSpans.TOOL) !== 0;
 
     // Model-related spans
-    case AISpanType.MODEL_GENERATION:
-    case AISpanType.MODEL_STEP:
-    case AISpanType.MODEL_CHUNK:
+    case SpanType.MODEL_GENERATION:
+    case SpanType.MODEL_STEP:
+    case SpanType.MODEL_CHUNK:
       return (flags & InternalSpans.MODEL) !== 0;
 
     // Default: never internal
@@ -60,19 +60,19 @@ function isSpanInternal(spanType: AISpanType, flags?: InternalSpans): boolean {
   }
 }
 
-export abstract class BaseAISpan<TType extends AISpanType = any> implements AISpan<TType> {
+export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
   public abstract id: string;
   public abstract traceId: string;
 
   public name: string;
   public type: TType;
-  public attributes: AISpanTypeMap[TType];
-  public parent?: AnyAISpan;
+  public attributes: SpanTypeMap[TType];
+  public parent?: AnySpan;
   public startTime: Date;
   public endTime?: Date;
   public isEvent: boolean;
   public isInternal: boolean;
-  public aiTracing: AITracing;
+  public observabilityInstance: ObservabilityInstance;
   public input?: any;
   public output?: any;
   public errorInfo?: {
@@ -87,21 +87,21 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
 
-  constructor(options: CreateSpanOptions<TType>, aiTracing: AITracing) {
+  constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
     this.name = options.name;
     this.type = options.type;
-    this.attributes = deepClean(options.attributes) || ({} as AISpanTypeMap[TType]);
+    this.attributes = deepClean(options.attributes) || ({} as SpanTypeMap[TType]);
     this.metadata = deepClean(options.metadata);
     this.parent = options.parent;
     this.startTime = new Date();
-    this.aiTracing = aiTracing;
+    this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
-      // Event spans are immediately emitted by the BaseAITracing class via the end() event.
+      // Event spans are immediately emitted by the BaseObservability class via the end() event.
       this.output = deepClean(options.output);
     } else {
       this.input = deepClean(options.input);
@@ -118,13 +118,13 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
   /** Update span attributes */
   abstract update(options: UpdateSpanOptions<TType>): void;
 
-  createChildSpan(options: ChildSpanOptions<AISpanType.MODEL_GENERATION>): AIModelGenerationSpan;
-  createChildSpan<TChildType extends AISpanType>(options: ChildSpanOptions<TChildType>): AISpan<TChildType> {
-    return this.aiTracing.startSpan<TChildType>({ ...options, parent: this, isEvent: false });
+  createChildSpan(options: ChildSpanOptions<SpanType.MODEL_GENERATION>): AIModelGenerationSpan;
+  createChildSpan<TChildType extends SpanType>(options: ChildSpanOptions<TChildType>): Span<TChildType> {
+    return this.observabilityInstance.startSpan<TChildType>({ ...options, parent: this, isEvent: false });
   }
 
-  createEventSpan<TChildType extends AISpanType>(options: ChildEventOptions<TChildType>): AISpan<TChildType> {
-    return this.aiTracing.startSpan<TChildType>({ ...options, parent: this, isEvent: true });
+  createEventSpan<TChildType extends SpanType>(options: ChildEventOptions<TChildType>): Span<TChildType> {
+    return this.observabilityInstance.startSpan<TChildType>({ ...options, parent: this, isEvent: true });
   }
 
   /**
@@ -133,11 +133,11 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
    */
   createTracker(): IModelSpanTracker | undefined {
     // Only create tracker for MODEL_GENERATION spans
-    if (this.type !== AISpanType.MODEL_GENERATION) {
+    if (this.type !== SpanType.MODEL_GENERATION) {
       return undefined;
     }
 
-    return new ModelSpanTracker(this as AISpan<AISpanType.MODEL_GENERATION>);
+    return new ModelSpanTracker(this as Span<SpanType.MODEL_GENERATION>);
   }
 
   /** Returns `TRUE` if the span is the root span of a trace */
@@ -161,12 +161,12 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
   }
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
-  public findParent<T extends AISpanType>(spanType: T): AISpan<T> | undefined {
-    let current: AnyAISpan | undefined = this.parent;
+  public findParent<T extends SpanType>(spanType: T): Span<T> | undefined {
+    let current: AnySpan | undefined = this.parent;
 
     while (current) {
       if (current.type === spanType) {
-        return current as AISpan<T>;
+        return current as Span<T>;
       }
       current = current.parent;
     }
@@ -175,7 +175,7 @@ export abstract class BaseAISpan<TType extends AISpanType = any> implements AISp
   }
 
   /** Returns a lightweight span ready for export */
-  public exportSpan(includeInternalSpans?: boolean): ExportedAISpan<TType> {
+  public exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> {
     return {
       id: this.id,
       traceId: this.traceId,

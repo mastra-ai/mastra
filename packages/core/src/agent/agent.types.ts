@@ -1,3 +1,4 @@
+import type { WritableStream } from 'stream/web';
 import type { ModelMessage, ToolChoice } from 'ai-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
@@ -25,7 +26,7 @@ export type MultiPrimitiveExecutionOptions = {
   /** Maximum number of steps to run */
   maxSteps?: number;
 
-  /** AI tracing context for span hierarchy and metadata */
+  /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
 
   /** Model-specific settings like temperature, maxTokens, topP, etc. */
@@ -108,9 +109,9 @@ export type AgentExecutionOptions<
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Whether to return detailed scoring data in the response */
   returnScorerData?: boolean;
-  /** AI tracing context for span hierarchy and metadata */
+  /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
-  /** AI tracing options for starting new traces */
+  /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
 
   /** Callback function called before each step of multi-step execution */

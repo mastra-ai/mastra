@@ -94,6 +94,7 @@ export const init = async ({
       await installMastraDocsMCPServer({
         editor: configureEditorWithDocsMCP,
         directory: process.cwd(),
+        versionTag,
       });
     }
 

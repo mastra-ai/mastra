@@ -8,7 +8,8 @@ const client = new MCPClient({
   id: 'weather-server',
   servers: {
     weather: {
-      url: new URL(`http://localhost:4114/api/mcp/myMcpServer/mcp`),
+      // Note: The MCP server ID gets slugified, so 'myMcpServer' becomes 'my-mcp-server'
+      url: new URL(`http://localhost:4114/api/mcp/my-mcp-server/mcp`),
     },
   },
 });

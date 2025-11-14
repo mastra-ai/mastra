@@ -1,5 +1,5 @@
 ---
-title: "Example: Structured Reasoning with Workflows | RAG | Mastra Docs"
+title: "Example: Structured Reasoning with Workflows | RAG"
 description: Example of implementing structured reasoning in a RAG system using Mastra's workflow capabilities.
 ---
 
@@ -258,6 +258,7 @@ Instantiate PgVector and Mastra with all components:
 
 ```typescript copy showLineNumbers{169} title="index.ts"
 const pgVector = new PgVector({
+  id: 'rag-vectors',
   connectionString: process.env.POSTGRES_CONNECTION_STRING!,
 });
 

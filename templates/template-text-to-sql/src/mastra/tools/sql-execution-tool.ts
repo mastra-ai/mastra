@@ -29,7 +29,8 @@ export const sqlExecutionTool = createTool({
     query: z.string().describe('SQL query to execute'),
   }),
   description: 'Executes SQL queries against a PostgreSQL database',
-  execute: async ({ context: { connectionString, query } }) => {
+  execute: async inputData => {
+    const { connectionString, query } = inputData;
     const client = createDatabaseConnection(connectionString);
 
     try {

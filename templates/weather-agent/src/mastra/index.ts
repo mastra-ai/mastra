@@ -1,3 +1,4 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
@@ -8,7 +9,7 @@ import { toolCallAppropriatenessScorer, completenessScorer, translationScorer } 
 export const mastra = new Mastra({
   workflows: { weatherWorkflow },
   agents: { weatherAgent },
-  storage: new LibSQLStore({ url: ':memory:' }),
+  storage: new LibSQLStore({ id: 'weather-agent-storage', url: ':memory:' }),
   scorers: {
     toolCallAppropriatenessScorer,
     completenessScorer,
@@ -18,9 +19,9 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  observability: {
+  observability: new Observability({
     default: {
       enabled: true,
     },
-  },
+  }),
 });

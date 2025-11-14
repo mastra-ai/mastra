@@ -136,3 +136,11 @@ const response = await agent.stream('Show me the quick start example', {
 - Access package changelogs
 - List all available package changelogs
 - Get detailed changelog content for specific packages
+
+### Migration Tool (`mastraMigration`)
+
+- Get migration guidance for Mastra version upgrades and breaking changes
+- Explore all available migration guides (e.g., upgrade-to-v1/, agentnetwork)
+- List section headers to see what breaking changes are covered
+- Fetch specific sections or entire migration guides
+- Search across all migration guides by keywords

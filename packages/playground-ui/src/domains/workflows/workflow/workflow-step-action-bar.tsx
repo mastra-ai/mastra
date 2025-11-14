@@ -4,20 +4,18 @@ import { Button } from '@/ds/components/Button';
 import { Dialog } from '@/components/ui/dialog';
 import { CodeDialogContent } from './workflow-code-dialog-content';
 import { useState } from 'react';
-import { WorkflowRunEventForm, WorkflowSendEventFormProps } from './workflow-run-event-form';
 import { cn } from '@/lib/utils';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
   output?: any;
+  suspendOutput?: any;
   resumeData?: any;
   error?: any;
   stepName: string;
+  stepId?: string;
   mapConfig?: string;
-  event?: string;
   onShowNestedGraph?: () => void;
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
-  runId?: string;
   status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
 }
 
@@ -25,13 +23,12 @@ export const WorkflowStepActionBar = ({
   input,
   output,
   resumeData,
+  suspendOutput,
   error,
   mapConfig,
   stepName,
-  event,
+  stepId,
   onShowNestedGraph,
-  onSendEvent,
-  runId,
   status,
 }: WorkflowStepActionBarProps) => {
   const [isInputOpen, setIsInputOpen] = useState(false);
@@ -39,16 +36,13 @@ export const WorkflowStepActionBar = ({
   const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const [isMapConfigOpen, setIsMapConfigOpen] = useState(false);
-  const [isEventFormOpen, setIsEventFormOpen] = useState(false);
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
 
-  const showEventForm = event && onSendEvent && runId;
-
   return (
     <>
-      {(input || output || error || mapConfig || resumeData || onShowNestedGraph || showEventForm) && (
+      {(input || output || error || mapConfig || resumeData || onShowNestedGraph) && (
         <div
           className={cn(
             'flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg',
@@ -66,7 +60,12 @@ export const WorkflowStepActionBar = ({
 
               <Dialog open={isMapConfigOpen} onOpenChange={setIsMapConfigOpen}>
                 <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>{stepName} map config</DialogTitle>
+                  <DialogTitle className={dialogTitleClass}>
+                    <div className="flex flex-col gap-1">
+                      <div>{stepName} Map Config</div>
+                      {stepId && stepId !== stepName && <div className="text-xs text-icon3 font-normal">{stepId}</div>}
+                    </div>
+                  </DialogTitle>
 
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent data={mapConfig} />
@@ -107,7 +106,7 @@ export const WorkflowStepActionBar = ({
             </>
           )}
 
-          {output && (
+          {(output ?? suspendOutput) && (
             <>
               <Button onClick={() => setIsOutputOpen(true)}>Output</Button>
 
@@ -115,7 +114,7 @@ export const WorkflowStepActionBar = ({
                 <DialogContent className={dialogContentClass}>
                   <DialogTitle className={dialogTitleClass}>{stepName} output</DialogTitle>
                   <div className="px-4 overflow-hidden">
-                    <CodeDialogContent data={output} />
+                    <CodeDialogContent data={output ?? suspendOutput} />
                   </div>
                 </DialogContent>
               </Dialog>
@@ -132,24 +131,6 @@ export const WorkflowStepActionBar = ({
 
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent data={error} />
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-
-          {showEventForm && (
-            <>
-              <Button className="!text-accent5" onClick={() => setIsEventFormOpen(true)}>
-                Send event
-              </Button>
-
-              <Dialog open={isEventFormOpen} onOpenChange={setIsEventFormOpen}>
-                <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>Send {event} event</DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
-                    <WorkflowRunEventForm event={event} runId={runId} onSendEvent={onSendEvent} />
                   </div>
                 </DialogContent>
               </Dialog>

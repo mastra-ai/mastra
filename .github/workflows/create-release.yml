@@ -58,10 +58,10 @@ jobs:
         with:
           run_install: false
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v5
         with:
-          node-version: 20.19.5
+          node-version: 22.13.0
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -151,10 +151,10 @@ jobs:
         with:
           run_install: false
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v5
         with:
-          node-version: 20.19.5
+          node-version: 22.13.0
           cache: 'pnpm'
 
       - name: Install dependencies

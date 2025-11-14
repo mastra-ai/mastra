@@ -250,6 +250,9 @@ export const lessComplexWorkflow = createWorkflow({
   // doUntil loop - continues until text has 20+ characters
   .dountil(addLetterWithCountStep, async ({ inputData: { text } }) => text.length >= 20)
 
+  // Suspend/resume step - requires user input
+  .then(suspendResumeStep)
+
   // Final step
   .then(finalStep)
   .commit();

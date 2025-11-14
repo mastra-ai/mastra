@@ -9,6 +9,7 @@ export const mastra = new Mastra({
     testProcessor: memoryProcessorAgent,
   },
   storage: new LibSQLStore({
+    id: 'mastra-storage',
     url: 'file:mastra.db',
   }),
   server: {
