@@ -113,3 +113,24 @@ npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::
+
+### `tool.execute` return type includes `ValidationError`
+
+The return type of `tool.execute` now includes `ValidationError` to handle validation failures. You must narrow the result type before accessing output schema properties to satisfy TypeScript's type checking.
+
+When calling `tool.execute`, check if the result contains an error before accessing output properties:
+
+```typescript
+const result = await tool.execute(inputData, context);
+
+if ('error' in result) {
+  // Handle validation error
+  console.error('Tool execution failed:', result.error);
+  return;
+}
+
+// Now TypeScript knows result is the success type
+console.log(result.yourOutputSchemaProperty);
+```
+
+This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.

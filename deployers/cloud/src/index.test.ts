@@ -54,12 +54,15 @@ vi.mock('@mastra/deployer', () => {
     writePackageJson = mockWritePackageJson;
   }
 
+  // Use a class for FileService constructor (Vitest v4 requirement)
+  class MockFileService {
+    getFirstExistingFile = vi.fn();
+    getFirstExistingFileOrUndefined = vi.fn();
+  }
+
   return {
     Deployer: MockDeployer,
-    FileService: vi.fn().mockImplementation(() => ({
-      getFirstExistingFile: vi.fn(),
-      getFirstExistingFileOrUndefined: vi.fn(),
-    })),
+    FileService: MockFileService,
   };
 });
 
