@@ -283,12 +283,15 @@ export class CouchbaseVector extends MastraVector {
       for (const match of results.rows) {
         const cleanedMetadata: Record<string, any> = {};
         const fields = (match.fields as Record<string, any>) || {}; // Ensure fields is an object
+
         for (const key in fields) {
           if (Object.prototype.hasOwnProperty.call(fields, key)) {
+            // Include content in metadata (removing the 'metadata.' prefix if present)
             const newKey = key.startsWith('metadata.') ? key.substring('metadata.'.length) : key;
             cleanedMetadata[newKey] = fields[key];
           }
         }
+
         output.push({
           id: match.id as string,
           score: (match.score as number) || 0,

@@ -399,8 +399,14 @@ describe('Unit Testing CouchbaseVector', () => {
           label: 'y-axis',
           text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
         },
-        content:
-          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+        content: {
+          parts: [
+            {
+              type: 'text',
+              text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+            },
+          ],
+        },
       });
       expect(mockCollectionUpsertFn).toHaveBeenNthCalledWith(3, vectorIds[2], {
         embedding: [0.0, 0.0, 1.0],
@@ -484,8 +490,14 @@ describe('Unit Testing CouchbaseVector', () => {
           label: 'y-axis',
           text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
         },
-        content:
-          'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+        content: {
+          parts: [
+            {
+              type: 'text',
+              text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+            },
+          ],
+        },
       });
       expect(mockCollectionUpsertFn).toHaveBeenNthCalledWith(3, testVectorIds[2], {
         embedding: [0.0, 0.0, 1.0],
