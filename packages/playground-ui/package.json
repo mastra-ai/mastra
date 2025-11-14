@@ -138,7 +138,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "autoprefixer": "^10.4.21",
+    "autoprefixer": "^10.4.22",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "postcss": "^8.5.6",
