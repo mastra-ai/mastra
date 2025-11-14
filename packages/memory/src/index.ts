@@ -1,5 +1,6 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { MastraError, ErrorDomain } from '@mastra/core/error';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
@@ -7,7 +8,7 @@ import type {
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
-  MessageDeleteInput,
+  MessageDeleteInput, MemoryRuntimeContext 
 } from '@mastra/core/memory';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -18,7 +19,6 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
-import { MastraError, ErrorDomain } from '@mastra/core/error';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { embedMany } from 'ai';
 import type { TextPart } from 'ai';
@@ -28,9 +28,8 @@ import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
 import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
-import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 import { SemanticRecall, WorkingMemory, MessageHistory } from './processors';
-import type { MemoryRuntimeContext } from '@mastra/core/memory';
+import { updateWorkingMemoryTool, __experimental_updateWorkingMemoryToolVNext } from './tools/working-memory';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
