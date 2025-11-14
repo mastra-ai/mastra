@@ -7,7 +7,7 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "^4.0.8",
     "@vitest/ui": "^4.0.8",
-    "changesets-changelog-github-local": "^1.0.0",
+    "changesets-changelog-github-local": "^1.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.6",
     "npm-run-all2": "^8.0.4",

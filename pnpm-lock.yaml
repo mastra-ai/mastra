@@ -52,8 +52,8 @@ importers:
         specifier: ^4.0.8
         version: 4.0.8(vitest@4.0.8)
       changesets-changelog-github-local:
-        specifier: ^1.0.0
-        version: 1.0.0
+        specifier: ^1.0.1
+        version: 1.0.1
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -10702,8 +10702,8 @@ packages:
     resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
     engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
 
-  changesets-changelog-github-local@1.0.0:
-    resolution: {integrity: sha512-vBwGMotqJOMtDIteUY1KiVSZcFHQjoAbA/JOmDE4j5p0o44JlzUGwHqVrnBkWOpy+6J3x3uo8ZFF80JP0IrJ5w==}
+  changesets-changelog-github-local@1.0.1:
+    resolution: {integrity: sha512-YK/a0W3DJ6DcisUIgI4k/XBEf4zDootk7AGrsYQMXjIO8N/qQ9ACLfroOfRq/IdCB14wLldpDdeTiLXkRMxKFQ==}
 
   character-entities-html4@2.1.0:
     resolution: {integrity: sha512-1v7fgQRj6hnSwFpq1Eu0ynr/CDEw0rXo2B61qXrLNdHZmPKgb7fqS1a2JwF0rISo9q77jDI8VMEHoApn8qDoZA==}
@@ -24054,7 +24054,7 @@ snapshots:
 
   chalk@5.6.2: {}
 
-  changesets-changelog-github-local@1.0.0:
+  changesets-changelog-github-local@1.0.1:
     dependencies:
       '@napi-rs/simple-git': 0.1.22
 
