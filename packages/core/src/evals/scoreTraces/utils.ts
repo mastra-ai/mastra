@@ -230,8 +230,7 @@ export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
   const systemMessages = extractSystemMessages(primaryLLMSpan);
 
   // Extract remembered messages from LLM span (excluding current input)
-  const currentInputContent =
-    (inputMessages[0]?.content.parts?.find((p: any) => p.type === 'text') as any)?.text || '';
+  const currentInputContent = (inputMessages[0]?.content.parts?.find((p: any) => p.type === 'text') as any)?.text || '';
   const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
 
   const input = {
