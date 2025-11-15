@@ -66,13 +66,13 @@ export class AgentBuilder extends Agent {
       },
       memory: new Memory({
         options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
-        processors: [
-          // use the write to disk processor to debug the agent's context
-          // new WriteToDiskProcessor({ prefix: 'before-filter' }),
-          new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
-          // new WriteToDiskProcessor({ prefix: 'after-filter' }),
-        ],
       }),
+      inputProcessors: [
+        // use the write to disk processor to debug the agent's context
+        // new WriteToDiskProcessor({ prefix: 'before-filter' }),
+        new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
+        // new WriteToDiskProcessor({ prefix: 'after-filter' }),
+      ],
     };
 
     super(agentConfig);
