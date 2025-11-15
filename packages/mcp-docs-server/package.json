@@ -34,7 +34,7 @@
   "dependencies": {
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.21.1",
     "jsdom": "^26.1.0",
     "zod": "^3.25.76"
   },

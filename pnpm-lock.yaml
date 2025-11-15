@@ -1687,8 +1687,8 @@ importers:
         specifier: workspace:*
         version: link:../schema-compat
       '@modelcontextprotocol/sdk':
-        specifier: ^1.17.5
-        version: 1.20.1
+        specifier: ^1.21.1
+        version: 1.22.0
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.0
         version: '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.93(zod@3.25.76))(zod@3.25.76)'
@@ -2167,8 +2167,8 @@ importers:
         specifier: ^14.2.1
         version: 14.2.1(@types/json-schema@7.0.15)
       '@modelcontextprotocol/sdk':
-        specifier: ^1.17.5
-        version: 1.20.1
+        specifier: ^1.21.1
+        version: 1.22.0
       exit-hook:
         specifier: ^4.0.0
         version: 4.0.0
@@ -2223,7 +2223,7 @@ importers:
         version: 4.10.3
       hono-mcp-server-sse-transport:
         specifier: 0.0.7
-        version: 0.0.7(@modelcontextprotocol/sdk@1.20.1)(hono@4.10.3)
+        version: 0.0.7(@modelcontextprotocol/sdk@1.22.0)(hono@4.10.3)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.55.0(@types/node@22.13.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
@@ -2252,8 +2252,8 @@ importers:
         specifier: workspace:^
         version: link:../mcp
       '@modelcontextprotocol/sdk':
-        specifier: ^1.17.5
-        version: 1.20.1
+        specifier: ^1.21.1
+        version: 1.22.0
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
@@ -2307,8 +2307,8 @@ importers:
   packages/mcp-registry-registry:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.17.5
-        version: 1.20.1
+        specifier: ^1.21.1
+        version: 1.22.0
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -4206,7 +4206,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.29.1(@modelcontextprotocol/sdk@1.20.1)
+        version: 1.29.1(@modelcontextprotocol/sdk@1.22.0)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.4.1
@@ -7371,9 +7371,14 @@ packages:
   '@microsoft/tsdoc@0.16.0':
     resolution: {integrity: sha512-xgAyonlVVS+q7Vc7qLW0UrJU7rSFcETRWsqdXZtjzRU8dF+6CkozTK4V4y1LwOX7j8r/vHphjDeMeGI4tNGeGA==}
 
-  '@modelcontextprotocol/sdk@1.20.1':
-    resolution: {integrity: sha512-j/P+yuxXfgxb+mW7OEoRCM3G47zCTDqUPivJo/VzpjbG8I9csTXtOprCf5FfOfHK4whOJny0aHuBEON+kS7CCA==}
+  '@modelcontextprotocol/sdk@1.22.0':
+    resolution: {integrity: sha512-VUpl106XVTCpDmTBil2ehgJZjhyLY2QZikzF8NvTXtLRF1CvO5iEE2UNZdVIUer35vFOwMKYeUGbjJtvPWan3g==}
     engines: {node: '>=18'}
+    peerDependencies:
+      '@cfworker/json-schema': ^4.1.1
+    peerDependenciesMeta:
+      '@cfworker/json-schema':
+        optional: true
 
   '@mongodb-js/saslprep@1.3.2':
     resolution: {integrity: sha512-QgA5AySqB27cGTXBFmnpifAi7HxoGUeezwo6p9dI03MuDB6Pp33zgclqVb6oVK3j6I9Vesg0+oojW2XxB59SGg==}
@@ -19282,12 +19287,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.29.1(@modelcontextprotocol/sdk@1.20.1)':
+  '@google/genai@1.29.1(@modelcontextprotocol/sdk@1.22.0)':
     dependencies:
       google-auth-library: 10.4.1
       ws: 8.18.3
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.20.1
+      '@modelcontextprotocol/sdk': 1.22.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -19943,7 +19948,7 @@ snapshots:
       '@isaacs/ttlcache': 1.4.1
       '@lukeed/uuid': 2.0.1
       '@mastra/schema-compat': 1.0.0-beta.0(zod@3.25.76)
-      '@modelcontextprotocol/sdk': 1.20.1
+      '@modelcontextprotocol/sdk': 1.22.0
       '@openrouter/ai-sdk-provider-v5': '@openrouter/ai-sdk-provider@1.2.0(ai@5.0.93(zod@3.25.76))(zod@3.25.76)'
       '@sindresorhus/slugify': 2.2.1
       ai-v5: ai@5.0.76(zod@3.25.76)
@@ -19966,6 +19971,7 @@ snapshots:
     optionalDependencies:
       '@mastra/observability': 1.0.0-beta.0(@mastra/core@1.0.0-beta.2)
     transitivePeerDependencies:
+      - '@cfworker/json-schema'
       - '@hono/arktype-validator'
       - '@hono/effect-validator'
       - '@hono/typebox-validator'
@@ -20059,9 +20065,10 @@ snapshots:
 
   '@microsoft/tsdoc@0.16.0': {}
 
-  '@modelcontextprotocol/sdk@1.20.1':
+  '@modelcontextprotocol/sdk@1.22.0':
     dependencies:
-      ajv: 6.12.6
+      ajv: 8.17.1
+      ajv-formats: 3.0.1(ajv@8.17.1)
       content-type: 1.0.5
       cors: 2.8.5
       cross-spawn: 7.0.6
@@ -23375,7 +23382,7 @@ snapshots:
   '@wong2/mcp-cli@1.13.0':
     dependencies:
       '@json-schema-tools/traverse': 1.11.0
-      '@modelcontextprotocol/sdk': 1.20.1
+      '@modelcontextprotocol/sdk': 1.22.0
       conf: 13.1.0
       eventsource: 3.0.7
       express: 5.1.0
@@ -23388,6 +23395,7 @@ snapshots:
       yocto-spinner: 0.2.3
       yoctocolors: 2.1.2
     transitivePeerDependencies:
+      - '@cfworker/json-schema'
       - supports-color
 
   '@workos-inc/node@7.71.0(express@5.1.0)':
@@ -26016,9 +26024,9 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.20.1)(hono@4.10.3):
+  hono-mcp-server-sse-transport@0.0.7(@modelcontextprotocol/sdk@1.22.0)(hono@4.10.3):
     dependencies:
-      '@modelcontextprotocol/sdk': 1.20.1
+      '@modelcontextprotocol/sdk': 1.22.0
       hono: 4.10.3
 
   hono-openapi@0.4.8(hono@4.10.3)(openapi-types@12.1.3)(zod@3.25.76):

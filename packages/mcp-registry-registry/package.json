@@ -31,7 +31,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.21.1",
     "uuid": "^11.1.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
