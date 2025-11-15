@@ -5,7 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="%%MASTRA_BASE_PATH%%/mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Studio</title>
+  </head>
+
+  <body class="overflow-hidden">
     <script>
+      window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
+      window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
+      window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
+      window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
+      window.MASTRA_BASE_PATH = '%%MASTRA_BASE_PATH%%';
+
       function connectSSE() {
         const basePath = window.MASTRA_BASE_PATH || '';
         const events = new EventSource(`${basePath}/refresh-events`);
@@ -28,23 +37,7 @@
 
       connectSSE();
     </script>
-  </head>
-
-  <body class="overflow-hidden">
-    <script>
-      window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
-      window.MASTRA_SERVER_HOST = '%%MASTRA_SERVER_HOST%%';
-      window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
-      window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
-      window.MASTRA_BASE_PATH = '%%MASTRA_BASE_PATH%%';
-    </script>
     <div id="root" class="dark"></div>
-    <!-- 
-      Note: The dynamic import below references TypeScript source (src/main.tsx) which browsers cannot execute.
-      This is intentional - Vite's build process transforms this entire script block during `vite build`,
-      replacing it with static <script> tags that reference the compiled JavaScript bundles.
-      The server serves the built version from CLI's dist/playground, not this source file.
-    -->
     <script type="module">
       const basePath = window.MASTRA_BASE_PATH || '';
       import(`${basePath}/src/main.tsx`);
