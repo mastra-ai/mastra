@@ -28,7 +28,7 @@ import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import type { MessageListInput, MastraDBMessage, UIMessageWithMetadata } from './message-list';
+import type { MessageListInput, UIMessageWithMetadata } from './message-list';
 import { MessageList } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import type { AgentGenerateOptions, AgentStreamOptions, AgentInstructions, ToolsetsInput, ToolsInput } from './types';

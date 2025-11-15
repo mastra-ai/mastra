@@ -170,7 +170,7 @@ export class ProcessorRunner {
         // Get all messages from the MessageList for the next processor
         processableMessages = messageList.get.all.db();
         // For trace output, show the full LLM prompt including system messages added by processors
-        processorSpan?.end({ output: result.get.input.llmPrompt() });
+        processorSpan?.end({ output: result.get.all.aiV4.prompt() });
       } else {
         // Processor returned an array of messages
         processableMessages = result;
@@ -426,7 +426,7 @@ export class ProcessorRunner {
         // Get all messages from the MessageList for the next processor
         processableMessages = messageList.get.all.db();
         // For trace output, show the full LLM prompt including system messages added by processors
-        processorSpan?.end({ output: result.get.input.llmPrompt() });
+        processorSpan?.end({ output: result.get.all.aiV4.prompt() });
       } else {
         // Processor returned an array of messages
         processableMessages = result;
