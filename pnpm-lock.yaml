@@ -3350,7 +3350,7 @@ importers:
         specifier: ^3.902.0
         version: 3.913.0(@aws-sdk/client-dynamodb@3.913.0)
       electrodb:
-        specifier: ^3.4.6
+        specifier: ^3.5.0
         version: 3.5.0(@aws-sdk/client-dynamodb@3.913.0)
     devDependencies:
       '@internal/lint':
