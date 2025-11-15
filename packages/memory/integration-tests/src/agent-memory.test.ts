@@ -599,6 +599,73 @@ describe('Agent with message processors', () => {
         .length,
     ).toBe(4);
   }, 30_000);
+
+  it('should include working memory in LLM request when input processors run', async () => {
+    const dbFile = 'file:mastra-agent.db';
+    const storage = new LibSQLStore({
+      id: 'test-storage',
+      url: dbFile,
+    });
+    const vector = new LibSQLVector({
+      connectionUrl: dbFile,
+      id: 'test-vector',
+    });
+
+    const memory = new Memory({
+      storage,
+      vector,
+      embedder: fastembed,
+      options: {
+        workingMemory: {
+          enabled: true,
+        },
+        lastMessages: 5,
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a helpful assistant',
+      model: openai('gpt-4o-mini'),
+      memory,
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+
+    // First, set working memory
+    await memory.updateWorkingMemory({
+      threadId,
+      resourceId,
+      workingMemory: '# User Information\nName: John Doe\nFavorite color: Blue',
+    });
+
+    // Now generate a response - this should include working memory in the LLM request
+    const response = await agent.generateLegacy('What is my favorite color?', {
+      threadId,
+      resourceId,
+    });
+
+    // Check the actual request body sent to the LLM
+    const requestMessages = JSON.parse(response.request.body as string).messages;
+
+    // Should have more than just the user message
+    // Should include working memory system message + user message
+    expect(requestMessages.length).toBeGreaterThan(1);
+
+    // Should include a system message with working memory
+    const workingMemoryMessage = requestMessages.find(
+      (msg: any) => msg.role === 'system' && msg.content.includes('John Doe') && msg.content.includes('Blue'),
+    );
+
+    expect(workingMemoryMessage).toBeDefined();
+    expect(workingMemoryMessage.content).toContain('John Doe');
+    expect(workingMemoryMessage.content).toContain('Blue');
+
+    // Response should reference the working memory
+    expect(response.text.toLowerCase()).toContain('blue');
+  }, 30_000);
 });
 
 describe('Agent memory test gemini', () => {
