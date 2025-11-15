@@ -193,6 +193,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/minimax",
+          label: "Minimax",
+        },
+        {
+          type: "doc",
           id: "providers/modelscope",
           label: "ModelScope",
         },

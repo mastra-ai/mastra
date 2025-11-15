@@ -18,19 +18,31 @@ vi.mock('../utils', async importOriginal => {
   };
 });
 
+// Create a mock instance tracker
+const mockGraphRAGInstances: any[] = [];
+
 vi.mock('../graph-rag', async importOriginal => {
   const actual: any = await importOriginal();
+
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockGraphRAG {
+    createGraph = vi.fn();
+    query = vi.fn(() => [
+      { content: 'foo', metadata: { text: 'foo' } },
+      { content: 'bar', metadata: { text: 'bar' } },
+    ]);
+
+    constructor() {
+      mockGraphRAGInstances.push(this);
+    }
+  }
+
+  // Create a spy on the class
+  const GraphRAGSpy = vi.fn(MockGraphRAG as any);
+
   return {
     ...actual,
-    GraphRAG: vi.fn().mockImplementation(() => {
-      return {
-        createGraph: vi.fn(),
-        query: vi.fn(() => [
-          { content: 'foo', metadata: { text: 'foo' } },
-          { content: 'bar', metadata: { text: 'bar' } },
-        ]),
-      };
-    }),
+    GraphRAG: GraphRAGSpy,
   };
 });
 
@@ -50,6 +62,7 @@ const mockMastra = {
 describe('createGraphRAGTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGraphRAGInstances.length = 0; // Clear instances
   });
 
   it('validates input schema', () => {
@@ -105,7 +118,7 @@ describe('createGraphRAGTool', () => {
       );
       // GraphRAG createGraph and query should be called
       expect(GraphRAG).toHaveBeenCalled();
-      const instance = (GraphRAG as any).mock.results[0].value;
+      const instance = mockGraphRAGInstances[0];
       expect(instance.createGraph).toHaveBeenCalled();
       expect(instance.query).toHaveBeenCalledWith(
         expect.objectContaining({
