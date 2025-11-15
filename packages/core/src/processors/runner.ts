@@ -169,12 +169,14 @@ export class ProcessorRunner {
         }
         // Get all messages from the MessageList for the next processor
         processableMessages = messageList.get.all.db();
+        // For trace output, show the full LLM prompt including system messages added by processors
+        processorSpan?.end({ output: result.get.input.llmPrompt() });
       } else {
         // Processor returned an array of messages
         processableMessages = result;
+        processorSpan?.end({ output: result });
       }
-      // Record the actual output of this processor (result), not the input to the next processor
-      processorSpan?.end({ output: result instanceof MessageList ? result.get.all.db() : result });
+
     }
 
     // Processed messages are already in the message list, no need to re-add them
@@ -423,12 +425,14 @@ export class ProcessorRunner {
         }
         // Get all messages from the MessageList for the next processor
         processableMessages = messageList.get.all.db();
+        // For trace output, show the full LLM prompt including system messages added by processors
+        processorSpan?.end({ output: result.get.input.llmPrompt() });
       } else {
         // Processor returned an array of messages
         processableMessages = result;
+        processorSpan?.end({ output: result });
       }
-      // Record the actual output of this processor (result), not the input to the next processor
-      processorSpan?.end({ output: result instanceof MessageList ? result.get.all.db() : result });
+
     }
 
     if (processableMessages.length > 0) {
