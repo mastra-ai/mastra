@@ -83,6 +83,7 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
   agentId: string;
+  toolConcurrency?: number;
 };
 
 export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<

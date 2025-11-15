@@ -2417,6 +2417,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       resumeContext,
       agentId: this.id,
       toolCallId: options.toolCallId,
+      toolConcurrency: this.#options?.toolConcurrency,
     });
 
     const run = await executionWorkflow.createRun();

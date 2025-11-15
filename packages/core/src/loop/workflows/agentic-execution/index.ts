@@ -34,6 +34,9 @@ export function createAgenticExecutionWorkflow<
     llmExecutionStep,
   );
 
+  // Extract toolConcurrency with default value
+  const concurrency = rest.toolConcurrency ?? 10;
+
   return createWorkflow({
     id: 'executionWorkflow',
     inputSchema: llmIterationOutputSchema,
@@ -55,7 +58,7 @@ export function createAgenticExecutionWorkflow<
       },
       { id: 'map-tool-calls' },
     )
-    .foreach(toolCallStep, { concurrency: 10 })
+    .foreach(toolCallStep, { concurrency })
     .then(llmMappingStep)
     .commit();
 }
