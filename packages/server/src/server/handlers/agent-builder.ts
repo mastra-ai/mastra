@@ -24,6 +24,7 @@ import {
   listWorkflowsResponseSchema,
   streamLegacyAgentBuilderBodySchema,
 } from '../schemas/agent-builder';
+import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
 
 interface AgentBuilderContext extends Context {
@@ -238,6 +239,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
   bodySchema: streamLegacyAgentBuilderBodySchema,
+  responseSchema: streamResponseSchema,
   summary: 'Stream action execution',
   description: 'Executes an action and streams the results in real-time',
   tags: ['Agent Builder'],
@@ -383,6 +385,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
+  responseSchema: streamResponseSchema,
   summary: 'Observe action stream',
   description: 'Observes and streams updates from an already running action execution',
   tags: ['Agent Builder'],
@@ -526,6 +529,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
   bodySchema: resumeAgentBuilderBodySchema,
+  responseSchema: streamResponseSchema,
   summary: 'Resume action stream',
   description: 'Resumes a suspended action execution and continues streaming results',
   tags: ['Agent Builder'],
@@ -633,6 +637,7 @@ export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   responseType: 'stream',
   pathParamSchema: actionIdPathParams,
   queryParamSchema: runIdSchema,
+  responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Observe agent-builder action stream with legacy format',
   description:
     'Legacy endpoint for observing agent-builder action stream. Use /api/agent-builder/:actionId/observe instead.',

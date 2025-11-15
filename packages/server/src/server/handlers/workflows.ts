@@ -4,6 +4,7 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { WorkflowInfo, ChunkType, StreamEvent } from '@mastra/core/workflows';
 import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
+import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
 import {
   createWorkflowRunResponseSchema,
@@ -332,6 +333,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: runIdSchema,
   bodySchema: resumeBodySchema,
+  responseSchema: streamResponseSchema,
   summary: 'Resume workflow stream',
   description: 'Resumes a suspended workflow execution and continues streaming results',
   tags: ['Workflows'],
@@ -555,6 +557,7 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
   responseType: 'stream',
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: runIdSchema,
+  responseSchema: streamResponseSchema,
   summary: 'Observe workflow stream',
   description: 'Observes and streams updates from an already running workflow execution',
   tags: ['Workflows'],
@@ -644,6 +647,7 @@ export const OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE = createRoute({
   responseType: 'stream',
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: runIdSchema,
+  responseSchema: streamResponseSchema,
   summary: 'Observe workflow stream (v2)',
   description: 'Observes and streams updates from an already running workflow execution using v2 streaming API',
   tags: ['Workflows'],
@@ -884,6 +888,7 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
   responseType: 'stream',
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: runIdSchema,
+  responseSchema: streamResponseSchema,
   summary: '[DEPRECATED] Observe workflow stream with legacy format',
   description: 'Legacy endpoint for observing workflow stream. Use /api/workflows/:workflowId/observe instead.',
   tags: ['Workflows', 'Legacy'],
