@@ -1497,6 +1497,13 @@ export class MessageList {
             break;
 
           case 'tool-call':
+            // Merge part-level and message-level providerOptions
+            // Part-level takes precedence over message-level
+            const toolCallProviderMetadata = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+            };
+
             parts.push({
               type: 'tool-invocation',
               toolInvocation: {
@@ -1505,6 +1512,9 @@ export class MessageList {
                 toolName: part.toolName,
                 args: part.args,
               },
+              ...(Object.keys(toolCallProviderMetadata).length > 0
+                ? { providerMetadata: toolCallProviderMetadata }
+                : {}),
             });
             break;
 
@@ -1541,6 +1551,12 @@ export class MessageList {
               }
             }
 
+            // Merge part-level and message-level providerOptions for tool-result
+            const toolResultProviderMetadata = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+            };
+
             const invocation = {
               state: 'result' as const,
               toolCallId: part.toolCallId,
@@ -1551,6 +1567,9 @@ export class MessageList {
             parts.push({
               type: 'tool-invocation',
               toolInvocation: invocation,
+              ...(Object.keys(toolResultProviderMetadata).length > 0
+                ? { providerMetadata: toolResultProviderMetadata }
+                : {}),
             });
             toolInvocations.push(invocation);
             break;
@@ -1570,19 +1589,33 @@ export class MessageList {
             });
             break;
           case 'image':
+            // Merge part-level and message-level providerOptions for image
+            const imageProviderMetadata = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+            };
+
             parts.push({
               type: 'file',
               data: imageContentToString(part.image),
               mimeType: part.mimeType!,
+              ...(Object.keys(imageProviderMetadata).length > 0 ? { providerMetadata: imageProviderMetadata } : {}),
             });
             break;
           case 'file':
+            // Merge part-level and message-level providerOptions for file
+            const fileProviderMetadata = {
+              ...('providerOptions' in coreMessage && coreMessage.providerOptions ? coreMessage.providerOptions : {}),
+              ...('providerOptions' in part && part.providerOptions ? part.providerOptions : {}),
+            };
+
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
             if (part.data instanceof URL) {
               parts.push({
                 type: 'file',
                 data: part.data.toString(),
                 mimeType: part.mimeType,
+                ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
               });
             } else if (typeof part.data === 'string') {
               const categorized = categorizeFileData(part.data, part.mimeType);
@@ -1593,6 +1626,7 @@ export class MessageList {
                   type: 'file',
                   data: part.data,
                   mimeType: categorized.mimeType || 'image/png',
+                  ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
                 });
               } else {
                 // Raw data, convert to base64
@@ -1601,6 +1635,7 @@ export class MessageList {
                     type: 'file',
                     mimeType: categorized.mimeType || 'image/png',
                     data: convertDataContentToBase64String(part.data),
+                    ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
                   });
                 } catch (error) {
                   console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
@@ -1613,6 +1648,7 @@ export class MessageList {
                   type: 'file',
                   mimeType: part.mimeType,
                   data: convertDataContentToBase64String(part.data),
+                  ...(Object.keys(fileProviderMetadata).length > 0 ? { providerMetadata: fileProviderMetadata } : {}),
                 });
               } catch (error) {
                 console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);

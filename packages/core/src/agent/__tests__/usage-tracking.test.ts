@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { streamText } from 'ai-v5';
+import { stepCountIs, streamText } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
@@ -239,7 +239,9 @@ describe('Agent usage tracking', () => {
         // Test 1: AI SDK streamText directly
         const aiSdkResult = streamText({
           model: openaiModel,
+          system: 'You are a helpful assistant',
           prompt: 'What is the weather in San Francisco?',
+          stopWhen: stepCountIs(5),
           tools: {
             weatherTool: {
               description: 'Get weather for a location',
@@ -253,6 +255,8 @@ describe('Agent usage tracking', () => {
 
         // Consume AI SDK stream and collect steps
         await aiSdkResult.consumeStream();
+
+        console.log(((await aiSdkResult.request).body as any).input);
 
         const aiSdkUsage = await aiSdkResult.usage;
 
@@ -269,6 +273,8 @@ describe('Agent usage tracking', () => {
 
         // Consume Mastra stream
         await mastraStream.consumeStream();
+
+        console.log(((await mastraStream.request).body as any).input);
 
         const mastraUsage = await mastraStream.usage;
 
