@@ -21,16 +21,6 @@ import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
-import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
-import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
-import { logsRouter } from './handlers/routes/logs/router';
-import { mcpRouter } from './handlers/routes/mcp/router';
-import { memoryRoutes } from './handlers/routes/memory/router';
-import { observabilityRouter } from './handlers/routes/observability/router';
-import { scoresRouter } from './handlers/routes/scores/router';
-import { toolsRouter } from './handlers/routes/tools/router';
-import { vectorRouter } from './handlers/routes/vector/router';
-import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 

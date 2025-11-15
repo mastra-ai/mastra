@@ -27,7 +27,7 @@ const serializedStepSchema = z
  */
 const serializedStepFlowEntrySchema = z
   .object({
-    type: z.enum(['step', 'sleep', 'sleepUntil', 'waitForEvent', 'parallel', 'conditional']),
+    type: z.enum(['step', 'sleep', 'sleepUntil', 'waitForEvent', 'parallel', 'conditional', 'loop', 'foreach']),
   })
   .passthrough();
 

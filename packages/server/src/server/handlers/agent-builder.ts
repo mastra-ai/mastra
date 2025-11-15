@@ -50,7 +50,7 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
       logger.info('Listing agent builder actions');
 
       // Call workflow list handler
-      return (await workflows.LIST_WORKFLOWS_ROUTE.handler(ctx)) as any;
+      return await workflows.LIST_WORKFLOWS_ROUTE.handler(ctx);
     } catch (error) {
       logger.error('Error listing agent builder actions', { error });
       return handleError(error, 'Error getting agent builder workflows');
@@ -83,7 +83,7 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
 
       logger.info('Getting agent builder action by ID', { actionId });
 
-      return (await workflows.GET_WORKFLOW_BY_ID_ROUTE.handler({ ...ctx, workflowId: actionId })) as any;
+      return await workflows.GET_WORKFLOW_BY_ID_ROUTE.handler({ ...ctx, workflowId: actionId });
     } catch (error) {
       logger.error('Error getting agent builder action by ID', { error, actionId });
       return handleError(error, 'Error getting agent builder action');
@@ -115,10 +115,10 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
 
       logger.info('Listing agent builder action runs', { actionId });
 
-      return (await workflows.LIST_WORKFLOW_RUNS_ROUTE.handler({
+      return await workflows.LIST_WORKFLOW_RUNS_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-      })) as any;
+      });
     } catch (error) {
       logger.error('Error listing agent builder action runs', { error, actionId });
       return handleError(error, 'Error getting agent builder action runs');
@@ -149,10 +149,10 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
 
       logger.info('Getting agent builder action run by ID', { actionId, runId });
 
-      return (await workflows.GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
+      return await workflows.GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-      })) as any;
+      });
     } catch (error) {
       logger.error('Error getting agent builder action run', { error, actionId, runId });
       return handleError(error, 'Error getting agent builder action run');
@@ -183,10 +183,10 @@ export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
 
       logger.info('Getting agent builder action run execution result', { actionId, runId });
 
-      return (await workflows.GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+      return await workflows.GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
-      })) as any;
+      });
     } catch (error) {
       logger.error('Error getting execution result', { error, actionId, runId });
       return handleError(error, 'Error getting agent builder action execution result');
@@ -326,11 +326,11 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
       logger.info('Starting agent builder action asynchronously', { actionId, runId });
 
-      return (await workflows.START_ASYNC_WORKFLOW_ROUTE.handler({
+      return await workflows.START_ASYNC_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
         workflowRequestContext: actionRequestContext,
-      })) as any;
+      });
     } catch (error) {
       logger.error('Error starting agent builder action asynchronously', { error, actionId });
       return handleError(error, 'Error starting agent builder action');
@@ -468,11 +468,11 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
 
       logger.info('Resuming agent builder action asynchronously', { actionId, runId, step });
 
-      return (await workflows.RESUME_ASYNC_WORKFLOW_ROUTE.handler({
+      return await workflows.RESUME_ASYNC_WORKFLOW_ROUTE.handler({
         ...ctx,
         workflowId: actionId,
         workflowRequestContext: actionRequestContext,
-      })) as any;
+      });
     } catch (error) {
       logger.error('Error resuming agent builder action asynchronously', { error, actionId });
       return handleError(error, 'Error resuming agent builder action');
