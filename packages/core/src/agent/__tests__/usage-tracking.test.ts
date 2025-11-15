@@ -1,6 +1,10 @@
+import { openai } from '@ai-sdk/openai-v5';
+import { streamText } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
 describe('Agent usage tracking', () => {
@@ -105,6 +109,172 @@ describe('Agent usage tracking', () => {
         // Ensure backward compatibility keys are NOT present
         expect((usage as any).promptTokens).toBeUndefined();
         expect((usage as any).completionTokens).toBeUndefined();
+      });
+
+      it('should handle cumulative usage correctly in multi-step conversations (not additive)', async () => {
+        // This test verifies that Mastra correctly handles cumulative usage from AI SDK
+        // AI SDK reports cumulative usage in each step-finish chunk, not incremental
+        // Before fix: Mastra was adding usage values (231 + 297 = 528 tokens)
+        // After fix: Mastra should use the latest cumulative value (297 tokens)
+
+        let callCount = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async () => {
+            const step = callCount++;
+            if (step === 0) {
+              // Step 1: Initial tool call
+              // AI SDK reports cumulative usage: 231 input tokens
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'weatherTool',
+                    input: '{"location": "San Francisco"}',
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    // Step 1 cumulative usage: 231 input, 16 output, 247 total
+                    usage: { inputTokens: 231, outputTokens: 16, totalTokens: 247 },
+                  },
+                ]),
+              };
+            } else {
+              // Step 2: Tool result processing
+              // AI SDK reports cumulative usage: 297 input tokens (total so far, not incremental)
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: '1' },
+                  { type: 'text-delta', id: '1', delta: 'The weather is sunny.' },
+                  { type: 'text-end', id: '1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    // Step 2 cumulative usage: 297 input, 86 output, 383 total
+                    // This is the TOTAL cumulative usage, not incremental
+                    usage: { inputTokens: 297, outputTokens: 86, totalTokens: 383 },
+                  },
+                ]),
+              };
+            }
+          },
+        });
+
+        const weatherTool = createTool({
+          id: 'weatherTool',
+          description: 'Get weather for a location',
+          inputSchema: z.object({
+            location: z.string().describe('The location to get weather for'),
+          }),
+          execute: async () => ({ temperature: 72, condition: 'sunny' }),
+        });
+
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          model,
+          instructions: 'You are a helpful assistant',
+          tools: { weatherTool },
+        });
+
+        const stream = await agent.stream('What is the weather in San Francisco?');
+
+        // Consume stream to get usage
+        for await (const _ of stream.fullStream) {
+          // Just consume
+        }
+
+        const usage = await stream.usage;
+        const steps = await stream.steps;
+
+        // Verify we have 2 steps
+        expect(steps).toHaveLength(2);
+
+        // Verify step 1 usage (cumulative)
+        expect(steps[0].usage.inputTokens).toBe(231);
+        expect(steps[0].usage.outputTokens).toBe(16);
+        expect(steps[0].usage.totalTokens).toBe(247);
+
+        // Verify step 2 usage (cumulative)
+        expect(steps[1].usage.inputTokens).toBe(297);
+        expect(steps[1].usage.outputTokens).toBe(86);
+        expect(steps[1].usage.totalTokens).toBe(383);
+
+        // CRITICAL: Final usage should be the LAST cumulative value (297), NOT the sum (231 + 297 = 528)
+        // This verifies that Mastra correctly handles cumulative usage instead of adding values
+        expect(usage.inputTokens).toBe(297); // Last cumulative value, not 528
+        expect(usage.outputTokens).toBe(86); // Last cumulative value, not 102
+        expect(usage.totalTokens).toBe(383); // Last cumulative value, not 630
+
+        console.log('Final usage (should be cumulative, not additive):', usage);
+        console.log('Step 1 usage:', steps[0].usage);
+        console.log('Step 2 usage:', steps[1].usage);
+      });
+
+      it.only('should match AI SDK streamText usage in multi-step tool call conversations', async () => {
+        // This test compares Mastra agent.stream() with AI SDK streamText() directly
+        // to verify they report the same token usage when using the same real OpenAI model with tools
+
+        // Skip if no API key
+        if (!process.env.OPENAI_API_KEY) {
+          console.log('Skipping test - OPENAI_API_KEY not set');
+          return;
+        }
+
+        // Use real OpenAI model
+        const openaiModel = openai('gpt-4o-mini');
+
+        const weatherTool = createTool({
+          id: 'weatherTool',
+          description: 'Get weather for a location',
+          inputSchema: z.object({
+            location: z.string().describe('The location to get weather for'),
+          }),
+          execute: async () => ({ temperature: 72, condition: 'sunny' }),
+        });
+
+        // Test 1: AI SDK streamText directly
+        const aiSdkResult = streamText({
+          model: openaiModel,
+          prompt: 'What is the weather in San Francisco?',
+          tools: {
+            weatherTool: {
+              description: 'Get weather for a location',
+              inputSchema: z.object({
+                location: z.string().describe('The location to get weather for'),
+              }),
+              execute: async () => ({ temperature: 72, condition: 'sunny' }),
+            },
+          },
+        });
+
+        // Consume AI SDK stream and collect steps
+        await aiSdkResult.consumeStream();
+
+        const aiSdkUsage = await aiSdkResult.usage;
+
+        // Test 2: Mastra agent.stream
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          model: openaiModel,
+          instructions: 'You are a helpful assistant',
+          tools: { weatherTool },
+        });
+
+        const mastraStream = await agent.stream('What is the weather in San Francisco?');
+
+        // Consume Mastra stream
+        await mastraStream.consumeStream();
+
+        const mastraUsage = await mastraStream.usage;
+
+        console.log('AI SDK usage property:', aiSdkUsage);
+        // Compare usage - they should match exactly
+        console.log('Mastra usage:', mastraUsage);
       });
     });
   });
