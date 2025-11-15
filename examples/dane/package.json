@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dane",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "main": "dist/index.js",
   "type": "module",
   "files": [

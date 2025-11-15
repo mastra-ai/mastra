@@ -1,5 +1,17 @@
 # @mastra/dane
 
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- Updated dependencies [[`dbd649b`](https://github.com/mastra-ai/mastra/commit/dbd649b2f9cff28fe5440a032bfb1fc977dc2e87), [`d86f075`](https://github.com/mastra-ai/mastra/commit/d86f0750957c5e85f9e24797d0b1fc891a2c561b), [`e314bb8`](https://github.com/mastra-ai/mastra/commit/e314bb89e7b57127ffecaf22687b5475f2aa2a63), [`d629361`](https://github.com/mastra-ai/mastra/commit/d629361a60f6565b5bfb11976fdaf7308af858e2), [`08c31c1`](https://github.com/mastra-ai/mastra/commit/08c31c188ebccd598acaf55e888b6397d01f7eae), [`fd3d338`](https://github.com/mastra-ai/mastra/commit/fd3d338a2c362174ed5b383f1f011ad9fb0302aa), [`01f8878`](https://github.com/mastra-ai/mastra/commit/01f88783de25e4de048c1c8aace43e26373c6ea5), [`23c10a1`](https://github.com/mastra-ai/mastra/commit/23c10a1efdd9a693c405511ab2dc8a1236603162), [`c10398d`](https://github.com/mastra-ai/mastra/commit/c10398d5b88f1d4af556f4267ff06f1d11e89179), [`00c2387`](https://github.com/mastra-ai/mastra/commit/00c2387f5f04a365316f851e58666ac43f8c4edf), [`e16d553`](https://github.com/mastra-ai/mastra/commit/e16d55338403c7553531cc568125c63d53653dff), [`4d59f58`](https://github.com/mastra-ai/mastra/commit/4d59f58de2d90d6e2810a19d4518e38ddddb9038), [`e1bb9c9`](https://github.com/mastra-ai/mastra/commit/e1bb9c94b4eb68b019ae275981be3feb769b5365)]:
+  - @mastra/rag@2.0.0-beta.1
+  - @mastra/upstash@1.0.0-beta.1
+  - @mastra/mcp@1.0.0-beta.2
+  - @mastra/core@1.0.0-beta.3
+  - @mastra/libsql@1.0.0-beta.1
+  - @mastra/memory@1.0.0-beta.1
+
 ## 1.0.0-beta.2
 
 ### Patch Changes

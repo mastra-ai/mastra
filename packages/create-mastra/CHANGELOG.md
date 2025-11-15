@@ -1,5 +1,12 @@
 # create-mastra
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- dependencies updates: ([#10111](https://github.com/mastra-ai/mastra/pull/10111))
+  - Updated dependency [`pino@^10.1.0` ↗︎](https://www.npmjs.com/package/pino/v/10.1.0) (from `^9.7.0`, in `dependencies`)
+
 ## 1.0.0-beta.1
 
 ### Patch Changes
