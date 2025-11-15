@@ -75,11 +75,8 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
             try {
               return typeof filter === 'string' ? JSON.parse(filter) : filter;
             } catch (error) {
-              // Log the error and use empty object
-              if (logger) {
-                logger.warn('Failed to parse filter as JSON, using empty filter', { filter, error });
-              }
-              return {};
+              logger.error("Invalid filter", {filter, error });
+              throw new Error("Invalid filter format");
             }
           })();
         }
