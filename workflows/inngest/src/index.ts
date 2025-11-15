@@ -1838,7 +1838,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return { result: execResults, executionContext, stepResults };
       });
     } catch (e) {
+      console.log('error in catch', e);
       const error = getErrorFromUnknown(e, { serializeStack: false });
+
+      // TODO: We throw RetryAfterError from within the step, thats where we pass the execResults as the cause of the error.
+      if (error instanceof RetryAfterError) {
+        // eslint-disable-next-line no-console
+        console.log('error is instanceof RetryAfterError');
+      }
 
       // TODO: do we need to use the error.cause here as the stepFailure instead?
       // ? since we added the execResult to the error cause on line 1780

@@ -159,7 +159,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -223,7 +223,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -831,7 +831,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -894,17 +894,17 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
-        // payload: {},
-        // startedAt: expect.any(Number),
-        // endedAt: expect.any(Number),
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
 
-      expect(result.steps['step2']).toMatchObject({
+      expect((result.steps as any)['step2']).toMatchObject({
         status: 'success',
         output: { result: 'slept successfully: success' },
-        // payload: { result: 'success' },
-        // startedAt: expect.any(Number),
-        // endedAt: expect.any(Number),
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
 
       expect(endTime - startTime).toBeGreaterThan(1000);
@@ -920,7 +920,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const execute = vi.fn().mockResolvedValue({ value: 1000 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1015,7 +1015,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1108,7 +1108,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const execute = vi.fn().mockResolvedValue({ value: 1000 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1203,7 +1203,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1249,7 +1249,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -1518,7 +1518,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
 
       const step1 = createStep({
         id: 'step1',
@@ -1680,7 +1680,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         inputData: z.string(),
       });
@@ -1747,7 +1747,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const triggerSchema = z.object({
         cool: z.string(),
       });
@@ -1826,10 +1826,10 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({
+      const step1Action = vi.fn().mockResolvedValue({
         nested: { value: 'step1-data' },
       });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success' });
 
       const step1 = createStep({
         id: 'step1',
@@ -2139,11 +2139,11 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       let err: Error | undefined;
-      const step1Action = vi.fn<any>().mockImplementation(() => {
+      const step1Action = vi.fn().mockImplementation(() => {
         err = new Error('Failed');
         throw err;
       });
-      const step2Action = vi.fn<any>();
+      const step2Action = vi.fn();
 
       const step1 = createStep({
         id: 'step1',
@@ -2220,9 +2220,9 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ status: 'success' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
-      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step1Action = vi.fn().mockResolvedValue({ status: 'success' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'step2' });
+      const step3Action = vi.fn().mockResolvedValue({ result: 'step3' });
       const step1 = createStep({
         id: 'step1',
         execute: step1Action,
@@ -2323,8 +2323,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ count: 5 });
-      const step2Action = vi.fn<any>();
+      const step1Action = vi.fn().mockResolvedValue({ count: 5 });
+      const step2Action = vi.fn();
 
       const step1 = createStep({
         id: 'step1',
@@ -2411,7 +2411,7 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
+      const failingAction = vi.fn().mockRejectedValue(error);
 
       const step1 = createStep({
         id: 'step1',
@@ -2478,8 +2478,8 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
-      const successAction = vi.fn<any>().mockResolvedValue({});
+      const failingAction = vi.fn().mockRejectedValue(error);
+      const successAction = vi.fn().mockResolvedValue({});
 
       const step1 = createStep({
         id: 'step1',
@@ -2565,8 +2565,8 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
-      const successAction = vi.fn<any>().mockResolvedValue({});
+      const failingAction = vi.fn().mockRejectedValue(error);
+      const successAction = vi.fn().mockResolvedValue({});
 
       const step1 = createStep({
         id: 'step1',
@@ -2658,13 +2658,13 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({
+      const step1Action = vi.fn().mockResolvedValue({
         status: 'partial',
         score: 75,
         flags: { isValid: true },
       });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
-      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'step2' });
+      const step3Action = vi.fn().mockResolvedValue({ result: 'step3' });
 
       const step1 = createStep({
         id: 'step1',
@@ -3401,7 +3401,7 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({
           required: z.string(),
           nested: z.object({
@@ -3455,31 +3455,31 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success1' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success1' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success2' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success2' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step3 = createStep({
         id: 'step3',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success3' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success3' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step4 = createStep({
         id: 'step4',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success4' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success4' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step5 = createStep({
         id: 'step5',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success5' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success5' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -3546,8 +3546,8 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(result.steps['nested-a']).toMatchObject({ status: 'success', output: { result: 'success3' } });
-      expect(result.steps['nested-b']).toMatchObject({ status: 'success', output: { result: 'success5' } });
+      expect((result.steps as any)['nested-a']).toMatchObject({ status: 'success', output: { result: 'success3' } });
+      expect((result.steps as any)['nested-b']).toMatchObject({ status: 'success', output: { result: 'success5' } });
     });
   });
 
@@ -3562,13 +3562,13 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
+        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -3619,7 +3619,8 @@ describe('MastraInngestWorkflow', () => {
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
-    it('should retry a step with a custom retry config', async ctx => {
+    // TODO: add error handling consistency tests similar to default execution engine tests
+    it('should return error instance after retrying and failing', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -3629,13 +3630,13 @@ describe('MastraInngestWorkflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockRejectedValue(new Error('Step failed')),
+        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -3691,6 +3692,152 @@ describe('MastraInngestWorkflow', () => {
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
     });
+
+    it('should retry a step with a custom retry config', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: {
+          attempts: 2,
+          delay: 1, // if the delay is 0 it will default to inngest's default backoff delay
+        },
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.steps.step1.status).toBe('success');
+      expect(result.steps.step2.status).toBe('failed');
+      expect(result.status).toBe('failed');
+
+      srv.close();
+
+      expect(step1.execute).toHaveBeenCalledTimes(1);
+      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
+    });
+
+    it('should retry a failing step and then succeed in the 2nd attempt', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockRejectedValueOnce(new Error('First attempt failed')).mockResolvedValueOnce({}),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn().mockResolvedValueOnce({}),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: {
+          attempts: 2,
+          delay: 1, // if the delay is 0 it will default to inngest's default backoff delay
+        },
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.steps.step1.status).toBe('success');
+      expect(result.steps.step2.status).toBe('success');
+      expect(result.status).toBe('success');
+
+      srv.close();
+
+      expect(step1.execute).toHaveBeenCalledTimes(2);
+      expect(step2.execute).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Interoperability (Actions)', () => {
@@ -3702,7 +3849,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
+      const step1Action = vi.fn().mockResolvedValue({ name: 'step1' });
 
       const step1 = createStep({
         id: 'step1',
@@ -3712,7 +3859,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
+      const toolAction = vi.fn().mockImplementation(async ({ context }) => {
         return { name: context.name };
       });
 
@@ -4631,7 +4778,7 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const finalStep = createStep({
         id: 'finalStep',
         inputSchema: z.object({
@@ -6612,8 +6759,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -6785,8 +6932,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -6988,8 +7135,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ value: 1000 });
-      const step2Action = vi.fn<any>().mockResolvedValue({ value: 2000 });
+      const step1Action = vi.fn().mockResolvedValue({ value: 1000 });
+      const step2Action = vi.fn().mockResolvedValue({ value: 2000 });
 
       const step1 = createStep({
         id: 'step1',
@@ -7794,8 +7941,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -8179,8 +8326,8 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -9343,8 +9490,8 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -9435,8 +9582,8 @@ describe('MastraInngestWorkflow', () => {
       });
 
       const { createWorkflow, createStep } = init(inngest);
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
