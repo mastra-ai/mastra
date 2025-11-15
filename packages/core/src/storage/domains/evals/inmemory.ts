@@ -13,9 +13,7 @@ export class EvalsStorageInMemory extends EvalsStorageBase {
     this.collection = new Map<string, ScoreRowData>();
   }
 
-  async init(): Promise<void> {
-    this.collection = new Map<string, ScoreRowData>();
-  }
+  async init(): Promise<void> {}
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.collection.get(id) ?? null;

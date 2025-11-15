@@ -33,13 +33,7 @@ export class MemoryStorageInMemory extends MemoryStorageBase {
     };
   }
 
-  async init(): Promise<void> {
-    this.collection = {
-      threads: new Map<string, StorageThreadType>(),
-      resources: new Map<string, StorageResourceType>(),
-      messages: new Map<string, StorageMessageType>(),
-    };
-  }
+  async init(): Promise<void> {}
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     this.logger.debug(`MockStore: getThreadById called for ${threadId}`);

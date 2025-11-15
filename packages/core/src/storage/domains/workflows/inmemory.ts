@@ -14,7 +14,9 @@ export class WorkflowsStorageInMemory extends WorkflowsStorageBase {
   }
 
   async init(): Promise<void> {
-    this.collection = new Map<string, StorageWorkflowRun>();
+    // The constructor already initializes the collection
+    // Don't reset it here to prevent losing data when init() is called multiple times
+    // Use dropData() explicitly if you need to clear the collection
   }
 
   async updateWorkflowResults({
@@ -159,6 +161,8 @@ export class WorkflowsStorageInMemory extends WorkflowsStorageBase {
       updatedAt: updatedAt || new Date(),
     };
 
+    // Match libsql behavior: INSERT OR REPLACE semantics
+    // Always set/replace the snapshot (Map.set() replaces existing entries)
     this.collection.set(record.id, record);
   }
 

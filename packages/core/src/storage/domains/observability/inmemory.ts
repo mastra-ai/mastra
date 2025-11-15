@@ -19,9 +19,7 @@ export class ObservabilityStorageInMemory extends ObservabilityStorageBase {
     this.collection = new Map<string, SpanRecord>();
   }
 
-  async init(): Promise<void> {
-    this.collection = new Map<string, SpanRecord>();
-  }
+  async init(): Promise<void> {}
 
   public get tracingStrategy(): {
     preferred: TracingStorageStrategy;
