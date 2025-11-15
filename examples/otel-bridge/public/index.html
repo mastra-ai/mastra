@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Story API Tester</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      font-size: 1.1em;
+      opacity: 0.9;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .endpoint {
+      background: white;
+      border-radius: 8px;
+      padding: 25px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s;
+    }
+
+    .endpoint:hover {
+      transform: translateY(-2px);
+    }
+
+    .endpoint h2 {
+      font-size: 1.3em;
+      margin-bottom: 15px;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .method {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-weight: bold;
+      color: white;
+      text-transform: uppercase;
+    }
+
+    .method.post { background-color: #10b981; }
+    .method.get { background-color: #3b82f6; }
+    .method.put { background-color: #f59e0b; }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+      font-size: 0.9em;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.9em;
+      transition: border-color 0.2s;
+    }
+
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 60px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.85em;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    button {
+      flex: 1;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.9em;
+      text-transform: uppercase;
+    }
+
+    .btn-primary {
+      background-color: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: #5568d3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background-color: #e5e7eb;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background-color: #d1d5db;
+    }
+
+    .response {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 12px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 0.85em;
+      max-height: 250px;
+      overflow-y: auto;
+      word-break: break-all;
+    }
+
+    .response.error {
+      background-color: #fee;
+      color: #c33;
+      border-color: #fcc;
+    }
+
+    .response.success {
+      background-color: #efe;
+      color: #030;
+      border-color: #cfc;
+    }
+
+    .response-label {
+      display: block;
+      margin-bottom: 8px;
+      color: #555;
+      font-weight: 500;
+      font-size: 0.9em;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: #667eea;
+      font-size: 0.9em;
+      margin-bottom: 10px;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #667eea;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .note {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      color: #92400e;
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📖 Story API Tester</h1>
+      <p>Interactive testing interface for the Story API with OpenTelemetry tracing</p>
+    </div>
+
+    <div class="note">
+      💡 <strong>Tip:</strong> Each API request is automatically traced in <a href="http://localhost:16686" style="color: #92400e; text-decoration: underline;">Jaeger</a>. Watch the traces appear in real-time!
+    </div>
+
+    <div class="grid">
+      <!-- Create Story -->
+      <div class="endpoint">
+        <h2><span class="method post">POST</span> Create Story</h2>
+        <div class="form-group">
+          <label for="create-title">Story Title</label>
+          <input type="text" id="create-title" placeholder="e.g., The Dragon Quest">
+        </div>
+        <div class="form-group">
+          <label for="create-prompt">Story Prompt</label>
+          <textarea id="create-prompt" placeholder="e.g., An epic adventure with dragons"></textarea>
+        </div>
+        <div class="button-group">
+          <button class="btn-primary" onclick="createStory()">Create Story</button>
+          <button class="btn-secondary" onclick="clearResult('create')">Clear</button>
+        </div>
+        <div class="loading" id="create-loading">
+          <span class="spinner"></span>Creating...
+        </div>
+        <div class="response" id="create-result" style="display: none;"></div>
+      </div>
+
+      <!-- List Stories -->
+      <div class="endpoint">
+        <h2><span class="method get">GET</span> List Stories</h2>
+        <div class="form-group">
+          <label for="list-limit">Limit (max 100)</label>
+          <input type="number" id="list-limit" value="10" min="1" max="100">
+        </div>
+        <div class="form-group">
+          <label for="list-offset">Offset</label>
+          <input type="number" id="list-offset" value="0" min="0">
+        </div>
+        <div class="button-group">
+          <button class="btn-primary" onclick="listStories()">Get Stories</button>
+          <button class="btn-secondary" onclick="clearResult('list')">Clear</button>
+        </div>
+        <div class="loading" id="list-loading">
+          <span class="spinner"></span>Fetching...
+        </div>
+        <div class="response" id="list-result" style="display: none;"></div>
+      </div>
+
+      <!-- Get Story by ID -->
+      <div class="endpoint">
+        <h2><span class="method get">GET</span> Get Story by ID</h2>
+        <div class="form-group">
+          <label for="get-id">Story ID</label>
+          <input type="number" id="get-id" placeholder="e.g., 1" min="1">
+        </div>
+        <div class="button-group">
+          <button class="btn-primary" onclick="getStory()">Get Story</button>
+          <button class="btn-secondary" onclick="clearResult('get')">Clear</button>
+        </div>
+        <div class="loading" id="get-loading">
+          <span class="spinner"></span>Fetching...
+        </div>
+        <div class="response" id="get-result" style="display: none;"></div>
+      </div>
+
+      <!-- Update Story -->
+      <div class="endpoint">
+        <h2><span class="method put">PUT</span> Update Story</h2>
+        <div class="form-group">
+          <label for="update-id">Story ID</label>
+          <input type="number" id="update-id" placeholder="e.g., 1" min="1">
+        </div>
+        <div class="form-group">
+          <label for="update-content">Story Content</label>
+          <textarea id="update-content" placeholder="Enter the story content..."></textarea>
+        </div>
+        <div class="button-group">
+          <button class="btn-primary" onclick="updateStory()">Update Story</button>
+          <button class="btn-secondary" onclick="clearResult('update')">Clear</button>
+        </div>
+        <div class="loading" id="update-loading">
+          <span class="spinner"></span>Updating...
+        </div>
+        <div class="response" id="update-result" style="display: none;"></div>
+      </div>
+
+      <!-- Create Character -->
+      <div class="endpoint">
+        <h2><span class="method post">POST</span> Create Character</h2>
+        <div class="form-group">
+          <label for="char-story-id">Story ID</label>
+          <input type="number" id="char-story-id" placeholder="e.g., 1" min="1">
+        </div>
+        <div class="form-group">
+          <label for="char-name">Character Name</label>
+          <input type="text" id="char-name" placeholder="e.g., Dragon King">
+        </div>
+        <div class="form-group">
+          <label for="char-desc">Description</label>
+          <textarea id="char-desc" placeholder="Character description (optional)"></textarea>
+        </div>
+        <div class="button-group">
+          <button class="btn-primary" onclick="createCharacter()">Create Character</button>
+          <button class="btn-secondary" onclick="clearResult('character')">Clear</button>
+        </div>
+        <div class="loading" id="character-loading">
+          <span class="spinner"></span>Creating...
+        </div>
+        <div class="response" id="character-result" style="display: none;"></div>
+      </div>
+
+      <!-- List Characters -->
+      <div class="endpoint">
+        <h2><span class="method get">GET</span> List Characters</h2>
+        <div class="form-group">
+          <label for="chars-story-id">Story ID</label>
+          <input type="number" id="chars-story-id" placeholder="e.g., 1" min="1">
+        </div>
+        <div class="button-group">
+          <button class="btn-primary" onclick="listCharacters()">Get Characters</button>
+          <button class="btn-secondary" onclick="clearResult('characters')">Clear</button>
+        </div>
+        <div class="loading" id="characters-loading">
+          <span class="spinner"></span>Fetching...
+        </div>
+        <div class="response" id="characters-result" style="display: none;"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+
+    function showLoading(key, show = true) {
+      const loading = document.getElementById(`${key}-loading`);
+      if (loading) loading.classList.toggle('active', show);
+    }
+
+    function showResult(key, result, isError = false) {
+      const resultEl = document.getElementById(`${key}-result`);
+      resultEl.textContent = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+      resultEl.style.display = 'block';
+      resultEl.className = 'response ' + (isError ? 'error' : 'success');
+    }
+
+    function clearResult(key) {
+      const resultEl = document.getElementById(`${key}-result`);
+      resultEl.style.display = 'none';
+      resultEl.textContent = '';
+    }
+
+    async function createStory() {
+      const title = document.getElementById('create-title').value.trim();
+      const prompt = document.getElementById('create-prompt').value.trim();
+
+      if (!title || !prompt) {
+        showResult('create', 'Error: Title and prompt are required', true);
+        return;
+      }
+
+      showLoading('create', true);
+      try {
+        const response = await fetch(`${API_BASE}/api/stories`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, prompt })
+        });
+        const data = await response.json();
+        showResult('create', data, !response.ok);
+        if (response.ok) {
+          document.getElementById('create-title').value = '';
+          document.getElementById('create-prompt').value = '';
+        }
+      } catch (error) {
+        showResult('create', `Error: ${error.message}`, true);
+      } finally {
+        showLoading('create', false);
+      }
+    }
+
+    async function listStories() {
+      const limit = document.getElementById('list-limit').value || '10';
+      const offset = document.getElementById('list-offset').value || '0';
+
+      showLoading('list', true);
+      try {
+        const response = await fetch(`${API_BASE}/api/stories?limit=${limit}&offset=${offset}`);
+        const data = await response.json();
+        showResult('list', data, !response.ok);
+      } catch (error) {
+        showResult('list', `Error: ${error.message}`, true);
+      } finally {
+        showLoading('list', false);
+      }
+    }
+
+    async function getStory() {
+      const id = document.getElementById('get-id').value.trim();
+
+      if (!id) {
+        showResult('get', 'Error: Story ID is required', true);
+        return;
+      }
+
+      showLoading('get', true);
+      try {
+        const response = await fetch(`${API_BASE}/api/stories/${id}`);
+        const data = await response.json();
+        showResult('get', data, !response.ok);
+      } catch (error) {
+        showResult('get', `Error: ${error.message}`, true);
+      } finally {
+        showLoading('get', false);
+      }
+    }
+
+    async function updateStory() {
+      const id = document.getElementById('update-id').value.trim();
+      const content = document.getElementById('update-content').value.trim();
+
+      if (!id) {
+        showResult('update', 'Error: Story ID is required', true);
+        return;
+      }
+
+      showLoading('update', true);
+      try {
+        const response = await fetch(`${API_BASE}/api/stories/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content })
+        });
+        const data = await response.json();
+        showResult('update', data, !response.ok);
+      } catch (error) {
+        showResult('update', `Error: ${error.message}`, true);
+      } finally {
+        showLoading('update', false);
+      }
+    }
+
+    async function createCharacter() {
+      const storyId = document.getElementById('char-story-id').value.trim();
+      const name = document.getElementById('char-name').value.trim();
+      const description = document.getElementById('char-desc').value.trim();
+
+      if (!storyId || !name) {
+        showResult('character', 'Error: Story ID and character name are required', true);
+        return;
+      }
+
+      showLoading('character', true);
+      try {
+        const response = await fetch(`${API_BASE}/api/characters`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storyId: parseInt(storyId), name, description })
+        });
+        const data = await response.json();
+        showResult('character', data, !response.ok);
+        if (response.ok) {
+          document.getElementById('char-story-id').value = '';
+          document.getElementById('char-name').value = '';
+          document.getElementById('char-desc').value = '';
+        }
+      } catch (error) {
+        showResult('character', `Error: ${error.message}`, true);
+      } finally {
+        showLoading('character', false);
+      }
+    }
+
+    async function listCharacters() {
+      const storyId = document.getElementById('chars-story-id').value.trim();
+
+      if (!storyId) {
+        showResult('characters', 'Error: Story ID is required', true);
+        return;
+      }
+
+      showLoading('characters', true);
+      try {
+        const response = await fetch(`${API_BASE}/api/stories/${storyId}/characters`);
+        const data = await response.json();
+        showResult('characters', data, !response.ok);
+      } catch (error) {
+        showResult('characters', `Error: ${error.message}`, true);
+      } finally {
+        showLoading('characters', false);
+      }
+    }
+  </script>
+</body>
+</html>
