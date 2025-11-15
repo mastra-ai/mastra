@@ -592,12 +592,14 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = JSON.parse(secondResponse.request.body as string).messages;
 
-    expect(secondResponseRequestMessages.length).toBe(4);
-    // Filter out tool messages and tool results, should be the same as above.
-    expect(
-      secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
-        .length,
-    ).toBe(4);
+    // Should have: system (instructions) + system (semantic recall) + user + assistant + user
+    expect(secondResponseRequestMessages.length).toBe(5);
+    
+    // Verify no tool messages or tool results are in the request
+    const toolOrToolResultMessages = secondResponseRequestMessages.filter(
+      m => m.role === 'tool' || (m.role === 'assistant' && (m as any)?.tool_calls?.length > 0)
+    );
+    expect(toolOrToolResultMessages.length).toBe(0);
   }, 30_000);
 
   it('should include working memory in LLM request when input processors run', async () => {
