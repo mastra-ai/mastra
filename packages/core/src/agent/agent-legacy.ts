@@ -31,7 +31,14 @@ import type { DynamicArgument } from '../types';
 import type { MessageListInput, MastraDBMessage, UIMessageWithMetadata } from './message-list';
 import { MessageList } from './message-list';
 import { SaveQueueManager } from './save-queue';
-import type { AgentGenerateOptions, AgentStreamOptions, AgentInstructions, ToolsetsInput, ToolsInput } from './types';
+import type {
+  AgentGenerateOptions,
+  AgentStreamOptions,
+  AgentInstructions,
+  ToolsetsInput,
+  ToolsInput,
+  AgentMethodType,
+} from './types';
 import { resolveThreadIdFromArgs } from './utils';
 
 /**
@@ -79,7 +86,7 @@ export interface AgentLegacyCapabilities {
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     writableStream?: WritableStream<ChunkType>;
-    methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+    methodType: AgentMethodType;
   }): Promise<Record<string, CoreTool>>;
   /** Get memory messages */
   getMemoryMessages(args: {

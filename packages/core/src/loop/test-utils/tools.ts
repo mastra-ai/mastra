@@ -21,6 +21,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       beforeEach(async () => {
         result = await loopFn({
+          methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
           models: createTestModels({
@@ -313,6 +314,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
       beforeEach(async () => {
         result = await loopFn({
+          methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
           models: createTestModels({
@@ -535,6 +537,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       const recordedCalls: unknown[] = [];
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({
@@ -813,6 +816,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     it('should send tool calls', async () => {
       const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: [
@@ -898,6 +902,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
 
     beforeEach(async () => {
       result = await loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: createTestModels({
@@ -1164,6 +1169,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
     it('should handle Claude Code SDK-style provider-executed tools', async () => {
       // This test simulates the exact scenario from issue #7558
       const result = loopFn({
+        methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
         models: createTestModels({

@@ -45,6 +45,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         'input',
       );
       const result = loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         models: [
@@ -174,6 +175,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     it('should send text deltas', async () => {
       const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: [
@@ -296,6 +298,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     it('should send reasoning deltas', async () => {
       const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
         messageList,
@@ -509,6 +512,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     it('should send sources', async () => {
       const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
         messageList,
@@ -604,6 +608,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     it('should send files', async () => {
       const messageList = createMessageListWithUserMessage();
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         messageList,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
@@ -696,6 +701,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         agentId: 'agent-id',
         runId,
         messageList,
@@ -815,6 +821,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         messageList,
@@ -898,6 +905,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({
@@ -1098,6 +1106,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({
@@ -1153,6 +1162,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({
@@ -1202,6 +1212,7 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         agentId: 'agent-id',
         models: createTestModels({

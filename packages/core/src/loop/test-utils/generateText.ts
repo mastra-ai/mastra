@@ -15,9 +15,10 @@ import {
 } from './utils';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
-  const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
+  const generateText = async (args: Omit<LoopOptions, 'runId' | 'methodType'>): ReturnType<typeof generateText5> => {
     const output = await loopFn({
       runId,
+      methodType: 'generate',
       ...args,
     });
     // @ts-expect-error -- missing `experimental_output` in v5 getFullOutput

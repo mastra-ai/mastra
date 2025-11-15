@@ -6,6 +6,7 @@ import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
@@ -20,7 +21,7 @@ interface PrepareToolsStepOptions<
   runId: string;
   requestContext: RequestContext;
   agentSpan: Span<SpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  methodType: AgentMethodType;
   memory?: MastraMemory;
 }
 
