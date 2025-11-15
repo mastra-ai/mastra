@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { Agent } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
 import { openai } from '@ai-sdk/openai';
-import { describe, expect, it } from 'vitest';
+import { Agent } from '@mastra/core/agent';
 import { MockStore } from '@mastra/core/storage';
-import type { CoreMessage } from 'ai';
-import { LibSQLStore } from '@mastra/libsql';
-import { LibSQLVector } from '@mastra/libsql';
 import { fastembed } from '@mastra/fastembed';
+import { LibSQLStore, LibSQLVector  } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import type { CoreMessage } from 'ai';
+import { describe, expect, it } from 'vitest';
 
 /**
  * CRITICAL: These tests verify that input processors actually run and modify the LLM request.
