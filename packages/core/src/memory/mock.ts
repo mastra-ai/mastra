@@ -1,6 +1,12 @@
 import { MessageList } from '../agent/message-list';
 import { MastraMemory } from '../memory';
-import type { StorageThreadType, MastraDBMessage, MemoryConfig, MessageDeleteInput } from '../memory';
+import type {
+  StorageThreadType,
+  MastraDBMessage,
+  MemoryConfig,
+  MessageDeleteInput,
+  WorkingMemoryTemplate,
+} from '../memory';
 import { InMemoryStore } from '../storage';
 import type {
   StorageListMessagesInput,
@@ -86,11 +92,10 @@ export class MockMemory extends MastraMemory {
     return null;
   }
 
-  async getWorkingMemoryTemplate({
-    memoryConfig: _memoryConfig,
-  }: {
-    memoryConfig?: MemoryConfig;
-  } = {}): Promise<any | null> {
+  async getWorkingMemoryTemplate(_args: {
+    threadId?: string;
+    resourceId?: string;
+  }): Promise<WorkingMemoryTemplate | null> {
     return null;
   }
 

@@ -44,7 +44,7 @@ import type { Workflow } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
-import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import type { MessageInput, MessageListInput, UIMessageWithMetadata } from './message-list';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -302,22 +302,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     inputProcessorOverrides?: InputProcessor[];
     outputProcessorOverrides?: OutputProcessor[];
   }): Promise<ProcessorRunner> {
-    // Use overrides if provided, otherwise fall back to agent's default processors
-    const inputProcessors =
-      inputProcessorOverrides ??
-      (this.#inputProcessors
-        ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext })
-          : this.#inputProcessors
-        : []);
+    // Use overrides if provided, otherwise use resolved processors (which include memory processors)
+    const inputProcessors = inputProcessorOverrides ?? (await this.listResolvedInputProcessors(requestContext));
 
-    const outputProcessors =
-      outputProcessorOverrides ??
-      (this.#outputProcessors
-        ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext })
-          : this.#outputProcessors
-        : []);
+    const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
 
     this.logger.debug('outputProcessors', outputProcessors);
 
@@ -334,15 +322,23 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]> {
-    if (!this.#outputProcessors) {
-      return [];
-    }
+    // Get configured output processors
+    const configuredProcessors = this.#outputProcessors
+      ? typeof this.#outputProcessors === 'function'
+        ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#outputProcessors
+      : [];
 
-    if (typeof this.#outputProcessors === 'function') {
-      return await this.#outputProcessors({ requestContext: requestContext || new RequestContext() });
-    }
+    // Get memory output processors (with deduplication)
+    const memory =
+      typeof this.#memory === 'function'
+        ? await this.#memory({ requestContext: requestContext || new RequestContext() })
+        : this.#memory;
 
-    return this.#outputProcessors;
+    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+
+    // Memory processors should run last (to persist messages after other processing)
+    return [...configuredProcessors, ...memoryProcessors];
   }
 
   /**
@@ -350,15 +346,24 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * @internal
    */
   private async listResolvedInputProcessors(requestContext?: RequestContext): Promise<InputProcessor[]> {
-    if (!this.#inputProcessors) {
-      return [];
-    }
+    // Get configured input processors
+    const configuredProcessors = this.#inputProcessors
+      ? typeof this.#inputProcessors === 'function'
+        ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
+        : this.#inputProcessors
+      : [];
 
-    if (typeof this.#inputProcessors === 'function') {
-      return await this.#inputProcessors({ requestContext: requestContext || new RequestContext() });
-    }
+    // Get memory input processors (with deduplication)
+    const memory =
+      typeof this.#memory === 'function'
+        ? await this.#memory({ requestContext: requestContext || new RequestContext() })
+        : this.#memory;
 
-    return this.#inputProcessors;
+    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+
+    // Memory processors should run first (to fetch history, semantic recall, working memory)
+    const result = [...memoryProcessors, ...configuredProcessors];
+    return result;
   }
 
   /**
@@ -445,6 +450,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     return resolvedMemory;
   }
+
+  
 
   get voice() {
     if (typeof this.#instructions === 'function') {
@@ -644,7 +651,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         getLLM: this.getLLM.bind(this) as any,
         getMemory: this.getMemory.bind(this),
         convertTools: this.convertTools.bind(this),
-        getMemoryMessages: (...args) => this.getMemoryMessages(...args),
+        
         __runInputProcessors: this.__runInputProcessors.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
@@ -1339,13 +1346,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors) {
+    // Get resolved processors (includes memory processors)
+    const resolvedProcessors = await this.listResolvedInputProcessors(requestContext);
+
+    // Only run if we have processors (either overrides or resolved)
+    if (inputProcessorOverrides?.length || resolvedProcessors.length) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
       });
       try {
-        messageList = await runner.runInputProcessors(messageList, tracingContext);
+        messageList = await runner.runInputProcessors(messageList, tracingContext, undefined, requestContext);
       } catch (error) {
         if (error instanceof TripWire) {
           tripwireTriggered = true;
@@ -1393,14 +1404,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     let tripwireTriggered = false;
     let tripwireReason = '';
 
-    if (outputProcessorOverrides?.length || this.#outputProcessors) {
+    // Get resolved processors (includes memory processors)
+    const resolvedProcessors = await this.listResolvedOutputProcessors(requestContext);
+
+    // Only run if we have processors (either overrides or resolved)
+    if (outputProcessorOverrides?.length || resolvedProcessors.length) {
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
       });
 
       try {
-        messageList = await runner.runOutputProcessors(messageList, tracingContext);
+        messageList = await runner.runOutputProcessors(messageList, tracingContext, undefined, requestContext);
       } catch (e) {
         if (e instanceof TripWire) {
           tripwireTriggered = true;
@@ -1417,43 +1432,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tripwireTriggered,
       tripwireReason,
     };
-  }
-
-  /**
-   * Fetches remembered messages from memory for the current thread.
-   * @internal
-   */
-  private async getMemoryMessages({
-    resourceId,
-    threadId,
-    vectorMessageSearch,
-    memoryConfig,
-    requestContext,
-  }: {
-    resourceId?: string;
-    threadId: string;
-    vectorMessageSearch: string;
-    memoryConfig?: MemoryConfig;
-    requestContext: RequestContext;
-  }): Promise<{ messages: MastraDBMessage[] }> {
-    const memory = await this.getMemory({ requestContext });
-    if (!memory) {
-      return { messages: [] };
-    }
-
-    const threadConfig = memory.getMergedThreadConfig(memoryConfig || {});
-    if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
-      return { messages: [] };
-    }
-
-    return memory.recall({
-      threadId,
-      resourceId,
-      perPage: threadConfig.lastMessages,
-      threadConfig: memoryConfig,
-      // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-      vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
-    });
   }
 
   /**
@@ -2391,7 +2369,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           : undefined,
       saveStepMessages: this.saveStepMessages.bind(this),
       convertTools: this.convertTools.bind(this),
-      getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
@@ -2511,6 +2488,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           });
         }
 
+        // Run output processors (e.g., SemanticRecall) to create embeddings BEFORE flushing messages
+
+        await this.__runOutputProcessors({ messageList, requestContext, tracingContext: { currentSpan: agentSpan } });
+
         // Parallelize title generation and message saving
         const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
 
@@ -2592,6 +2573,13 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         messageList.add(responseMessages, 'response');
       }
     }
+
+    // Run output processors (e.g., SemanticRecall for embeddings)
+    await this.__runOutputProcessors({
+      messageList,
+      requestContext,
+      tracingContext: { currentSpan: agentSpan },
+    });
 
     await this.#runScorers({
       messageList,

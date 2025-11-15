@@ -1,11 +1,12 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
+import type { ZodObject } from 'zod';
 
 export type { MastraDBMessage } from '../agent';
-import type { ZodObject } from 'zod';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { RequestContext } from '../request-context';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraVector } from '../vector';
@@ -41,6 +42,58 @@ export type StorageThreadType = {
   updatedAt: Date;
   metadata?: Record<string, unknown>;
 };
+
+/**
+ * Memory-specific context passed via RequestContext under the 'MastraMemory' key
+ * This provides processors with access to memory-related execution context
+ */
+export type MemoryRuntimeContext = {
+  thread?: Partial<StorageThreadType> & { id: string };
+  resourceId?: string;
+  memoryConfig?: MemoryConfig;
+};
+
+/**
+ * Parse and validate memory runtime context from RequestContext
+ * @param runtimeContext - The RequestContext to extract memory context from
+ * @returns The validated MemoryRuntimeContext or null if not available
+ * @throws Error if the context exists but is malformed
+ */
+export function parseMemoryRuntimeContext(runtimeContext?: RequestContext): MemoryRuntimeContext | null {
+  if (!runtimeContext) {
+    return null;
+  }
+
+  const memoryContext = runtimeContext.get('MastraMemory');
+  if (!memoryContext) {
+    return null;
+  }
+
+  // Validate the structure
+  if (typeof memoryContext !== 'object' || memoryContext === null) {
+    throw new Error(`Invalid MemoryRuntimeContext: expected object, got ${typeof memoryContext}`);
+  }
+
+  const ctx = memoryContext as Record<string, unknown>;
+
+  // Validate thread if present
+  if (ctx.thread !== undefined) {
+    if (typeof ctx.thread !== 'object' || ctx.thread === null) {
+      throw new Error(`Invalid MemoryRuntimeContext.thread: expected object, got ${typeof ctx.thread}`);
+    }
+    const thread = ctx.thread as Record<string, unknown>;
+    if (typeof thread.id !== 'string') {
+      throw new Error(`Invalid MemoryRuntimeContext.thread.id: expected string, got ${typeof thread.id}`);
+    }
+  }
+
+  // Validate resourceId if present
+  if (ctx.resourceId !== undefined && typeof ctx.resourceId !== 'string') {
+    throw new Error(`Invalid MemoryRuntimeContext.resourceId: expected string, got ${typeof ctx.resourceId}`);
+  }
+
+  return memoryContext as MemoryRuntimeContext;
+}
 
 export type MessageResponse<T extends 'raw' | 'core_message'> = {
   raw: MastraMessageV1[];
@@ -227,6 +280,28 @@ export type SemanticRecall = {
    * ```
    */
   indexConfig?: VectorIndexConfig;
+
+  /**
+   * Minimum similarity score threshold (0-1).
+   * Messages below this threshold will be filtered out from semantic search results.
+   *
+   * @example
+   * ```typescript
+   * threshold: 0.7 // Only include messages with 70%+ similarity
+   * ```
+   */
+  threshold?: number;
+
+  /**
+   * Index name for the vector store.
+   * If not provided, will be auto-generated based on embedder model.
+   *
+   * @example
+   * ```typescript
+   * indexName: 'my-custom-index'
+   * ```
+   */
+  indexName?: string;
 };
 
 /**
@@ -402,16 +477,23 @@ export type SharedMemoryConfig = {
   embedder?: EmbeddingModelId | EmbeddingModel<string> | EmbeddingModelV2<string>;
 
   /**
-   * Memory processors that modify retrieved messages before sending to the LLM.
-   * Useful for managing context size, filtering content, and preventing token limit errors.
-   * Processors execute in order, with TokenLimiter typically placed last.
+   * @deprecated This option is deprecated and will throw an error if used.
+   * Use the new Input/Output processor system instead.
+   *
+   * See: https://mastra.ai/en/docs/memory/processors
    *
    * @example
    * ```typescript
-   * processors: [
-   *   new CustomMemoryProcessor(),
-   *   new TokenLimiter(127000)
-   * ]
+   * // OLD (throws error):
+   * new Memory({
+   *   processors: [new TokenLimiter(100000)]
+   * })
+   *
+   * // NEW (use this):
+   * new Agent({
+   *   memory,
+   *   outputProcessors: [new TokenLimiterProcessor(100000)]
+   * })
    * ```
    */
   processors?: MemoryProcessor[];

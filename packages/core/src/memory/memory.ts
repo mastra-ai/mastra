@@ -4,6 +4,8 @@ import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
 import type { Mastra } from '../mastra';
+import type { InputProcessor, OutputProcessor } from '../processors';
+import type { RequestContext } from '../request-context';
 import type {
   MastraStorage,
   StorageListMessagesInput,
@@ -80,7 +82,6 @@ export abstract class MastraMemory extends MastraBase {
   protected _storage?: MastraStorage;
   vector?: MastraVector;
   embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
-  private processors: MemoryProcessor[] = [];
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
@@ -88,7 +89,36 @@ export abstract class MastraMemory extends MastraBase {
     super({ component: 'MEMORY', name: config.name });
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
-    if (config.processors) this.processors = config.processors;
+
+    // DEPRECATION: Block old processors config
+    if (config.processors) {
+      throw new Error(
+        `The 'processors' option in Memory is deprecated and has been removed.
+      
+Please use the new Input/Output processor system instead:
+
+OLD (deprecated):
+  new Memory({
+    processors: [new TokenLimiter(100000)]
+  })
+
+NEW (use this):
+  new Agent({
+    memory,
+    outputProcessors: [
+      new TokenLimiterProcessor(100000)
+    ]
+  })
+
+Or pass memory directly to processor arrays:
+  new Agent({
+    inputProcessors: [memory],
+    outputProcessors: [memory]
+  })
+
+See: https://mastra.ai/en/docs/memory/processors`,
+      );
+    }
     if (config.storage) {
       this._storage = augmentWithInit(config.storage);
       this._hasOwnStorage = true;
@@ -97,14 +127,18 @@ export abstract class MastraMemory extends MastraBase {
     if (this.threadConfig.semanticRecall) {
       if (!config.vector) {
         throw new Error(
-          `Semantic recall requires a vector store to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
+          `Semantic recall requires a vector store to be configured.
+
+https://mastra.ai/en/docs/memory/semantic-recall`,
         );
       }
       this.vector = config.vector;
 
       if (!config.embedder) {
         throw new Error(
-          `Semantic recall requires an embedder to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
+          `Semantic recall requires an embedder to be configured.
+
+https://mastra.ai/en/docs/memory/semantic-recall`,
         );
       }
 
@@ -134,7 +168,9 @@ export abstract class MastraMemory extends MastraBase {
   get storage() {
     if (!this._storage) {
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.\n\nhttps://mastra.ai/en/docs/memory/overview`,
+        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.
+
+https://mastra.ai/en/docs/memory/overview`,
       );
     }
     return this._storage;
@@ -212,7 +248,7 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
-    if (config?.workingMemory && 'use' in config.workingMemory) {
+    if (config?.workingMemory && typeof config.workingMemory === 'object' && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
 
@@ -224,53 +260,15 @@ export abstract class MastraMemory extends MastraBase {
 
     const mergedConfig = deepMerge(this.threadConfig, config || {});
 
-    if (config?.workingMemory?.schema) {
-      if (mergedConfig.workingMemory) {
-        mergedConfig.workingMemory.schema = config.workingMemory.schema;
-      }
+    if (
+      typeof config?.workingMemory === 'object' &&
+      config.workingMemory?.schema &&
+      typeof mergedConfig.workingMemory === 'object'
+    ) {
+      mergedConfig.workingMemory.schema = config.workingMemory.schema;
     }
 
     return mergedConfig;
-  }
-
-  /**
-   * Apply all configured message processors to a list of messages.
-   * @param messages The messages to process
-   * @returns The processed messages
-   */
-  protected async applyProcessors(
-    messages: CoreMessage[],
-    opts: {
-      processors?: MemoryProcessor[];
-    } & MemoryProcessorOpts,
-  ): Promise<CoreMessage[]> {
-    const processors = opts.processors || this.processors;
-    if (!processors || processors.length === 0) {
-      return messages;
-    }
-
-    let processedMessages = [...messages];
-
-    for (const processor of processors) {
-      processedMessages = await processor.process(processedMessages, {
-        systemMessage: opts.systemMessage,
-        newMessages: opts.newMessages,
-        memorySystemMessage: opts.memorySystemMessage,
-      });
-    }
-
-    return processedMessages;
-  }
-
-  processMessages({
-    messages,
-    processors,
-    ...opts
-  }: {
-    messages: CoreMessage[];
-    processors?: MemoryProcessor[];
-  } & MemoryProcessorOpts) {
-    return this.applyProcessors(messages, { processors: processors || this.processors, ...opts });
   }
 
   estimateTokens(text: string): number {
@@ -428,14 +426,14 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<string | null>;
 
   /**
-   * Retrieves working memory template for a specific thread
-   * @param memoryConfig - Optional memory configuration
+   * Get working memory template
+   * @param threadId - Thread ID
+   * @param resourceId - Resource ID
    * @returns Promise resolving to working memory template or null if not found
    */
-  abstract getWorkingMemoryTemplate({
-    memoryConfig,
-  }?: {
-    memoryConfig?: MemoryConfig;
+  abstract getWorkingMemoryTemplate(args: {
+    threadId?: string;
+    resourceId?: string;
   }): Promise<WorkingMemoryTemplate | null>;
 
   abstract updateWorkingMemory({
@@ -468,9 +466,35 @@ export abstract class MastraMemory extends MastraBase {
   }): Promise<{ success: boolean; reason: string }>;
 
   /**
-   * Deletes multiple messages by their IDs
-   * @param messageIds - Array of message IDs to delete
-   * @returns Promise that resolves when all messages are deleted
+   * Get input processors for this memory instance.
+   * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
+   * 
+   * NOTE: This base implementation returns an empty array. Concrete implementations
+   * (e.g., @mastra/memory) should override this method to instantiate memory-specific
+   * processors like SemanticRecall, WorkingMemory, and MessageHistory.
+   * 
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @param context - Optional execution context with threadId and resourceId
+   * @returns Array of input processors configured for this memory instance
    */
+  getInputProcessors(_configuredProcessors: InputProcessor[] = [], _context?: RequestContext): InputProcessor[] {
+    return [];
+  }
+
+  /**
+   * Get output processors for this memory instance
+   * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
+   * 
+   * NOTE: This base implementation returns an empty array. Concrete implementations
+   * (e.g., @mastra/memory) should override this method to instantiate memory-specific
+   * processors like MessageHistory and SemanticRecall.
+   * 
+   * @param configuredProcessors - Processors already configured by the user (for deduplication)
+   * @returns Array of output processors configured for this memory instance
+   */
+  getOutputProcessors(_configuredProcessors: OutputProcessor[] = [], _context?: RequestContext): OutputProcessor[] {
+    return [];
+  }
+
   abstract deleteMessages(messageIds: MessageDeleteInput): Promise<void>;
 }
