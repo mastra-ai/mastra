@@ -26,8 +26,6 @@ export interface WorkingMemoryConfig {
   logger?: IMastraLogger;
 }
 
-
-
 /**
  * WorkingMemory processor injects working memory data as a system message.
  *
@@ -65,7 +63,10 @@ export class WorkingMemory implements InputProcessor {
       scope?: 'thread' | 'resource';
       useVNext?: boolean;
       templateProvider?: {
-        getWorkingMemoryTemplate(args: { threadId?: string; resourceId?: string }): Promise<WorkingMemoryTemplate | null>;
+        getWorkingMemoryTemplate(args: {
+          threadId?: string;
+          resourceId?: string;
+        }): Promise<WorkingMemoryTemplate | null>;
       };
       logger?: IMastraLogger;
     },

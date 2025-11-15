@@ -316,7 +316,7 @@ export class SemanticRecall implements Processor {
   }): Promise<MastraDBMessage[]> {
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
-    
+
     // Generate embeddings for the query
     const { embeddings, dimension } = await this.embedMessageContent(query, indexName);
     await this.ensureVectorIndex(indexName, dimension);
@@ -375,7 +375,10 @@ export class SemanticRecall implements Processor {
     return h.h64(combined).toString(16);
   }
 
-  private async embedMessageContent(content: string, indexName: string): Promise<{
+  private async embedMessageContent(
+    content: string,
+    indexName: string,
+  ): Promise<{
     embeddings: number[][];
     dimension: number;
   }> {
