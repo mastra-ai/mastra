@@ -46,7 +46,7 @@
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "@wong2/mcp-cli": "^1.10.0",
+    "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",
     "hono": "^4.9.7",
