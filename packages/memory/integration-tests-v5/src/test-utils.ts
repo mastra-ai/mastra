@@ -71,7 +71,8 @@ export function generateConversationHistory({
 
     // Create assistant message
     if (includeTool) {
-      // Assistant message with tool call and result
+      // Assistant message with tool call that transitions to result
+      // Note: In reality, there's only ONE tool invocation that mutates from 'call' to 'result' state
       messages.push({
         role: 'assistant',
         content: {
@@ -81,16 +82,7 @@ export function generateConversationHistory({
             {
               type: 'tool-invocation',
               toolInvocation: {
-                state: 'call',
-                toolCallId: `tool-${i}`,
-                toolName,
-                args: toolArgs[toolName as keyof typeof toolArgs] || {},
-              },
-            },
-            {
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
+                state: 'result', // Final state after execution
                 toolCallId: `tool-${i}`,
                 toolName,
                 args: toolArgs[toolName as keyof typeof toolArgs] || {},

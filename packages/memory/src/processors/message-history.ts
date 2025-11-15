@@ -51,30 +51,25 @@ export class MessageHistory implements Processor {
       return messages;
     }
 
-    try {
-      // 1. Fetch historical messages from storage (as DB format)
-      const result = await this.storage.listMessages({
-        threadId,
-        page: 0,
-        perPage: this.lastMessages,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
+    // 1. Fetch historical messages from storage (as DB format)
+    const result = await this.storage.listMessages({
+      threadId,
+      page: 0,
+      perPage: this.lastMessages,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+    });
 
-      // 2. Filter based on includeSystemMessages option
-      const filteredMessages = result.messages.filter(
-        (msg: MastraDBMessage) => this.includeSystemMessages || msg.role !== 'system',
-      );
+    // 2. Filter based on includeSystemMessages option
+    const filteredMessages = result.messages.filter(
+      (msg: MastraDBMessage) => this.includeSystemMessages || msg.role !== 'system',
+    );
 
-      // 3. Merge with incoming messages (avoiding duplicates by ID)
-      const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-      const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
+    // 3. Merge with incoming messages (avoiding duplicates by ID)
+    const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
+    const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
 
-      const mergedMessages = [...uniqueHistoricalMessages, ...messages];
-      return mergedMessages;
-    } catch {
-      // Fail open - return original messages if history fetch fails
-      return messages;
-    }
+    const mergedMessages = [...uniqueHistoricalMessages, ...messages];
+    return mergedMessages;
   }
 
   async processOutputResult(args: {
@@ -93,56 +88,45 @@ export class MessageHistory implements Processor {
       return messages;
     }
 
-    try {
-      // 1. Filter out ONLY system messages - keep everything else
-      const messagesToSave = messages.filter(m => m.role !== 'system');
+    // 1. Filter out ONLY system messages - keep everything else
+    const messagesToSave = messages.filter(m => m.role !== 'system');
 
-      if (messagesToSave.length === 0) {
-        return messages;
-      }
-
-      // 2. Add IDs to messages that don't have them
-      const messagesWithIds = messagesToSave.map(msg => ({
-        ...msg,
-        id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      }));
-
-      // 3. Save to storage
-      await this.storage.saveMessages({
-        messages: messagesWithIds,
-      });
-
-      // 4. Update thread metadata
-      try {
-        const thread = await this.storage.getThreadById({ threadId });
-        if (thread) {
-          const result = await this.storage.listMessages({
-            threadId,
-            page: 1,
-            perPage: 1000,
-          });
-
-          await this.storage.updateThread({
-            id: threadId,
-            title: thread.title || '',
-            metadata: {
-              ...thread.metadata,
-              updatedAt: new Date(),
-              lastMessageAt: new Date(),
-              messageCount: result.messages.length || 0,
-            },
-          });
-        }
-      } catch (updateError) {
-        console.warn('Failed to update thread metadata:', updateError);
-        // Continue even if thread update fails
-      }
-
-      return messages;
-    } catch (error) {
-      console.warn('Failed to save messages:', error);
-      // Return original messages if storage fails
+    if (messagesToSave.length === 0) {
       return messages;
     }
+
+    // 2. Add IDs to messages that don't have them
+    const messagesWithIds = messagesToSave.map(msg => ({
+      ...msg,
+      id: msg.id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    }));
+
+    // 3. Save to storage
+    await this.storage.saveMessages({
+      messages: messagesWithIds,
+    });
+
+    // 4. Update thread metadata
+    const thread = await this.storage.getThreadById({ threadId });
+    if (thread) {
+      const result = await this.storage.listMessages({
+        threadId,
+        page: 1,
+        perPage: 1000,
+      });
+
+      await this.storage.updateThread({
+        id: threadId,
+        title: thread.title || '',
+        metadata: {
+          ...thread.metadata,
+          updatedAt: new Date(),
+          lastMessageAt: new Date(),
+          messageCount: result.messages.length || 0,
+        },
+      });
+    }
+
+    return messages;
   }
 }

@@ -314,11 +314,11 @@ export class SemanticRecall implements Processor {
     threadId: string;
     resourceId?: string;
   }): Promise<MastraDBMessage[]> {
-    // Generate embeddings for the query
-    const { embeddings, dimension } = await this.embedMessageContent(query);
-
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
+    
+    // Generate embeddings for the query
+    const { embeddings, dimension } = await this.embedMessageContent(query, indexName);
     await this.ensureVectorIndex(indexName, dimension);
 
     // Perform vector search for each embedding
@@ -367,18 +367,20 @@ export class SemanticRecall implements Processor {
    */
   /**
    * Hash content using xxhash for fast cache key generation
+   * Includes index name to ensure cache isolation between different embedding models/dimensions
    */
-  private async hashContent(content: string): Promise<string> {
+  private async hashContent(content: string, indexName: string): Promise<string> {
     const h = await this.hasher;
-    return h.h64(content).toString(16);
+    const combined = `${indexName}:${content}`;
+    return h.h64(combined).toString(16);
   }
 
-  private async embedMessageContent(content: string): Promise<{
+  private async embedMessageContent(content: string, indexName: string): Promise<{
     embeddings: number[][];
     dimension: number;
   }> {
     // Check cache first
-    const contentHash = await this.hashContent(content);
+    const contentHash = await this.hashContent(content, indexName);
     const cachedEmbedding = this.embeddingCache.get(contentHash);
 
     if (cachedEmbedding) {
@@ -494,7 +496,7 @@ export class SemanticRecall implements Processor {
 
         try {
           // Create embedding for the message
-          const { embeddings, dimension } = await this.embedMessageContent(textContent);
+          const { embeddings, dimension } = await this.embedMessageContent(textContent, indexName);
 
           if (embeddings.length === 0) {
             continue;
