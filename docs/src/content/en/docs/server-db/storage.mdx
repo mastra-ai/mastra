@@ -298,7 +298,7 @@ const retrievedThread = await memoryStore.getThreadById({
 });
 
 // List threads for a resource
-const threads = await memoryStore.listThreads({
+const threads = await memoryStore.listThreadsByResourceId({
   resourceId: 'user-123',
   page: 0,
   perPage: 20,

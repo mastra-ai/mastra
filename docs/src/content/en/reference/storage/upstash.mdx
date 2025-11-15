@@ -106,7 +106,7 @@ const storage = new UpstashStore({
 // Access memory domain for threads and messages
 const memoryStore = await storage.getStore('memory');
 
-const threads = await memoryStore.listThreads({
+const threads = await memoryStore.listThreadsByResourceId({
   resourceId: 'user-123',
   page: 0,
   perPage: 20,
@@ -157,7 +157,7 @@ The Upstash storage implementation uses a structured key-value format based on t
   - Example: `mastra_scorers:runId:run_abc123`
 
 **Workflows Domain:**
-- **Workflow Snapshots**: `mastra_workflow_snapshot:namespace:workflows:workflow_name:{workflowName}:run_id:{runId}[:resourceId:{resourceId}]`
+- **Workflow Snapshots**: `mastra_workflow_snapshot:namespace:workflows:workflow_name:{workflowId}:run_id:{runId}[:resourceId:{resourceId}]`
   - Example: `mastra_workflow_snapshot:namespace:workflows:workflow_name:myWorkflow:run_id:run_xyz`
   - With resourceId: `mastra_workflow_snapshot:namespace:workflows:workflow_name:myWorkflow:run_id:run_xyz:resourceId:res_123`
 

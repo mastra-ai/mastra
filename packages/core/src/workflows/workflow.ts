@@ -1281,14 +1281,14 @@ export class Workflow<
     const storage = await this.#mastra?.getStore('workflows');
     if (!storage) {
       return this.#runs.get(runId)
-        ? ({ ...this.#runs.get(runId), workflowId: this.id } as unknown as WorkflowRun)
+        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
         : null;
     }
     const run = await storage.getWorkflowRunById({ runId, workflowId: this.id });
 
     return (
       run ??
-      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowId: this.id } as unknown as WorkflowRun) : null)
+      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
     );
   }
 

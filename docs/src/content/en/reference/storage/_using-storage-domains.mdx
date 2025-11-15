@@ -6,7 +6,7 @@ To access domain-specific operations (threads, messages, workflows, etc.), use `
 // Access memory domain for threads and messages
 const memoryStore = await storage.getStore('memory');
 
-const threads = await memoryStore.listThreads({
+const threads = await memoryStore.listThreadsByResourceId({
   resourceId: 'user-123',
   page: 0,
   perPage: 20,
