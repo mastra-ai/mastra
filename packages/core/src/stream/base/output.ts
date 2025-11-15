@@ -865,20 +865,22 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     }
 
     // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    // AI SDK reports cumulative usage in step-finish chunks, so we should replace
+    // the values rather than add them to avoid double-counting
     if (usage.inputTokens !== undefined) {
-      this.#usageCount.inputTokens = (this.#usageCount.inputTokens ?? 0) + usage.inputTokens;
+      this.#usageCount.inputTokens = usage.inputTokens;
     }
     if (usage.outputTokens !== undefined) {
-      this.#usageCount.outputTokens = (this.#usageCount.outputTokens ?? 0) + usage.outputTokens;
+      this.#usageCount.outputTokens = usage.outputTokens;
     }
     if (usage.totalTokens !== undefined) {
-      this.#usageCount.totalTokens = (this.#usageCount.totalTokens ?? 0) + usage.totalTokens;
+      this.#usageCount.totalTokens = usage.totalTokens;
     }
     if (usage.reasoningTokens !== undefined) {
-      this.#usageCount.reasoningTokens = (this.#usageCount.reasoningTokens ?? 0) + usage.reasoningTokens;
+      this.#usageCount.reasoningTokens = usage.reasoningTokens;
     }
     if (usage.cachedInputTokens !== undefined) {
-      this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
+      this.#usageCount.cachedInputTokens = usage.cachedInputTokens;
     }
   }
 
