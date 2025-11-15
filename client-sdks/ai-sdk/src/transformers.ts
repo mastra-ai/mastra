@@ -148,7 +148,19 @@ export function AgentNetworkToAISDKTransformer() {
   });
 }
 
-export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>(lastMessageId?: string) {
+export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
+  lastMessageId,
+  sendStart,
+  sendFinish,
+  sendReasoning,
+  sendSources,
+}: {
+  lastMessageId?: string;
+  sendStart?: boolean;
+  sendFinish?: boolean;
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+}) {
   let bufferedSteps = new Map<string, any>();
 
   return new TransformStream<ChunkType<TOutput>, object>({
@@ -157,10 +169,10 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>(last
 
       const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
         part: part as any,
-        sendReasoning: false,
-        sendSources: false,
-        sendStart: true,
-        sendFinish: true,
+        sendReasoning,
+        sendSources,
+        sendStart,
+        sendFinish,
         responseMessageId: lastMessageId,
         onError(error) {
           return safeParseErrorObject(error);
