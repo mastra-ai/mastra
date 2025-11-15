@@ -60,7 +60,7 @@ type FallbackFields<OUTPUT extends OutputSchema = undefined> =
 
 export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Zod schema to validate the output against */
-  schema: OUTPUT;
+  schema: OUTPUT extends undefined ? OutputSchema : OUTPUT;
 
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
   model?: MastraModelConfig;
