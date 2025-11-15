@@ -26,7 +26,6 @@ describe('Scores Handlers', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockStorage = new InMemoryStore();
-
     evalsStorage = await mockStorage.getStore('evals');
 
     mastra = new Mastra({

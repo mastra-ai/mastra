@@ -211,10 +211,14 @@ function getTraceDetails(traceIdWithSpanId?: string) {
 export async function saveScoreHandler({ mastra, score }: Context & { score: ScoreRowData }) {
   try {
     const storage = await mastra.getStore('evals');
+    const logger = mastra.getLogger();
+
     if (!storage) {
-      return handleError(new Error('Storage not found'), 'Error saving score');
+      logger?.debug('Storage not found, returning empty array');
+      return [];
     }
-    const scores = (await storage?.saveScore?.(score)) || [];
+
+    const scores = (await storage.saveScore(score)) || [];
     return scores;
   } catch (error) {
     return handleError(error, 'Error saving score');

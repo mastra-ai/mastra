@@ -10,11 +10,11 @@ import { Agent } from '../agent';
 import { RequestContext } from '../di';
 import { MastraError } from '../error';
 import { Mastra } from '../mastra';
+import type { WorkflowsStorageBase } from '../storage';
 import { InMemoryStore } from '../storage/inmemory';
 import { createTool } from '../tools';
 import type { ChunkType, StreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
-import { WorkflowsStorageBase } from '../storage';
 
 vi.mock('crypto', () => {
   return {

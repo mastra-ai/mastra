@@ -1,8 +1,8 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
-import { InMemoryMemory } from './inmemory';
+import { MemoryStorageInMemory } from './inmemory';
 
 describe('InMemoryMemory.updateResource', () => {
-  let memory: InMemoryMemory;
+  let memory: MemoryStorageInMemory;
   let initialDate: Date;
   let laterDate: Date;
 
@@ -16,14 +16,7 @@ describe('InMemoryMemory.updateResource', () => {
     vi.setSystemTime(initialDate);
 
     // Initialize fresh InMemoryMemory instance for each test with required constructor args
-    memory = new InMemoryMemory({
-      collection: {
-        threads: new Map(),
-        resources: new Map(),
-        messages: new Map(),
-      } as any,
-      operations: {} as any,
-    });
+    memory = new MemoryStorageInMemory();
   });
 
   afterEach(() => {

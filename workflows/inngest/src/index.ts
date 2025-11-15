@@ -444,18 +444,12 @@ export class InngestRun<
       throw new Error('No steps provided to timeTravel');
     }
 
-    console.log('steps', steps);
-    console.log('this.workflowId', this.workflowId);
-    console.log('this.runId', this.runId);
-
     const storage = await this.#mastra?.getStore('workflows');
 
     const snapshot = await storage?.getWorkflowSnapshot({
       workflowId: this.workflowId,
       runId: this.runId,
     });
-
-    console.log('snapshot', snapshot);
 
     if (!snapshot) {
       await storage?.createWorkflowSnapshot({
@@ -488,8 +482,6 @@ export class InngestRun<
       inputDataToUse = await this._validateTimetravelInputData(params.inputData, this.workflowSteps[steps[0]!]!);
     }
 
-    console.log('inputDataToUse', inputDataToUse);
-
     const timeTravelData = createTimeTravelExecutionParams({
       steps,
       inputData: inputDataToUse,
@@ -500,8 +492,6 @@ export class InngestRun<
       graph: this.executionGraph,
       initialState: params.initialState,
     });
-
-    console.log('timeTravelData', timeTravelData);
 
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
@@ -518,19 +508,13 @@ export class InngestRun<
 
     const eventId = eventOutput.ids[0];
 
-    console.log('eventId', eventId);
-
     if (!eventId) {
       throw new Error('Event ID is not set');
     }
 
     const runOutput = await this.getRunOutput(eventId);
 
-    console.log('runOutput', runOutput);
-
     const result = runOutput?.output?.result;
-
-    console.log('result', result);
 
     if (result.status === 'failed') {
       result.error = new Error(result.error);

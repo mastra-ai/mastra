@@ -8,12 +8,12 @@ import { RequestContext } from '../../di';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
+import type { WorkflowsStorageBase } from '../../storage';
 import { InMemoryStore } from '../../storage/inmemory';
 import { createTool } from '../../tools';
 import type { StreamEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
-import { WorkflowsStorageBase } from '../../storage';
 
 const testStorage = new InMemoryStore();
 

@@ -30,6 +30,15 @@ const config = {
     },
     parseFrontMatter: async (params) => {
       const result = await params.defaultParseFrontMatter(params);
+      // Skip modifying front matter for partial files (files starting with _)
+      // Partial files should not have front matter according to Docusaurus
+      const filePath = params.filePath || "";
+      const fileName = filePath.split("/").pop() || "";
+      if (fileName.startsWith("_")) {
+        // For partial files, return the result without modifying front matter
+        // If front matter exists, it will be ignored by Docusaurus anyway
+        return result;
+      }
       result.frontMatter.description = `Mastra v1 Beta: ${result.frontMatter.description}`;
       return result;
     },
