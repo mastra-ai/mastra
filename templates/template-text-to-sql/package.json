@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "22.13.17",
-    "@types/pg": "^8.15.5",
+    "@types/pg": "^8.15.6",
     "mastra": "beta",
     "typescript": "^5.8.3"
   }
