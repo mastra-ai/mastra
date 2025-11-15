@@ -202,7 +202,7 @@
     "ai-v5": "npm:ai@5.0.76",
     "dotenv": "^16.6.1",
     "hono": "^4.9.7",
-    "hono-openapi": "^0.4.8",
+    "hono-openapi": "^1.1.1",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
     "json-schema-to-zod": "^2.6.1",
