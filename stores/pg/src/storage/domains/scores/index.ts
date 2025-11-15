@@ -11,7 +11,6 @@ import {
 } from '@mastra/core/storage';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
-import { getTableName } from '../utils';
 
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return {
@@ -53,7 +52,7 @@ export class ScoresPG extends ScoresStorage {
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
       const result = await this.client.oneOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE id = $1`,
+        `SELECT * FROM ${this.operations.getQualifiedTableName(TABLE_SCORERS)} WHERE id = $1`,
         [id],
       );
 
@@ -106,7 +105,7 @@ export class ScoresPG extends ScoresStorage {
       const whereClause = conditions.join(' AND ');
 
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause}`,
+        `SELECT COUNT(*) FROM ${this.operations.getQualifiedTableName(TABLE_SCORERS)} WHERE ${whereClause}`,
         queryParams,
       );
       const { page, perPage: perPageInput } = pagination;
@@ -127,7 +126,7 @@ export class ScoresPG extends ScoresStorage {
       const limitValue = perPageInput === false ? Number(total?.count) : perPage;
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        `SELECT * FROM ${this.operations.getQualifiedTableName(TABLE_SCORERS)} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
         [...queryParams, limitValue, start],
       );
 
@@ -233,7 +232,7 @@ export class ScoresPG extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1`,
+        `SELECT COUNT(*) FROM ${this.operations.getQualifiedTableName(TABLE_SCORERS)} WHERE "runId" = $1`,
         [runId],
       );
       const { page, perPage: perPageInput } = pagination;
@@ -256,7 +255,7 @@ export class ScoresPG extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
+        `SELECT * FROM ${this.operations.getQualifiedTableName(TABLE_SCORERS)} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
         [runId, limitValue, start],
       );
       return {
@@ -291,7 +290,7 @@ export class ScoresPG extends ScoresStorage {
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
       const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2`,
+        `SELECT COUNT(*) FROM ${this.operations.getQualifiedTableName(TABLE_SCORERS)} WHERE "entityId" = $1 AND "entityType" = $2`,
         [entityId, entityType],
       );
       const { page, perPage: perPageInput } = pagination;
@@ -314,7 +313,7 @@ export class ScoresPG extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
+        `SELECT * FROM ${this.operations.getQualifiedTableName(TABLE_SCORERS)} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
         [entityId, entityType, limitValue, start],
       );
       return {
@@ -348,7 +347,7 @@ export class ScoresPG extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema });
+      const tableName = this.operations.getQualifiedTableName(TABLE_SCORERS);
       const countSQLResult = await this.client.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2`,
         [traceId, spanId],

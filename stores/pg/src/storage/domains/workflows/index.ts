@@ -4,7 +4,6 @@ import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@m
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
-import { getTableName } from '../utils';
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
@@ -97,7 +96,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       const now = new Date().toISOString();
       await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+        `INSERT INTO ${this.operations.getQualifiedTableName(TABLE_WORKFLOW_SNAPSHOT)} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
@@ -169,7 +168,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${this.operations.getQualifiedTableName(TABLE_WORKFLOW_SNAPSHOT)}
           ${whereClause}
           ORDER BY "createdAt" DESC LIMIT 1
         `;
@@ -254,7 +253,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Only get total count when using pagination
       if (usePagination) {
         const countResult = await this.client.one(
-          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
+          `SELECT COUNT(*) as count FROM ${this.operations.getQualifiedTableName(TABLE_WORKFLOW_SNAPSHOT)} ${whereClause}`,
           values,
         );
         total = Number(countResult.count);
@@ -265,7 +264,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${this.operations.getQualifiedTableName(TABLE_WORKFLOW_SNAPSHOT)}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
