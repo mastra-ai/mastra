@@ -474,9 +474,7 @@ export async function createHonoServer(
   const serverOptions = mastra.getServer();
   // Normalize base path: ensure it starts with / and doesn't end with /
   // Empty string means playground is served at root
-  const basePath = serverOptions?.path
-    ? `/${serverOptions.path}`.replace(/^\/+/, '/').replace(/\/+$/, '')
-    : '';
+  const basePath = serverOptions?.path ? `/${serverOptions.path}`.replace(/^\/+/, '/').replace(/\/+$/, '') : '';
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
@@ -527,7 +525,7 @@ export async function createHonoServer(
       `${basePath}/assets/*`,
       serveStatic({
         root: './playground/assets',
-        rewriteRequestPath: basePath ? (path) => path.replace(basePath, '') : undefined,
+        rewriteRequestPath: basePath ? path => path.replace(basePath, '') : undefined,
       }),
     );
   }
@@ -535,7 +533,7 @@ export async function createHonoServer(
   // Dynamic HTML handler - this must come before static file serving
   app.get('*', async (c, next) => {
     const requestPath = c.req.path;
-    
+
     // Skip if it's an API route
     if (
       requestPath.startsWith('/api/') ||
@@ -564,8 +562,8 @@ export async function createHonoServer(
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
       indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
-      // Inject the base path for frontend routing
-      indexHtml = indexHtml.replace(`'%%MASTRA_BASE_PATH%%'`, `'${basePath}'`);
+      // Inject the base path for frontend routing and favicon
+      indexHtml = indexHtml.replace(/%%MASTRA_BASE_PATH%%/g, basePath);
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
@@ -580,7 +578,7 @@ export async function createHonoServer(
       playgroundPath,
       serveStatic({
         root: './playground',
-        rewriteRequestPath: basePath ? (path) => path.replace(basePath, '') : undefined,
+        rewriteRequestPath: basePath ? path => path.replace(basePath, '') : undefined,
       }),
     );
   }

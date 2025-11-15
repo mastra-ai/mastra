@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/mastra.svg" id="favicon" />
+    <link rel="icon" type="image/svg+xml" href="%%MASTRA_BASE_PATH%%/mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Studio</title>
     <script>
@@ -37,13 +37,14 @@
       window.MASTRA_SERVER_PORT = '%%MASTRA_SERVER_PORT%%';
       window.MASTRA_HIDE_CLOUD_CTA = '%%MASTRA_HIDE_CLOUD_CTA%%';
       window.MASTRA_BASE_PATH = '%%MASTRA_BASE_PATH%%';
-
-      // Update favicon path if base path is configured
-      if (window.MASTRA_BASE_PATH) {
-        document.getElementById('favicon').href = window.MASTRA_BASE_PATH + '/mastra.svg';
-      }
     </script>
     <div id="root" class="dark"></div>
+    <!-- 
+      Note: The dynamic import below references TypeScript source (src/main.tsx) which browsers cannot execute.
+      This is intentional - Vite's build process transforms this entire script block during `vite build`,
+      replacing it with static <script> tags that reference the compiled JavaScript bundles.
+      The server serves the built version from CLI's dist/playground, not this source file.
+    -->
     <script type="module">
       const basePath = window.MASTRA_BASE_PATH || '';
       import(`${basePath}/src/main.tsx`);
