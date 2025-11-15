@@ -659,6 +659,63 @@ describe('Agent with message processors', () => {
   }, 3000_000);
 });
 
+describe('CRITICAL BUG: Input processors not running', () => {
+  it('should run MessageHistory input processor and include previous messages in LLM request', async () => {
+    const memory = new Memory({
+      storage: new MockStore(),
+      options: {
+        lastMessages: 10, // Fetch last 10 messages
+      },
+    });
+
+    const agent = new Agent({
+      id: 'bug-test-agent',
+      name: 'Bug Test Agent',
+      instructions: 'You are a helpful assistant',
+      model: openai('gpt-4o-mini'),
+      memory,
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'bug-test-resource';
+
+    // First message
+    const firstResponse = await agent.generate('My name is Alice', {
+      threadId,
+      resourceId,
+    });
+
+    expect(firstResponse.text).toBeDefined();
+
+    // Verify first message was saved
+    const { messages: messagesAfterFirst } = await memory.recall({ threadId });
+    expect(messagesAfterFirst.length).toBe(2); // user + assistant
+
+    // Second message - should include history from MessageHistory input processor
+    const secondResponse = await agent.generate('What is my name?', {
+      threadId,
+      resourceId,
+    });
+
+    // Check the actual request sent to the LLM
+    const requestMessages: CoreMessage[] = secondResponse.request.body.input;
+
+    console.log('=== LLM Request Messages ===');
+    console.log(JSON.stringify(requestMessages, null, 2));
+    console.log('=== Request message count:', requestMessages.length);
+
+    // EXPECTED: Should have 3+ messages (previous user + assistant + current user)
+    // ACTUAL BUG: Only has 1 message (current user message)
+    expect(requestMessages.length).toBeGreaterThan(1);
+
+    // Should include the previous conversation
+    const previousUserMessage = requestMessages.find(
+      (msg: any) => msg.role === 'user' && msg.content.includes('Alice')
+    );
+    expect(previousUserMessage).toBeDefined();
+  });
+});
+
 describe('Agent memory test gemini', () => {
   const memory = new Memory({
     storage: new MockStore(),

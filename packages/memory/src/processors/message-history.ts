@@ -55,8 +55,9 @@ export class MessageHistory implements Processor {
       // 1. Fetch historical messages from storage (as DB format)
       const result = await this.storage.listMessages({
         threadId,
-        page: 1,
+        page: 0,
         perPage: this.lastMessages,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
       });
 
       // 2. Filter based on includeSystemMessages option

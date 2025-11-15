@@ -65,7 +65,7 @@ export class Memory extends MastraMemory {
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of input processors configured for this memory instance
    */
-  getProcessors(configuredProcessors: InputProcessor[] = [], context?: RequestContext): InputProcessor[] {
+  getInputProcessors(configuredProcessors: InputProcessor[] = [], context?: RequestContext): InputProcessor[] {
     const processors: InputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
@@ -224,7 +224,7 @@ export class Memory extends MastraMemory {
     }
 
     // Add SemanticRecall output processor if configured
-    if (this.threadConfig.semanticRecall) {
+    if (effectiveConfig.semanticRecall) {
       if (!this.storage?.stores?.memory)
         throw new MastraError({
           category: 'USER',
@@ -254,7 +254,7 @@ export class Memory extends MastraMemory {
 
       if (!hasSemanticRecall) {
         const semanticRecallConfig =
-          typeof this.threadConfig.semanticRecall === 'object' ? this.threadConfig.semanticRecall : {};
+          typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
         processors.push(
           new SemanticRecall({
             storage: this.storage.stores.memory,
