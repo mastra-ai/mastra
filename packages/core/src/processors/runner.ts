@@ -173,7 +173,8 @@ export class ProcessorRunner {
         // Processor returned an array of messages
         processableMessages = result;
       }
-      processorSpan?.end({ output: processableMessages });
+      // Record the actual output of this processor (result), not the input to the next processor
+      processorSpan?.end({ output: result instanceof MessageList ? result.get.all.db() : result });
     }
 
     // Processed messages are already in the message list, no need to re-add them
@@ -426,7 +427,8 @@ export class ProcessorRunner {
         // Processor returned an array of messages
         processableMessages = result;
       }
-      processorSpan?.end({ output: processableMessages });
+      // Record the actual output of this processor (result), not the input to the next processor
+      processorSpan?.end({ output: result instanceof MessageList ? result.get.all.db() : result });
     }
 
     if (processableMessages.length > 0) {

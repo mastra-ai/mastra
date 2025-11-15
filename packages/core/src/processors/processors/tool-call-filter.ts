@@ -4,6 +4,20 @@ import type { RequestContext } from '../../request-context';
 import type { InputProcessor } from '../index';
 
 /**
+ * Type definition for tool invocation parts in MastraDBMessage format 2
+ */
+type V2ToolInvocationPart = {
+  type: 'tool-invocation';
+  toolInvocation: {
+    toolName: string;
+    toolCallId: string;
+    args: unknown;
+    result?: unknown;
+    state: 'call' | 'result';
+  };
+};
+
+/**
  * Filters out tool calls and results from messages.
  * By default (with no arguments), excludes all tool calls and their results.
  * Can be configured to exclude only specific tools by name.
@@ -109,16 +123,6 @@ export class ToolCallFilter implements InputProcessor {
       for (const message of messagesToFilter) {
         const toolInvocations = getToolInvocations(message);
         for (const part of toolInvocations) {
-          type V2ToolInvocationPart = {
-            type: 'tool-invocation';
-            toolInvocation: {
-              toolName: string;
-              toolCallId: string;
-              args: unknown;
-              result?: unknown;
-              state: 'call' | 'result';
-            };
-          };
           const invocationPart = part as unknown as V2ToolInvocationPart;
           const invocation = invocationPart.toolInvocation;
 
@@ -151,16 +155,6 @@ export class ToolCallFilter implements InputProcessor {
               return true; // Keep non-tool parts
             }
 
-            type V2ToolInvocationPart = {
-              type: 'tool-invocation';
-              toolInvocation: {
-                toolName: string;
-                toolCallId: string;
-                args: unknown;
-                result?: unknown;
-                state: 'call' | 'result';
-              };
-            };
             const invocationPart = part as unknown as V2ToolInvocationPart;
             const invocation = invocationPart.toolInvocation;
 

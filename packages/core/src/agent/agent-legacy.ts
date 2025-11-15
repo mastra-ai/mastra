@@ -81,14 +81,7 @@ export interface AgentLegacyCapabilities {
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
   }): Promise<Record<string, CoreTool>>;
-  /** Get memory messages */
-  getMemoryMessages(args: {
-    resourceId?: string;
-    threadId: string;
-    vectorMessageSearch: string;
-    memoryConfig?: MemoryConfig;
-    requestContext: RequestContext;
-  }): Promise<{ messages: MastraDBMessage[] }>;
+
   /** Run input processors */
   __runInputProcessors(args: {
     requestContext: RequestContext;

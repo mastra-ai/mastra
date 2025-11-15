@@ -451,35 +451,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     return resolvedMemory;
   }
 
-  /**
-   * Gets memory messages for a specific thread (legacy API support).
-   * @internal
-   */
-  private async getMemoryMessages({
-    resourceId,
-    threadId,
-    vectorMessageSearch,
-    memoryConfig,
-    requestContext,
-  }: {
-    resourceId?: string;
-    threadId: string;
-    vectorMessageSearch: string;
-    memoryConfig?: MemoryConfig;
-    requestContext: RequestContext;
-  }): Promise<{ messages: MastraDBMessage[] }> {
-    const memory = await this.getMemory({ requestContext });
-    if (!memory) {
-      return { messages: [] };
-    }
-    return memory.recall({
-      threadId,
-      resourceId,
-      threadConfig: memoryConfig,
-      // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
-      vectorSearchString: vectorMessageSearch,
-    });
-  }
+  
 
   get voice() {
     if (typeof this.#instructions === 'function') {
@@ -679,7 +651,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         getLLM: this.getLLM.bind(this) as any,
         getMemory: this.getMemory.bind(this),
         convertTools: this.convertTools.bind(this),
-        getMemoryMessages: (...args) => this.getMemoryMessages(...args),
+        
         __runInputProcessors: this.__runInputProcessors.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),
@@ -2397,7 +2369,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           : undefined,
       saveStepMessages: this.saveStepMessages.bind(this),
       convertTools: this.convertTools.bind(this),
-      getMemoryMessages: this.getMemoryMessages.bind(this),
       runInputProcessors: this.__runInputProcessors.bind(this),
       executeOnFinish: this.#executeOnFinish.bind(this),
       outputProcessors: this.#outputProcessors,
