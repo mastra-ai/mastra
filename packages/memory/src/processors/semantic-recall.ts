@@ -1,4 +1,4 @@
-import type { MessageList } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { parseMemoryRuntimeContext } from '@mastra/core/memory';
 import type { MastraDBMessage } from '@mastra/core/memory';
@@ -112,7 +112,7 @@ export class SemanticRecall implements Processor {
 
   // LRU cache for embeddings: contentHash -> embedding vector
   private embeddingCache: LRUCache<string, number[]>;
-  
+
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
 
@@ -205,7 +205,7 @@ export class SemanticRecall implements Processor {
         const crossThreadMessages = newMessages.filter(m => m.threadId && m.threadId !== threadId);
         if (crossThreadMessages.length > 0) {
           // Format cross-thread messages as a system message for context
-          const formattedSystemMessage = this.formatCrossThreadMessages(crossThreadMessages);
+          const formattedSystemMessage = this.formatCrossThreadMessages(crossThreadMessages, threadId);
 
           // Add cross-thread messages as a context message
           messageList.add([formattedSystemMessage], 'context');
@@ -232,41 +232,36 @@ export class SemanticRecall implements Processor {
 
   /**
    * Format cross-thread messages as a system message with timestamps and labels
+   * Uses the exact formatting logic from main that was tested with longmemeval benchmark
    */
-  private formatCrossThreadMessages(messages: MastraDBMessage[]): SystemModelMessage {
-    // Group messages by date
-    const messagesByDate = new Map<string, MastraDBMessage[]>();
+  private formatCrossThreadMessages(messages: MastraDBMessage[], currentThreadId: string): SystemModelMessage {
+    let result = ``;
 
-    for (const msg of messages) {
-      const date = msg.createdAt ? new Date(msg.createdAt).toLocaleDateString() : 'Unknown Date';
-      if (!messagesByDate.has(date)) {
-        messagesByDate.set(date, []);
+    // Convert to v1 format like main did
+    const v1Messages = new MessageList().add(messages, 'memory').get.all.v1();
+    let lastYmd: string | null = null;
+
+    for (const msg of v1Messages) {
+      const date = msg.createdAt;
+      const year = date.getUTCFullYear();
+      const month = date.toLocaleString('default', { month: 'short' });
+      const day = date.getUTCDate();
+      const ymd = `${year}, ${month}, ${day}`;
+      const utcHour = date.getUTCHours();
+      const utcMinute = date.getUTCMinutes();
+      const hour12 = utcHour % 12 || 12;
+      const ampm = utcHour < 12 ? 'AM' : 'PM';
+      const timeofday = `${hour12}:${utcMinute < 10 ? '0' : ''}${utcMinute} ${ampm}`;
+
+      if (!lastYmd || lastYmd !== ymd) {
+        result += `\nthe following messages are from ${ymd}\n`;
       }
-      messagesByDate.get(date)!.push(msg);
+      result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${JSON.stringify(msg)}`;
+
+      lastYmd = ymd;
     }
 
-    // Format messages with timestamps and labels
-    const formattedSections: string[] = [];
-
-    for (const [date, msgs] of messagesByDate) {
-      const formattedMessages = msgs
-        .map(msg => {
-          const time = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString() : '';
-          const role = msg.role === 'user' ? 'User' : 'Assistant';
-          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          return `[${time}] ${role}: ${content}`;
-        })
-        .join('\n');
-
-      formattedSections.push(`Date: ${date}
-${formattedMessages}`);
-    }
-
-    const formattedContent = `<remembered_from_other_conversation>
-The following messages are from previous conversations with this user. They may provide helpful context:
-
-${formattedSections.join('\n')}
-</remembered_from_other_conversation>`;
+    const formattedContent = `The following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${result}\n<end_remembered_from_other_conversation>`;
 
     return {
       role: 'system',
