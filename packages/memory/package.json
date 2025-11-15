@@ -49,7 +49,7 @@
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@5.0.60",
     "async-mutex": "^0.5.0",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "xxhash-wasm": "^1.1.0"
   },

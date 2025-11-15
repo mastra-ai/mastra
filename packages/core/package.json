@@ -203,7 +203,7 @@
     "dotenv": "^16.6.1",
     "hono": "^4.9.7",
     "hono-openapi": "^0.4.8",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "json-schema-to-zod": "^2.6.1",
     "p-map": "^7.0.3",
