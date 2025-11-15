@@ -14,9 +14,9 @@ export const convertToSources = (results: SourceInput[]) => {
     // RankedNode
     if ('content' in result) {
       return {
-        id: result.id,
+        id: result.id || '',
         vector: result.embedding || [],
-        score: result.score,
+        score: result.score || 0,
         metadata: result.metadata,
         document: result.content || '',
       };
@@ -24,18 +24,18 @@ export const convertToSources = (results: SourceInput[]) => {
     // RerankResult
     if ('result' in result) {
       return {
-        id: result.result.id,
+        id: result.result.id || '',
         vector: result.result.vector || [],
-        score: result.score,
+        score: result.score || 0,
         metadata: result.result.metadata,
         document: result.result.document || '',
       };
     }
     // QueryResult
     return {
-      id: result.id,
+      id: result.id || '',
       vector: result.vector || [],
-      score: result.score,
+      score: result.score || 0,
       metadata: result.metadata,
       document: result.document || '',
     };
