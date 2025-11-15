@@ -1,6 +1,6 @@
 # @mastra/libsql
 
-SQLite implementation for Mastra, providing both vector similarity search and general storage capabilities with connection pooling and transaction support.
+LibSQL (SQLite) storage and vector store implementation for Mastra.
 
 ## Installation
 
@@ -8,7 +8,32 @@ SQLite implementation for Mastra, providing both vector similarity search and ge
 npm install @mastra/libsql
 ```
 
-## Usage
+## Quick Start
+
+### Storage
+
+```typescript
+import { LibSQLStore } from '@mastra/libsql';
+import { Mastra } from '@mastra/core/mastra';
+
+// Initialize LibSQLStore
+const storage = new LibSQLStore({
+  id: 'my-storage-id',
+  url: 'file:./mastra.db', // Local file, :memory:, or Turso URL
+  // Or use: authToken for Turso
+});
+
+// Configure Mastra
+const mastra = new Mastra({
+  storage: storage,
+});
+
+// Access domain stores
+const memoryStore = await storage.getStore('memory');
+const workflowsStore = await storage.getStore('workflows');
+const evalsStore = await storage.getStore('evals');
+const observabilityStore = await storage.getStore('observability');
+```
 
 ### Vector Store
 
@@ -16,136 +41,37 @@ npm install @mastra/libsql
 import { LibSQLVector } from '@mastra/libsql';
 
 const vectorStore = new LibSQLVector({
-  url: 'file:./my-db.db'
+  url: 'file:./my-db.db',
 });
 
-// Create a new table with vector support
+// Create index
 await vectorStore.createIndex({
   indexName: 'my_vectors',
   dimension: 1536,
   metric: 'cosine',
 });
 
-// Add vectors
-const ids = await vectorStore.upsert({
+// Upsert vectors
+await vectorStore.upsert({
   indexName: 'my_vectors',
   vectors: [[0.1, 0.2, ...], [0.3, 0.4, ...]],
   metadata: [{ text: 'doc1' }, { text: 'doc2' }],
 });
-
-// Query vectors
-const results = await vectorStore.query({
-  indexName: 'my_vectors',
-  queryVector: [0.1, 0.2, ...],
-  topK: 10, // topK
-  filter: { text: 'doc1' }, // filter
-  includeVector: false, // includeVector
-  minScore: 0.5, // minScore
-});
 ```
 
-### Storage
+## Connection Options
 
-```typescript
-import { LibSQLStore } from '@mastra/libsql';
+- **Local file**: `'file:./mastra.db'`
+- **In-memory**: `':memory:'`
+- **Turso**: `'libsql://your-database.turso.io'` (with `authToken`)
 
-const store = new LibSQLStore({
-  id: 'libsql-storage',
-  url: 'file:./my-db.db',
-});
+## Documentation
 
-// Create a thread
-await store.saveThread({
-  thread: {
-    id: 'thread-123',
-    resourceId: 'resource-456',
-    title: 'My Thread',
-    metadata: { key: 'value' },
-    createdAt: new Date(),
-  },
-});
+For complete documentation, see:
 
-// Add messages to thread
-await store.saveMessages({
-  messages: [
-    {
-      id: 'msg-789',
-      threadId: 'thread-123',
-      role: 'user',
-      content: { content: 'Hello' },
-      resourceId: 'resource-456',
-      createdAt: new Date(),
-    },
-  ],
-});
-
-// Query threads and messages
-const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const messages = await store.listMessages({ threadId: 'thread-123' });
-```
-
-## Configuration
-
-The LibSQLStore store can be initialized with:
-
-- Configuration object with url and auth. Auth is only necessary when using a provider like [Turso](https://turso.tech/)
-
-## Features
-
-### Vector Store Features
-
-- Vector similarity search with cosine, euclidean, and dot product metrics
-- Advanced metadata filtering with MongoDB-like query syntax
-- Minimum score threshold for queries
-- Automatic UUID generation for vectors
-- Table management (create, list, describe, delete, truncate)
-
-### Storage Features
-
-- Thread and message storage with JSON support
-- Atomic transactions for data consistency
-- Efficient batch operations
-- Rich metadata support
-- Timestamp tracking
-- Cascading deletes
-
-## Supported Filter Operators
-
-The following filter operators are supported for metadata queries:
-
-- Comparison: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
-- Logical: `$and`, `$or`
-- Array: `$in`, `$nin`
-- Text: `$regex`, `$like`
-
-Example filter:
-
-```typescript
-{
-  $and: [{ age: { $gt: 25 } }, { tags: { $in: ['tag1', 'tag2'] } }];
-}
-```
-
-## Vector Store Methods
-
-- `createIndex({indexName, dimension, metric?, indexConfig?, defineIndex?})`: Create a new table with vector support
-- `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
-- `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?})`: Search for similar vectors
-- `defineIndex({indexName, metric?, indexConfig?})`: Define an index
-- `listIndexes()`: List all vector-enabled tables
-- `describeIndex(indexName)`: Get table statistics
-- `deleteIndex(indexName)`: Delete a table
-- `truncateIndex(indexName)`: Remove all data from a table
-
-## Storage Methods
-
-- `saveThread({ thread })`: Create or update a thread
-- `getThreadById({ threadId })`: Get a thread by ID
-- `deleteThread({ threadId })`: Delete a thread and its messages
-- `saveMessages({ messages })`: Save multiple messages in a transaction
-- `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
-- `deleteMessages(messageIds)`: Delete specific messages
-
-## Related Links
-
-- [LibSQL Documentation](https://docs.turso.tech/sdk/introductionh)
+- [Storage Overview](https://mastra.ai/docs/v1/server-db/storage) - Learn about storage domains and composite storage
+- [Memory Domain Reference](https://mastra.ai/reference/v1/storage-domains/memory) - Threads, messages, and resources API
+- [Workflows Domain Reference](https://mastra.ai/reference/v1/storage-domains/workflows) - Workflow snapshots and runs API
+- [Evals Domain Reference](https://mastra.ai/reference/v1/storage-domains/evals) - Evaluation scores API
+- [Observability Domain Reference](https://mastra.ai/reference/v1/storage-domains/observability) - Traces and spans API
+- [LibSQLVector Store Reference](https://mastra.ai/reference/v1/vectors/libsql) - Vector store API

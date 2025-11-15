@@ -1,15 +1,20 @@
 import type { Connection } from '@lancedb/lancedb';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations } from '@mastra/core/storage';
+import { getDefaultValue } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { Utf8, Int32, Float32, Binary, Schema, Field, Float64 } from 'apache-arrow';
 import type { DataType } from 'apache-arrow';
 import { getPrimaryKeys, getTableSchema, processResultWithTypeConversion, validateKeyTypes } from '../utils';
 
-export class StoreOperationsLance extends StoreOperations {
+export class StoreOperationsLance extends MastraBase {
   client: Connection;
   constructor({ client }: { client: Connection }) {
-    super();
+    super({
+      component: 'STORAGE',
+      name: 'OPERATIONS',
+    });
+
     this.client = client;
   }
 
@@ -27,7 +32,7 @@ export class StoreOperationsLance extends StoreOperations {
       case 'uuid':
         return "''";
       default:
-        return super.getDefaultValue(type);
+        return getDefaultValue(type);
     }
   }
 

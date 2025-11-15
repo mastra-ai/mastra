@@ -8,19 +8,20 @@ import { RequestContext } from '../../di';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
-import { MockStore } from '../../storage/mock';
+import type { WorkflowsStorageBase } from '../../storage';
+import { InMemoryStore } from '../../storage/inmemory';
 import { createTool } from '../../tools';
 import type { StreamEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
-const testStorage = new MockStore();
+const testStorage = new InMemoryStore();
 
 describe('Workflow', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks();
-    testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    const workflowsStore = await testStorage.getStore('workflows');
+    await workflowsStore?.dropData();
   });
 
   describe('Streaming Legacy', () => {
@@ -5408,8 +5409,16 @@ describe('Workflow', () => {
   });
 
   describe('Time travel', () => {
+    let workflowStore: WorkflowsStorageBase | undefined;
+    let testStorage: InMemoryStore | undefined;
+
+    beforeEach(async () => {
+      testStorage = new InMemoryStore();
+      workflowStore = await testStorage.getStore('workflows');
+    });
+
     afterEach(async () => {
-      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await workflowStore?.dropData();
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async () => {
@@ -5464,8 +5473,8 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
 
-      await testStorage.persistWorkflowSnapshot({
-        workflowName: 'testWorkflow',
+      await workflowStore?.createWorkflowSnapshot({
+        workflowId: 'testWorkflow',
         runId,
         snapshot: {
           runId,
@@ -7095,7 +7104,7 @@ describe('Workflow', () => {
     let testStorage;
 
     beforeEach(async () => {
-      testStorage = new MockStore();
+      testStorage = new InMemoryStore();
     });
 
     it('should return empty result when mastra is not initialized', async () => {
@@ -8751,7 +8760,7 @@ describe('Workflow', () => {
           const otherVal = getStepResult(otherStep)?.other ?? 0;
           return { finalValue: startVal + otherVal };
         });
-        const last = vi.fn().mockImplementation(async ({}) => {
+        const last = vi.fn().mockImplementation(async () => {
           return { success: true };
         });
         const begin = vi.fn().mockImplementation(async ({ inputData }) => {
@@ -9173,7 +9182,7 @@ describe('Workflow', () => {
     });
 
     it('should inject requestContext dependencies into steps during resume', async () => {
-      const initialStorage = new MockStore();
+      const initialStorage = new InMemoryStore();
 
       const requestContext = new RequestContext();
       const testValue = 'test-dependency';

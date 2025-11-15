@@ -2,6 +2,7 @@ import { createTestSuite } from '@internal/storage-test-utils';
 import { SpanType } from '@mastra/core/observability';
 import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import type { ConnectorHandler } from './connectors/base';
+import { MongoDBDomainBase } from './domains/base';
 import type { MongoDBConfig } from './types';
 import { MongoDBStore } from './index';
 
@@ -63,15 +64,19 @@ describe('MongoDB Store Validation', () => {
 });
 
 describe('MongoDB Specific Tests', () => {
+  let dbOps: MongoDBDomainBase;
   let store: MongoDBStore;
 
   beforeAll(async () => {
+    dbOps = new MongoDBDomainBase({
+      config: TEST_CONFIG,
+    });
     store = new MongoDBStore(TEST_CONFIG);
   });
 
   afterAll(async () => {
     try {
-      await store.close();
+      await dbOps.close();
     } catch {}
   });
 
@@ -86,7 +91,7 @@ describe('MongoDB Specific Tests', () => {
           w: 'majority',
         },
       };
-      expect(() => new MongoDBStore(atlasConfig)).not.toThrow();
+      expect(() => new MongoDBStore(atlasConfig as any)).not.toThrow();
     });
 
     it('should handle MongoDB connection with auth options', () => {
@@ -99,7 +104,7 @@ describe('MongoDB Specific Tests', () => {
           authMechanism: 'SCRAM-SHA-1',
         },
       };
-      expect(() => new MongoDBStore(authConfig)).not.toThrow();
+      expect(() => new MongoDBStore(authConfig as any)).not.toThrow();
     });
 
     it('should handle MongoDB connection pool options', () => {
@@ -122,8 +127,8 @@ describe('MongoDB Specific Tests', () => {
     beforeEach(async () => {
       // Clear test collections
       try {
-        await store.clearTable({ tableName: 'mastra_threads' as any });
-        await store.clearTable({ tableName: 'mastra_messages' as any });
+        await dbOps.db.deleteCollection({ tableName: 'mastra_threads' as any });
+        await dbOps.db.deleteCollection({ tableName: 'mastra_messages' as any });
       } catch {}
     });
 
@@ -149,9 +154,9 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should handle this flexible schema without issues
-      await expect(store.insert({ tableName: 'mastra_threads' as any, record: customData })).resolves.not.toThrow();
+      await expect(dbOps.db.insert({ tableName: 'mastra_threads' as any, record: customData })).resolves.not.toThrow();
 
-      const retrieved = await store.load({
+      const retrieved = await dbOps.db.load({
         tableName: 'mastra_threads' as any,
         keys: { id: 'test-thread-1' },
       });
@@ -180,9 +185,9 @@ describe('MongoDB Specific Tests', () => {
         updatedAt: new Date(),
       };
 
-      await store.insert({ tableName: 'mastra_threads' as any, record: mongoData });
+      await dbOps.db.insert({ tableName: 'mastra_threads' as any, record: mongoData });
 
-      const retrieved = await store.load({
+      const retrieved = await dbOps.db.load({
         tableName: 'mastra_threads' as any,
         keys: { id: 'mongo-types-test' },
       });
@@ -194,7 +199,7 @@ describe('MongoDB Specific Tests', () => {
   describe('MongoDB Query Capabilities', () => {
     beforeEach(async () => {
       try {
-        await store.clearTable({ tableName: 'mastra_traces' as any });
+        await dbOps.db.deleteCollection({ tableName: 'mastra_traces' as any });
       } catch {}
     });
 
@@ -231,13 +236,13 @@ describe('MongoDB Specific Tests', () => {
       ];
 
       for (const trace of traceData) {
-        await store.insert({ tableName: 'mastra_traces' as any, record: trace });
+        await dbOps.db.insert({ tableName: 'mastra_traces' as any, record: trace });
       }
 
       // This would be ideal for MongoDB $in operator (though our current
       // implementation may not expose this directly)
       // We can at least verify the data is stored properly
-      const allTraces = await store.load({
+      const allTraces = await dbOps.db.load({
         tableName: 'mastra_traces' as any,
         keys: {},
       });
@@ -249,7 +254,7 @@ describe('MongoDB Specific Tests', () => {
   describe('MongoDB JSON/JSONB Field Handling', () => {
     beforeEach(async () => {
       try {
-        await store.clearTable({ tableName: 'mastra_messages' as any });
+        await dbOps.db.deleteCollection({ tableName: 'mastra_messages' as any });
       } catch {}
     });
 
@@ -304,10 +309,10 @@ describe('MongoDB Specific Tests', () => {
 
       // MongoDB should handle this complex nested structure naturally
       await expect(
-        store.insert({ tableName: 'mastra_messages' as any, record: complexMessage }),
+        dbOps.db.insert({ tableName: 'mastra_messages' as any, record: complexMessage }),
       ).resolves.not.toThrow();
 
-      const retrieved = await store.load({
+      const retrieved = await dbOps.db.load({
         tableName: 'mastra_messages' as any,
         keys: { id: 'msg-json-test' },
       });
@@ -340,9 +345,9 @@ describe('MongoDB Specific Tests', () => {
         updatedAt: new Date(),
       };
 
-      await store.insert({ tableName: 'mastra_messages' as any, record: typedMessage });
+      await dbOps.db.insert({ tableName: 'mastra_messages' as any, record: typedMessage });
 
-      const retrieved = await store.load({
+      const retrieved = await dbOps.db.load({
         tableName: 'mastra_messages' as any,
         keys: { id: 'msg-types-test' },
       });
@@ -356,7 +361,7 @@ describe('MongoDB Specific Tests', () => {
 
     afterEach(async () => {
       try {
-        await store.dropTable({ tableName: testCollectionName });
+        await dbOps.db.dropTable({ tableName: testCollectionName });
       } catch {}
     });
 
@@ -369,9 +374,9 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // This should work without explicitly creating the collection first
-      await expect(store.insert({ tableName: testCollectionName, record: testDoc })).resolves.not.toThrow();
+      await expect(dbOps.db.insert({ tableName: testCollectionName, record: testDoc })).resolves.not.toThrow();
 
-      const retrieved = await store.load({
+      const retrieved = await dbOps.db.load({
         tableName: testCollectionName,
         keys: { id: 'test-1' },
       });
@@ -381,17 +386,17 @@ describe('MongoDB Specific Tests', () => {
 
     it('should handle collection operations gracefully', async () => {
       // Test drop on non-existent collection
-      await expect(store.dropTable({ tableName: 'non_existent_collection' as any })).resolves.not.toThrow();
+      await expect(dbOps.db.dropTable({ tableName: 'non_existent_collection' as any })).resolves.not.toThrow();
 
       // Test clear on non-existent collection
-      await expect(store.clearTable({ tableName: 'non_existent_collection' as any })).resolves.not.toThrow();
+      await expect(dbOps.db.dropTable({ tableName: 'non_existent_collection' as any })).resolves.not.toThrow();
     });
   });
 
   describe('MongoDB Batch Operations', () => {
     beforeEach(async () => {
       try {
-        await store.clearTable({ tableName: 'mastra_threads' as any });
+        await dbOps.db.deleteCollection({ tableName: 'mastra_threads' as any });
       } catch {}
     });
 
@@ -414,7 +419,7 @@ describe('MongoDB Specific Tests', () => {
       // MongoDB should handle this batch efficiently
       const startTime = Date.now();
       await expect(
-        store.batchInsert({ tableName: 'mastra_threads' as any, records: batchData }),
+        dbOps.db.batchInsert({ tableName: 'mastra_threads' as any, records: batchData }),
       ).resolves.not.toThrow();
       const endTime = Date.now();
 
@@ -422,7 +427,7 @@ describe('MongoDB Specific Tests', () => {
       expect(endTime - startTime).toBeLessThan(5000); // 5 seconds max
 
       // Verify all records were inserted
-      const allRecords = await store.load({
+      const allRecords = await dbOps.db.load({
         tableName: 'mastra_threads' as any,
         keys: {},
       });
@@ -433,16 +438,20 @@ describe('MongoDB Specific Tests', () => {
   describe('MongoDB Span Operations', () => {
     beforeEach(async () => {
       try {
-        await store.clearTable({ tableName: 'mastra_ai_spans' as any });
+        await dbOps.db.deleteCollection({ tableName: 'mastra_ai_spans' as any });
       } catch {}
     });
 
     it('should handle Span creation with MongoDB-specific features', async () => {
+      const observabilityStore = await store.getStore('observability');
+      if (!observabilityStore) {
+        throw new Error('Observability store not found');
+      }
       const Span = {
         spanId: 'mongodb-span-1',
         traceId: 'mongodb-trace-1',
         name: 'MongoDB AI Operation',
-        spanType: SpanType.LLM_GENERATION,
+        spanType: SpanType.MODEL_GENERATION,
         parentSpanId: null,
         scope: {
           name: 'mongodb-test',
@@ -487,16 +496,20 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(store.createSpan(Span)).resolves.not.toThrow();
+      await expect(observabilityStore.createSpan(Span)).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await store.getTrace('mongodb-trace-1');
+      const trace = await observabilityStore.getTrace('mongodb-trace-1');
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe('mongodb-span-1');
     });
 
     it('should handle Span updates with complex data', async () => {
+      const observabilityStore = await store.getStore('observability');
+      if (!observabilityStore) {
+        throw new Error('Observability store not found');
+      }
       // Create initial span with all required fields
       const initialSpan = {
         spanId: 'update-span-1',
@@ -519,7 +532,7 @@ describe('MongoDB Specific Tests', () => {
         links: null,
       };
 
-      await store.createSpan(initialSpan);
+      await observabilityStore.createSpan(initialSpan);
 
       // Update with complex nested data
       const updates = {
@@ -552,7 +565,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       await expect(
-        store.updateSpan({
+        observabilityStore.updateSpan({
           spanId: 'update-span-1',
           traceId: 'update-trace-1',
           updates,
@@ -560,7 +573,7 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await store.getTrace('update-trace-1');
+      const trace = await observabilityStore.getTrace('update-trace-1');
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });
@@ -577,21 +590,25 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should actually handle these field names fine
-      await expect(store.insert({ tableName: 'test_collection' as any, record: invalidData })).resolves.not.toThrow();
+      await expect(
+        dbOps.db.insert({ tableName: 'test_collection' as any, record: invalidData }),
+      ).resolves.not.toThrow();
     });
 
     it('should handle connection issues gracefully', async () => {
-      const badStore = new MongoDBStore({
-        id: 'mongodb-bad-connection-test',
-        url: 'mongodb://nonexistent:27017',
-        dbName: 'test',
-        options: {
-          serverSelectionTimeoutMS: 1000, // Quick timeout for testing
+      const badStore = new MongoDBDomainBase({
+        config: {
+          id: 'mongodb-bad-connection-test',
+          url: 'mongodb://nonexistent:27017',
+          dbName: 'test',
+          options: {
+            serverSelectionTimeoutMS: 1000, // Quick timeout for testing
+          },
         },
       });
 
       // This should eventually timeout and provide a meaningful error
-      await expect(badStore.insert({ tableName: 'test' as any, record: { id: 'test' } })).rejects.toThrow();
+      await expect(badStore.db.insert({ tableName: 'test' as any, record: { id: 'test' } })).rejects.toThrow();
     });
   });
 });

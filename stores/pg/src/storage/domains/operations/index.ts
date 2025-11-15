@@ -1,13 +1,12 @@
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  StoreOperations,
+  IndexManagementBase,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_THREADS,
-  TABLE_MESSAGES,
-  TABLE_TRACES,
-  TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_SCHEMAS,
+  getSqlType,
+  getDefaultValue,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -23,474 +22,14 @@ import { getSchemaName, getTableName } from '../utils';
 // Re-export the types for convenience
 export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 
-export class StoreOperationsPG extends StoreOperations {
+export class IndexManagementPG extends IndexManagementBase {
   public client: IDatabase<{}>;
   public schemaName?: string;
-  private setupSchemaPromise: Promise<void> | null = null;
-  private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
     super();
     this.client = client;
     this.schemaName = schemaName;
-  }
-
-  async hasColumn(table: string, column: string): Promise<boolean> {
-    // Use this.schema to scope the check
-    const schema = this.schemaName || 'public';
-
-    const result = await this.client.oneOrNone(
-      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
-      [schema, table, column, column.toLowerCase()],
-    );
-
-    return !!result;
-  }
-
-  /**
-   * Prepares values for insertion, handling JSONB columns by stringifying them
-   */
-  private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
-    return Object.entries(record).map(([key, value]) => {
-      // Get the schema for this table to determine column types
-      const schema = TABLE_SCHEMAS[tableName];
-      const columnSchema = schema?.[key];
-
-      // If the column is JSONB, stringify the value (unless it's null/undefined)
-      // PostgreSQL JSONB columns require valid JSON, so even primitives need to be stringified
-      if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined) {
-        return JSON.stringify(value);
-      }
-      return value;
-    });
-  }
-
-  /**
-   * Adds timestamp Z columns to a record if timestamp columns exist
-   */
-  private addTimestampZColumns(record: Record<string, any>): void {
-    if (record.createdAt) {
-      record.createdAtZ = record.createdAt;
-    }
-    if (record.created_at) {
-      record.created_atZ = record.created_at;
-    }
-    if (record.updatedAt) {
-      record.updatedAtZ = record.updatedAt;
-    }
-  }
-
-  /**
-   * Prepares a value for database operations, handling Date objects and JSON serialization
-   * This is schema-aware and only stringifies objects for JSONB columns
-   */
-  private prepareValue(value: any, columnName: string, tableName: TABLE_NAMES): any {
-    if (value === null || value === undefined) {
-      return value;
-    }
-
-    if (value instanceof Date) {
-      return value.toISOString();
-    }
-
-    // Get the schema for this table to determine column types
-    const schema = TABLE_SCHEMAS[tableName];
-    const columnSchema = schema?.[columnName];
-
-    // If the column is JSONB, stringify the value
-    // PostgreSQL JSONB columns require valid JSON, so all non-null values need to be stringified
-    if (columnSchema?.type === 'jsonb') {
-      return JSON.stringify(value);
-    }
-
-    // For non-JSONB columns with object values, stringify them (for backwards compatibility)
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
-    }
-
-    return value;
-  }
-
-  private async setupSchema() {
-    if (!this.schemaName || this.schemaSetupComplete) {
-      return;
-    }
-
-    const schemaName = getSchemaName(this.schemaName);
-
-    if (!this.setupSchemaPromise) {
-      this.setupSchemaPromise = (async () => {
-        try {
-          // First check if schema exists and we have usage permission
-          const schemaExists = await this.client.oneOrNone(
-            `
-                SELECT EXISTS (
-                  SELECT 1 FROM information_schema.schemata
-                  WHERE schema_name = $1
-                )
-              `,
-            [this.schemaName],
-          );
-
-          if (!schemaExists?.exists) {
-            try {
-              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
-              this.logger.info(`Schema "${this.schemaName}" created successfully`);
-            } catch (error) {
-              this.logger.error(`Failed to create schema "${this.schemaName}"`, { error });
-              throw new Error(
-                `Unable to create schema "${this.schemaName}". This requires CREATE privilege on the database. ` +
-                  `Either create the schema manually or grant CREATE privilege to the user.`,
-              );
-            }
-          }
-
-          // If we got here, schema exists and we can use it
-          this.schemaSetupComplete = true;
-          this.logger.debug(`Schema "${schemaName}" is ready for use`);
-        } catch (error) {
-          // Reset flags so we can retry
-          this.schemaSetupComplete = undefined;
-          this.setupSchemaPromise = null;
-          throw error;
-        } finally {
-          this.setupSchemaPromise = null;
-        }
-      })();
-    }
-
-    await this.setupSchemaPromise;
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    try {
-      this.addTimestampZColumns(record);
-
-      const schemaName = getSchemaName(this.schemaName);
-      const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-      const values = this.prepareValuesForInsert(record, tableName);
-      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-
-      await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: tableName, schemaName })} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
-        values,
-      );
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_INSERT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    try {
-      const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
-      await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_CLEAR_TABLE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  protected getDefaultValue(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'timestamp':
-        return 'DEFAULT NOW()';
-      case 'jsonb':
-        return "DEFAULT '{}'::jsonb";
-      default:
-        return super.getDefaultValue(type);
-    }
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    try {
-      const timeZColumnNames = Object.entries(schema)
-        .filter(([_, def]) => def.type === 'timestamp')
-        .map(([name]) => name);
-
-      const timeZColumns = Object.entries(schema)
-        .filter(([_, def]) => def.type === 'timestamp')
-        .map(([name]) => {
-          const parsedName = parseSqlIdentifier(name, 'column name');
-          return `"${parsedName}Z" TIMESTAMPTZ DEFAULT NOW()`;
-        });
-
-      const columns = Object.entries(schema).map(([name, def]) => {
-        const parsedName = parseSqlIdentifier(name, 'column name');
-        const constraints = [];
-        if (def.primaryKey) constraints.push('PRIMARY KEY');
-        if (!def.nullable) constraints.push('NOT NULL');
-        return `"${parsedName}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
-      });
-
-      // Create schema if it doesn't exist
-      if (this.schemaName) {
-        await this.setupSchema();
-      }
-
-      const finalColumns = [...columns, ...timeZColumns].join(',\n');
-
-      // Constraints are global to a database, ensure schemas do not conflict with each other
-      const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
-      const sql = `
-            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (
-              ${finalColumns}
-            );
-            ${
-              tableName === TABLE_WORKFLOW_SNAPSHOT
-                ? `
-            DO $$ BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
-              ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
-              ) THEN
-                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
-                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
-                UNIQUE (workflow_name, run_id);
-              END IF;
-            END $$;
-            `
-                : ''
-            }
-          `;
-
-      await this.client.none(sql);
-
-      await this.alterTable({
-        tableName,
-        schema,
-        ifNotExists: timeZColumnNames,
-      });
-
-      // Set up timestamp triggers for Spans table
-      if (tableName === TABLE_SPANS) {
-        await this.setupTimestampTriggers(tableName);
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_CREATE_TABLE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  /**
-   * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
-   */
-  private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
-    const schemaName = getSchemaName(this.schemaName);
-    const fullTableName = getTableName({ indexName: tableName, schemaName });
-    const functionName = `${schemaName}.trigger_set_timestamps`;
-
-    try {
-      const triggerSQL = `
-        -- Create or replace the trigger function in the schema
-        CREATE OR REPLACE FUNCTION ${functionName}()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            IF TG_OP = 'INSERT' THEN
-                NEW."createdAt" = NOW();
-                NEW."updatedAt" = NOW();
-                NEW."createdAtZ" = NOW();
-                NEW."updatedAtZ" = NOW();
-            ELSIF TG_OP = 'UPDATE' THEN
-                NEW."updatedAt" = NOW();
-                NEW."updatedAtZ" = NOW();
-                -- Prevent createdAt from being changed
-                NEW."createdAt" = OLD."createdAt";
-                NEW."createdAtZ" = OLD."createdAtZ";
-            END IF;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-
-        -- Drop existing trigger if it exists
-        DROP TRIGGER IF EXISTS ${tableName}_timestamps ON ${fullTableName};
-
-        -- Create the trigger
-        CREATE TRIGGER ${tableName}_timestamps
-            BEFORE INSERT OR UPDATE ON ${fullTableName}
-            FOR EACH ROW
-            EXECUTE FUNCTION ${functionName}();
-      `;
-
-      await this.client.none(triggerSQL);
-      this.logger?.debug?.(`Set up timestamp triggers for table ${fullTableName}`);
-    } catch (error) {
-      // Log warning but don't fail table creation
-      this.logger?.warn?.(`Failed to set up timestamp triggers for ${fullTableName}:`, error);
-    }
-  }
-
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
-
-    try {
-      for (const columnName of ifNotExists) {
-        if (schema[columnName]) {
-          const columnDef = schema[columnName];
-          const sqlType = this.getSqlType(columnDef.type);
-          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
-          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
-          const alterSql =
-            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
-
-          await this.client.none(alterSql);
-
-          if (sqlType === 'TIMESTAMP') {
-            const alterSql =
-              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
-            await this.client.none(alterSql);
-          }
-
-          this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
-        }
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_ALTER_TABLE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    try {
-      const keyEntries = Object.entries(keys).map(([key, value]) => [parseSqlIdentifier(key, 'column name'), value]);
-      const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
-      const values = keyEntries.map(([_, value]) => value);
-
-      const result = await this.client.oneOrNone<R>(
-        `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
-        values,
-      );
-
-      if (!result) {
-        return null;
-      }
-
-      // If this is a workflow snapshot, parse the snapshot field
-      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-        const snapshot = result as any;
-        if (typeof snapshot.snapshot === 'string') {
-          snapshot.snapshot = JSON.parse(snapshot.snapshot);
-        }
-        return snapshot;
-      }
-
-      return result;
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_LOAD_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    try {
-      await this.client.query('BEGIN');
-      for (const record of records) {
-        await this.insert({ tableName, record });
-      }
-      await this.client.query('COMMIT');
-    } catch (error) {
-      await this.client.query('ROLLBACK');
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-            numberOfRecords: records.length,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    try {
-      const schemaName = getSchemaName(this.schemaName);
-      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
-      await this.client.none(`DROP TABLE IF EXISTS ${tableNameWithSchema}`);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_DROP_TABLE_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
   }
 
   /**
@@ -713,89 +252,6 @@ export class StoreOperationsPG extends StoreOperations {
   }
 
   /**
-   * Returns definitions for automatic performance indexes
-   * These composite indexes cover both filtering and sorting in single index
-   */
-  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
-    return [
-      // Composite index for threads (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
-        table: TABLE_THREADS,
-        columns: ['resourceId', 'createdAt DESC'],
-      },
-      // Composite index for messages (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id', 'createdAt DESC'],
-      },
-      // Composite index for traces (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
-        table: TABLE_TRACES,
-        columns: ['name', 'startTime DESC'],
-      },
-      // Composite index for scores (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
-        table: TABLE_SCORERS,
-        columns: ['traceId', 'spanId', 'createdAt DESC'],
-      },
-      // Spans indexes for optimal trace querying
-      {
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['traceId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['parentSpanId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_SPANS,
-        columns: ['name'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['spanType', 'startedAt DESC'],
-      },
-    ];
-  }
-
-  /**
-   * Creates automatic indexes for optimal query performance
-   * Uses getAutomaticIndexDefinitions() to determine which indexes to create
-   */
-  async createAutomaticIndexes(): Promise<void> {
-    try {
-      const indexes = this.getAutomaticIndexDefinitions();
-
-      for (const indexOptions of indexes) {
-        try {
-          await this.createIndex(indexOptions);
-        } catch (error) {
-          // Log but continue with other indexes
-          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
-        }
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_PG_STORE_CREATE_PERFORMANCE_INDEXES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  /**
    * Get detailed statistics for a specific index
    */
   async describeIndex(indexName: string): Promise<StorageIndexStats> {
@@ -861,6 +317,480 @@ export class StoreOperationsPG extends StoreOperations {
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
+          },
+        },
+        error,
+      );
+    }
+  }
+}
+
+export class StoreOperationsPG extends MastraBase {
+  public client: IDatabase<{}>;
+  public schemaName?: string;
+  private setupSchemaPromise: Promise<void> | null = null;
+  private schemaSetupComplete: boolean | undefined = undefined;
+
+  constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
+    super({
+      component: 'STORAGE',
+      name: 'OPERATIONS',
+    });
+    this.client = client;
+    this.schemaName = schemaName;
+  }
+
+  async hasColumn(table: string, column: string): Promise<boolean> {
+    // Use this.schema to scope the check
+    const schema = this.schemaName || 'public';
+
+    const result = await this.client.oneOrNone(
+      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      [schema, table, column, column.toLowerCase()],
+    );
+
+    return !!result;
+  }
+
+  /**
+   * Prepares values for insertion, handling JSONB columns by stringifying them
+   */
+  private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
+    return Object.entries(record).map(([key, value]) => {
+      // Get the schema for this table to determine column types
+      const schema = TABLE_SCHEMAS[tableName];
+      const columnSchema = schema?.[key];
+
+      // If the column is JSONB, stringify the value (unless it's null/undefined)
+      // PostgreSQL JSONB columns require valid JSON, so even primitives need to be stringified
+      if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined) {
+        return JSON.stringify(value);
+      }
+      return value;
+    });
+  }
+
+  /**
+   * Adds timestamp Z columns to a record if timestamp columns exist
+   */
+  private addTimestampZColumns(record: Record<string, any>): void {
+    if (record.createdAt) {
+      record.createdAtZ = record.createdAt;
+    }
+    if (record.created_at) {
+      record.created_atZ = record.created_at;
+    }
+    if (record.updatedAt) {
+      record.updatedAtZ = record.updatedAt;
+    }
+  }
+
+  /**
+   * Prepares a value for database operations, handling Date objects and JSON serialization
+   * This is schema-aware and only stringifies objects for JSONB columns
+   */
+  private prepareValue(value: any, columnName: string, tableName: TABLE_NAMES): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    // Get the schema for this table to determine column types
+    const schema = TABLE_SCHEMAS[tableName];
+    const columnSchema = schema?.[columnName];
+
+    // If the column is JSONB, stringify the value
+    // PostgreSQL JSONB columns require valid JSON, so all non-null values need to be stringified
+    if (columnSchema?.type === 'jsonb') {
+      return JSON.stringify(value);
+    }
+
+    // For non-JSONB columns with object values, stringify them (for backwards compatibility)
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return value;
+  }
+
+  private async setupSchema() {
+    if (!this.schemaName || this.schemaSetupComplete) {
+      return;
+    }
+
+    const schemaName = getSchemaName(this.schemaName);
+
+    if (!this.setupSchemaPromise) {
+      this.setupSchemaPromise = (async () => {
+        try {
+          // First check if schema exists and we have usage permission
+          const schemaExists = await this.client.oneOrNone(
+            `
+                SELECT EXISTS (
+                  SELECT 1 FROM information_schema.schemata
+                  WHERE schema_name = $1
+                )
+              `,
+            [this.schemaName],
+          );
+
+          if (!schemaExists?.exists) {
+            try {
+              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
+              this.logger.info(`Schema "${this.schemaName}" created successfully`);
+            } catch (error) {
+              this.logger.error(`Failed to create schema "${this.schemaName}"`, { error });
+              throw new Error(
+                `Unable to create schema "${this.schemaName}". This requires CREATE privilege on the database. ` +
+                  `Either create the schema manually or grant CREATE privilege to the user.`,
+              );
+            }
+          }
+
+          // If we got here, schema exists and we can use it
+          this.schemaSetupComplete = true;
+          this.logger.debug(`Schema "${schemaName}" is ready for use`);
+        } catch (error) {
+          // Reset flags so we can retry
+          this.schemaSetupComplete = undefined;
+          this.setupSchemaPromise = null;
+          throw error;
+        } finally {
+          this.setupSchemaPromise = null;
+        }
+      })();
+    }
+
+    await this.setupSchemaPromise;
+  }
+
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    try {
+      this.addTimestampZColumns(record);
+
+      const schemaName = getSchemaName(this.schemaName);
+      const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
+      const values = this.prepareValuesForInsert(record, tableName);
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+
+      await this.client.none(
+        `INSERT INTO ${getTableName({ indexName: tableName, schemaName })} (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+        values,
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      const schemaName = getSchemaName(this.schemaName);
+      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
+      await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_CLEAR_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'timestamp':
+        return 'DEFAULT NOW()';
+      case 'jsonb':
+        return "DEFAULT '{}'::jsonb";
+      default:
+        return getDefaultValue(type);
+    }
+  }
+
+  async createTable({
+    tableName,
+    schema,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+  }): Promise<void> {
+    try {
+      const timeZColumnNames = Object.entries(schema)
+        .filter(([_, def]) => def.type === 'timestamp')
+        .map(([name]) => name);
+
+      const timeZColumns = Object.entries(schema)
+        .filter(([_, def]) => def.type === 'timestamp')
+        .map(([name]) => {
+          const parsedName = parseSqlIdentifier(name, 'column name');
+          return `"${parsedName}Z" TIMESTAMPTZ DEFAULT NOW()`;
+        });
+
+      const columns = Object.entries(schema).map(([name, def]) => {
+        const parsedName = parseSqlIdentifier(name, 'column name');
+        const constraints = [];
+        if (def.primaryKey) constraints.push('PRIMARY KEY');
+        if (!def.nullable) constraints.push('NOT NULL');
+        return `"${parsedName}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
+      });
+
+      // Create schema if it doesn't exist
+      if (this.schemaName) {
+        await this.setupSchema();
+      }
+
+      const finalColumns = [...columns, ...timeZColumns].join(',\n');
+
+      // Constraints are global to a database, ensure schemas do not conflict with each other
+      const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
+      const sql = `
+            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (
+              ${finalColumns}
+            );
+            ${
+              tableName === TABLE_WORKFLOW_SNAPSHOT
+                ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+              ) AND NOT EXISTS (
+                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
+                UNIQUE (workflow_name, run_id);
+              END IF;
+            END $$;
+            `
+                : ''
+            }
+          `;
+
+      await this.client.none(sql);
+
+      await this.alterTable({
+        tableName,
+        schema,
+        ifNotExists: timeZColumnNames,
+      });
+
+      // Set up timestamp triggers for Spans table
+      if (tableName === TABLE_SPANS) {
+        await this.setupTimestampTriggers(tableName);
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_CREATE_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
+   */
+  private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
+    const schemaName = getSchemaName(this.schemaName);
+    const fullTableName = getTableName({ indexName: tableName, schemaName });
+    const functionName = `${schemaName}.trigger_set_timestamps`;
+
+    try {
+      const triggerSQL = `
+        -- Create or replace the trigger function in the schema
+        CREATE OR REPLACE FUNCTION ${functionName}()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF TG_OP = 'INSERT' THEN
+                NEW."createdAt" = NOW();
+                NEW."updatedAt" = NOW();
+                NEW."createdAtZ" = NOW();
+                NEW."updatedAtZ" = NOW();
+            ELSIF TG_OP = 'UPDATE' THEN
+                NEW."updatedAt" = NOW();
+                NEW."updatedAtZ" = NOW();
+                -- Prevent createdAt from being changed
+                NEW."createdAt" = OLD."createdAt";
+                NEW."createdAtZ" = OLD."createdAtZ";
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        -- Drop existing trigger if it exists
+        DROP TRIGGER IF EXISTS ${tableName}_timestamps ON ${fullTableName};
+
+        -- Create the trigger
+        CREATE TRIGGER ${tableName}_timestamps
+            BEFORE INSERT OR UPDATE ON ${fullTableName}
+            FOR EACH ROW
+            EXECUTE FUNCTION ${functionName}();
+      `;
+
+      await this.client.none(triggerSQL);
+      this.logger?.debug?.(`Set up timestamp triggers for table ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail table creation
+      this.logger?.warn?.(`Failed to set up timestamp triggers for ${fullTableName}:`, error);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+
+    try {
+      for (const columnName of ifNotExists) {
+        if (schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = getSqlType(columnDef.type);
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          const defaultValue = columnDef.nullable === false ? getDefaultValue(columnDef.type) : '';
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.client.none(alterSql);
+
+          if (sqlType === 'TIMESTAMP') {
+            const alterSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(alterSql);
+          }
+
+          this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_ALTER_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+    try {
+      const keyEntries = Object.entries(keys).map(([key, value]) => [parseSqlIdentifier(key, 'column name'), value]);
+      const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
+      const values = keyEntries.map(([_, value]) => value);
+
+      const result = await this.client.oneOrNone<R>(
+        `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
+        values,
+      );
+
+      if (!result) {
+        return null;
+      }
+
+      // If this is a workflow snapshot, parse the snapshot field
+      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+        const snapshot = result as any;
+        if (typeof snapshot.snapshot === 'string') {
+          snapshot.snapshot = JSON.parse(snapshot.snapshot);
+        }
+        return snapshot;
+      }
+
+      return result;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_LOAD_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    try {
+      await this.client.query('BEGIN');
+      for (const record of records) {
+        await this.insert({ tableName, record });
+      }
+      await this.client.query('COMMIT');
+    } catch (error) {
+      await this.client.query('ROLLBACK');
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: records.length,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      const schemaName = getSchemaName(this.schemaName);
+      const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
+      await this.client.none(`DROP TABLE IF EXISTS ${tableNameWithSchema}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_STORE_DROP_TABLE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
           },
         },
         error,

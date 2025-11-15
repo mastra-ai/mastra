@@ -1,0 +1,362 @@
+---
+title: "Reference: Workflows Domain | Storage"
+description: "API reference for the Workflows storage domain, which provides access to workflow snapshots and runs."
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Workflows
+
+The Workflows domain provides access to workflow snapshots and runs. 
+
+Access it using `getStore('workflows')`:
+
+```typescript copy
+const workflowsStore = await mastra.getStore('workflows');
+// or 
+const workflowsStore = await storage.getStore('workflows');
+```
+
+## Methods
+
+### init()
+
+Initializes the workflows domain storage, creating necessary tables and indexes.
+
+```typescript copy
+await workflowsStore.init();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+### createWorkflowSnapshot()
+
+Creates or updates a workflow snapshot.
+
+```typescript copy
+await workflowsStore.createWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+  resourceId: 'user-123',
+  snapshot: {
+    value: { currentState: 'running' },
+    context: {
+      stepResults: {},
+      attempts: {},
+      triggerData: {},
+    },
+    activePaths: [],
+    runId: 'run-123',
+    timestamp: Date.now(),
+  },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow identifier",
+      isOptional: false,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique run identifier",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional resource ID associated with the workflow run",
+      isOptional: true,
+    },
+    {
+      name: "snapshot",
+      type: "WorkflowRunState",
+      description: "The workflow state snapshot",
+      isOptional: false,
+    },
+    {
+      name: "createdAt",
+      type: "Date",
+      description: "Optional creation timestamp",
+      isOptional: true,
+    },
+    {
+      name: "updatedAt",
+      type: "Date",
+      description: "Optional update timestamp",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### getWorkflowSnapshot()
+
+Retrieves a workflow snapshot by workflow ID and run ID.
+
+```typescript copy
+const snapshot = await workflowsStore.getWorkflowSnapshot({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow identifier",
+      isOptional: false,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique run identifier",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<WorkflowRunState | null>`
+
+---
+
+### listWorkflowRuns()
+
+Lists workflow runs with optional filtering and pagination.
+
+```typescript copy
+const runs = await workflowsStore.listWorkflowRuns({
+  workflowId: 'my-workflow',
+  fromDate: new Date('2024-01-01'),
+  toDate: new Date('2024-01-31'),
+  page: 0,
+  perPage: 50,
+  resourceId: 'user-123',
+  status: 'completed',
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflowId",
+      type: "string",
+      description: "Optional workflow ID filter",
+      isOptional: true,
+    },
+    {
+      name: "fromDate",
+      type: "Date",
+      description: "Optional start date filter",
+      isOptional: true,
+    },
+    {
+      name: "toDate",
+      type: "Date",
+      description: "Optional end date filter",
+      isOptional: true,
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "Number of items per page, or `false` to fetch all records. When undefined, returns all workflow runs without pagination.",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Zero-indexed page number. When both perPage and page are provided, pagination is applied.",
+      isOptional: true,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional resource ID filter",
+      isOptional: true,
+    },
+    {
+      name: "status",
+      type: "WorkflowRunStatus",
+      description: "Optional status filter",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<WorkflowRuns>` - Object containing `runs` array and `total` count.
+
+---
+
+### getWorkflowRunById()
+
+Retrieves a workflow run by its run ID.
+
+```typescript copy
+const run = await workflowsStore.getWorkflowRunById({
+  runId: 'run-123',
+  workflowId: 'my-workflow', // Optional
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique run identifier",
+      isOptional: false,
+    },
+    {
+      name: "workflowId",
+      type: "string",
+      description: "Optional workflow ID for additional filtering",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<WorkflowRun | null>`
+
+---
+
+### updateWorkflowResults()
+
+Updates workflow step results.
+
+```typescript copy
+await workflowsStore.updateWorkflowResults({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+  stepId: 'step-1',
+  result: {
+    output: { data: 'result' },
+    status: 'completed',
+  },
+  requestContext: { userId: 'user-123' },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow identifier",
+      isOptional: false,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique run identifier",
+      isOptional: false,
+    },
+    {
+      name: "stepId",
+      type: "string",
+      description: "The step identifier",
+      isOptional: false,
+    },
+    {
+      name: "result",
+      type: "StepResult<any, any, any, any>",
+      description: "The step result",
+      isOptional: false,
+    },
+    {
+      name: "requestContext",
+      type: "Record<string, any>",
+      description: "Request context metadata",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<Record<string, StepResult<any, any, any, any>>>`
+
+---
+
+### updateWorkflowState()
+
+Updates the workflow state.
+
+```typescript copy
+const updatedState = await workflowsStore.updateWorkflowState({
+  workflowId: 'my-workflow',
+  runId: 'run-123',
+  opts: {
+    status: 'suspended',
+    suspendedPaths: { 'path-1': [1, 2, 3] },
+    waitingPaths: {},
+  },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflowId",
+      type: "string",
+      description: "The workflow identifier",
+      isOptional: false,
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "The unique run identifier",
+      isOptional: false,
+    },
+    {
+      name: "opts",
+      type: "{ status: string; result?: StepResult<any, any, any, any>; error?: string; suspendedPaths?: Record<string, number[]>; waitingPaths?: Record<string, number[]> }",
+      description: "State update options",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<WorkflowRunState | undefined>`
+
+---
+
+### dropData()
+
+Drops all data in the workflows domain (workflow snapshots). **Use with caution!**
+
+```typescript copy
+await workflowsStore.dropData();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+## Index Management
+
+The following methods are available for index management (if supported by the storage adapter):
+
+- `createIndex()` - Create a custom index
+- `listIndexes()` - List indexes for a table
+- `describeIndex()` - Get detailed statistics for an index
+- `dropIndex()` - Drop an index
+- `createIndexes()` - Create default indexes
+- `dropIndexes()` - Drop all indexes
+
+See the [PostgreSQL Storage](/reference/v1/storage/postgresql#index-management) or [MSSQL Storage](/reference/v1/storage/mssql#index-management) documentation for detailed examples.
+
+## Related
+
+- [Mastra.getStore()](/reference/v1/core/getStore) - How to access storage domains
+- [Storage overview](/docs/v1/server-db/storage) - General storage documentation
+- [PostgreSQL Storage](/reference/v1/storage/postgresql) - PostgreSQL adapter reference
+

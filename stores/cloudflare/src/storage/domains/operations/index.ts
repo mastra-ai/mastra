@@ -1,7 +1,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  StoreOperations,
   TABLE_MESSAGES,
   TABLE_SCORERS,
   TABLE_THREADS,
@@ -12,7 +12,7 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
 import type { ListOptions, RecordTypes } from '../../types';
 
-export class StoreOperationsCloudflare extends StoreOperations {
+export class StoreOperationsCloudflare extends MastraBase {
   private bindings?: Record<TABLE_NAMES, KVNamespace>;
   client?: Cloudflare;
   accountId?: string;
@@ -28,7 +28,10 @@ export class StoreOperationsCloudflare extends StoreOperations {
     client?: Cloudflare;
     accountId?: string;
   }) {
-    super();
+    super({
+      component: 'STORAGE',
+      name: 'OPERATIONS',
+    });
     this.bindings = bindings;
     this.namespacePrefix = namespacePrefix;
     this.client = client;

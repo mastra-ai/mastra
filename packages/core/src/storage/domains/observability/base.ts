@@ -1,6 +1,7 @@
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { TracingStorageStrategy } from '../../../observability';
+import type { TABLE_SPANS } from '../../constants';
 import type {
   SpanRecord,
   TraceRecord,
@@ -8,9 +9,11 @@ import type {
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '../../types';
-
-export class ObservabilityStorage extends MastraBase {
+export abstract class ObservabilityStorageBase extends MastraBase {
   constructor() {
     super({
       component: 'STORAGE',
@@ -18,6 +21,14 @@ export class ObservabilityStorage extends MastraBase {
     });
   }
 
+  init(): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_INITIALIZE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider has not been initialized',
+    });
+  }
   /**
    * Provides hints for tracing strategy selection by the DefaultExporter.
    * Storage adapters can override this to specify their preferred and supported strategies.
@@ -71,7 +82,7 @@ export class ObservabilityStorage extends MastraBase {
   /**
    * Retrieves a paginated list of traces with optional filtering.
    */
-  getTracesPaginated(_args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  listTraces(_args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_GET_TRACES_PAGINATED_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
@@ -120,5 +131,42 @@ export class ObservabilityStorage extends MastraBase {
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support batch deleting traces',
     });
+  }
+
+  abstract dropData(): Promise<void>;
+
+  async createIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async dropIndexes(): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
+  }
+
+  async createIndex<T extends typeof TABLE_SPANS>({
+    name: _name,
+    table: _table,
+    columns: _columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>): Promise<void> {
+    // Optional: subclasses can override this method to implement index creation
+  }
+
+  async listIndexes<T extends typeof TABLE_SPANS>(_table: T): Promise<IndexInfo[]> {
+    // Optional: subclasses can override this method to implement index listing
+    return [];
+  }
+
+  async describeIndex(_name: string): Promise<StorageIndexStats> {
+    // Optional: subclasses can override this method to implement index description
+    throw new Error(
+      `Index description is not supported by this storage adapter (${this.constructor.name}). ` +
+        `The describeIndex method needs to be implemented in the storage adapter.`,
+    );
+  }
+
+  async dropIndex(_name: string): Promise<void> {
+    // Optional: subclasses can override this method to implement index dropping
   }
 }

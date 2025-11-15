@@ -1,0 +1,503 @@
+---
+title: "Reference: Memory Domain | Storage"
+description: "API reference for the Memory storage domain, which provides access to threads, messages, and resources."
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Memory
+
+The Memory storage domain provides access to threads, messages, and resources. 
+
+Access it using `getStore('memory')`:
+
+```typescript copy
+const memoryStore = await mastra.getStore('memory');
+// or 
+const memoryStore = await storage.getStore('memory');
+```
+
+## Methods
+
+### init()
+
+Initializes the memory domain storage, creating necessary tables and indexes.
+
+```typescript copy
+await memoryStore.init();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+### getThreadById()
+
+Retrieves a thread by its ID.
+
+```typescript copy
+const thread = await memoryStore.getThreadById({ threadId: 'thread-123' });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "The unique identifier of the thread",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageThreadType | null>`
+
+---
+
+### saveThread()
+
+Creates or updates a thread.
+
+```typescript copy
+const thread = await memoryStore.saveThread({
+  thread: {
+    id: 'thread-123',
+    resourceId: 'user-123',
+    title: 'Support Conversation',
+    metadata: { category: 'support' },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "thread",
+      type: "StorageThreadType",
+      description: "The thread object to save",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageThreadType>`
+
+---
+
+### updateThread()
+
+Updates a thread's title and metadata.
+
+```typescript copy
+const updatedThread = await memoryStore.updateThread({
+  id: 'thread-123',
+  title: 'Updated Title',
+  metadata: { category: 'support', priority: 2 },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "The thread ID",
+      isOptional: false,
+    },
+    {
+      name: "title",
+      type: "string",
+      description: "The new title for the thread",
+      isOptional: false,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "The new metadata for the thread",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageThreadType>`
+
+---
+
+### deleteThread()
+
+Deletes a thread by its ID.
+
+```typescript copy
+await memoryStore.deleteThread({ threadId: 'thread-123' });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "The unique identifier of the thread to delete",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### listMessages()
+
+Lists messages for a thread with pagination and filtering.
+
+```typescript copy
+const result = await memoryStore.listMessages({
+  threadId: 'thread-123',
+  page: 0,
+  perPage: 50,
+  filter: {
+    dateRange: {
+      start: new Date('2024-01-01'),
+      end: new Date('2024-01-31'),
+    },
+  },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "threadId",
+      type: "string",
+      description: "The thread ID to list messages for",
+      isOptional: false,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional resource ID filter",
+      isOptional: true,
+    },
+    {
+      name: "include",
+      type: "Array<{ id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }>",
+      description: "Optional array of specific messages to include with context",
+      isOptional: true,
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "Number of items per page, or `false` to fetch all records. Defaults to 40.",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Zero-indexed page number. Defaults to 0.",
+      isOptional: true,
+    },
+    {
+      name: "filter",
+      type: "{ dateRange?: { start?: Date; end?: Date } }",
+      description: "Optional date range filter",
+      isOptional: true,
+    },
+    {
+      name: "orderBy",
+      type: "StorageOrderBy",
+      description: "Optional ordering configuration",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageListMessagesOutput>` - Object containing `messages`, `total`, `page`, `perPage`, and `hasMore`.
+
+---
+
+### listMessagesById()
+
+Retrieves multiple messages by their IDs.
+
+```typescript copy
+const result = await memoryStore.listMessagesById({
+  messageIds: ['msg-1', 'msg-2', 'msg-3'],
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "Array of message IDs to retrieve",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ messages: MastraDBMessage[] }>`
+
+---
+
+### saveMessages()
+
+Saves multiple messages.
+
+```typescript copy
+const result = await memoryStore.saveMessages({
+  messages: [
+    {
+      id: 'msg-1',
+      thread_id: 'thread-123',
+      content: 'Hello',
+      role: 'user',
+      type: 'text',
+      createdAt: new Date(),
+    },
+  ],
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "MastraDBMessage[]",
+      description: "Array of messages to save",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ messages: MastraDBMessage[] }>`
+
+---
+
+### updateMessages()
+
+Updates multiple messages.
+
+```typescript copy
+const updatedMessages = await memoryStore.updateMessages({
+  messages: [
+    {
+      id: 'msg-1',
+      content: { content: 'Updated content' },
+    },
+  ],
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "messages",
+      type: "Array<Partial<Omit<MastraDBMessage, 'createdAt'>> & { id: string; content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] } }>",
+      description: "Array of message updates",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<MastraDBMessage[]>`
+
+---
+
+### deleteMessages()
+
+Deletes messages by their IDs. **Note:** Not all storage adapters support this method.
+
+```typescript copy
+await memoryStore.deleteMessages(['msg-1', 'msg-2']);
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "Array of message IDs to delete",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<void>`
+
+---
+
+### listThreadsByResourceId()
+
+Lists all threads for a specific resource with pagination.
+
+```typescript copy
+const result = await memoryStore.listThreadsByResourceId({
+  resourceId: 'user-123',
+  page: 0,
+  perPage: 20,
+  orderBy: { field: 'updatedAt', direction: 'DESC' },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "The resource ID to list threads for",
+      isOptional: false,
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "Number of items per page, or `false` to fetch all records. Defaults to 100.",
+      isOptional: true,
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Zero-indexed page number. Defaults to 0.",
+      isOptional: true,
+    },
+    {
+      name: "orderBy",
+      type: "{ field?: 'createdAt' | 'updatedAt'; direction?: 'ASC' | 'DESC' }",
+      description: "Optional ordering configuration. Defaults to `{ field: 'createdAt', direction: 'DESC' }`.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageListThreadsByResourceIdOutput>` - Object containing `threads`, `total`, `page`, `perPage`, and `hasMore`.
+
+---
+
+### getResourceById()
+
+Retrieves a resource by its ID.
+
+```typescript copy
+const resource = await memoryStore.getResourceById({
+  resourceId: 'user-123',
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "The resource ID",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageResourceType | null>`
+
+---
+
+### saveResource()
+
+Creates or updates a resource.
+
+```typescript copy
+const resource = await memoryStore.saveResource({
+  resource: {
+    id: 'user-123',
+    workingMemory: '# User Profile\n\nName: John Doe',
+    metadata: { preferences: { language: 'en' } },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "resource",
+      type: "StorageResourceType",
+      description: "The resource object to save",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageResourceType>`
+
+---
+
+### updateResource()
+
+Updates a resource's working memory and/or metadata.
+
+```typescript copy
+const updatedResource = await memoryStore.updateResource({
+  resourceId: 'user-123',
+  workingMemory: '# Updated Profile\n\nName: Jane Doe',
+  metadata: { preferences: { language: 'es' } },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "resourceId",
+      type: "string",
+      description: "The resource ID",
+      isOptional: false,
+    },
+    {
+      name: "workingMemory",
+      type: "string",
+      description: "Optional new working memory content",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description: "Optional new metadata",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<StorageResourceType>`
+
+---
+
+### dropData()
+
+Drops all data in the memory domain (threads, messages, resources). **Use with caution!**
+
+```typescript copy
+await memoryStore.dropData();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+## Index Management
+
+The following methods are available for index management (if supported by the storage adapter):
+
+- `createIndex()` - Create a custom index
+- `listIndexes()` - List indexes for a table
+- `describeIndex()` - Get detailed statistics for an index
+- `dropIndex()` - Drop an index
+- `createIndexes()` - Create default indexes
+- `dropIndexes()` - Drop all indexes
+
+See the [PostgreSQL Storage](/reference/v1/storage/postgresql#index-management) or [MSSQL Storage](/reference/v1/storage/mssql#index-management) documentation for detailed examples.
+
+## Related
+
+- [Mastra.getStore()](/reference/v1/core/getStore) - How to access storage domains
+- [Storage overview](/docs/v1/server-db/storage) - General storage documentation
+- [PostgreSQL Storage](/reference/v1/storage/postgresql) - PostgreSQL adapter reference
+

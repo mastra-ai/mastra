@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { SPAN_SCHEMA, ObservabilityStorageBase, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -8,29 +8,140 @@ import type {
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
+  CreateIndexOptions,
+  IndexInfo,
+  StorageIndexStats,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsPG } from '../operations';
+import { PGDomainBase } from '../base';
+import type { PGDomainConfig } from '../base';
+import { IndexManagementPG } from '../operations';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
-export class ObservabilityPG extends ObservabilityStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema?: string;
+// Observability domain table names
+type ObservabilityTableNames = typeof TABLE_SPANS;
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema?: string;
-  }) {
+export class ObservabilityPG extends ObservabilityStorageBase {
+  private domainBase: PGDomainBase;
+  indexManagement?: IndexManagementPG;
+  schemaPrefix?: string;
+
+  constructor(opts: PGDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    this.domainBase = new PGDomainBase(opts);
+    this.schemaPrefix =
+      this.domainBase.getSchema() && this.domainBase.getSchema() !== 'public' ? `${this.domainBase.getSchema()}_` : '';
+  }
+
+  private getIndexManagement() {
+    if (!this.indexManagement) {
+      this.indexManagement = new IndexManagementPG({
+        client: this.domainBase.getClient(),
+        schemaName: this.domainBase.getSchema(),
+      });
+    }
+    return this.indexManagement;
+  }
+
+  async createIndex<T extends ObservabilityTableNames>({
+    name,
+    table,
+    columns,
+  }: {
+    table: T;
+  } & Omit<CreateIndexOptions, 'table'>) {
+    const indexManagement = this.getIndexManagement();
+
+    await indexManagement.createIndex({
+      name: `${this.schemaPrefix}${name}`,
+      table,
+      columns,
+    });
+  }
+
+  async describeIndex(name: string): Promise<StorageIndexStats> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.describeIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async listIndexes<T extends ObservabilityTableNames>(table: T): Promise<IndexInfo[]> {
+    const indexManagement = this.getIndexManagement();
+    return indexManagement.listIndexes(table);
+  }
+
+  async dropIndex(name: string) {
+    const indexManagement = this.getIndexManagement();
+    await indexManagement.dropIndex(`${this.schemaPrefix}${name}`);
+  }
+
+  async createIndexes(): Promise<void> {
+    // Create indexes for observability domain
+    // Create traceId + startedAt index
+    try {
+      await this.createIndex({
+        name: 'mastra_ai_spans_traceid_startedat_idx',
+        table: TABLE_SPANS,
+        columns: ['traceId', 'startedAt DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability traceId index:', error);
+    }
+
+    // Create parentSpanId + startedAt index
+    try {
+      await this.createIndex({
+        name: 'mastra_ai_spans_parentspanid_startedat_idx',
+        table: TABLE_SPANS,
+        columns: ['parentSpanId', 'startedAt DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability parentSpanId index:', error);
+    }
+
+    // Create name index
+    try {
+      await this.createIndex({
+        name: 'mastra_ai_spans_name_idx',
+        table: TABLE_SPANS,
+        columns: ['name'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability name index:', error);
+    }
+
+    // Create spanType + startedAt index
+    try {
+      await this.createIndex({
+        name: 'mastra_ai_spans_spantype_startedat_idx',
+        table: TABLE_SPANS,
+        columns: ['spanType', 'startedAt DESC'],
+      });
+    } catch (error) {
+      // Log but don't fail initialization - indexes are performance optimizations
+      this.logger?.warn?.('Failed to create observability spanType index:', error);
+    }
+  }
+
+  async dropIndexes(): Promise<void> {
+    await this.dropIndex('mastra_ai_spans_traceid_startedat_idx');
+    await this.dropIndex('mastra_ai_spans_parentspanid_startedat_idx');
+    await this.dropIndex('mastra_ai_spans_name_idx');
+    await this.dropIndex('mastra_ai_spans_spantype_startedat_idx');
+  }
+
+  async init(): Promise<void> {
+    await this.domainBase.getOperations().createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    await this.createIndexes();
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await this.domainBase.getOperations().clearTable({ tableName: TABLE_SPANS });
   }
 
   public override get tracingStrategy(): {
@@ -57,7 +168,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         // Note: createdAt/updatedAt will be set by database triggers
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.domainBase.getOperations().insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -80,10 +191,10 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.domainBase.getSchema()),
       });
 
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.domainBase.getClient().manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -142,7 +253,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
       // Note: updatedAt will be set by database trigger automatically
 
-      await this.operations.update({
+      await this.domainBase.getOperations().update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -163,7 +274,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
+  async listTraces({
     filters,
     pagination,
   }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
@@ -215,15 +326,14 @@ export class ObservabilityPG extends ObservabilityStorage {
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
+      schemaName: getSchemaName(this.domainBase.getSchema()),
     });
 
     try {
       // Get total count
-      const countResult = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`,
-        whereClause.args,
-      );
+      const countResult = await this.domainBase
+        .getClient()
+        .oneOrNone<{ count: string }>(`SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`, whereClause.args);
       const count = Number(countResult?.count ?? 0);
 
       if (count === 0) {
@@ -239,7 +349,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
 
       // Get paginated spans
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.domainBase.getClient().manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -293,7 +403,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         };
       });
 
-      return this.operations.batchInsert({
+      return this.domainBase.getOperations().batchInsert({
         tableName: TABLE_SPANS,
         records,
       });
@@ -317,7 +427,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
+      return this.domainBase.getOperations().batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateSpanRecord> & {
@@ -360,11 +470,13 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.domainBase.getSchema()),
       });
 
       const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-      await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
+      await this.domainBase
+        .getClient()
+        .none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
     } catch (error) {
       throw new MastraError(
         {

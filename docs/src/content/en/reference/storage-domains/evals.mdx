@@ -1,0 +1,331 @@
+---
+title: "Reference: Evals Domain | Storage"
+description: "API reference for the Evals storage domain, which provides access to evaluation scores."
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Evals
+
+The Evals domain provides access to evaluation scores.
+
+Access it using `getStore('evals')`:
+
+```typescript copy
+const evalsStore = await mastra.getStore('evals');
+// or 
+const evalsStore = await storage.getStore('evals');
+```
+
+## Methods
+
+### init()
+
+Initializes the evals domain storage, creating necessary tables and indexes.
+
+```typescript copy
+await evalsStore.init();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+### getScoreById()
+
+Retrieves a score by its ID.
+
+```typescript copy
+const score = await evalsStore.getScoreById({ id: 'score-123' });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "The unique score identifier",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<ScoreRowData | null>`
+
+---
+
+### saveScore()
+
+Saves a new evaluation score.
+
+```typescript copy
+const result = await evalsStore.saveScore({
+  runId: 'run-123',
+  scorerId: 'faithfulness-scorer',
+  entityId: 'agent-1',
+  entityType: 'AGENT',
+  score: 0.95,
+  reason: 'Response accurately reflects source material',
+  source: 'LIVE',
+  input: { question: 'What is...' },
+  output: { answer: '...' },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The run ID being evaluated",
+      isOptional: false,
+    },
+    {
+      name: "scorerId",
+      type: "string",
+      description: "The scorer identifier",
+      isOptional: false,
+    },
+    {
+      name: "entityId",
+      type: "string",
+      description: "The entity ID (agent or workflow)",
+      isOptional: false,
+    },
+    {
+      name: "entityType",
+      type: "string",
+      description: "The entity type (e.g., 'AGENT', 'WORKFLOW')",
+      isOptional: false,
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "The evaluation score",
+      isOptional: false,
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Optional reason for the score",
+      isOptional: true,
+    },
+    {
+      name: "source",
+      type: "ScoringSource",
+      description: "The source of the score (e.g., 'LIVE', 'TEST')",
+      isOptional: false,
+    },
+    {
+      name: "input",
+      type: "any",
+      description: "The input data",
+      isOptional: false,
+    },
+    {
+      name: "output",
+      type: "any",
+      description: "The output data",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ score: ScoreRowData }>`
+
+---
+
+### listScoresByScorerId()
+
+Lists scores filtered by scorer ID with pagination.
+
+```typescript copy
+const result = await evalsStore.listScoresByScorerId({
+  scorerId: 'faithfulness-scorer',
+  pagination: { page: 0, perPage: 50 },
+  entityId: 'agent-1',
+  entityType: 'AGENT',
+  source: 'LIVE',
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "scorerId",
+      type: "string",
+      description: "The scorer identifier",
+      isOptional: false,
+    },
+    {
+      name: "pagination",
+      type: "StoragePagination",
+      description: "Pagination configuration with `page` and `perPage`",
+      isOptional: false,
+    },
+    {
+      name: "entityId",
+      type: "string",
+      description: "Optional entity ID filter",
+      isOptional: true,
+    },
+    {
+      name: "entityType",
+      type: "string",
+      description: "Optional entity type filter",
+      isOptional: true,
+    },
+    {
+      name: "source",
+      type: "ScoringSource",
+      description: "Optional source filter",
+      isOptional: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>`
+
+---
+
+### listScoresByRunId()
+
+Lists scores filtered by run ID with pagination.
+
+```typescript copy
+const result = await evalsStore.listScoresByRunId({
+  runId: 'run-123',
+  pagination: { page: 0, perPage: 50 },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "runId",
+      type: "string",
+      description: "The run ID",
+      isOptional: false,
+    },
+    {
+      name: "pagination",
+      type: "StoragePagination",
+      description: "Pagination configuration with `page` and `perPage`",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>`
+
+---
+
+### listScoresByEntityId()
+
+Lists scores filtered by entity ID and type with pagination.
+
+```typescript copy
+const result = await evalsStore.listScoresByEntityId({
+  entityId: 'agent-1',
+  entityType: 'AGENT',
+  pagination: { page: 0, perPage: 50 },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "entityId",
+      type: "string",
+      description: "The entity ID",
+      isOptional: false,
+    },
+    {
+      name: "entityType",
+      type: "string",
+      description: "The entity type (e.g., 'AGENT', 'WORKFLOW')",
+      isOptional: false,
+    },
+    {
+      name: "pagination",
+      type: "StoragePagination",
+      description: "Pagination configuration with `page` and `perPage`",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>`
+
+---
+
+### listScoresBySpan()
+
+Lists scores filtered by trace ID and span ID with pagination. **Note:** Not all storage adapters support this method.
+
+```typescript copy
+const result = await evalsStore.listScoresBySpan({
+  traceId: 'trace-123',
+  spanId: 'span-123',
+  pagination: { page: 0, perPage: 50 },
+});
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "traceId",
+      type: "string",
+      description: "The trace ID",
+      isOptional: false,
+    },
+    {
+      name: "spanId",
+      type: "string",
+      description: "The span ID",
+      isOptional: false,
+    },
+    {
+      name: "pagination",
+      type: "StoragePagination",
+      description: "Pagination configuration with `page` and `perPage`",
+      isOptional: false,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>`
+
+---
+
+### dropData()
+
+Drops all data in the evals domain (scores). **Use with caution!**
+
+```typescript copy
+await evalsStore.dropData();
+```
+
+**Returns:** `Promise<void>`
+
+---
+
+## Index Management
+
+The following methods are available for index management (if supported by the storage adapter):
+
+- `createIndex()` - Create a custom index
+- `listIndexes()` - List indexes for a table
+- `describeIndex()` - Get detailed statistics for an index
+- `dropIndex()` - Drop an index
+- `createIndexes()` - Create default indexes
+- `dropIndexes()` - Drop all indexes
+
+See the [PostgreSQL Storage](/reference/v1/storage/postgresql#index-management) or [MSSQL Storage](/reference/v1/storage/mssql#index-management) documentation for detailed examples.
+
+## Related
+
+- [Mastra.getStore()](/reference/v1/core/getStore) - How to access storage domains
+- [Storage overview](/docs/v1/server-db/storage) - General storage documentation
+- [PostgreSQL Storage](/reference/v1/storage/postgresql) - PostgreSQL adapter reference
+

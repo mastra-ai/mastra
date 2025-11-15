@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { IndexManagementPG } from '../domains/operations';
 import { PostgresStore } from '../index';
 import { PostgresPerformanceTest } from './performance-test';
 
@@ -6,7 +7,7 @@ import { PostgresPerformanceTest } from './performance-test';
 describe('PostgresStore Performance Indexes Integration', () => {
   let store: PostgresStore;
   let performanceTest: PostgresPerformanceTest;
-  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5435/mastra';
 
   beforeAll(async () => {
     store = new PostgresStore({ id: 'integration-test-store', connectionString });
@@ -29,8 +30,9 @@ describe('PostgresStore Performance Indexes Integration', () => {
   });
 
   it('should create performance indexes during store initialization', async () => {
-    // Composite indexes are created by default during init
-    const indexes = await store.listIndexes();
+    // Composite indexes are created by default during domain init
+    const indexManagement = new IndexManagementPG({ client: store.db, schemaName: store['schema'] });
+    const indexes = await indexManagement.listIndexes();
 
     expect(indexes.length).toBeGreaterThan(0);
 
@@ -150,14 +152,20 @@ describe('PostgresStore Performance Indexes Integration', () => {
   }, 300000); // 5 minute timeout for comprehensive testing
 
   it('should handle index creation gracefully when indexes already exist', async () => {
-    // Access operations to test index creation
-    const operations = store.stores.operations as any;
+    // Each domain manages its own indexes - call createIndexes on each domain
+    // This should not fail even if indexes already exist
+    const memoryStore = store.getStore('memory')!;
+    await expect(memoryStore.createIndexes()).resolves.not.toThrow();
 
-    // Create automatic indexes again - should not fail
-    await expect(operations.createAutomaticIndexes()).resolves.not.toThrow();
+    const observabilityStore = store.getStore('observability')!;
+    await expect(observabilityStore.createIndexes()).resolves.not.toThrow();
+
+    const evalsStore = store.getStore('evals')!;
+    await expect(evalsStore.createIndexes()).resolves.not.toThrow();
 
     // Verify indexes still exist
-    const indexes = await store.listIndexes();
+    const indexManagement = new IndexManagementPG({ client: store.db, schemaName: store['schema'] });
+    const indexes = await indexManagement.listIndexes();
     const compositeIndexes = indexes.filter(
       idx => idx.name.includes('threads_resourceid_createdat') || idx.name.includes('messages_thread_id_createdat'),
     );

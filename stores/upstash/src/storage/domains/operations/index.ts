@@ -1,42 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import { getKey, processRecord } from '../utils';
 
-export class StoreOperationsUpstash extends StoreOperations {
+export class StoreOperationsUpstash {
   private client: Redis;
 
   constructor({ client }: { client: Redis }) {
-    super();
     this.client = client;
   }
 
-  async createTable({
-    tableName: _tableName,
-    schema: _schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    // For Redis/Upstash, tables are created implicitly when data is inserted
-    // This method is a no-op for Redis-based storage
-  }
-
-  async alterTable({
-    tableName: _tableName,
-    schema: _schema,
-    ifNotExists: _ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    // For Redis/Upstash, schema changes are handled implicitly
-    // This method is a no-op for Redis-based storage
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+  async clearKeyspace({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const pattern = `${tableName}:*`;
     try {
       await this.scanAndDelete(pattern);
@@ -56,7 +30,7 @@ export class StoreOperationsUpstash extends StoreOperations {
   }
 
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.clearTable({ tableName });
+    return this.clearKeyspace({ tableName });
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {

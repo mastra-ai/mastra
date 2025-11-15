@@ -1,15 +1,15 @@
-import type { Connection } from '@lancedb/lancedb';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
-  MemoryStorage,
+  MemoryStorageBase,
   normalizePerPage,
   calculatePagination,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -18,16 +18,49 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import type { StoreOperationsLance } from '../operations';
+import { LanceDomainBase } from '../base';
+import type { LanceDomainConfig } from '../base';
 import { getTableSchema, processResultWithTypeConversion } from '../utils';
 
-export class StoreMemoryLance extends MemoryStorage {
-  private client: Connection;
-  private operations: StoreOperationsLance;
-  constructor({ client, operations }: { client: Connection; operations: StoreOperationsLance }) {
+export class MemoryStorageLance extends MemoryStorageBase {
+  private domainBase: LanceDomainBase;
+
+  private constructor(domainBase: LanceDomainBase) {
     super();
-    this.client = client;
-    this.operations = operations;
+    this.domainBase = domainBase;
+  }
+
+  /**
+   * Static factory method to create a StoreMemoryLance instance
+   * Required because LanceDB connection is async
+   */
+  static async create(opts: LanceDomainConfig): Promise<MemoryStorageLance> {
+    const domainBase = await LanceDomainBase.create(opts);
+    return new MemoryStorageLance(domainBase);
+  }
+
+  async init(): Promise<void> {
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.domainBase
+      .getOperations()
+      .createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+  }
+
+  async close(): Promise<void> {
+    await this.domainBase.close();
+  }
+
+  async dropData(): Promise<void> {
+    await Promise.all([
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_THREADS }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_MESSAGES }),
+      this.domainBase.getOperations().clearTable({ tableName: TABLE_RESOURCES }),
+    ]);
   }
 
   // Utility to escape single quotes in SQL strings
@@ -37,7 +70,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.operations.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
+      const thread = await this.domainBase.getOperations().load({ tableName: TABLE_THREADS, keys: { id: threadId } });
 
       if (!thread) {
         return null;
@@ -68,7 +101,7 @@ export class StoreMemoryLance extends MemoryStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       const record = { ...thread, metadata: JSON.stringify(thread.metadata) };
-      const table = await this.client.openTable(TABLE_THREADS);
+      const table = await this.domainBase.getClient().openTable(TABLE_THREADS);
       await table.add([record], { mode: 'append' });
 
       return thread;
@@ -114,7 +147,7 @@ export class StoreMemoryLance extends MemoryStorage {
           updatedAt: new Date().getTime(),
         };
 
-        const table = await this.client.openTable(TABLE_THREADS);
+        const table = await this.domainBase.getClient().openTable(TABLE_THREADS);
         await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
 
         const updatedThread = await this.getThreadById({ threadId: id });
@@ -156,11 +189,11 @@ export class StoreMemoryLance extends MemoryStorage {
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
       // Delete the thread
-      const table = await this.client.openTable(TABLE_THREADS);
+      const table = await this.domainBase.getClient().openTable(TABLE_THREADS);
       await table.delete(`id = '${threadId}'`);
 
       // Delete all messages with the matching thread_id
-      const messagesTable = await this.client.openTable(TABLE_MESSAGES);
+      const messagesTable = await this.domainBase.getClient().openTable(TABLE_MESSAGES);
       await messagesTable.delete(`thread_id = '${threadId}'`);
     } catch (error: any) {
       throw new MastraError(
@@ -195,14 +228,14 @@ export class StoreMemoryLance extends MemoryStorage {
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     try {
-      const table = await this.client.openTable(TABLE_MESSAGES);
+      const table = await this.domainBase.getClient().openTable(TABLE_MESSAGES);
 
       const quotedIds = messageIds.map(id => `'${id}'`).join(', ');
       const allRecords = await table.query().where(`id IN (${quotedIds})`).toArray();
 
       const messages = processResultWithTypeConversion(
         allRecords,
-        await getTableSchema({ tableName: TABLE_MESSAGES, client: this.client }),
+        await getTableSchema({ tableName: TABLE_MESSAGES, client: this.domainBase.getClient() }),
       );
 
       const list = new MessageList().add(
@@ -260,7 +293,7 @@ export class StoreMemoryLance extends MemoryStorage {
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-      const table = await this.client.openTable(TABLE_MESSAGES);
+      const table = await this.domainBase.getClient().openTable(TABLE_MESSAGES);
 
       // Build query conditions
       const conditions: string[] = [`thread_id = '${this.escapeSql(threadId)}'`];
@@ -454,11 +487,11 @@ export class StoreMemoryLance extends MemoryStorage {
         };
       });
 
-      const table = await this.client.openTable(TABLE_MESSAGES);
+      const table = await this.domainBase.getClient().openTable(TABLE_MESSAGES);
       await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute(transformedMessages);
 
       // Update the thread's updatedAt timestamp
-      const threadsTable = await this.client.openTable(TABLE_THREADS);
+      const threadsTable = await this.domainBase.getClient().openTable(TABLE_THREADS);
       const currentTime = new Date().getTime();
       const updateRecord = { id: threadId, updatedAt: currentTime };
       await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([updateRecord]);
@@ -499,7 +532,7 @@ export class StoreMemoryLance extends MemoryStorage {
       // When perPage is false (get all), ignore page offset
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
-      const table = await this.client.openTable(TABLE_THREADS);
+      const table = await this.domainBase.getClient().openTable(TABLE_THREADS);
 
       // Get total count
       const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
@@ -527,7 +560,7 @@ export class StoreMemoryLance extends MemoryStorage {
       // Apply pagination AFTER sorting
       const paginatedRecords = records.slice(offset, offset + perPage);
 
-      const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.client });
+      const schema = await getTableSchema({ tableName: TABLE_THREADS, client: this.domainBase.getClient() });
       const threads = paginatedRecords.map(record =>
         processResultWithTypeConversion(record, schema),
       ) as StorageThreadType[];
@@ -673,7 +706,7 @@ export class StoreMemoryLance extends MemoryStorage {
         const { id, ...updates } = updateData;
 
         // Get the existing message
-        const existingMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const existingMessage = await this.domainBase.getOperations().load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (!existingMessage) {
           this.logger.warn('Message not found for update', { id });
           continue;
@@ -722,10 +755,10 @@ export class StoreMemoryLance extends MemoryStorage {
         }
 
         // Update the message using merge insert
-        await this.operations.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
+        await this.domainBase.getOperations().insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
 
         // Get the updated message
-        const updatedMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const updatedMessage = await this.domainBase.getOperations().load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (updatedMessage) {
           updatedMessages.push(this.parseMessageData(updatedMessage));
         }
@@ -733,7 +766,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Update timestamps for all affected threads
       for (const threadId of affectedThreadIds) {
-        await this.operations.insert({
+        await this.domainBase.getOperations().insert({
           tableName: TABLE_THREADS,
           record: { id: threadId, updatedAt: Date.now() },
         });
@@ -755,7 +788,9 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
-      const resource = await this.operations.load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
+      const resource = await this.domainBase
+        .getOperations()
+        .load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
 
       if (!resource) {
         return null;
@@ -859,7 +894,7 @@ export class StoreMemoryLance extends MemoryStorage {
         updatedAt: resource.updatedAt.getTime(), // Store as timestamp (milliseconds)
       };
 
-      const table = await this.client.openTable(TABLE_RESOURCES);
+      const table = await this.domainBase.getClient().openTable(TABLE_RESOURCES);
       await table.add([record], { mode: 'append' });
 
       return resource;
@@ -919,7 +954,7 @@ export class StoreMemoryLance extends MemoryStorage {
           updatedAt: updatedResource.updatedAt.getTime(), // Store as timestamp (milliseconds)
         };
 
-        const table = await this.client.openTable(TABLE_RESOURCES);
+        const table = await this.domainBase.getClient().openTable(TABLE_RESOURCES);
         await table.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
 
         return updatedResource;

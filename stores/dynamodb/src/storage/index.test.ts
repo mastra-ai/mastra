@@ -222,16 +222,16 @@ describe('DynamoDBStore', () => {
     }
   }, 60000); // Increase timeout for beforeAll to accommodate Docker startup and table creation
 
-  createTestSuite(
-    new DynamoDBStore({
-      name: 'DynamoDBStoreTest',
-      config: {
-        id: 'dynamodb-test-store',
-        tableName: TEST_TABLE_NAME,
-        endpoint: LOCAL_ENDPOINT,
-        region: LOCAL_REGION,
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-      },
-    }),
-  );
+  const storage = new DynamoDBStore({
+    name: 'DynamoDBStoreTest',
+    config: {
+      id: 'dynamodb-test-store',
+      tableName: TEST_TABLE_NAME,
+      endpoint: LOCAL_ENDPOINT,
+      region: LOCAL_REGION,
+      credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+    },
+  });
+
+  createTestSuite(storage);
 });

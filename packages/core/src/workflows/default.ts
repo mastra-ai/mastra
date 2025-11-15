@@ -1920,28 +1920,32 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContextObj[key] = value;
     });
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-      resourceId,
-      snapshot: {
+    const storage = await this.mastra?.getStore('workflows');
+
+    if (storage) {
+      await storage?.createWorkflowSnapshot({
+        workflowId: workflowId,
         runId,
-        status: workflowStatus,
-        value: executionContext.state,
-        context: stepResults as any,
-        activePaths: executionContext.executionPath,
-        activeStepsPath: executionContext.activeStepsPath,
-        serializedStepGraph,
-        suspendedPaths: executionContext.suspendedPaths,
-        waitingPaths: {},
-        resumeLabels: executionContext.resumeLabels,
-        result,
-        error,
-        requestContext: requestContextObj,
-        // @ts-ignore
-        timestamp: Date.now(),
-      },
-    });
+        resourceId,
+        snapshot: {
+          runId,
+          status: workflowStatus,
+          value: executionContext.state,
+          context: stepResults as any,
+          activePaths: executionContext.executionPath,
+          activeStepsPath: executionContext.activeStepsPath,
+          serializedStepGraph,
+          suspendedPaths: executionContext.suspendedPaths,
+          waitingPaths: {},
+          resumeLabels: executionContext.resumeLabels,
+          result,
+          error,
+          requestContext: requestContextObj,
+          // @ts-ignore
+          timestamp: Date.now(),
+        },
+      });
+    }
   }
 
   async executeEntry({

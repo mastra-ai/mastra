@@ -89,13 +89,19 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
-    const currentState = await this.mastra.getStorage()?.updateWorkflowState({
-      workflowName: workflowId,
-      runId,
-      opts: {
-        status: 'canceled',
-      },
-    });
+    const storage = await this.mastra.getStore('workflows');
+
+    let currentState: WorkflowRunState | undefined = undefined;
+
+    if (storage) {
+      currentState = await storage?.updateWorkflowState({
+        workflowId,
+        runId,
+        opts: {
+          status: 'canceled',
+        },
+      });
+    }
 
     await this.endWorkflow({
       workflow: undefined as any,
@@ -125,25 +131,29 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
   }: ProcessorArgs) {
-    await this.mastra.getStorage()?.persistWorkflowSnapshot({
-      workflowName: workflow.id,
-      runId,
-      snapshot: {
-        activePaths: [],
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        activeStepsPath: {},
-        serializedStepGraph: workflow.serializedStepGraph,
-        timestamp: Date.now(),
+    const storage = await this.mastra?.getStore('workflows');
+
+    if (storage) {
+      await storage.createWorkflowSnapshot({
+        workflowId: workflow.id,
         runId,
-        context: stepResults ?? {
-          input: prevResult?.status === 'success' ? prevResult.output : undefined,
+        snapshot: {
+          activePaths: [],
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          activeStepsPath: {},
+          serializedStepGraph: workflow.serializedStepGraph,
+          timestamp: Date.now(),
+          runId,
+          context: stepResults ?? {
+            input: prevResult?.status === 'success' ? prevResult.output : undefined,
+          },
+          status: 'running',
+          value: {},
         },
-        status: 'running',
-        value: {},
-      },
-    });
+      });
+    }
 
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.step.run',
@@ -168,8 +178,9 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   protected async endWorkflow(args: ProcessorArgs) {
     const { workflowId, runId, prevResult } = args;
-    await this.mastra.getStorage()?.updateWorkflowState({
-      workflowName: workflowId,
+    const storage = await this.mastra.getStore('workflows');
+    await storage?.updateWorkflowState({
+      workflowId,
       runId,
       opts: {
         status: 'success',
@@ -286,8 +297,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       timeTravel,
     } = args;
 
-    await this.mastra.getStorage()?.updateWorkflowState({
-      workflowName: workflowId,
+    const storage = await this.mastra.getStore('workflows');
+    await storage?.updateWorkflowState({
+      workflowId,
       runId,
       opts: {
         status: 'failed',
@@ -527,6 +539,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     activeSteps[step.step.id] = true;
 
+    const storage = await this.mastra?.getStore('workflows');
+
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
       if (resumeSteps?.length > 1) {
@@ -555,10 +569,14 @@ export class WorkflowEventProcessor extends EventProcessor {
           );
         }
 
-        const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
-          workflowName: step.step.id,
-          runId: nestedRunId,
-        });
+        let snapshot: WorkflowRunState | null = null;
+
+        if (storage) {
+          snapshot = await storage.getWorkflowSnapshot({
+            workflowId: step.step.id,
+            runId: nestedRunId,
+          });
+        }
 
         const nestedStepResults = snapshot?.context;
         const nestedSteps = resumeSteps.slice(1);
@@ -590,8 +608,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
         const snapshot =
-          (await this.mastra?.getStorage()?.loadWorkflowSnapshot({
-            workflowName: step.step.id,
+          (await storage?.getWorkflowSnapshot({
+            workflowId: step.step.id,
             runId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
@@ -847,6 +865,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentContext,
     requestContext,
   }: ProcessorArgs) {
+    const storage = await this.mastra?.getStore('workflows');
+
     let step = workflow.stepGraph[executionPath[0]!];
 
     if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
@@ -875,10 +895,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (step.type === 'foreach') {
-      const snapshot = await this.mastra.getStorage()?.loadWorkflowSnapshot({
-        workflowName: workflowId,
-        runId,
-      });
+      let snapshot: WorkflowRunState | null = null;
+      if (storage) {
+        snapshot = await storage.getWorkflowSnapshot({
+          workflowId,
+          runId,
+        });
+      }
 
       const currentIdx = executionPath[1];
       const currentResult = (snapshot?.context?.[step.step.id] as any)?.output;
@@ -892,8 +915,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           newResult = { ...prevResult, output: [(prevResult as any).output] } as any;
         }
       }
-      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
-        workflowName: workflow.id,
+
+      const newStepResults = await storage?.updateWorkflowResults({
+        workflowId: workflow.id,
         runId,
         stepId: step.step.id,
         result: newResult,
@@ -917,8 +941,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
 
-      const newStepResults = await this.mastra.getStorage()?.updateWorkflowResults({
-        workflowName: workflow.id,
+      const newStepResults = await storage?.updateWorkflowResults({
+        workflowId: workflow.id,
         runId,
         stepId: step.step.id,
         result: prevResult,
@@ -958,8 +982,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths[suspendedStep.id] = executionPath;
       }
 
-      await this.mastra.getStorage()?.updateWorkflowState({
-        workflowName: workflowId,
+      const storage = await this.mastra.getStore('workflows');
+      await storage?.updateWorkflowState({
+        workflowId,
         runId,
         opts: {
           status: 'suspended',
@@ -1128,11 +1153,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflowId: string;
     runId: string;
   }): Promise<WorkflowRunState | null | undefined> {
-    const snapshot = await this.mastra.getStorage()?.loadWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-    });
-
+    const storage = await this.mastra?.getStore('workflows');
+    let snapshot: WorkflowRunState | null = null;
+    if (storage) {
+      snapshot = await storage.getWorkflowSnapshot({
+        workflowId,
+        runId,
+      });
+    }
     return snapshot;
   }
 

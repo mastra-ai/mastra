@@ -47,6 +47,11 @@ function createMockScorerResult(overrides: any = {}) {
 // Test context helper to reduce repetitive setup
 class TestContext {
   public mockStorage!: MastraStorage;
+  public mockObservabilityStore!: {
+    getTrace: ReturnType<typeof vi.fn>;
+    saveScore: ReturnType<typeof vi.fn>;
+    updateSpan: ReturnType<typeof vi.fn>;
+  };
   public mockLogger!: IMastraLogger;
   public mockScorer!: MastraScorer;
   public mockTracingContext!: TracingContext;
@@ -56,10 +61,14 @@ class TestContext {
   }
 
   reset() {
-    this.mockStorage = {
+    this.mockObservabilityStore = {
       getTrace: vi.fn(),
       saveScore: vi.fn(),
       updateSpan: vi.fn(),
+    };
+
+    this.mockStorage = {
+      getStore: vi.fn().mockResolvedValue(this.mockObservabilityStore),
     } as unknown as MastraStorage;
 
     this.mockLogger = {
@@ -127,10 +136,10 @@ class TestContext {
       createdAt: new Date(),
     };
 
-    (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
+    (this.mockObservabilityStore.getTrace as any).mockResolvedValue(mockTrace);
     (this.mockScorer.run as any).mockResolvedValue(mockScorerResult);
-    (this.mockStorage.saveScore as any).mockResolvedValue({ score: mockSavedScore });
-    (this.mockStorage.updateSpan as any).mockResolvedValue(undefined);
+    (this.mockObservabilityStore.saveScore as any).mockResolvedValue({ score: mockSavedScore });
+    (this.mockObservabilityStore.updateSpan as any).mockResolvedValue(undefined);
 
     return this;
   }
@@ -141,7 +150,7 @@ class TestContext {
   ) {
     switch (scenarioType) {
       case 'trace-not-found':
-        (this.mockStorage.getTrace as any).mockResolvedValue(null);
+        (this.mockObservabilityStore.getTrace as any).mockResolvedValue(null);
         break;
 
       case 'span-not-found':
@@ -157,7 +166,7 @@ class TestContext {
             }),
           ],
         };
-        (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
+        (this.mockObservabilityStore.getTrace as any).mockResolvedValue(mockTrace);
         break;
 
       case 'no-root-span':
@@ -173,7 +182,7 @@ class TestContext {
             }),
           ],
         };
-        (this.mockStorage.getTrace as any).mockResolvedValue(mockTraceNoRoot);
+        (this.mockObservabilityStore.getTrace as any).mockResolvedValue(mockTraceNoRoot);
         break;
 
       case 'scorer-failure':
@@ -182,7 +191,9 @@ class TestContext {
         break;
 
       case 'storage-failure':
-        (this.mockStorage.getTrace as any).mockRejectedValue(errorDetails?.error || new Error('Storage error'));
+        (this.mockObservabilityStore.getTrace as any).mockRejectedValue(
+          errorDetails?.error || new Error('Storage error'),
+        );
         break;
     }
     return this;
@@ -217,9 +228,9 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.getTrace).toHaveBeenCalledWith('trace-1');
+      expect(testContext.mockObservabilityStore.getTrace).toHaveBeenCalledWith('trace-1');
       expect(testContext.mockScorer.run).toHaveBeenCalled();
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
+      expect(testContext.mockObservabilityStore.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: 'run-123',
           scorerId: 'test-scorer',
@@ -229,7 +240,7 @@ describe('runScorerOnTarget Function', () => {
           traceId: 'trace-1',
         }),
       );
-      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.updateSpan).toHaveBeenCalled();
     });
   });
 
@@ -276,16 +287,16 @@ describe('runScorerOnTarget Function', () => {
       const target = { traceId: 'trace-1' };
       testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.saveScore).toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.updateSpan).toHaveBeenCalled();
     });
 
     it('should select specific span when spanId provided', async () => {
       const target = { traceId: 'trace-1', spanId: 'span-2' };
       testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.saveScore).toHaveBeenCalled();
+      expect(testContext.mockObservabilityStore.updateSpan).toHaveBeenCalled();
     });
   });
 
@@ -303,7 +314,7 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
+      expect(testContext.mockObservabilityStore.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: 'run-123',
           input: { test: 'input' },
@@ -336,7 +347,7 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
+      expect(testContext.mockObservabilityStore.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: 'run-456',
           input: { test: 'input2' },

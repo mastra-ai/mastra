@@ -27,8 +27,8 @@ export type ScoringInput = {
 export type ScoringHookInput = {
   runId?: string;
   scorer: Record<string, any>;
-  input: any;
-  output: any;
+  input?: any;
+  output?: any;
   metadata?: Record<string, any>;
   additionalContext?: Record<string, any>;
   source: ScoringSource;
