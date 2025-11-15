@@ -9,7 +9,6 @@ import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
-import { TokenLimiter } from '@mastra/memory/processors';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
@@ -71,7 +70,6 @@ export class AgentBuilder extends Agent {
           // use the write to disk processor to debug the agent's context
           // new WriteToDiskProcessor({ prefix: 'before-filter' }),
           new ToolSummaryProcessor({ summaryModel: config.summaryModel || config.model }),
-          new TokenLimiter(100000),
           // new WriteToDiskProcessor({ prefix: 'after-filter' }),
         ],
       }),
