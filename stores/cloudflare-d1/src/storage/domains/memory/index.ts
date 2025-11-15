@@ -835,7 +835,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         id: string;
         content?: {
           metadata?: MastraMessageContentV2['metadata'];
-          content?: MastraMessageContentV2['content'];
+          parts?: MastraMessageContentV2['parts'];
         };
       }[];
   }): Promise<MastraDBMessage[]> {

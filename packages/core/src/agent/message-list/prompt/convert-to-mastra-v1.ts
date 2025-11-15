@@ -63,7 +63,9 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
-    const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
+    // experimental_attachments is deprecated, file parts are now in the parts array
+    const { parts: inputParts } = message.content;
+    const inputAttachments: Array<{ url: string; contentType?: string; name?: string }> = [];
     const { role } = message;
 
     const fields = {
@@ -77,10 +79,15 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
     const parts: typeof inputParts = [];
     for (const part of inputParts) {
       if (part.type === 'file') {
-        experimental_attachments.push({
-          url: part.data,
-          contentType: part.mimeType,
-        });
+        // Convert file part data or url to string URL for attachment
+        const data = part.url || part.data;
+        const url = typeof data === 'string' ? data : data?.toString() || '';
+        if (url) {
+          experimental_attachments.push({
+            url,
+            contentType: part.mimeType,
+          });
+        }
       } else {
         parts.push(part);
       }
@@ -88,10 +95,13 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
     switch (role) {
       case 'user': {
-        if (parts == null) {
-          const userContent = experimental_attachments
-            ? [{ type: 'text', text: content || '' }, ...attachmentsToParts(experimental_attachments)]
-            : { type: 'text', text: content || '' };
+        if (parts == null || parts.length === 0) {
+          // Extract text content from parts if available
+          const textContent = inputParts?.find(p => p.type === 'text')?.text || '';
+          const userContent =
+            experimental_attachments.length > 0
+              ? [{ type: 'text', text: textContent }, ...attachmentsToParts(experimental_attachments)]
+              : { type: 'text', text: textContent };
           pushOrCombine({
             role: 'user',
             ...fields,
@@ -100,26 +110,25 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             content: userContent,
           });
         } else {
-          const textParts = message.content.parts
+          const textParts = parts
             .filter(part => part.type === 'text')
             .map(part => ({
               type: 'text' as const,
               text: part.text,
             }));
 
-          const userContent = experimental_attachments
-            ? [...textParts, ...attachmentsToParts(experimental_attachments)]
-            : textParts;
+          // experimental_attachments now contains converted file parts from the loop above
+          const userContent =
+            experimental_attachments.length > 0
+              ? [...textParts, ...attachmentsToParts(experimental_attachments)]
+              : textParts;
           pushOrCombine({
             role: 'user',
             ...fields,
             type: 'text',
             content:
-              Array.isArray(userContent) &&
-              userContent.length === 1 &&
-              userContent[0]?.type === `text` &&
-              typeof content !== `undefined`
-                ? content
+              Array.isArray(userContent) && userContent.length === 1 && userContent[0]?.type === `text`
+                ? userContent[0].text
                 : userContent,
           });
         }
@@ -137,7 +146,18 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
             for (const part of block) {
               switch (part.type) {
-                case 'file':
+                case 'file': {
+                  // Ensure file parts have required data and mimeType fields
+                  const data = part.url || part.data;
+                  if (data && part.mimeType) {
+                    content.push({
+                      type: 'file',
+                      data,
+                      mimeType: part.mimeType,
+                    });
+                  }
+                  break;
+                }
                 case 'text': {
                   content.push(part);
                   break;
@@ -252,95 +272,37 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
 
           processBlock();
 
-          // Check if there are toolInvocations that weren't processed from parts
-          const toolInvocations = message.content.toolInvocations;
-          if (toolInvocations && toolInvocations.length > 0) {
-            // Find tool invocations that weren't already processed from parts
-            const processedToolCallIds = new Set<string>();
-            for (const part of message.content.parts) {
-              if (part.type === 'tool-invocation' && part.toolInvocation.toolCallId) {
-                processedToolCallIds.add(part.toolInvocation.toolCallId);
-              }
-            }
-
-            const unprocessedToolInvocations = toolInvocations.filter(
-              ti => !processedToolCallIds.has(ti.toolCallId) && ti.toolName !== 'updateWorkingMemory',
-            );
-
-            if (unprocessedToolInvocations.length > 0) {
-              // Group by step, handling undefined steps
-              const invocationsByStep = new Map<number, typeof unprocessedToolInvocations>();
-
-              for (const inv of unprocessedToolInvocations) {
-                const step = inv.step ?? 0;
-                if (!invocationsByStep.has(step)) {
-                  invocationsByStep.set(step, []);
-                }
-                invocationsByStep.get(step)!.push(inv);
-              }
-
-              // Process each step
-              const sortedSteps = Array.from(invocationsByStep.keys()).sort((a, b) => a - b);
-
-              for (const step of sortedSteps) {
-                const stepInvocations = invocationsByStep.get(step)!;
-
-                // Create tool-call message for all invocations (calls and results)
-                pushOrCombine({
-                  role: 'assistant',
-                  ...fields,
-                  type: 'tool-call',
-                  content: [
-                    ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
-                      type: 'tool-call' as const,
-                      toolCallId,
-                      toolName,
-                      args,
-                    })),
-                  ],
-                });
-
-                // Only create tool-result message if there are actual results
-                const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
-
-                if (invocationsWithResults.length > 0) {
-                  pushOrCombine({
-                    role: 'tool',
-                    ...fields,
-                    type: 'tool-result',
-                    content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
-                      const { toolCallId, toolName, result } = toolInvocation;
-                      return {
-                        type: 'tool-result',
-                        toolCallId,
-                        toolName,
-                        result,
-                      };
-                    }),
-                  });
-                }
-              }
-            }
-          }
+          // Tool invocations are now only stored in parts array
+          // No need to check for separate toolInvocations field
 
           break;
         }
 
-        const toolInvocations = message.content.toolInvocations;
+        // Fallback: Extract tool invocations from parts (for non-migrated messages)
+        // After migration, this code path shouldn't be hit since parts will always exist
+        const partsArray = (message.content.parts || []) as MastraMessageContentV2['parts'];
+        const toolInvocationParts = partsArray.filter(
+          p => p.type === 'tool-invocation' && p.toolInvocation?.toolName !== 'updateWorkingMemory',
+        );
 
-        if (toolInvocations == null || toolInvocations.length === 0) {
-          pushOrCombine({ role: 'assistant', ...fields, content: content || '', type: 'text' });
+        // Extract text content from parts - combine all text parts
+        const textContent = partsArray
+          .filter(p => p.type === 'text')
+          .map(p => (p.type === 'text' ? p.text : ''))
+          .join('\n');
+
+        if (toolInvocationParts.length === 0) {
+          pushOrCombine({ role: 'assistant', ...fields, content: textContent, type: 'text' });
           break;
         }
 
-        const maxStep = toolInvocations.reduce((max, toolInvocation) => {
-          return Math.max(max, toolInvocation.step ?? 0);
+        const maxStep = toolInvocationParts.reduce((max: number, part: any) => {
+          const step = part.toolInvocation?.step ?? 0;
+          return Math.max(max, step);
         }, 0);
 
         for (let i = 0; i <= maxStep; i++) {
-          const stepInvocations = toolInvocations.filter(
-            toolInvocation => (toolInvocation.step ?? 0) === i && toolInvocation.toolName !== 'updateWorkingMemory',
-          );
+          const stepInvocations = toolInvocationParts.filter((part: any) => (part.toolInvocation?.step ?? 0) === i);
 
           if (stepInvocations.length === 0) {
             continue;
@@ -352,26 +314,28 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
             ...fields,
             type: 'tool-call',
             content: [
-              ...(isLastMessage && content && i === 0 ? [{ type: 'text' as const, text: content }] : []),
-              ...stepInvocations.map(({ toolCallId, toolName, args }) => ({
+              ...(isLastMessage && textContent && i === 0 ? [{ type: 'text' as const, text: textContent }] : []),
+              ...stepInvocations.map((part: any) => ({
                 type: 'tool-call' as const,
-                toolCallId,
-                toolName,
-                args,
+                toolCallId: part.toolInvocation.toolCallId,
+                toolName: part.toolInvocation.toolName,
+                args: part.toolInvocation.args,
               })),
             ],
           });
 
           // Only create tool-result message if there are actual results
-          const invocationsWithResults = stepInvocations.filter(ti => ti.state === 'result' && 'result' in ti);
+          const invocationsWithResults = stepInvocations.filter(
+            (part: any) => part.toolInvocation.state === 'result' && 'result' in part.toolInvocation,
+          );
 
           if (invocationsWithResults.length > 0) {
             pushOrCombine({
               role: 'tool',
               ...fields,
               type: 'tool-result',
-              content: invocationsWithResults.map((toolInvocation): ToolResultPart => {
-                const { toolCallId, toolName, result } = toolInvocation;
+              content: invocationsWithResults.map((part: any): ToolResultPart => {
+                const { toolCallId, toolName, result } = part.toolInvocation;
                 return {
                   type: 'tool-result',
                   toolCallId,
@@ -383,8 +347,8 @@ export function convertToV1Messages(messages: Array<MastraDBMessage>) {
           }
         }
 
-        if (content && !isLastMessage) {
-          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content || '' });
+        if (textContent && !isLastMessage) {
+          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: textContent });
         }
 
         break;

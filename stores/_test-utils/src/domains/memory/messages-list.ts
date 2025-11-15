@@ -23,37 +23,37 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 1' },
+          content: { parts: [{ type: 'text', text: 'Message 1' }] },
           createdAt: new Date(now + 1000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 2' },
+          content: { parts: [{ type: 'text', text: 'Message 2' }] },
           createdAt: new Date(now + 2000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 3' },
+          content: { parts: [{ type: 'text', text: 'Message 3' }] },
           createdAt: new Date(now + 3000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 4' },
+          content: { parts: [{ type: 'text', text: 'Message 4' }] },
           createdAt: new Date(now + 4000),
         }),
         createSampleMessageV2({
           threadId: thread.id,
           resourceId: thread.resourceId,
-          content: { content: 'Message 5' },
+          content: { parts: [{ type: 'text', text: 'Message 5' }] },
           createdAt: new Date(now + 5000),
         }),
         createSampleMessageV2({
           threadId: thread2.id,
           resourceId: thread2.resourceId,
-          content: { content: 'Thread2 Message 1' },
+          content: { parts: [{ type: 'text', text: 'Thread2 Message 1' }] },
           createdAt: new Date(now + 6000),
         }),
       ];
@@ -111,7 +111,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const differentResourceMessage = createSampleMessageV2({
         threadId: thread.id,
         resourceId: 'different-resource',
-        content: { content: 'Different Resource' },
+        content: { parts: [{ type: 'text', text: 'Different Resource' }] },
         createdAt: new Date(),
       });
       await storage.saveMessages({ messages: [differentResourceMessage] });
@@ -136,17 +136,17 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const dateMessages = [
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: 'Old Message' },
+          content: { parts: [{ type: 'text', text: 'Old Message' }] },
           createdAt: twoDaysAgo,
         }),
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: 'Yesterday Message' },
+          content: { parts: [{ type: 'text', text: 'Yesterday Message' }] },
           createdAt: yesterday,
         }),
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: 'Recent Message' },
+          content: { parts: [{ type: 'text', text: 'Recent Message' }] },
           createdAt: now,
         }),
       ];
@@ -178,9 +178,15 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 1, 2, 3 are already in the paginated set
       expect(result.messages).toHaveLength(5);
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 1');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 1');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 2');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 3');
     });
 
     it('should include specific messages with next context', async () => {
@@ -197,9 +203,15 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 4');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 2');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 3');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 4');
     });
 
     it('should include specific messages with both previous and next context', async () => {
@@ -217,9 +229,15 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       // Default pagination applies (perPage: 40), so we get all 5 messages from thread
       // No duplicates since Message 2, 3, 4 are already in the paginated set
       expect(result.messages).toHaveLength(5);
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 2');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 3');
-      expect(result.messages.map((m: any) => m.content.content)).toContain('Message 4');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 2');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 3');
+      expect(
+        result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+      ).toContain('Message 4');
     });
 
     it('should include multiple messages from different threads', async () => {
@@ -261,7 +279,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       // Default pagination gets all 5 messages, include overlaps are deduplicated
       expect(result.messages).toHaveLength(5);
-      const contents = result.messages.map((m: any) => m.content.content);
+      const contents = result.messages.map(
+        (m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text,
+      );
       expect(contents).toContain('Message 2');
       expect(contents).toContain('Message 3');
       expect(contents).toContain('Message 4');
@@ -390,7 +410,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const dateMessages = Array.from({ length: 10 }, (_, i) =>
         createSampleMessageV2({
           threadId: dateThread.id,
-          content: { content: `Message ${i + 1}` },
+          content: { parts: [{ type: 'text', text: `Message ${i + 1}` }] },
           createdAt: new Date(now.getTime() + i * 1000),
         }),
       );
@@ -433,7 +453,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           createSampleMessageV2({
             threadId: thread.id,
             resourceId: thread.resourceId,
-            content: { content: `Extra Message ${i + 1}` },
+            content: { parts: [{ type: 'text', text: `Extra Message ${i + 1}` }] },
             createdAt: new Date(Date.now() + 10000 + i * 1000),
           }),
         );
@@ -494,7 +514,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
         // Should get first 2 from pagination (Message 1, 2) + included Message 3 (Message 2 already in paginated set)
         expect(result.messages).toHaveLength(3);
-        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
+        expect(
+          result.messages.map((m: any) => (m.content.parts.find((p: any) => p.type === 'text') as any)?.text),
+        ).toEqual(['Message 1', 'Message 2', 'Message 3']);
       });
 
       it('should work with perPage and date range', async () => {
@@ -505,7 +527,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         const dateMessages = Array.from({ length: 10 }, (_, i) =>
           createSampleMessageV2({
             threadId: dateThread.id,
-            content: { content: `Date Message ${i + 1}` },
+            content: { parts: [{ type: 'text', text: `Date Message ${i + 1}` }] },
             createdAt: new Date(now.getTime() + i * 1000),
           }),
         );
@@ -532,7 +554,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           createSampleMessageV2({
             threadId: thread.id,
             resourceId: 'other-resource',
-            content: { content: `Other ${i + 1}` },
+            content: { parts: [{ type: 'text', text: `Other ${i + 1}` }] },
             createdAt: new Date(Date.now() + 20000 + i * 1000),
           }),
         );

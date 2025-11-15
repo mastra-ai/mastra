@@ -86,10 +86,6 @@ const getTextContent = (message: any): string => {
   if (message.content?.text) {
     return message.content.text;
   }
-  // Fallback: check if content.content exists (nested structure)
-  if (message.content?.content && typeof message.content.content === 'string') {
-    return message.content.content;
-  }
   console.error('Unable to extract text from message:', JSON.stringify(message, null, 2));
   return '';
 };

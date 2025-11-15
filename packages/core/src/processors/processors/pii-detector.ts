@@ -401,7 +401,6 @@ export class PIIDetector implements Processor {
       content: {
         ...originalMessage.content,
         parts: [{ type: 'text', text: redactedContent }],
-        content: redactedContent,
       },
     };
   }
@@ -534,9 +533,7 @@ export class PIIDetector implements Processor {
       }
     }
 
-    if (!text.trim() && typeof message.content.content === 'string') {
-      text = message.content.content;
-    }
+    // Content is now only in parts array
 
     return text.trim();
   }

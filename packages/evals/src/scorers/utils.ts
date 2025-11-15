@@ -1,20 +1,22 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, ScoringInput } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ToolInvocation } from 'ai';
 
+// Helper type to extract specific part types from MastraMessageContentV2
+type MessagePart = MastraMessageContentV2['parts'][number];
+type ToolInvocationPart = Extract<MessagePart, { type: 'tool-invocation' }>;
+type TextPart = Extract<MessagePart, { type: 'text' }>;
+
 /**
  * Extract text content from MastraDBMessage
- * Matches the logic used in MessageList.mastraDBMessageToAIV4UIMessage
+ * Extracts all text parts from the parts array and combines them
  */
 export function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
-  if (typeof message.content.content === 'string' && message.content.content !== '') {
-    return message.content.content;
-  }
   if (message.content.parts && Array.isArray(message.content.parts)) {
-    // Return only the last text part like AI SDK does
+    // Combine all text parts
     const textParts = message.content.parts.filter(p => p.type === 'text');
-    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
+    return textParts.map(p => p.text).join('');
   }
   return '';
 }
@@ -145,27 +147,35 @@ export function createTestMessage({
   toolInvocations?: Array<{
     toolCallId: string;
     toolName: string;
-    args: Record<string, any>;
-    result: Record<string, any>;
-    state: any;
+    args: Record<string, unknown>;
+    result: Record<string, unknown>;
+    state: 'call' | 'result' | 'partial-call';
   }>;
 }): MastraDBMessage {
-  return {
-    id,
-    role,
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: content }],
-      content,
-      ...(toolInvocations.length > 0 && {
-        toolInvocations: toolInvocations.map(ti => ({
+  const parts: MessagePart[] = [{ type: 'text', text: content } as TextPart];
+
+  // Add tool invocations as tool-invocation parts
+  if (toolInvocations.length > 0) {
+    for (const ti of toolInvocations) {
+      parts.push({
+        type: 'tool-invocation',
+        toolInvocation: {
           toolCallId: ti.toolCallId,
           toolName: ti.toolName,
           args: ti.args,
           result: ti.result,
           state: ti.state,
-        })),
-      }),
+        },
+      } as ToolInvocationPart);
+    }
+  }
+
+  return {
+    id,
+    role,
+    content: {
+      format: 2,
+      parts,
     },
     createdAt: new Date(),
   };
@@ -219,18 +229,23 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 
   for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
     const message = output[messageIndex];
-    // Tool invocations are now nested under content
-    if (message?.content?.toolInvocations) {
-      for (let invocationIndex = 0; invocationIndex < message.content.toolInvocations.length; invocationIndex++) {
-        const invocation = message.content.toolInvocations[invocationIndex];
-        if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
-          toolCalls.push(invocation.toolName);
-          toolCallInfos.push({
-            toolName: invocation.toolName,
-            toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
-            messageIndex,
-            invocationIndex,
-          });
+    // Extract tool calls from parts array
+    if (message?.content?.parts && Array.isArray(message.content.parts)) {
+      let invocationIndex = 0;
+      for (const part of message.content.parts) {
+        if (part.type === 'tool-invocation' && part.toolInvocation?.toolName) {
+          const toolName = part.toolInvocation.toolName;
+          const state = part.toolInvocation.state;
+          if (state === 'result' || state === 'call') {
+            toolCalls.push(toolName);
+            toolCallInfos.push({
+              toolName,
+              toolCallId: part.toolInvocation.toolCallId || `${messageIndex}-${invocationIndex}`,
+              messageIndex,
+              invocationIndex,
+            });
+            invocationIndex++;
+          }
         }
       }
     }

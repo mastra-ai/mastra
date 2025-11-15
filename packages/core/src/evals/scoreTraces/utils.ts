@@ -84,7 +84,6 @@ function createMastraDBMessage(
     content: {
       format: 2,
       parts: [{ type: 'text', text: contentText }],
-      content: contentText,
     },
     createdAt: new Date(createdAt),
   };
@@ -231,7 +230,7 @@ export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
   const systemMessages = extractSystemMessages(primaryLLMSpan);
 
   // Extract remembered messages from LLM span (excluding current input)
-  const currentInputContent = inputMessages[0]?.content.content || '';
+  const currentInputContent = (inputMessages[0]?.content.parts?.find((p: any) => p.type === 'text') as any)?.text || '';
   const rememberedMessages = extractRememberedMessages(primaryLLMSpan, currentInputContent);
 
   const input = {
@@ -270,8 +269,6 @@ export function transformTraceToScorerInputAndOutput(trace: TraceRecord): {
     content: {
       format: 2,
       parts: parts as any, // Type assertion needed due to providerMetadata optional field
-      content: responseText,
-      toolInvocations, // Always include, even if empty array
     },
     createdAt: new Date(rootAgentSpan.endedAt || rootAgentSpan.startedAt),
   };
