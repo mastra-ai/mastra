@@ -28,7 +28,7 @@
     "posttest": "node scripts/stop-docker.js"
   },
   "dependencies": {
-    "couchbase": "^4.5.0"
+    "couchbase": "^4.6.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
