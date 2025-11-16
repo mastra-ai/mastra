@@ -592,8 +592,9 @@ describe('Agent with message processors', () => {
 
     const secondResponseRequestMessages: CoreMessage[] = JSON.parse(secondResponse.request.body as string).messages;
 
-    // Should have: system (instructions) + system (semantic recall) + user + assistant + user
-    expect(secondResponseRequestMessages.length).toBe(5);
+    // Should have: system (instructions) + system (semantic recall) + user + user
+    // (The assistant message with tool call is filtered out by ToolCallFilter)
+    expect(secondResponseRequestMessages.length).toBe(4);
 
     // Verify no tool messages or tool results are in the request
     const toolOrToolResultMessages = secondResponseRequestMessages.filter(
