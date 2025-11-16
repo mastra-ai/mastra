@@ -47,7 +47,7 @@ When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
 ```bash
 cd my-nextjs-agent
-npx --force mastra@latestinit
+npx --force mastra@latest init
 ```
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
@@ -65,7 +65,8 @@ Install AI SDK UI along with the Mastra adapter:
 ```bash
 npm install \
     @mastra/ai-sdk \
-    @ai-sdk/react
+    @ai-sdk/react \
+    ai
 ```
 
 Next, initialize AI Elements. When prompted, choose the default options:
