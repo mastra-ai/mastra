@@ -552,11 +552,36 @@ describe('MessageHistory', () => {
       });
 
       const messages: MastraDBMessage[] = [
-        { role: 'system', content: { format: 2, parts: [{ type: 'text', text: 'System prompt 1' }] }, id: 'msg-1', createdAt: new Date() },
-        { role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'User message' }] }, id: 'msg-2', createdAt: new Date() },
-        { role: 'system', content: { format: 2, parts: [{ type: 'text', text: 'System prompt 2' }] }, id: 'msg-3', createdAt: new Date() },
-        { role: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'Assistant response' }] }, id: 'msg-4', createdAt: new Date() },
-        { role: 'system', content: { format: 2, parts: [{ type: 'text', text: 'System prompt 3' }] }, id: 'msg-5', createdAt: new Date() },
+        {
+          role: 'system',
+          content: { format: 2, parts: [{ type: 'text', text: 'System prompt 1' }] },
+          id: 'msg-1',
+          createdAt: new Date(),
+        },
+        {
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+          id: 'msg-2',
+          createdAt: new Date(),
+        },
+        {
+          role: 'system',
+          content: { format: 2, parts: [{ type: 'text', text: 'System prompt 2' }] },
+          id: 'msg-3',
+          createdAt: new Date(),
+        },
+        {
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Assistant response' }] },
+          id: 'msg-4',
+          createdAt: new Date(),
+        },
+        {
+          role: 'system',
+          content: { format: 2, parts: [{ type: 'text', text: 'System prompt 3' }] },
+          id: 'msg-5',
+          createdAt: new Date(),
+        },
       ];
 
       await processor.processOutputResult({

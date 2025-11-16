@@ -710,7 +710,7 @@ describe('CRITICAL BUG: Input processors not running', () => {
 
     // Should include the previous conversation
     const previousUserMessage = requestMessages.find(
-      (msg: any) => msg.role === 'user' && msg.content.includes('Alice')
+      (msg: any) => msg.role === 'user' && msg.content.includes('Alice'),
     );
     expect(previousUserMessage).toBeDefined();
   });

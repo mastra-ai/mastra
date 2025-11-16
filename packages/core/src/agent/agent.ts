@@ -451,8 +451,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     return resolvedMemory;
   }
 
-  
-
   get voice() {
     if (typeof this.#instructions === 'function') {
       const mastraError = new MastraError({
@@ -651,7 +649,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         getLLM: this.getLLM.bind(this) as any,
         getMemory: this.getMemory.bind(this),
         convertTools: this.convertTools.bind(this),
-        
+
         __runInputProcessors: this.__runInputProcessors.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
         genTitle: this.genTitle.bind(this),

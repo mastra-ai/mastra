@@ -140,80 +140,60 @@ describe('TokenLimiterProcessor', () => {
       },
     );
 
-    it(
-      `60 messages, no tools`,
-      async () => {
-        await expectTokenEstimate(
-          {
-            messageCount: 30,
-            toolFrequency: 0,
-            threadId: '3',
-          },
-          agent,
-        );
-      },
-      60000,
-    );
+    it(`60 messages, no tools`, async () => {
+      await expectTokenEstimate(
+        {
+          messageCount: 30,
+          toolFrequency: 0,
+          threadId: '3',
+        },
+        agent,
+      );
+    }, 60000);
 
-    it(
-      `20 messages, 0 tools`,
-      async () => {
-        await expectTokenEstimate(
-          {
-            messageCount: 10,
-            toolFrequency: 0,
-            threadId: '3',
-          },
-          agent,
-        );
-      },
-      60000,
-    );
+    it(`20 messages, 0 tools`, async () => {
+      await expectTokenEstimate(
+        {
+          messageCount: 10,
+          toolFrequency: 0,
+          threadId: '3',
+        },
+        agent,
+      );
+    }, 60000);
 
-    it(
-      `20 messages, 2 tool messages`,
-      async () => {
-        await expectTokenEstimate(
-          {
-            messageCount: 10,
-            toolFrequency: 5,
-            threadId: '3',
-          },
-          agent,
-        );
-      },
-      60000,
-    );
+    it(`20 messages, 2 tool messages`, async () => {
+      await expectTokenEstimate(
+        {
+          messageCount: 10,
+          toolFrequency: 5,
+          threadId: '3',
+        },
+        agent,
+      );
+    }, 60000);
 
-    it(
-      `40 messages, 6 tool messages`,
-      async () => {
-        await expectTokenEstimate(
-          {
-            messageCount: 20,
-            toolFrequency: 5,
-            threadId: '4',
-          },
-          agent,
-        );
-      },
-      60000,
-    );
+    it(`40 messages, 6 tool messages`, async () => {
+      await expectTokenEstimate(
+        {
+          messageCount: 20,
+          toolFrequency: 5,
+          threadId: '4',
+        },
+        agent,
+      );
+    }, 60000);
 
-    it(
-      `100 messages, 24 tool messages`,
-      async () => {
-        await expectTokenEstimate(
-          {
-            messageCount: 50,
-            toolFrequency: 4,
-            threadId: '5',
-          },
-          agent,
-        );
-      },
-      60000,
-    );
+    it(`100 messages, 24 tool messages`, async () => {
+      await expectTokenEstimate(
+        {
+          messageCount: 50,
+          toolFrequency: 4,
+          threadId: '5',
+        },
+        agent,
+      );
+    }, 60000);
 
     it(
       `101 messages, 49 tool calls`,

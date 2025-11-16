@@ -594,10 +594,10 @@ describe('Agent with message processors', () => {
 
     // Should have: system (instructions) + system (semantic recall) + user + assistant + user
     expect(secondResponseRequestMessages.length).toBe(5);
-    
+
     // Verify no tool messages or tool results are in the request
     const toolOrToolResultMessages = secondResponseRequestMessages.filter(
-      m => m.role === 'tool' || (m.role === 'assistant' && (m as any)?.tool_calls?.length > 0)
+      m => m.role === 'tool' || (m.role === 'assistant' && (m as any)?.tool_calls?.length > 0),
     );
     expect(toolOrToolResultMessages.length).toBe(0);
   }, 30_000);

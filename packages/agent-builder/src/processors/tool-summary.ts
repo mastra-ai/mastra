@@ -8,7 +8,7 @@ import type { InputProcessor } from '@mastra/core/processors';
 export class ToolSummaryProcessor implements InputProcessor {
   readonly id = 'tool-summary-processor';
   readonly name = 'ToolSummaryProcessor';
-  
+
   private summaryAgent: Agent;
   private summaryCache: Map<string, string> = new Map();
 
@@ -81,7 +81,7 @@ export class ToolSummaryProcessor implements InputProcessor {
       if (message.content.format === 2 && message.content.parts) {
         for (let partIndex = 0; partIndex < message.content.parts.length; partIndex++) {
           const part = message.content.parts[partIndex];
-          
+
           // Check if this is a tool invocation with a result
           if (part && part.type === 'tool-invocation' && part.toolInvocation?.state === 'result') {
             const cacheKey = this.createCacheKey(part.toolInvocation);

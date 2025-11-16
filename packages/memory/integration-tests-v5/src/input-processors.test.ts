@@ -3,19 +3,19 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
-import { LibSQLStore, LibSQLVector  } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { CoreMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
 
 /**
  * CRITICAL: These tests verify that input processors actually run and modify the LLM request.
- * 
+ *
  * Each test checks the actual request.body.input sent to the LLM to ensure:
  * 1. MessageHistory processor fetches and includes previous messages
  * 2. WorkingMemory processor adds system messages with user context
  * 3. SemanticRecall processor adds relevant messages from other threads
- * 
+ *
  * If these tests pass without the processors running, our test coverage is insufficient.
  */
 describe('Input Processor Verification - MessageHistory', () => {
@@ -74,35 +74,31 @@ describe('Input Processor Verification - MessageHistory', () => {
     expect(requestMessages.length).toBeGreaterThanOrEqual(5);
 
     // Should include "Alice" from first message
-    const aliceMessage = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'user') {
-          if (typeof msg.content === 'string') {
-            return msg.content.includes('Alice');
-          }
-          if (Array.isArray(msg.content)) {
-            return msg.content.some((part: any) => part.text?.includes('Alice'));
-          }
+    const aliceMessage = requestMessages.find((msg: any) => {
+      if (msg.role === 'user') {
+        if (typeof msg.content === 'string') {
+          return msg.content.includes('Alice');
         }
-        return false;
+        if (Array.isArray(msg.content)) {
+          return msg.content.some((part: any) => part.text?.includes('Alice'));
+        }
       }
-    );
+      return false;
+    });
     expect(aliceMessage).toBeDefined();
 
     // Should include "Paris" from second message
-    const parisMessage = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'user') {
-          if (typeof msg.content === 'string') {
-            return msg.content.includes('Paris');
-          }
-          if (Array.isArray(msg.content)) {
-            return msg.content.some((part: any) => part.text?.includes('Paris'));
-          }
+    const parisMessage = requestMessages.find((msg: any) => {
+      if (msg.role === 'user') {
+        if (typeof msg.content === 'string') {
+          return msg.content.includes('Paris');
         }
-        return false;
+        if (Array.isArray(msg.content)) {
+          return msg.content.some((part: any) => part.text?.includes('Paris'));
+        }
       }
-    );
+      return false;
+    });
     expect(parisMessage).toBeDefined();
   });
 
@@ -151,35 +147,31 @@ describe('Input Processor Verification - MessageHistory', () => {
     expect(requestMessages.length).toBeLessThanOrEqual(5); // Allow for system message variations
 
     // Should NOT include "Message 1" (too old)
-    const message1 = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'user') {
-          if (typeof msg.content === 'string') {
-            return msg.content.includes('Message 1');
-          }
-          if (Array.isArray(msg.content)) {
-            return msg.content.some((part: any) => part.text?.includes('Message 1'));
-          }
+    const message1 = requestMessages.find((msg: any) => {
+      if (msg.role === 'user') {
+        if (typeof msg.content === 'string') {
+          return msg.content.includes('Message 1');
         }
-        return false;
+        if (Array.isArray(msg.content)) {
+          return msg.content.some((part: any) => part.text?.includes('Message 1'));
+        }
       }
-    );
+      return false;
+    });
     expect(message1).toBeUndefined();
 
     // Should include "Message 3" (within limit)
-    const message3 = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'user') {
-          if (typeof msg.content === 'string') {
-            return msg.content.includes('Message 3');
-          }
-          if (Array.isArray(msg.content)) {
-            return msg.content.some((part: any) => part.text?.includes('Message 3'));
-          }
+    const message3 = requestMessages.find((msg: any) => {
+      if (msg.role === 'user') {
+        if (typeof msg.content === 'string') {
+          return msg.content.includes('Message 3');
         }
-        return false;
+        if (Array.isArray(msg.content)) {
+          return msg.content.some((part: any) => part.text?.includes('Message 3'));
+        }
       }
-    );
+      return false;
+    });
     expect(message3).toBeDefined();
   });
 });
@@ -210,7 +202,8 @@ describe('Input Processor Verification - WorkingMemory', () => {
     await memory.updateWorkingMemory({
       threadId,
       resourceId,
-      workingMemory: '# User Profile\nName: Bob Smith\nAge: 35\nOccupation: Software Engineer\nFavorite Language: TypeScript',
+      workingMemory:
+        '# User Profile\nName: Bob Smith\nAge: 35\nOccupation: Software Engineer\nFavorite Language: TypeScript',
     });
 
     // Generate a response - WorkingMemory processor should include the working memory
@@ -230,29 +223,28 @@ describe('Input Processor Verification - WorkingMemory', () => {
     expect(requestMessages.length).toBeGreaterThanOrEqual(2);
 
     // Should include a system message with working memory content
-    const workingMemoryMessage = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'system') {
-          if (typeof msg.content === 'string') {
-            return msg.content.includes('Bob Smith') && msg.content.includes('Software Engineer');
-          }
-          if (Array.isArray(msg.content)) {
-            return msg.content.some((part: any) => 
-              part.text?.includes('Bob Smith') && part.text?.includes('Software Engineer')
-            );
-          }
+    const workingMemoryMessage = requestMessages.find((msg: any) => {
+      if (msg.role === 'system') {
+        if (typeof msg.content === 'string') {
+          return msg.content.includes('Bob Smith') && msg.content.includes('Software Engineer');
         }
-        return false;
+        if (Array.isArray(msg.content)) {
+          return msg.content.some(
+            (part: any) => part.text?.includes('Bob Smith') && part.text?.includes('Software Engineer'),
+          );
+        }
       }
-    );
+      return false;
+    });
 
     expect(workingMemoryMessage).toBeDefined();
-    
+
     // Verify the working memory content is present
-    const workingMemoryContent = typeof workingMemoryMessage!.content === 'string' 
-      ? workingMemoryMessage!.content 
-      : (workingMemoryMessage!.content as any[]).find((part: any) => part.text)?.text || '';
-    
+    const workingMemoryContent =
+      typeof workingMemoryMessage!.content === 'string'
+        ? workingMemoryMessage!.content
+        : (workingMemoryMessage!.content as any[]).find((part: any) => part.text)?.text || '';
+
     expect(workingMemoryContent).toContain('Bob Smith');
     expect(workingMemoryContent).toContain('Software Engineer');
     expect(workingMemoryContent).toContain('TypeScript');
@@ -302,17 +294,16 @@ describe('Input Processor Verification - WorkingMemory', () => {
     console.log(JSON.stringify(requestMessages, null, 2));
 
     // Should include the custom template text
-    const customTemplateMessage = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'system') {
-          const content = typeof msg.content === 'string' 
-            ? msg.content 
+    const customTemplateMessage = requestMessages.find((msg: any) => {
+      if (msg.role === 'system') {
+        const content =
+          typeof msg.content === 'string'
+            ? msg.content
             : (msg.content as any[]).find((part: any) => part.text)?.text || '';
-          return content.includes('CUSTOM CONTEXT') && content.includes('dark mode');
-        }
-        return false;
+        return content.includes('CUSTOM CONTEXT') && content.includes('dark mode');
       }
-    );
+      return false;
+    });
 
     expect(customTemplateMessage).toBeDefined();
   });
@@ -388,16 +379,13 @@ describe('Input Processor Verification - SemanticRecall', () => {
     expect(requestMessages.length).toBeGreaterThan(2);
 
     // Should include messages about Python from thread 1 in a system message
-    const semanticRecallMessage = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'system') {
-          const content = typeof msg.content === 'string' ? msg.content : '';
-          return content.includes('<remembered_from_other_conversation>') && 
-                 content.toLowerCase().includes('python');
-        }
-        return false;
+    const semanticRecallMessage = requestMessages.find((msg: any) => {
+      if (msg.role === 'system') {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+        return content.includes('<remembered_from_other_conversation>') && content.toLowerCase().includes('python');
       }
-    );
+      return false;
+    });
 
     expect(semanticRecallMessage).toBeDefined();
 
@@ -547,48 +535,43 @@ describe('Input Processor Verification - Combined Processors', () => {
     expect(requestMessages.length).toBeGreaterThan(2);
 
     // Should include working memory (system message with "Charlie")
-    const workingMemoryMsg = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'system') {
-          const content = typeof msg.content === 'string' 
-            ? msg.content 
-            : Array.isArray(msg.content) 
+    const workingMemoryMsg = requestMessages.find((msg: any) => {
+      if (msg.role === 'system') {
+        const content =
+          typeof msg.content === 'string'
+            ? msg.content
+            : Array.isArray(msg.content)
               ? msg.content.find((part: any) => part.text)?.text || ''
               : '';
-          return content.includes('Charlie');
-        }
-        return false;
+        return content.includes('Charlie');
       }
-    );
+      return false;
+    });
     expect(workingMemoryMsg).toBeDefined();
 
     // Should include message history from thread 2 ("Hello")
-    const historyMsg = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'user') {
-          const content = typeof msg.content === 'string' 
-            ? msg.content 
-            : Array.isArray(msg.content) 
+    const historyMsg = requestMessages.find((msg: any) => {
+      if (msg.role === 'user') {
+        const content =
+          typeof msg.content === 'string'
+            ? msg.content
+            : Array.isArray(msg.content)
               ? msg.content.find((part: any) => part.text)?.text || ''
               : '';
-          return content.includes('Hello');
-        }
-        return false;
+        return content.includes('Hello');
       }
-    );
+      return false;
+    });
     expect(historyMsg).toBeDefined();
 
     // Should include semantically recalled message from thread 1 ("React") in a system message
-    const semanticMsg = requestMessages.find(
-      (msg: any) => {
-        if (msg.role === 'system') {
-          const content = typeof msg.content === 'string' ? msg.content : '';
-          return content.includes('<remembered_from_other_conversation>') && 
-                 content.includes('React');
-        }
-        return false;
+    const semanticMsg = requestMessages.find((msg: any) => {
+      if (msg.role === 'system') {
+        const content = typeof msg.content === 'string' ? msg.content : '';
+        return content.includes('<remembered_from_other_conversation>') && content.includes('React');
       }
-    );
+      return false;
+    });
     expect(semanticMsg).toBeDefined();
   });
 });

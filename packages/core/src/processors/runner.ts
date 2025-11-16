@@ -176,7 +176,6 @@ export class ProcessorRunner {
         processableMessages = result;
         processorSpan?.end({ output: result });
       }
-
     }
 
     // Processed messages are already in the message list, no need to re-add them
@@ -432,7 +431,6 @@ export class ProcessorRunner {
         processableMessages = result;
         processorSpan?.end({ output: result });
       }
-
     }
 
     if (processableMessages.length > 0) {

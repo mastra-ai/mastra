@@ -93,7 +93,7 @@ describe('ToolCallFilter', () => {
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0]!.id).toBe('msg-1');
       expect(resultMessages[1]!.id).toBe('msg-2');
-      
+
       // Verify tool-invocation parts were removed
       const assistantMsg = resultMessages[1]!;
       if (typeof assistantMsg.content !== 'string') {
@@ -276,13 +276,13 @@ describe('ToolCallFilter', () => {
       });
 
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
-      
+
       // After consolidation, msg-2 through msg-6 are merged into a single message with id 'msg-2'
       // The filter should remove tool-invocation parts, leaving only text parts
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0]!.id).toBe('msg-1');
       expect(resultMessages[1]!.id).toBe('msg-2');
-      
+
       // Verify tool-invocation parts were removed
       const assistantMsg = resultMessages[1]!;
       if (typeof assistantMsg.content !== 'string') {
@@ -416,7 +416,7 @@ describe('ToolCallFilter', () => {
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0]!.id).toBe('msg-1');
       expect(resultMessages[1]!.id).toBe('msg-2');
-      
+
       // Verify weather tool invocations were removed but calculator tool invocations remain
       const assistantMsg = resultMessages[1]!;
       if (typeof assistantMsg.content !== 'string') {
@@ -582,7 +582,7 @@ describe('ToolCallFilter', () => {
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0]!.id).toBe('msg-1');
       expect(resultMessages[1]!.id).toBe('msg-2');
-      
+
       // Verify weather and search tool invocations were removed but calculator tool invocations remain
       const assistantMsg = resultMessages[1]!;
       if (typeof assistantMsg.content !== 'string') {
@@ -739,14 +739,14 @@ describe('ToolCallFilter', () => {
       // Should keep all messages since 'weather' is not in exclude list
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
       expect(resultMessages).toHaveLength(3);
-      
+
       // Messages are sorted by createdAt, so msg-2 and msg-3 come first (2024 timestamps)
       expect(resultMessages[0]!.id).toBe('msg-2');
       expect(resultMessages[0]!.content.parts[0]!.type).toBe('tool-invocation');
-      
+
       expect(resultMessages[1]!.id).toBe('msg-3');
       expect(resultMessages[1]!.content.parts[0]!.type).toBe('tool-invocation');
-      
+
       expect(resultMessages[2]!.id).toBe('msg-1');
     });
   });

@@ -468,11 +468,11 @@ https://mastra.ai/en/docs/memory/overview`,
   /**
    * Get input processors for this memory instance.
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
-   * 
+   *
    * NOTE: This base implementation returns an empty array. Concrete implementations
    * (e.g., @mastra/memory) should override this method to instantiate memory-specific
    * processors like SemanticRecall, WorkingMemory, and MessageHistory.
-   * 
+   *
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @param context - Optional execution context with threadId and resourceId
    * @returns Array of input processors configured for this memory instance
@@ -484,11 +484,11 @@ https://mastra.ai/en/docs/memory/overview`,
   /**
    * Get output processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's outputProcessors array.
-   * 
+   *
    * NOTE: This base implementation returns an empty array. Concrete implementations
    * (e.g., @mastra/memory) should override this method to instantiate memory-specific
    * processors like MessageHistory and SemanticRecall.
-   * 
+   *
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of output processors configured for this memory instance
    */

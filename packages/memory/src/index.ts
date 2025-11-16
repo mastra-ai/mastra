@@ -8,7 +8,8 @@ import type {
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
-  MessageDeleteInput, MemoryRuntimeContext 
+  MessageDeleteInput,
+  MemoryRuntimeContext,
 } from '@mastra/core/memory';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -103,9 +104,8 @@ export class Memory extends MastraMemory {
       const hasSemanticRecall = configuredProcessors.some(p => p.constructor.name === 'SemanticRecall');
 
       if (!hasSemanticRecall) {
-        const semanticConfig =
-          typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
-        
+        const semanticConfig = typeof effectiveConfig.semanticRecall === 'object' ? effectiveConfig.semanticRecall : {};
+
         processors.push(
           new SemanticRecall({
             storage: this.storage.stores.memory,
