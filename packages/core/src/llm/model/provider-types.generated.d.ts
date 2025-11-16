@@ -650,7 +650,7 @@ export type ProviderModelsMap = {
     'microsoft/mai-ds-r1:free',
     'minimax/minimax-01',
     'minimax/minimax-m1',
-    'minimax/minimax-m2:free',
+    'minimax/minimax-m2',
     'mistralai/codestral-2508',
     'mistralai/devstral-medium-2507',
     'mistralai/devstral-small-2505',
