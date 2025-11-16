@@ -102,29 +102,38 @@ export class MessageHistory implements Processor {
     }));
 
     // 3. Save to storage
-    await this.storage.saveMessages({
-      messages: messagesWithIds,
-    });
+    try {
+      await this.storage.saveMessages({
+        messages: messagesWithIds,
+      });
+    } catch (error) {
+      console.warn('Failed to save messages:', error);
+      return messages;
+    }
 
     // 4. Update thread metadata
-    const thread = await this.storage.getThreadById({ threadId });
-    if (thread) {
-      const result = await this.storage.listMessages({
-        threadId,
-        page: 1,
-        perPage: 1000,
-      });
+    try {
+      const thread = await this.storage.getThreadById({ threadId });
+      if (thread) {
+        const result = await this.storage.listMessages({
+          threadId,
+          page: 1,
+          perPage: 1000,
+        });
 
-      await this.storage.updateThread({
-        id: threadId,
-        title: thread.title || '',
-        metadata: {
-          ...thread.metadata,
-          updatedAt: new Date(),
-          lastMessageAt: new Date(),
-          messageCount: result.messages.length || 0,
-        },
-      });
+        await this.storage.updateThread({
+          id: threadId,
+          title: thread.title || '',
+          metadata: {
+            ...thread.metadata,
+            updatedAt: new Date(),
+            lastMessageAt: new Date(),
+            messageCount: result.messages.length || 0,
+          },
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to update thread metadata:', error);
     }
 
     return messages;

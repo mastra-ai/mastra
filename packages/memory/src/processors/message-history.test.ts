@@ -1,5 +1,4 @@
-
-import type { MastraMessageV2, MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryRuntimeContext } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { MemoryStorage } from '@mastra/core/storage';
@@ -65,7 +64,7 @@ class MockStorage extends MemoryStorage {
       updatedAt: new Date(),
     };
   }
-  async deleteThread(_args: { threadId: string}) {}
+  async deleteThread(_args: { threadId: string }) {}
   async saveMessages(args: { messages: MastraDBMessage[] }) {
     return { messages: args.messages };
   }
@@ -122,11 +121,11 @@ describe('MessageHistory', () => {
         lastMessages: 2,
       });
 
-      const newMessages: MastraMessageV2[] = [
+      const newMessages: MastraDBMessage[] = [
         {
           id: 'msg-4',
           role: 'user',
-          content: { content: 'New message', parts: [{ type: 'text', text: 'New message' }] },
+          content: { format: 2, content: 'New message', parts: [{ type: 'text', text: 'New message' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
@@ -164,11 +163,11 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const newMessages: MastraMessageV2[] = [
+      const newMessages: MastraDBMessage[] = [
         {
           id: 'msg-2',
           role: 'user',
-          content: { content: 'New', parts: [{ type: 'text', text: 'New' }] },
+          content: { format: 2, content: 'New', parts: [{ type: 'text', text: 'New' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
@@ -186,18 +185,18 @@ describe('MessageHistory', () => {
     });
 
     it('should avoid duplicate message IDs', async () => {
-      const historicalMessages: MastraMessageV2[] = [
+      const historicalMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: { content: 'Message 1', parts: [{ type: 'text', text: 'Message 1' }] },
+          content: { format: 2, content: 'Message 1', parts: [{ type: 'text', text: 'Message 1' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
         {
           id: 'msg-2',
           role: 'assistant',
-          content: { content: 'Message 2', parts: [{ type: 'text', text: 'Message 2' }] },
+          content: { format: 2, content: 'Message 2', parts: [{ type: 'text', text: 'Message 2' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
@@ -245,11 +244,11 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const newMessages: MastraMessageV2[] = [
+      const newMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: { content: 'New', parts: [{ type: 'text', text: 'New' }] },
+          content: { format: 2, content: 'New', parts: [{ type: 'text', text: 'New' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
@@ -266,18 +265,18 @@ describe('MessageHistory', () => {
     });
 
     it('should respect includeSystemMessages flag', async () => {
-      const historicalMessages: MastraMessageV2[] = [
+      const historicalMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'system',
-          content: { content: 'System prompt', parts: [{ type: 'text', text: 'System prompt' }] },
+          content: { format: 2, content: 'System prompt', parts: [{ type: 'text', text: 'System prompt' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
         {
           id: 'msg-2',
           role: 'user',
-          content: { content: 'User message', parts: [{ type: 'text', text: 'User message' }] },
+          content: { format: 2, content: 'User message', parts: [{ type: 'text', text: 'User message' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
@@ -324,11 +323,11 @@ describe('MessageHistory', () => {
         storage: errorStorage,
       });
 
-      const newMessages: MastraMessageV2[] = [
+      const newMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: { content: 'New', parts: [{ type: 'text', text: 'New' }] },
+          content: { format: 2, content: 'New', parts: [{ type: 'text', text: 'New' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
@@ -350,11 +349,11 @@ describe('MessageHistory', () => {
         // No threadId
       });
 
-      const newMessages: MastraMessageV2[] = [
+      const newMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'user',
-          content: { content: 'New', parts: [{ type: 'text', text: 'New' }] },
+          content: { format: 2, content: 'New', parts: [{ type: 'text', text: 'New' }] },
           threadId: 'thread-1',
           createdAt: new Date(),
         },
@@ -460,6 +459,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         getMessages: vi.fn().mockResolvedValue([]),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -543,6 +543,7 @@ describe('MessageHistory', () => {
           metadata: {},
         }),
         getMessages: vi.fn().mockResolvedValue([]),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
         updateThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
@@ -550,12 +551,12 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraMessageV2[] = [
-        { role: 'system', content: 'System prompt 1' },
-        { role: 'user', content: 'User message' },
-        { role: 'system', content: 'System prompt 2' },
-        { role: 'assistant', content: 'Assistant response' },
-        { role: 'system', content: 'System prompt 3' },
+      const messages: MastraDBMessage[] = [
+        { role: 'system', content: { format: 2, parts: [{ type: 'text', text: 'System prompt 1' }] }, id: 'msg-1', createdAt: new Date() },
+        { role: 'user', content: { format: 2, parts: [{ type: 'text', text: 'User message' }] }, id: 'msg-2', createdAt: new Date() },
+        { role: 'system', content: { format: 2, parts: [{ type: 'text', text: 'System prompt 2' }] }, id: 'msg-3', createdAt: new Date() },
+        { role: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'Assistant response' }] }, id: 'msg-4', createdAt: new Date() },
+        { role: 'system', content: { format: 2, parts: [{ type: 'text', text: 'System prompt 3' }] }, id: 'msg-5', createdAt: new Date() },
       ];
 
       await processor.processOutputResult({
@@ -616,13 +617,19 @@ describe('MessageHistory', () => {
     it('should handle save failures gracefully', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockRejectedValue(new Error('Save failed')),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
       } as unknown as MemoryStorage;
 
       const processor = new MessageHistory({
         storage: mockStorage,
       });
 
-      const messages: MastraMessageV2[] = [{ role: 'user', content: 'Hello' }];
+      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello' }];
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -654,7 +661,7 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraMessageV2[] = [{ role: 'user', content: 'Hello' }];
+      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello' }];
 
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -682,7 +689,7 @@ describe('MessageHistory', () => {
         // No threadId
       });
 
-      const messages: MastraMessageV2[] = [{ role: 'user', content: 'Hello' }];
+      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello' }];
 
       const result = await processor.processOutputResult({
         messages,
@@ -703,7 +710,7 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         { role: 'system', content: 'System message 1' },
         { role: 'system', content: 'System message 2' },
       ];
@@ -734,7 +741,7 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraMessageV2[] = [
+      const messages: MastraDBMessage[] = [
         { role: 'user', content: 'Hello' }, // No ID
       ];
 
@@ -765,7 +772,7 @@ describe('MessageHistory', () => {
         storage: mockStorage,
       });
 
-      const messages: MastraMessageV2[] = [{ role: 'user', content: 'Hello', id: 'existing-id-123' }];
+      const messages: MastraDBMessage[] = [{ role: 'user', content: 'Hello', id: 'existing-id-123' }];
 
       await processor.processOutputResult({
         messages,
