@@ -47,6 +47,81 @@ const azureVector = new AzureAISearchVector({
 });
 ```
 
+### Advanced Client Configuration
+
+Use `clientOptions` to customize the SearchClient behavior with retry policies, custom headers, or proxy configurations:
+
+```typescript
+import { AzureAISearchVector } from '@mastra/aisearch';
+
+const azureVector = new AzureAISearchVector({
+  id: 'azure-search-custom',
+  endpoint: 'https://your-service.search.windows.net',
+  credential: 'your-api-key',
+  clientOptions: {
+    // Add custom policies (e.g., for proxy, logging, etc.)
+    additionalPolicies: [
+      {
+        position: 'perCall',
+        policy: {
+          name: 'CustomHeadersPolicy',
+          async sendRequest(request, next) {
+            // Add custom headers
+            request.headers.set('X-Custom-Header', 'my-value');
+            return next(request);
+          }
+        }
+      }
+    ],
+    // Configure retry behavior
+    retryOptions: {
+      maxRetries: 3,
+      retryDelayInMs: 1000
+    }
+  }
+});
+```
+
+#### Example: Using with a Proxy
+
+```typescript
+import { AzureAISearchVector } from '@mastra/aisearch';
+import type { PipelinePolicy } from '@azure/core-rest-pipeline';
+
+// Custom proxy policy
+const createProxyPolicy = (config: {
+  proxyUrl: string;
+  token: string;
+}): PipelinePolicy => ({
+  name: 'ProxyPolicy',
+  async sendRequest(request, next) {
+    // Rewrite URL to proxy
+    const originalUrl = new URL(request.url);
+    request.url = `${config.proxyUrl}${originalUrl.pathname}${originalUrl.search}`;
+    
+    // Add proxy authentication
+    request.headers.set('Authorization', `Bearer ${config.token}`);
+    
+    return next(request);
+  }
+});
+
+const azureVector = new AzureAISearchVector({
+  id: 'azure-search-proxy',
+  endpoint: 'https://your-service.search.windows.net',
+  credential: 'dummy-key', // Not used with proxy
+  clientOptions: {
+    additionalPolicies: [{
+      position: 'perCall',
+      policy: createProxyPolicy({
+        proxyUrl: 'https://my-proxy.example.com',
+        token: process.env.PROXY_TOKEN!
+      })
+    }]
+  }
+});
+```
+
 ### Integration with Mastra Memory System
 
 ```typescript

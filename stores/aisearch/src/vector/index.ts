@@ -7,7 +7,8 @@ import {
   type SemanticSearchOptions,
   type SearchRequestOptions,
   type VectorizedQuery,
-  type VectorizableTextQuery
+  type VectorizableTextQuery,
+  type SearchClientOptions
 } from '@azure/search-documents';
 import type { TokenCredential } from '@azure/core-auth';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
@@ -36,6 +37,21 @@ export interface AzureAISearchVectorOptions {
   credential: string | AzureKeyCredential | TokenCredential;
   /** API version (optional, defaults to latest) */
   apiVersion?: string;
+  /** 
+   * Additional options for SearchClient (optional)
+   * Use this to pass custom policies like AXET proxy, retry options, etc.
+   * 
+   * @example
+   * ```typescript
+   * clientOptions: {
+   *   additionalPolicies: [{
+   *     position: 'perCall',
+   *     policy: createAxetProxyPolicy({ ... })
+   *   }]
+   * }
+   * ```
+   */
+  clientOptions?: Omit<SearchClientOptions, 'apiVersion'>;
 }
 
 /**
@@ -185,6 +201,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   private endpoint: string;
   private credential: string | AzureKeyCredential | TokenCredential;
   private apiVersion?: string;
+  private clientOptions?: Omit<SearchClientOptions, 'apiVersion'>;
   private indexClient: SearchIndexClient;
   private searchClients: Map<string, SearchClient<AzureAISearchDocument>> = new Map();
 
@@ -192,13 +209,15 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     id, 
     endpoint, 
     credential, 
-    apiVersion 
+    apiVersion,
+    clientOptions
   }: AzureAISearchVectorOptions & { id: string }) {
     super({ id });
     
     this.endpoint = endpoint;
     this.credential = credential;
     this.apiVersion = apiVersion;
+    this.clientOptions = clientOptions;
     
     // Initialize the index client for managing indexes
     this.indexClient = new SearchIndexClient(
@@ -237,7 +256,10 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         this.endpoint,
         indexName,
         typeof this.credential === 'string' ? new AzureKeyCredential(this.credential) : this.credential,
-        { apiVersion: this.apiVersion }
+        { 
+          apiVersion: this.apiVersion,
+          ...this.clientOptions // Merge custom client options
+        }
       );
       this.searchClients.set(indexName, client);
     }

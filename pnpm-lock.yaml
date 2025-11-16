@@ -2946,6 +2946,9 @@ importers:
         specifier: ^12.0.0
         version: 12.2.0
     devDependencies:
+      '@ai-sdk/openai':
+        specifier: ^1.0.5
+        version: 1.3.24(zod@4.1.12)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2955,12 +2958,18 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@microsoft/api-extractor':
         specifier: ^7.52.8
         version: 7.53.1(@types/node@20.19.23)
       '@types/node':
         specifier: ^20.19.21
         version: 20.19.23
+      ai:
+        specifier: ^4.0.0
+        version: 4.3.19(react@19.2.0)(zod@4.1.12)
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -2970,6 +2979,9 @@ importers:
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.53.1(@types/node@20.19.23))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.1)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.20.6
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
@@ -3977,7 +3989,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.29.0(@modelcontextprotocol/sdk@1.20.1)
+        version: 1.29.1(@modelcontextprotocol/sdk@1.20.1)
       google-auth-library:
         specifier: ^10.2.1
         version: 10.4.1
@@ -4873,6 +4885,10 @@ packages:
 
   '@azure/core-rest-pipeline@1.22.1':
     resolution: {integrity: sha512-UVZlVLfLyz6g3Hy7GNDpooMQonUygH7ghdiSASOOHy97fKj/mPLqgDX7aidOijn+sCMU+WU8NjlPlNTgnvbcGA==}
+    engines: {node: '>=20.0.0'}
+
+  '@azure/core-rest-pipeline@1.22.2':
+    resolution: {integrity: sha512-MzHym+wOi8CLUlKCQu12de0nwcq9k9Kuv43j4Wa++CsCpJwps2eeBQwD2Bu8snkxTtDKDx4GwjuR9E8yC8LNrg==}
     engines: {node: '>=20.0.0'}
 
   '@azure/core-tracing@1.3.1':
@@ -6547,8 +6563,8 @@ packages:
     resolution: {integrity: sha512-gAcNqVL6E6V+d7yZbv5pQAPh5ZTE66UB0n2AZB3QaVaQDo9H8yalja3u2v3NE4QTVt03DkpoIuyvzs4i3w/b7A==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.29.0':
-    resolution: {integrity: sha512-cQP7Ssa06W+MSAyVtL/812FBtZDoDehnFObIpK1xo5Uv4XvqBcVZ8OhXgihOIXWn7xvPQGvLclR8+yt3Ysnd9g==}
+  '@google/genai@1.29.1':
+    resolution: {integrity: sha512-Buywpq0A6xf9cOdhiWCi5KUiDBbZkjCH5xbl+xxNQRItoYQgd31p0OKyn5cUnT0YNzC/pAmszqXoOc7kncqfFQ==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.20.1
@@ -16559,6 +16575,12 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
       zod: 3.25.76
 
+  '@ai-sdk/openai@1.3.24(zod@4.1.12)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@4.1.12)
+      zod: 4.1.12
+
   '@ai-sdk/openai@2.0.42(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -17339,7 +17361,7 @@ snapshots:
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-auth': 1.10.1
-      '@azure/core-rest-pipeline': 1.22.1
+      '@azure/core-rest-pipeline': 1.22.2
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1
       '@azure/logger': 1.3.0
@@ -17351,7 +17373,7 @@ snapshots:
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-client': 1.10.1
-      '@azure/core-rest-pipeline': 1.22.1
+      '@azure/core-rest-pipeline': 1.22.2
     transitivePeerDependencies:
       - supports-color
 
@@ -17369,6 +17391,18 @@ snapshots:
       tslib: 2.8.1
 
   '@azure/core-rest-pipeline@1.22.1':
+    dependencies:
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-auth': 1.10.1
+      '@azure/core-tracing': 1.3.1
+      '@azure/core-util': 1.13.1
+      '@azure/logger': 1.3.0
+      '@typespec/ts-http-runtime': 0.3.1
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@azure/core-rest-pipeline@1.22.2':
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-auth': 1.10.1
@@ -17463,7 +17497,7 @@ snapshots:
       '@azure/core-client': 1.10.1
       '@azure/core-http-compat': 2.3.1
       '@azure/core-paging': 1.6.2
-      '@azure/core-rest-pipeline': 1.22.1
+      '@azure/core-rest-pipeline': 1.22.2
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1
       '@azure/logger': 1.3.0
@@ -19301,7 +19335,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.29.0(@modelcontextprotocol/sdk@1.20.1)':
+  '@google/genai@1.29.1(@modelcontextprotocol/sdk@1.20.1)':
     dependencies:
       google-auth-library: 10.4.1
       ws: 8.18.3
