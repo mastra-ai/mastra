@@ -22,6 +22,7 @@ import { MastraLLMVNext } from '../llm/model/model.loop';
 import type { MastraLanguageModel, MastraLanguageModelV2, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
+import { createStaticExecutionWorkflow } from '../loop/workflows/static';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
@@ -60,7 +61,8 @@ import type {
   DynamicAgentInstructions,
 } from './types';
 import { resolveThreadIdFromArgs } from './utils';
-import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
+// NOTE: Replaced with static workflow to prevent memory leaks
+// import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -122,6 +124,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #outputProcessors?: DynamicArgument<OutputProcessor[]>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+  #executionWorkflow?: Workflow<any, any, 'execution-workflow', any, any, any>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -2398,31 +2401,51 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       llm,
     };
 
-    // Create the workflow with all necessary context
-    const executionWorkflow = createPrepareStreamWorkflow({
-      capabilities,
-      options: { ...options, methodType },
-      threadFromArgs,
-      resourceId,
-      runId,
-      requestContext,
-      agentSpan: agentSpan!,
-      methodType,
-      instructions,
-      memoryConfig,
-      memory,
-      saveQueueManager,
-      returnScorerData: options.returnScorerData,
-      requireToolApproval: options.requireToolApproval,
-      resumeContext,
-      agentId: this.id,
-      toolCallId: options.toolCallId,
+    // Get or create the static workflow (created once, reused forever)
+    const executionWorkflow = this.#getOrCreateExecutionWorkflow();
+
+    // Create a run with all request-specific data passed via initialState (not closures!)
+    const run = await executionWorkflow.createRun({ runId });
+    const result = await run.start({
+      inputData: {}, // Empty - all data comes from state
+      initialState: {
+        capabilities,
+        options: { ...options, methodType },
+        threadFromArgs,
+        resourceId,
+        runId,
+        requestContext,
+        agentSpan: agentSpan!,
+        methodType,
+        instructions,
+        memoryConfig,
+        memory,
+        saveQueueManager,
+        returnScorerData: options.returnScorerData,
+        requireToolApproval: options.requireToolApproval,
+        resumeContext,
+        agentId: this.id,
+        toolCallId: options.toolCallId,
+      },
+      tracingContext: { currentSpan: agentSpan },
     });
 
-    const run = await executionWorkflow.createRun();
-    const result = await run.start({ tracingContext: { currentSpan: agentSpan } });
-
     return result;
+  }
+
+  /**
+   * Gets or creates the static execution workflow.
+   * The workflow is created once and reused across all agent executions,
+   * preventing memory leaks from recreating workflows on each request.
+   * @internal
+   */
+  #getOrCreateExecutionWorkflow(): Workflow<any, any, 'execution-workflow', any, any, any> {
+    if (!this.#executionWorkflow) {
+      // Import at runtime to avoid circular dependencies
+      this.#executionWorkflow = createStaticExecutionWorkflow();
+      this.logger.debug(`[Agent:${this.name}] - Static execution workflow created (will be reused)`);
+    }
+    return this.#executionWorkflow!; // Non-null assertion: we just created it above
   }
 
   /**
