@@ -209,6 +209,26 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   }
 
   /**
+   * Static factory method for easier instantiation with connection string
+   */
+  static fromConnectionString(connectionString: string, options?: { id?: string; apiVersion?: string }) {
+    const url = new URL(connectionString);
+    const endpoint = url.origin;
+    const apiKey = url.searchParams.get('api-key') || url.searchParams.get('key');
+    
+    if (!apiKey) {
+      throw new Error('API key not found in connection string');
+    }
+
+    return new AzureAISearchVector({
+      id: options?.id || 'azure-ai-search',
+      endpoint,
+      credential: apiKey,
+      apiVersion: options?.apiVersion
+    });
+  }
+
+  /**
    * Gets or creates a search client for a specific index
    */
   private getSearchClient(indexName: string): SearchClient<AzureAISearchDocument> {
@@ -585,7 +605,18 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
   }
 
   /**
-   * Performs advanced vector similarity search with Azure AI Search capabilities
+   * Standard MastraVector query method - compatible with Memory integration
+   * 
+   * @param params - Standard query parameters compatible with MastraVector interface
+   * @returns Array of search results with scores and metadata
+   * @throws {MastraError} When search operation fails
+   */
+  async query(params: QueryVectorParams<AzureAISearchVectorFilter>): Promise<QueryResult[]> {
+    return this.advancedQuery(params);
+  }
+
+  /**
+   * Advanced vector similarity search with full Azure AI Search capabilities
    * 
    * @param indexName - Name of the index to search
    * @param queryVector - Vector to search with
@@ -607,7 +638,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * Note: Vector fields are not retrievable in Azure AI Search, so vectors 
    * are never included in query results regardless of includeVector parameter.
    */
-  async query({
+  async advancedQuery({
     indexName,
     queryVector,
     filter,
@@ -623,6 +654,8 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     additionalVectorQueries = [],
     filterMode = 'preFilter'
   }: AzureAISearchAdvancedQueryParams): Promise<QueryResult[]> {
+    // Note: includeVector is ignored due to Azure AI Search limitations - vectors are not retrievable
+    void includeVector;
     try {
       const searchClient = this.getSearchClient(indexName);
       
@@ -885,7 +918,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     enableAnswers?: boolean;
     enableCaptions?: boolean;
   }): Promise<QueryResult[]> {
-    return this.query({
+    return this.advancedQuery({
       ...params,
       useSemanticSearch: true,
       queryType: 'semantic',
@@ -908,7 +941,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     textQuery: string;
     vectorFields?: string[];
   }): Promise<QueryResult[]> {
-    return this.query({
+    return this.advancedQuery({
       ...params,
       textVectorization: {
         text: params.textQuery,
@@ -930,7 +963,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       fields?: string[];
     }>;
   }): Promise<QueryResult[]> {
-    return this.query({
+    return this.advancedQuery({
       ...params,
       additionalVectorQueries: params.vectors.map(v => ({
         vector: v.vector,
@@ -948,7 +981,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * @returns Array of search results from exhaustive search
    */
   async exactQuery(params: Omit<AzureAISearchAdvancedQueryParams, 'exhaustiveSearch'>): Promise<QueryResult[]> {
-    return this.query({
+    return this.advancedQuery({
       ...params,
       exhaustiveSearch: true
     });

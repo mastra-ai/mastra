@@ -24,8 +24,7 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:integration": "vitest run --testNamePattern=\"Integration Tests\"",
-    "test:performance": "vitest run --testNamePattern=\"Performance Tests\"",
-    "test:unit": "vitest run --testNamePattern=\"^(?!.*Integration Tests|.*Performance Tests).*\"",
+    "test:unit": "vitest run --testNamePattern=\"^(?!.*Integration Tests).*\"",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -36,11 +35,15 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@ai-sdk/openai": "^1.0.5",
+    "ai": "^4.0.0",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.19.0",
     "dotenv": "^17.2.3",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },

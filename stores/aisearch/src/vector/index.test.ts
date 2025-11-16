@@ -804,6 +804,181 @@ describeIntegration('AzureAISearchVector Integration Tests', () => {
   });
 });
 
+// ==========================================
+// MEMORY INTEGRATION TESTS (Unit Tests)
+// ==========================================
+
+describe('AzureAISearchVector Memory Integration Tests', () => {
+  let azureVector: AzureAISearchVector;
+  let mockIndexClient: any;
+  let mockSearchClient: any;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+
+    // Setup Azure SDK mocks
+    mockIndexClient = {
+      createIndex: vi.fn().mockResolvedValue({ name: 'memory-index' }),
+      listIndexes: vi.fn().mockResolvedValue([]),
+      getIndex: vi.fn().mockResolvedValue({
+        name: 'memory-index',
+        fields: [
+          { name: 'id', type: 'Edm.String', key: true },
+          { 
+            name: 'content_vector', 
+            type: 'Collection(Edm.Single)', 
+            vectorSearchDimensions: 1536 
+          },
+          { name: 'metadata', type: 'Edm.String' },
+          { name: 'content', type: 'Edm.String' },
+        ],
+        vectorSearch: {
+          algorithms: [{ hnswParameters: { metric: 'cosine' } }]
+        }
+      }),
+      deleteIndex: vi.fn(),
+    };
+
+    mockSearchClient = {
+      uploadDocuments: vi.fn().mockResolvedValue({
+        results: [
+          { succeeded: true, key: 'memory-1' },
+          { succeeded: true, key: 'memory-2' },
+        ],
+      }),
+      search: vi.fn().mockResolvedValue({
+        results: (async function* () {
+          yield {
+            document: {
+              id: 'memory-1',
+              content_vector: new Array(1536).fill(0.1),
+              metadata: JSON.stringify({
+                threadId: 'thread-123',
+                userId: 'user-456',
+                timestamp: new Date().toISOString(),
+                messageType: 'user'
+              }),
+              content: 'Hello, I am interested in learning about AI',
+            },
+            score: 0.95,
+          };
+          yield {
+            document: {
+              id: 'memory-2', 
+              content_vector: new Array(1536).fill(0.2),
+              metadata: JSON.stringify({
+                threadId: 'thread-123',
+                userId: 'user-456', 
+                timestamp: new Date().toISOString(),
+                messageType: 'assistant'
+              }),
+              content: 'I would be happy to help you learn about artificial intelligence!',
+            },
+            score: 0.88,
+          };
+        })(),
+      }),
+      getDocument: vi.fn(),
+      mergeDocuments: vi.fn(),
+      deleteDocuments: vi.fn(),
+      getDocumentsCount: vi.fn().mockResolvedValue(10),
+    };
+
+    // Mock constructors
+    const { SearchIndexClient, SearchClient, AzureKeyCredential } = await vi.importMock<typeof import('@azure/search-documents')>('@azure/search-documents');
+    (SearchIndexClient as Mock).mockImplementation(() => mockIndexClient);
+    (SearchClient as Mock).mockImplementation(() => mockSearchClient);
+    (AzureKeyCredential as Mock).mockImplementation((key: string) => ({ key }));
+
+    azureVector = new AzureAISearchVector({
+      id: 'memory-test',
+      endpoint: 'https://test.search.windows.net',
+      credential: 'test-key',
+    });
+  });
+
+  describe('Memory Index Management', () => {
+    it('should create memory index with proper configuration', async () => {
+      await azureVector.createIndex({
+        indexName: 'mastra-memory',
+        dimension: 1536,
+      });
+
+      expect(mockIndexClient.createIndex).toHaveBeenCalled();
+      const createIndexCall = mockIndexClient.createIndex.mock.calls[0][0];
+      expect(createIndexCall.name).toBe('mastra-memory');
+    });
+  });
+
+  describe('Memory Data Operations', () => {
+    it('should store memory messages successfully', async () => {
+      const memoryData = [{
+        id: 'memory-1',
+        vector: new Array(1536).fill(0.1),
+        metadata: {
+          threadId: 'thread-123',
+          userId: 'user-456',
+          messageType: 'user',
+          timestamp: '2024-01-15T10:00:00Z'
+        },
+        document: 'Hello, I am interested in learning about AI'
+      }];
+
+      await azureVector.upsert({
+        indexName: 'mastra-memory',
+        vectors: [memoryData[0].vector],
+        ids: [memoryData[0].id],
+        metadata: [memoryData[0].metadata]
+      });
+
+      expect(mockSearchClient.uploadDocuments).toHaveBeenCalled();
+    });
+
+    it('should query memory messages with filters', async () => {
+      const queryVector = new Array(1536).fill(0.1);
+
+      const results = await azureVector.query({
+        indexName: 'mastra-memory',
+        queryVector,
+        topK: 10,
+        filter: {
+          eq: { userId: 'user-456' }
+        }
+      });
+
+      expect(mockSearchClient.search).toHaveBeenCalled();
+      expect(results).toBeDefined();
+    });
+  });
+
+  describe('Memory Compatibility', () => {
+    it('should be compatible with Mastra Memory interface', () => {
+      // Test that AzureAISearchVector can be used as a Mastra vector store
+      expect(azureVector.query).toBeDefined();
+      expect(azureVector.upsert).toBeDefined();
+      expect(azureVector.createIndex).toBeDefined();
+    });
+
+    it('should handle semantic search queries', async () => {
+      const queryVector = new Array(1536).fill(0.1);
+
+      await azureVector.advancedQuery({
+        indexName: 'mastra-memory',
+        queryVector,
+        topK: 5,
+        useSemanticSearch: true,
+        semanticOptions: {
+          configurationName: 'memory-semantic-config'
+        }
+      });
+
+      expect(mockSearchClient.search).toHaveBeenCalled();
+      const searchCall = mockSearchClient.search.mock.calls[0][1];
+      expect(searchCall.queryType).toBe('semantic');
+    });
+  });
+});
+
 // ==========================================  
 // ADVANCED FEATURES TESTS (Skip if no credentials)
 // ==========================================
@@ -865,7 +1040,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
     it('should support exhaustive search', async () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -878,7 +1053,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
     it('should support weighted queries', async () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -891,7 +1066,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
     it('should support different query types', async () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -908,7 +1083,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
       // Pre-filter (default)
-      const preFilterResults = await azureVector.query({
+      const preFilterResults = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -917,7 +1092,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
       });
 
       // Post-filter  
-      const postFilterResults = await azureVector.query({
+      const postFilterResults = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -939,7 +1114,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
       const queryVector1 = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       const queryVector2 = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector: queryVector1,
         topK: 5,
@@ -960,7 +1135,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
       const queryVector1 = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       const queryVector2 = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector: queryVector1,
         topK: 5,
@@ -983,7 +1158,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
     it('should support hybrid query (vector + text)', async () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         textVectorization: {
@@ -998,7 +1173,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
     it('should support semantic search configuration', async () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -1029,10 +1204,65 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
       });
     });
 
+    it('should support Memory-compatible query interface', async () => {
+      const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
+      
+      // Test standard query method used by Memory integration
+      const results = await azureVector.query({
+        indexName: testIndexName,
+        queryVector,
+        topK: 3,
+        filter: { contains: { content: 'test' } }
+      });
+
+      expect(results.length).toBeGreaterThanOrEqual(0);
+      results.forEach(result => {
+        expect(result).toMatchObject({
+          id: expect.any(String),
+          score: expect.any(Number),
+          metadata: expect.any(Object)
+        });
+      });
+    });
+
+    it('should demonstrate difference between query and advancedQuery methods', async () => {
+      const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
+      
+      // Standard query - Memory compatible
+      const standardResults = await azureVector.query({
+        indexName: testIndexName,
+        queryVector,
+        topK: 5,
+      });
+
+      // Advanced query - Azure AI Search specific features
+      const advancedResults = await azureVector.advancedQuery({
+        indexName: testIndexName,
+        queryVector,
+        topK: 5,
+        weight: 0.8,
+        exhaustiveSearch: true,
+      });
+
+      // Both should return valid results
+      expect(standardResults.length).toBeGreaterThan(0);
+      expect(advancedResults.length).toBeGreaterThan(0);
+      
+      // Results structure should be the same
+      expect(standardResults[0]).toMatchObject({
+        id: expect.any(String),
+        score: expect.any(Number),
+      });
+      expect(advancedResults[0]).toMatchObject({
+        id: expect.any(String),
+        score: expect.any(Number),
+      });
+    });
+
     it('should handle advanced parameters gracefully', async () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -1053,7 +1283,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
       // This should work even if semantic search isn't configured
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -1070,7 +1300,7 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
     it('should handle oversampling limitations gracefully', async () => {
       const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
       
-      const results = await azureVector.query({
+      const results = await azureVector.advancedQuery({
         indexName: testIndexName,
         queryVector,
         topK: 5,
@@ -1078,6 +1308,65 @@ describeIntegration('AzureAISearchVector Advanced Features', () => {
       });
 
       expect(results.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Convenience Methods', () => {
+    it('should support semantic query method', async () => {
+      const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
+      
+      const results = await azureVector.semanticQuery({
+        indexName: testIndexName,
+        queryVector,
+        topK: 5,
+        semanticConfig: 'default',
+        semanticQuery: 'test document',
+        enableAnswers: true,
+        enableCaptions: true,
+      });
+
+      expect(results.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should support hybrid query method', async () => {
+      const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
+      
+      const results = await azureVector.hybridQuery({
+        indexName: testIndexName,
+        queryVector,
+        topK: 5,
+        textQuery: 'test document',
+      });
+
+      expect(results.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should support multi-vector query method', async () => {
+      const queryVector1 = Array.from({ length: 1536 }, () => Math.random() - 0.5);
+      const queryVector2 = Array.from({ length: 1536 }, () => Math.random() - 0.5);
+      
+      const results = await azureVector.multiVectorQuery({
+        indexName: testIndexName,
+        queryVector: queryVector1,
+        topK: 5,
+        vectors: [
+          { vector: queryVector2, weight: 0.5 },
+        ],
+      });
+
+      expect(results.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should support exact query method', async () => {
+      const queryVector = Array.from({ length: 1536 }, () => Math.random() - 0.5);
+      
+      const results = await azureVector.exactQuery({
+        indexName: testIndexName,
+        queryVector,
+        topK: 5,
+      });
+
+      expect(results.length).toBeGreaterThanOrEqual(0);
     });
   });
 });

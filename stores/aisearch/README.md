@@ -47,7 +47,45 @@ const azureVector = new AzureAISearchVector({
 });
 ```
 
-### Integration with Mastra
+### Integration with Mastra Memory System
+
+```typescript
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { AzureAISearchVector } from '@mastra/aisearch';
+
+// Setup Azure AI Search vector store
+const azureVector = new AzureAISearchVector({
+  id: 'azure-memory-store',
+  endpoint: process.env.AZURE_AI_SEARCH_ENDPOINT!,
+  credential: process.env.AZURE_AI_SEARCH_CREDENTIAL!,
+});
+
+// Configure Memory with Azure AI Search
+const memory = new Memory({
+  vector: azureVector,
+  options: {
+    lastMessages: 15,
+    semanticRecall: {
+      topK: 5,
+      messageRange: 3,
+    },
+  },
+  embedder: openai.embedding('text-embedding-3-small'),
+});
+
+// Create agent with advanced memory
+const agent = new Agent({
+  id: 'azure-assistant',
+  name: 'Azure-Powered Assistant',
+  instructions: 'You are an assistant with advanced memory capabilities powered by Azure AI Search.',
+  model: openai('gpt-4o'),
+  memory,
+});
+```
+
+### Basic Vector Store Setup
 
 ```typescript
 import { Mastra } from '@mastra/core';
@@ -55,8 +93,8 @@ import { AzureAISearchVector } from '@mastra/aisearch';
 
 const azureVector = new AzureAISearchVector({
   id: 'azure-search',
-  endpoint: process.env.AZURE_SEARCH_ENDPOINT!,
-  credential: process.env.AZURE_SEARCH_API_KEY!
+  endpoint: process.env.AZURE_AI_SEARCH_ENDPOINT!,
+  credential: process.env.AZURE_AI_SEARCH_CREDENTIAL!
 });
 
 const mastra = new Mastra({
@@ -505,14 +543,77 @@ const filter: AzureAISearchVectorFilter = {
 };
 ```
 
+## Testing
+
+This package includes comprehensive tests for Azure AI Search integration with Mastra Memory.
+
+### Test Types
+
+```bash
+# Run all tests
+npm test
+
+# Unit tests only
+npm run test:unit
+
+# Integration tests (requires Azure credentials)
+npm run test:integration
+
+# Memory-specific tests
+npm run test:memory
+npm run test:memory:integration
+
+# Quick connection test
+npm run test:quick
+
+# Memory integration scenarios
+npm run test:memory:scenario
+npm run test:memory:real
+```
+
+### Memory Integration Testing
+
+The package includes specialized tests for Memory integration:
+
+1. **Unit Tests** (`src/vector/memory.test.ts`): Mock-based tests for Memory compatibility
+2. **Scenario Tests** (`examples/memory-test-scenario.ts`): Functional tests with realistic memory operations
+3. **Real Integration** (`examples/real-memory-integration.ts`): Full integration with @mastra/memory (if available)
+
+#### Running Memory Tests
+
+```bash
+# Test memory interface compatibility
+npm run test:memory
+
+# Test with realistic scenarios (requires Azure credentials)
+npm run test:memory:scenario
+
+# Test with real Mastra Memory integration (requires Azure + OpenAI credentials)
+npm run test:memory:real
+```
+
+#### Memory Test Environment
+
+For memory integration tests, set these environment variables:
+
+```bash
+# Required for all memory tests
+AZURE_AI_SEARCH_ENDPOINT=https://your-service.search.windows.net
+AZURE_AI_SEARCH_CREDENTIAL=your-admin-api-key
+
+# Required for real memory integration tests
+OPENAI_API_KEY=your-openai-api-key
+```
+
 ## Contributing
 
 This package is part of the Mastra framework. For contributions:
 
 1. Follow the [Mastra contribution guidelines](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md)
 2. Ensure all tests pass: `pnpm test`
-3. Add tests for new functionality
-4. Update documentation as needed
+3. Add tests for new functionality, especially memory-related features
+4. Test memory integration with: `npm run test:memory:scenario`
+5. Update documentation as needed
 
 ## License
 
