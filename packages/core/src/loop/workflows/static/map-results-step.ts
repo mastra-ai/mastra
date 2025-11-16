@@ -1,10 +1,10 @@
 import { z } from 'zod';
+import { getModelOutputForTripwire } from '../../../agent/trip-wire';
 import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
 import type { TracingContext } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
-import { getModelOutputForTripwire } from '../../../agent/trip-wire';
 import { prepareMemoryStepOutputSchema } from './prepare-memory-step';
 import { prepareToolsStepOutputSchema } from './prepare-tools-step';
 import { executionWorkflowStateSchema } from './schema';
