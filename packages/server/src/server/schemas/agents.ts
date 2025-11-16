@@ -30,15 +30,13 @@ export const serializedProcessorSchema = z.object({
  * Schema for serialized tool with JSON schemas
  * Uses passthrough() to allow additional tool properties beyond core fields
  */
-export const serializedToolSchema = z
-  .object({
-    id: z.string(),
-    description: z.string().optional(),
-    inputSchema: z.string().optional(),
-    outputSchema: z.string().optional(),
-    requireApproval: z.boolean().optional(),
-  })
-  .passthrough();
+export const serializedToolSchema = z.object({
+  id: z.string(),
+  description: z.string().optional(),
+  inputSchema: z.string().optional(),
+  outputSchema: z.string().optional(),
+  requireApproval: z.boolean().optional(),
+});
 
 /**
  * Schema for serialized workflow with steps

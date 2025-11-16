@@ -2,7 +2,6 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import { RequestContext } from '@mastra/core/di';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { WorkflowInfo, ChunkType, StreamEvent } from '@mastra/core/workflows';
-import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
@@ -98,9 +97,7 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
         acc[key] = getWorkflowInfo(workflow);
         return acc;
       }, {});
-      // Type assertion needed: WorkflowInfo stepGraph types (loop, foreach) are added to schema
-      // but TypeScript still sees structural mismatch with passthrough schemas
-      return _workflows as unknown as z.infer<typeof listWorkflowsResponseSchema>;
+      return _workflows;
     } catch (error) {
       return handleError(error, 'Error getting workflows');
     }
@@ -122,9 +119,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-      // Type assertion needed: WorkflowInfo stepGraph types (loop, foreach) are added to schema
-      // but TypeScript still sees structural mismatch with passthrough schemas
-      return getWorkflowInfo(workflow) as unknown as z.infer<typeof workflowInfoSchema>;
+      return getWorkflowInfo(workflow);
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }
@@ -168,9 +163,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
         runs: [],
         total: 0,
       };
-      // Type assertion needed: WorkflowRunState lacks index signature required by passthrough schema
-      // Core type is correct but doesn't structurally match Zod's passthrough type
-      return workflowRuns as unknown as z.infer<typeof workflowRunsResponseSchema>;
+      return workflowRuns;
     } catch (error) {
       return handleError(error, 'Error getting workflow runs');
     }
@@ -208,9 +201,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      // Type assertion needed: WorkflowRunState lacks index signature required by passthrough schema
-      // Core type is correct but doesn't structurally match Zod's passthrough type
-      return run as unknown as z.infer<typeof workflowRunResponseSchema>;
+      return run;
     } catch (error) {
       return handleError(error, 'Error getting workflow run');
     }
@@ -433,9 +424,7 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow run execution result not found' });
       }
 
-      // Type assertion needed: WorkflowState lacks index signature required by passthrough schema
-      // Schema uses .passthrough() to allow extra properties, but TypeScript can't verify structural compatibility
-      return executionResult as unknown as z.infer<typeof workflowExecutionResultSchema>;
+      return executionResult;
     } catch (error) {
       return handleError(error, 'Error getting workflow run execution result');
     }
@@ -483,9 +472,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         requestContext: finalRequestContext,
         tracingOptions,
       });
-      // Type assertion needed: WorkflowResult type includes many additional properties beyond schema
-      // Schema uses .passthrough() to allow these, but TypeScript can't verify structural compatibility
-      return result as unknown as z.infer<typeof workflowExecutionResultSchema>;
+      return result;
     } catch (error) {
       return handleError(error, 'Error starting async workflow');
     }
@@ -708,9 +695,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
         tracingOptions,
       });
 
-      // Type assertion needed: WorkflowResult type includes many additional properties beyond schema
-      // Schema uses .passthrough() to allow these, but TypeScript can't verify structural compatibility
-      return result as unknown as z.infer<typeof workflowExecutionResultSchema>;
+      return result;
     } catch (error) {
       return handleError(error, 'Error resuming workflow step');
     }

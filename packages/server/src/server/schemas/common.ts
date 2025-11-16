@@ -96,22 +96,18 @@ export const tracingOptionsSchema = z.object({
  * Represents messages exchanged with AI models
  * Content can be string, array of content parts, or object (for complex message types)
  */
-export const coreMessageSchema = z
-  .object({
-    role: z.enum(['system', 'user', 'assistant', 'tool']),
-    content: z.union([
-      z.string(),
-      z.array(
-        z
-          .object({
-            type: z.enum(['text', 'image', 'file', 'tool-call', 'tool-result']),
-          })
-          .passthrough(),
-      ),
-      z.object({}).passthrough(), // For complex message content objects
-    ]),
-  })
-  .passthrough();
+export const coreMessageSchema = z.object({
+  role: z.enum(['system', 'user', 'assistant', 'tool']),
+  content: z.union([
+    z.string(),
+    z.array(
+      z.object({
+        type: z.enum(['text', 'image', 'file', 'tool-call', 'tool-result']),
+      }),
+    ),
+    z.object({}), // For complex message content objects
+  ]),
+});
 
 // ============================================================================
 // Common Response Schemas

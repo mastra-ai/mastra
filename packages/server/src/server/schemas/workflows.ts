@@ -14,22 +14,18 @@ export const workflowRunPathParams = workflowIdPathParams.extend({
  * Schema for serialized step
  * Uses passthrough() to allow step-specific fields
  */
-const serializedStepSchema = z
-  .object({
-    id: z.string(),
-    description: z.string().optional(),
-  })
-  .passthrough();
+const serializedStepSchema = z.object({
+  id: z.string(),
+  description: z.string().optional(),
+});
 
 /**
  * Schema for serialized step flow entry
  * Represents different step flow types in the workflow graph
  */
-const serializedStepFlowEntrySchema = z
-  .object({
-    type: z.enum(['step', 'sleep', 'sleepUntil', 'waitForEvent', 'parallel', 'conditional', 'loop', 'foreach']),
-  })
-  .passthrough();
+const serializedStepFlowEntrySchema = z.object({
+  type: z.enum(['step', 'sleep', 'sleepUntil', 'waitForEvent', 'parallel', 'conditional', 'loop', 'foreach']),
+});
 
 /**
  * Schema for workflow information
@@ -43,7 +39,7 @@ export const workflowInfoSchema = z.object({
   stepGraph: z.array(serializedStepFlowEntrySchema),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
-  options: z.object({}).passthrough().optional(),
+  options: z.object({}).optional(),
 });
 
 /**
@@ -58,7 +54,7 @@ export const listWorkflowsResponseSchema = z.record(z.string(), workflowInfoSche
 const workflowRunSchema = z.object({
   workflowName: z.string(),
   runId: z.string(),
-  snapshot: z.union([z.object({}).passthrough(), z.string()]),
+  snapshot: z.union([z.object({}), z.string()]),
   createdAt: z.date(),
   updatedAt: z.date(),
   resourceId: z.string().optional(),
@@ -138,13 +134,11 @@ export const sendWorkflowRunEventBodySchema = z.object({
 /**
  * Schema for workflow execution result
  */
-export const workflowExecutionResultSchema = z
-  .object({
-    status: z.string(),
-    result: z.unknown().optional(),
-    error: z.unknown().optional(),
-  })
-  .passthrough();
+export const workflowExecutionResultSchema = z.object({
+  status: z.string(),
+  result: z.unknown().optional(),
+  error: z.unknown().optional(),
+});
 
 /**
  * Response schema for workflow control operations

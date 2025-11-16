@@ -134,7 +134,7 @@ export const LIST_SCORERS_ROUTE = createRoute({
       mastra,
       requestContext,
     });
-    return scorers as unknown as z.infer<typeof listScorersResponseSchema>;
+    return scorers;
   },
 });
 
@@ -159,7 +159,7 @@ export const GET_SCORER_ROUTE = createRoute({
       return null;
     }
 
-    return scorer as unknown as z.infer<typeof scorerEntrySchema>;
+    return scorer;
   },
 });
 

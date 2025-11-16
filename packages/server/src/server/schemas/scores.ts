@@ -5,7 +5,7 @@ import { paginationInfoSchema } from './common';
  * Schema for sampling configuration
  * Using passthrough to allow various sampling config shapes
  */
-const scoringSamplingConfigSchema = z.object({}).passthrough();
+const scoringSamplingConfigSchema = z.object({});
 
 /**
  * Schema for MastraScorer config object
@@ -22,11 +22,9 @@ const mastraScorerConfigSchema = z.object({
  * Schema for MastraScorer
  * Only validates public config property, uses passthrough to allow class instance
  */
-const mastraScorerSchema = z
-  .object({
-    config: mastraScorerConfigSchema,
-  })
-  .passthrough();
+const mastraScorerSchema = z.object({
+  config: mastraScorerConfigSchema,
+});
 
 /**
  * Schema for scorer entry with associations to agents and workflows

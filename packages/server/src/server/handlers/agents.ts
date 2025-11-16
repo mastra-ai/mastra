@@ -449,7 +449,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
         {},
       );
 
-      return serializedAgents as unknown as z.infer<typeof listAgentsResponseSchema>;
+      return serializedAgents;
     } catch (error) {
       return handleError(error, 'Error getting agents');
     }
@@ -470,7 +470,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
       const agent = await getAgentFromSystem({ mastra, agentId });
       const isPlayground = false; // TODO: Get from context if needed
       const result = await formatAgent({ mastra, agent, requestContext, isPlayground });
-      return result as unknown as z.infer<typeof serializedAgentSchema>;
+      return result;
     } catch (error) {
       return handleError(error, 'Error getting agent');
     }

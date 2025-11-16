@@ -2,7 +2,6 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
-import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
   threadIdPathParams,
@@ -289,7 +288,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         include,
         filter,
       });
-      return result as unknown as z.infer<typeof listMessagesResponseSchema>;
+      return result;
     } catch (error) {
       return handleError(error, 'Error getting messages');
     }
@@ -373,7 +372,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       }));
 
       const result = await memory.saveMessages({ messages: processedMessages as any, memoryConfig: {} });
-      return result as unknown as z.infer<typeof saveMessagesResponseSchema>;
+      return result;
     } catch (error) {
       return handleError(error, 'Error saving messages');
     }

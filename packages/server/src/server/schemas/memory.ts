@@ -92,8 +92,8 @@ const threadSchema = z.object({
 const messageSchema = coreMessageSchema.extend({
   id: z.string(),
   createdAt: z.coerce.date(),
-  threadId: z.string(),
-  resourceId: z.string(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
 });
 
 // ============================================================================
@@ -219,13 +219,11 @@ export const memoryStatusResponseSchema = z.object({
  * MemoryConfig is complex with many optional fields - using passthrough
  */
 export const memoryConfigResponseSchema = z.object({
-  config: z
-    .object({
-      lastMessages: z.union([z.number(), z.literal(false)]).optional(),
-      semanticRecall: z.union([z.boolean(), z.object({}).passthrough()]).optional(),
-      workingMemory: z.object({}).passthrough().optional(),
-    })
-    .passthrough(),
+  config: z.object({
+    lastMessages: z.union([z.number(), z.literal(false)]).optional(),
+    semanticRecall: z.union([z.boolean(), z.object({})]).optional(),
+    workingMemory: z.object({}).optional(),
+  }),
 });
 
 /**
