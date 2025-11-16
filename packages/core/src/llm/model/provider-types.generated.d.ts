@@ -695,6 +695,8 @@ export type ProviderModelsMap = {
     'openrouter/horizon-alpha',
     'openrouter/horizon-beta',
     'openrouter/polaris-alpha',
+    'openrouter/sherlock-dash-alpha',
+    'openrouter/sherlock-think-alpha',
     'openrouter/sonoma-dusk-alpha',
     'openrouter/sonoma-sky-alpha',
     'qwen/qwen-2.5-coder-32b-instruct',
