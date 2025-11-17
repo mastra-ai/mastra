@@ -149,7 +149,7 @@ export class Workflow extends BaseResource {
       step?: string | string[];
       resumeData?: Record<string, any>;
       requestContext?: RequestContext | Record<string, any>;
-    }) => Promise<ReadableStream>;
+    }) => Promise<ReadableStream<StreamVNextChunkType>>;
   }> {
     const searchParams = new URLSearchParams();
 
@@ -619,7 +619,7 @@ export class Workflow extends BaseResource {
     resumeData?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
-  }): Promise<ReadableStream> {
+  }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', params.runId);
     const requestContext = parseClientRequestContext(params.requestContext);

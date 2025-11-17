@@ -38,6 +38,7 @@ jobs:
         with:
           token: ${{ steps.app-auth.outputs.token }}
           persist-credentials: true
+          fetch-depth: 0
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

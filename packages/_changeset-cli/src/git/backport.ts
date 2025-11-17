@@ -60,6 +60,9 @@ async function github({ pull_number, continue: continueAfterCherryPick }: { pull
     childProcess.execSync(`git switch "${baseBranch}"`, {
       stdio: `inherit`,
     });
+    childProcess.execSync(`git pull origin "${baseBranch}"`, {
+      stdio: `inherit`,
+    });
   } catch {}
 
   if (!continueAfterCherryPick) {

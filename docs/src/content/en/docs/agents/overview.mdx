@@ -388,15 +388,13 @@ const response = await testAgent.generate([
 console.log(response.text);
 ```
 
-For a detailed guide to creating and configuring tools, see the [Tools Overview](../tools-mcp/overview) page.
-
 ### Using `maxSteps`
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
 
 ```typescript showLineNumbers copy
 const response = await testAgent.generate("Help me organize my day", {
-  maxSteps: 5,
+  maxSteps: 10,
 });
 
 console.log(response.text);
@@ -429,7 +427,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Using Tools](./using-tools) for more information.
+> See [Using Tools](/docs/v1/agents/using-tools) for more information.
 
 ## Using `RequestContext`
 
@@ -462,7 +460,6 @@ Use [Studio](/docs/v1/getting-started/studio) to test agents with different mess
 
 ## Related
 
-- [Using Tools](./using-tools)
-- [Agent Memory](./agent-memory)
-- [Request Context](/examples/v1/agents/request-context)
-- [Calling Agents](/examples/v1/agents/calling-agents)
+- [Using Tools](/docs/v1/agents/using-tools)
+- [Agent Memory](/docs/v1/agents/agent-memory)
+- [Request Context](/docs/v1/server-db/request-context)
