@@ -1782,7 +1782,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
           stepSpan?.error({ error });
           throw new RetryAfterError(error.message, executionContext.retryConfig.delay, {
-            cause: execResults,
+            cause: error,
           });
         }
 
@@ -1838,17 +1838,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         return { result: execResults, executionContext, stepResults };
       });
     } catch (e) {
-      console.log('error in catch', e);
-      const error = getErrorFromUnknown(e, { serializeStack: false });
-
-      // TODO: We throw RetryAfterError from within the step, thats where we pass the execResults as the cause of the error.
-      if (error instanceof RetryAfterError) {
-        // eslint-disable-next-line no-console
-        console.log('error is instanceof RetryAfterError');
+      let error: Error;
+      if (e instanceof Error && 'cause' in e && e.cause && typeof e.cause === 'object' && 'message' in e.cause) {
+        error = getErrorFromUnknown(e.cause, {
+          serializeStack: false,
+          fallbackMessage: `Unknown error in step ${step.id}`,
+        });
+      } else {
+        error = getErrorFromUnknown(e, { serializeStack: false, fallbackMessage: `Unknown error in step ${step.id}` });
       }
-
-      // TODO: do we need to use the error.cause here as the stepFailure instead?
-      // ? since we added the execResult to the error cause on line 1780
 
       const stepFailure: StepFailure<any, any, any, any> = {
         status: 'failed' as const,
@@ -1857,17 +1855,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         startedAt,
         endedAt: Date.now(),
       };
-
-      // const stepFailure: Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string } =
-      //   e instanceof Error
-      //     ? (e?.cause as unknown as Omit<StepFailure<any, any, any, any>, 'error'> & { error?: string })
-      //     : {
-      //         status: 'failed' as const,
-      //         error: e instanceof Error ? e.message : String(e),
-      //         payload: inputData,
-      //         startedAt,
-      //         endedAt: Date.now(),
-      //       };
 
       stepRes = {
         result: stepFailure,
