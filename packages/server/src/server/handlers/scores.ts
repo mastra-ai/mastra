@@ -212,11 +212,11 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
         entityId?: string;
         entityType?: string;
       };
+      const filters = Object.fromEntries(Object.entries({ entityId, entityType }).filter(([_, v]) => v !== undefined));
       const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
         scorerId: scorerId as string,
         pagination: { page: page ?? 0, perPage: perPage ?? 10 },
-        entityId,
-        entityType,
+        ...filters,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
       return {
         pagination: scoreResults.pagination,

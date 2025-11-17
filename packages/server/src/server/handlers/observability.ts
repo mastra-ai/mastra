@@ -203,7 +203,6 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
 
       const { page, perPage, name, spanType, dateRange, entityId, entityType } = params as any;
       const pagination = { page, perPage, dateRange: dateRange ? JSON.parse(dateRange) : undefined };
-      // Filter out undefined values from filters object
       const filters = Object.fromEntries(
         Object.entries({ name, spanType, entityId, entityType }).filter(([_, v]) => v !== undefined),
       );
