@@ -35,8 +35,7 @@ const migrationPrompts: Prompt[] = [
     arguments: [
       {
         name: 'area',
-        description:
-          'Optional: A specific area to focus the migration guide on (e.g., "agent", "workflow", "tools")',
+        description: 'Optional: A specific area to focus the migration guide on (e.g., "agent", "workflow", "tools")',
         required: false,
       },
     ],
