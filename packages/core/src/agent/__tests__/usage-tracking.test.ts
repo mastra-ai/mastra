@@ -1,9 +1,95 @@
+import { openai } from '@ai-sdk/openai-v5';
+import { stepCountIs, streamText } from 'ai-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
 import { describe, it, expect } from 'vitest';
+import z from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
 
 describe('Agent usage tracking', () => {
+  describe('Usage tracking aisdk vs mastra', () => {
+    const system = 'You are a helpful assistant';
+    const prompt = 'Hello';
+
+    it('Should be equal for usage and totalUsage for the same setup - no tools', async () => {
+      const streamTextResult = streamText({
+        prompt,
+        model: openai('gpt-4o-mini'),
+        system,
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: openai('gpt-4o-mini'),
+        instructions: system,
+      });
+
+      const mastraStream = await agent.stream(prompt);
+
+      await streamTextResult.consumeStream();
+      await mastraStream.consumeStream();
+
+      const streamTextUsage = await streamTextResult.usage;
+      const mastraUsage = await mastraStream.usage;
+
+      const streamTextTotalUsage = await streamTextResult.totalUsage;
+      const mastraTotalUsage = await mastraStream.totalUsage;
+
+      expect(streamTextTotalUsage).toEqual(mastraTotalUsage);
+      expect(streamTextUsage).toEqual(mastraUsage);
+    });
+
+    it.only('Should be equal for usage and totalUsage for the same setup - with tools', async () => {
+      const prompt = 'Call the test tool with the value "test"';
+
+      const tool = {
+        description: 'Test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async ({ value }: { value: string }) => {
+          return {
+            value,
+          };
+        },
+      };
+
+      const streamTextResult = streamText({
+        prompt,
+        model: openai('gpt-4o-mini'),
+        system,
+        stopWhen: stepCountIs(5),
+        tools: {
+          tool,
+        },
+      });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        model: openai('gpt-4o-mini'),
+        instructions: system,
+        tools: {
+          tool,
+        },
+      });
+
+      const mastraStream = await agent.stream(prompt);
+
+      await streamTextResult.consumeStream();
+      await mastraStream.consumeStream();
+
+      const streamTextUsage = await streamTextResult.usage;
+      console.log('streamTextUsage:', streamTextUsage);
+      const mastraUsage = await mastraStream.usage;
+      console.log('Mastra usage:', mastraUsage);
+
+      const streamTextTotalUsage = await streamTextResult.totalUsage;
+      console.log('streamTextTotalUsage:', streamTextTotalUsage);
+      const mastraTotalUsage = await mastraStream.totalUsage;
+      console.log('Mastra total usage:', mastraTotalUsage);
+    });
+  });
+
   describe('Agent usage tracking (VNext paths)', () => {
     describe('generate', () => {
       it('should expose usage with inputTokens and outputTokens (AI SDK v5 format)', async () => {

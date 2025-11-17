@@ -95,6 +95,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #finishReason: LLMStepResult['finishReason'] = undefined;
   #request: LLMStepResult['request'] = {};
   #usageCount: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+  #lastStepUsage: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
   #tripwire = false;
   #tripwireReason = '';
 
@@ -498,7 +499,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
               self.#delayedPromises.finishReason.resolve('other');
               self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-              self.#delayedPromises.usage.resolve(self.#usageCount);
+              self.#delayedPromises.usage.resolve(self.#lastStepUsage);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(undefined);
               self.#delayedPromises.response.resolve({} as LLMStepResult<OUTPUT>['response']);
@@ -612,7 +613,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               }
 
               // Resolve all delayed promises with final values
-              self.#delayedPromises.usage.resolve(self.#usageCount);
+              self.#delayedPromises.usage.resolve(self.#lastStepUsage);
               self.#delayedPromises.warnings.resolve(self.#warnings);
               self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
               self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
@@ -865,6 +866,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     }
 
     // Use AI SDK v5 format only (MastraModelOutput is only used in VNext paths)
+    // Accumulate usage into #usageCount (for totalUsage)
     if (usage.inputTokens !== undefined) {
       this.#usageCount.inputTokens = (this.#usageCount.inputTokens ?? 0) + usage.inputTokens;
     }
@@ -880,6 +882,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     if (usage.cachedInputTokens !== undefined) {
       this.#usageCount.cachedInputTokens = (this.#usageCount.cachedInputTokens ?? 0) + usage.cachedInputTokens;
     }
+
+    // Store last step usage (overwrite, not accumulate - for .usage property)
+    this.#lastStepUsage = {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+      reasoningTokens: usage.reasoningTokens,
+      cachedInputTokens: usage.cachedInputTokens,
+    };
   }
 
   populateUsageCount(usage: Partial<LanguageModelUsage>) {
