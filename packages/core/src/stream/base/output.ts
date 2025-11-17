@@ -176,8 +176,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
-    
-    
 
     this.#model = _model;
 

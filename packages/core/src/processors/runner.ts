@@ -184,15 +184,15 @@ export class ProcessorRunner {
     // After all processors have run, update the MessageList if any processor returned an array
     if (hasArrayReturn) {
       const responseMessagesToRemove = new Set(responseMessages);
-      
+
       // Access private messages array via type assertion to filter out ALL old response messages
       (messageList as any).messages = (messageList as any).messages.filter(
-        (msg: any) => !responseMessagesToRemove.has(msg)
+        (msg: any) => !responseMessagesToRemove.has(msg),
       );
-      
+
       // Clear the response message set
       (messageList as any).newResponseMessages.clear();
-      
+
       // Add the final processed messages back
       messageList.add(processableMessages, 'response');
     }
