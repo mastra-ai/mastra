@@ -60,11 +60,6 @@ const sidebars = {
           id: "guide/web-search",
           label: "Tools: Web Search",
         },
-        {
-          type: "doc",
-          id: "guide/manual-installation",
-          label: "Manual Installation",
-        },
       ],
     },
     {
