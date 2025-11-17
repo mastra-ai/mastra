@@ -60,12 +60,13 @@ You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 
 ## Install AI SDK UI and AI Elements
 
-Install AI SDK UI along with the Mastra adapter:
+Install AI SDK along with the Mastra adapter:
 
 ```bash
 npm install \
     @mastra/ai-sdk \
-    @ai-sdk/react
+    @ai-sdk/react  \
+    ai
 ```
 
 Next, initialize AI Elements. When prompted, choose the default options:
@@ -256,7 +257,7 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 2. Open the chat at http://localhost:3000/chat
 
-3. Try asking about the weather. If your API key is set up correctly, you'll get a response.
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
 
@@ -268,8 +269,9 @@ From here, you can extend the project with your own tools and logic:
 - Give your agent its own [tools](/docs/v1/agents/using-tools)
 - Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
 
-When you're ready, read more about how Mastra integrates with AI SDK and Next.js, and how to deploy to Vercel:
+When you're ready, read more about how Mastra integrates with AI SDK and Next.js, and how to deploy your agent anywhere, including Vercel:
 
 - Integrate Mastra with [AI SDK](/docs/v1/frameworks/agentic-uis/ai-sdk)
 - Use Mastra in your [Next.js app](/docs/v1/frameworks/web-frameworks/next-js)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
 - Deploy your agent to [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
