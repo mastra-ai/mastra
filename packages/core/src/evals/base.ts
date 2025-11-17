@@ -641,7 +641,7 @@ export function createScorer<TID extends string, TInputSchema extends z.ZodTypeA
 ): MastraScorer<TID, z.infer<TInputSchema>, z.infer<TOutputSchema>, {}>;
 
 // Overload: explicit generics (backwards compatible)
-export function createScorer<TID extends string = string, TInput = any, TRunOutput = any>(
+export function createScorer<TInput = any, TRunOutput = any, TID extends string = string>(
   config: ScorerConfig<TID, TInput, TRunOutput>,
 ): MastraScorer<TID, TInput, TRunOutput, {}>;
 
