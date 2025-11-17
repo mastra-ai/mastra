@@ -681,17 +681,26 @@ function runStreamTest(version: 'v1' | 'v2') {
     it(`should show correct request input for multi-turn inputs with memory`, async () => {
       const threadId = '1';
       const resourceId = '2';
-      
+
       // Create historical messages with older timestamps
       const historicalTimestamp1 = new Date(Date.now() - 60000); // 1 minute ago
       const historicalTimestamp2 = new Date(Date.now() - 55000); // 55 seconds ago
-      const historicalMessages = new MessageList({ threadId, resourceId }).add(
-        [
-          { role: `user`, content: `hello!`, threadId, resourceId, createdAt: historicalTimestamp1, id: 'hist-1' },
-          { role: 'assistant', content: 'hi, how are you?', threadId, resourceId, createdAt: historicalTimestamp2, id: 'hist-2' },
-        ],
-        `memory`,
-      ).get.remembered.db();
+      const historicalMessages = new MessageList({ threadId, resourceId })
+        .add(
+          [
+            { role: `user`, content: `hello!`, threadId, resourceId, createdAt: historicalTimestamp1, id: 'hist-1' },
+            {
+              role: 'assistant',
+              content: 'hi, how are you?',
+              threadId,
+              resourceId,
+              createdAt: historicalTimestamp2,
+              id: 'hist-2',
+            },
+          ],
+          `memory`,
+        )
+        .get.remembered.db();
 
       // Create a mock InputProcessor that simulates MessageHistory behavior
       const mockMessageHistoryProcessor: InputProcessor = {
@@ -800,7 +809,7 @@ function runStreamTest(version: 'v1' | 'v2') {
           // Filter out messages that are already in the current messages list
           const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
           const uniqueHistoricalMessages = historicalMessagesResult.messages.filter(
-            (m: MastraDBMessage) => !m.id || !messageIds.has(m.id)
+            (m: MastraDBMessage) => !m.id || !messageIds.has(m.id),
           );
 
           // Reverse to chronological order (oldest first) since we fetched DESC
