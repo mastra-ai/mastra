@@ -119,7 +119,7 @@ export class Memory extends MastraMemory {
 
     // Add working memory input processor if configured
     const isWorkingMemoryEnabled =
-      typeof this.threadConfig.workingMemory === 'object' && this.threadConfig.workingMemory.enabled !== false;
+      typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
 
     if (isWorkingMemoryEnabled) {
       if (!this.storage?.stores?.memory)

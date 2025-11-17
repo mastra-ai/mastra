@@ -473,12 +473,8 @@ export class ProcessorRunner {
 
       // First, remove ALL original input messages from the MessageList
       // This ensures messages filtered out by processors are actually removed
-      for (const originalMsg of originalUserMessages) {
-        const existingIndex = messageList['messages'].findIndex(m => m.id === originalMsg.id);
-        if (existingIndex !== -1) {
-          messageList['messages'].splice(existingIndex, 1);
-        }
-      }
+      const originalMessageIdsToRemove = originalUserMessages.map(m => m.id).filter(Boolean) as string[];
+      messageList.removeByIds(originalMessageIdsToRemove);
 
       // Add non-system messages with correct source
       // Messages that were in the original input get source='input'

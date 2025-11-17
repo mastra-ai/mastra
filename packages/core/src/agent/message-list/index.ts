@@ -262,6 +262,24 @@ export class MessageList {
     };
   }
 
+  /**
+   * Remove messages by ID
+   * @param ids - Array of message IDs to remove
+   * @returns Array of removed messages
+   */
+  public removeByIds(ids: string[]): MastraDBMessage[] {
+    const idsSet = new Set(ids);
+    const removed: MastraDBMessage[] = [];
+    this.messages = this.messages.filter(m => {
+      if (idsSet.has(m.id)) {
+        removed.push(m);
+        return false;
+      }
+      return true;
+    });
+    return removed;
+  }
+
   private all = {
     db: (): MastraDBMessage[] => this.messages,
     v1: (): MastraMessageV1[] => convertToV1Messages(this.all.db()),
