@@ -3701,8 +3701,10 @@ describe('MastraInngestWorkflow', () => {
       }
 
       expect(result.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any).error).toBeInstanceOf(Error);
       expect(result.error.message).toEqual(testError.message);
       expect(result.error).toMatchObject(testError);
+      expect((result.steps.step2 as any).error).toMatchObject(testError);
 
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)

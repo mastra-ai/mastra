@@ -21,6 +21,7 @@ import {
   runCountDeprecationMessage,
   validateStepResumeData,
   createTimeTravelExecutionParams,
+  hydrateSerializedStepErrors,
 } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
@@ -175,6 +176,10 @@ export class InngestRun<
           workflowName: this.workflowId,
           runId: this.runId,
         });
+        if (snapshot?.context) {
+          snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+        }
+
         return {
           output: {
             result: {
