@@ -41,6 +41,31 @@ const ALLOWED_FUNCTIONS = new Set([
   'least',
 ]);
 
+/**
+ * Sanitize SQL query by removing string literals and comments before pattern matching.
+ * This prevents false positives from dangerous patterns appearing in string literals.
+ */
+const sanitizeQueryForPatternMatching = (query: string): string => {
+  let sanitized = query;
+
+  // Remove single-quoted string literals (handle escaped quotes)
+  sanitized = sanitized.replace(/'(?:''|[^'])*'/g, "''");
+
+  // Remove double-quoted identifiers (handle escaped quotes)
+  sanitized = sanitized.replace(/"(?:""|[^"])*"/g, '""');
+
+  // Remove multi-line /* */ comments
+  sanitized = sanitized.replace(/\/\*[\s\S]*?\*\//g, ' ');
+
+  // Remove single-line -- comments
+  sanitized = sanitized.replace(/--.*$/gm, ' ');
+
+  // Normalize whitespace
+  sanitized = sanitized.replace(/\s+/g, ' ');
+
+  return sanitized.toLowerCase();
+};
+
 const validateQuery = (query: string) => {
   const trimmedQuery = query.trim().toLowerCase();
 
@@ -48,17 +73,13 @@ const validateQuery = (query: string) => {
     throw new Error('Only SELECT queries are allowed for security reasons');
   }
 
-  // Normalize the query by removing comments and extra whitespace for pattern matching
-  const normalizedQuery = query
-    .replace(/\/\*[\s\S]*?\*\//g, ' ') // Remove /* */ comments
-    .replace(/--.*$/gm, ' ') // Remove -- comments
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .toLowerCase();
+  // Sanitize the query by removing string literals and comments before checking patterns
+  const normalizedQuery = sanitizeQueryForPatternMatching(query);
 
   // Block common dangerous patterns with more robust regex
   const dangerousPatterns = [
-    // PostgreSQL system functions - handles whitespace and comments
-    /pg_\s*\w+\s*\(/i,
+    // PostgreSQL system functions - handles schema-qualified calls (e.g., pg_catalog.pg_sleep, public.pg_read_file)
+    /(?:\w+\.)?pg_\s*\w+\s*\(/i,
 
     // Information schema access
     /information_schema/i,
@@ -77,20 +98,10 @@ const validateQuery = (query: string) => {
 
     // Time/resource manipulation
     /\bsleep\s*\(/i,
-    /\bpg_sleep\s*\(/i,
 
     // Administrative functions
     /\bcurrent_setting\s*\(/i,
     /\bset_config\s*\(/i,
-
-    // Process/system functions
-    /\bpg_terminate_backend\s*\(/i,
-    /\bpg_cancel_backend\s*\(/i,
-
-    // File system functions
-    /\bpg_read_file\s*\(/i,
-    /\bpg_ls_dir\s*\(/i,
-    /\bpg_stat_file\s*\(/i,
 
     // Network functions
     /\binet_client_addr\s*\(/i,
@@ -104,14 +115,15 @@ const validateQuery = (query: string) => {
   }
 
   // Extract and validate function calls more robustly
-  // This regex finds function calls while handling whitespace
-  const functionMatches = normalizedQuery.match(/\b(\w+)\s*\(/g);
-  if (functionMatches) {
-    for (const match of functionMatches) {
-      const functionName = match.replace(/\s*\(/, '').trim().toLowerCase();
-      if (!ALLOWED_FUNCTIONS.has(functionName)) {
-        throw new Error(`Function '${functionName}' is not allowed for security reasons`);
-      }
+  // This regex finds function calls with optional schema prefix and captures the function name
+  // Matches: count(...), public.count(...), schema.function_name(...)
+  const functionPattern = /\b(?:\w+\.)?(\w+)\s*\(/g;
+  let match;
+  while ((match = functionPattern.exec(normalizedQuery)) !== null) {
+    // Extract the captured function name (without schema prefix)
+    const functionName = match[1].trim().toLowerCase();
+    if (!ALLOWED_FUNCTIONS.has(functionName)) {
+      throw new Error(`Function '${functionName}' is not allowed for security reasons`);
     }
   }
 
