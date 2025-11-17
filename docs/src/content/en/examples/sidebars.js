@@ -32,11 +32,6 @@ const sidebars = {
         { type: "doc", id: "agents/request-context", label: "Request Context" },
         {
           type: "doc",
-          id: "agents/deploying-mcp-server",
-          label: "Deploying an MCPServer",
-        },
-        {
-          type: "doc",
           id: "agents/ai-sdk-v5-integration",
           label: "AI SDK v5 Integration",
         },
@@ -287,8 +282,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "observability/basic-tracing",
-          label: "Basic Tracing",
+          id: "observability/basic-ai-tracing",
+          label: "Basic AI Tracing",
         },
       ],
     },
