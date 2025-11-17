@@ -68,7 +68,10 @@ export class MessageHistory implements Processor {
     const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
     const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
 
-    const mergedMessages = [...uniqueHistoricalMessages, ...messages];
+    // Reverse to chronological order (oldest first) since we fetched DESC
+    const chronologicalMessages = uniqueHistoricalMessages.reverse();
+
+    const mergedMessages = [...chronologicalMessages, ...messages];
     return mergedMessages;
   }
 
