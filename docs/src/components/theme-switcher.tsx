@@ -1,50 +1,55 @@
-import React from "react";
 import { useColorMode } from "@docusaurus/theme-common";
+import IconDarkMode from "@theme/Icon/DarkMode";
+import IconLightMode from "@theme/Icon/LightMode";
+import IconSystemColorMode from "@theme/Icon/SystemColorMode";
 import { disableTransitions } from "../utils/disableTransitions";
 
 export const ThemeSwitcher = () => {
-  const { colorMode, setColorMode } = useColorMode();
+  const { colorModeChoice, setColorMode } = useColorMode();
 
-  const toggleTheme = () => {
+  const toggleTheme = ({
+    colorMode,
+  }: {
+    colorMode: typeof colorModeChoice;
+  }) => {
     const enableTransitions = disableTransitions();
-    setColorMode(colorMode === "light" ? "dark" : "light");
+    setColorMode(colorMode);
     setTimeout(() => {
       enableTransitions();
     }, 0);
   };
 
   const getAriaLabel = () => {
-    return colorMode === "light"
-      ? "Switch to dark theme"
-      : "Switch to light theme";
+    return colorModeChoice === "light"
+      ? "light mode"
+      : colorModeChoice === "dark"
+        ? "dark mode"
+        : "system mode";
   };
 
   return (
     <button
-      onClick={toggleTheme}
+      onClick={() =>
+        toggleTheme({
+          colorMode:
+            colorModeChoice === "light"
+              ? "dark"
+              : colorModeChoice === "dark"
+                ? null
+                : "light",
+        })
+      }
       className="w-fit hover:bg-(--mastra-surface-3) hover:dark:bg-[#121212] text-black hover:text-black dark:text-white dark:hover:text-white transition-colors ease-linear p-2 rounded-[10px] cursor-pointer border-0 bg-transparent"
       aria-label={getAriaLabel()}
       title={getAriaLabel()}
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="size-4.5"
-      >
-        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-        <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path>
-        <path d="M12 3l0 18"></path>
-        <path d="M12 9l4.65 -4.65"></path>
-        <path d="M12 14.3l7.37 -7.37"></path>
-        <path d="M12 19.6l8.85 -8.85"></path>
-      </svg>
+      {colorModeChoice === "light" ? (
+        <IconLightMode className="size-5" />
+      ) : colorModeChoice === "dark" ? (
+        <IconDarkMode className="size-5" />
+      ) : (
+        <IconSystemColorMode className="size-5" />
+      )}
       <span className="sr-only">{getAriaLabel()}</span>
     </button>
   );

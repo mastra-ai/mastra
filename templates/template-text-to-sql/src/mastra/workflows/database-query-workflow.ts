@@ -90,20 +90,22 @@ const seedDatabaseStep = createStep({
         throw new Error('Database seeding tool is not available');
       }
 
-      const seedResult = await databaseSeedingTool.execute({
-        context: { connectionString },
-        requestContext: requestContext || new RequestContext(),
-      });
+      const seedResult = await databaseSeedingTool.execute(
+        { connectionString },
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard to ensure we have seed result
-      if (!seedResult || typeof seedResult !== 'object') {
-        throw new Error('Invalid seed result returned from seeding tool');
+      if ('error' in seedResult) {
+        throw new Error(`Invalid seed result returned from seeding tool: ${seedResult.error}`);
       }
 
       return {
         connectionString,
         seeded: true,
-        seedResult: seedResult as any,
+        seedResult,
       };
     } catch (error) {
       throw new Error(`Failed to seed database: ${error instanceof Error ? error.message : String(error)}`);
@@ -149,10 +151,12 @@ const introspectDatabaseStep = createStep({
         throw new Error('Database introspection tool is not available');
       }
 
-      const schemaData = await databaseIntrospectionTool.execute({
-        context: { connectionString },
-        requestContext: requestContext || new RequestContext(),
-      });
+      const schemaData = await databaseIntrospectionTool.execute(
+        { connectionString },
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard to ensure we have schema data
       if (!schemaData || typeof schemaData !== 'object') {
@@ -255,13 +259,15 @@ const generateSQLStep = createStep({
         throw new Error('SQL generation tool is not available');
       }
 
-      const generatedSQL = await sqlGenerationTool.execute({
-        context: {
+      const generatedSQL = await sqlGenerationTool.execute(
+        {
           naturalLanguageQuery,
           databaseSchema: schema,
         },
-        requestContext: requestContext || new RequestContext(),
-      });
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard for generated SQL
       if (!generatedSQL || typeof generatedSQL !== 'object') {
@@ -354,13 +360,15 @@ const reviewAndExecuteStep = createStep({
         throw new Error('SQL execution tool is not available');
       }
 
-      const result = await sqlExecutionTool.execute({
-        context: {
+      const result = await sqlExecutionTool.execute(
+        {
           connectionString,
           query: finalSQL,
         },
-        requestContext: requestContext || new RequestContext(),
-      });
+        {
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
 
       // Type guard for execution result
       if (!result || typeof result !== 'object') {

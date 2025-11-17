@@ -37,18 +37,20 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/provider": "^2.0.0",
     "ai": "^5.0.76",
     "ai-v4": "npm:ai@4.3.19",
-    "@ai-sdk/provider": "^2.0.0",
     "fastembed": "^1.14.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=22.13.0"
