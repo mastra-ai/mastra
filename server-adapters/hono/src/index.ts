@@ -121,7 +121,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     res.header('Content-Type', 'text/plain');
     res.header('Transfer-Encoding', 'chunked');
 
-    const streamMode: 'data' | 'plain' = result instanceof ReadableStream ? 'plain' : 'data';
+    const streamFormat = route.streamFormat || 'stream';
 
     return stream(
       res,
@@ -139,7 +139,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
             if (done) break;
 
             if (value) {
-              if (streamMode === 'data') {
+              if (streamFormat === 'sse') {
                 await stream.write(`data: ${JSON.stringify(value)}\n\n`);
               } else {
                 await stream.write(JSON.stringify(value) + '\x1E');
@@ -180,6 +180,9 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
       return this.stream(route, response, result as { fullStream: ReadableStream });
+    } else if (route.responseType === 'datastream-response') {
+      // Handle AI SDK Response objects - Hono accepts Response objects natively
+      return result;
     } else {
       return response.status(500);
     }

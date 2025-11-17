@@ -115,7 +115,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     res.setHeader('Content-Type', 'text/plain');
     res.setHeader('Transfer-Encoding', 'chunked');
 
-    const streamMode: 'data' | 'plain' = result instanceof ReadableStream ? 'plain' : 'data';
+    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
@@ -126,7 +126,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         if (done) break;
 
         if (value) {
-          if (streamMode === 'data') {
+          if (streamFormat === 'sse') {
             res.write(`data: ${JSON.stringify(value)}\n\n`);
           } else {
             res.write(JSON.stringify(value) + '\x1E');
@@ -155,6 +155,25 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
       response.json(result);
     } else if (route.responseType === 'stream') {
       await this.stream(route, response, result as { fullStream: ReadableStream });
+    } else if (route.responseType === 'datastream-response') {
+      // Handle AI SDK Response objects - pipe Response.body to Express response
+      const fetchResponse = result as globalThis.Response;
+      fetchResponse.headers.forEach((value, key) => response.setHeader(key, value));
+      response.status(fetchResponse.status);
+      if (fetchResponse.body) {
+        const reader = fetchResponse.body.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            response.write(value);
+          }
+        } finally {
+          response.end();
+        }
+      } else {
+        response.end();
+      }
     } else {
       response.sendStatus(500);
     }
