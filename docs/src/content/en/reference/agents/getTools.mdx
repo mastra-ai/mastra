@@ -1,16 +1,16 @@
 ---
-title: "Reference: Agent.listTools() | Agents"
-description: "Documentation for the `Agent.listTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+title: "Reference: Agent.getTools() | Agents"
+description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
 ---
 
-# Agent.listTools()
+# Agent.getTools()
 
-The `.listTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+The `.getTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
 
 ## Usage example
 
 ```typescript copy
-await agent.listTools();
+await agent.getTools();
 ```
 
 ## Parameters
@@ -22,7 +22,7 @@ await agent.listTools();
       type: "{ requestContext?: RequestContext }",
       isOptional: true,
       defaultValue: "{}",
-      description: "Optional configuration object containing request context.",
+      description: "Optional configuration object containing runtime context.",
     },
   ]}
 />
@@ -43,7 +43,7 @@ await agent.listTools();
 ## Extended usage example
 
 ```typescript copy
-await agent.listTools({
+await agent.getTools({
   requestContext: new RequestContext(),
 });
 ```
@@ -58,7 +58,7 @@ await agent.listTools({
       isOptional: true,
       defaultValue: "new RequestContext()",
       description:
-        "Request Context for dependency injection and contextual information.",
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -66,4 +66,4 @@ await agent.listTools({
 ## Related
 
 - [Using tools with agents](/docs/v1/agents/using-tools)
-- [Creating tools](/docs/v1/mcp/overview)
+- [MCP Overview](/docs/v1/mcp/overview)
