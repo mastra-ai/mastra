@@ -117,10 +117,10 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
       });
     }, 30000);
 
-    it('should filter vectors correctly', async () => {
+    it('should upsert and query multiple vectors with different IDs', async () => {
       // Note: Azure AI Search stores metadata as JSON string, so filtering by metadata fields
       // is not directly supported without creating explicit filterable fields in the index.
-      // This test verifies basic filtering capabilities using the document ID field.
+      // This test verifies basic indexing and retrieval of multiple documents.
 
       const testData = [
         { content: 'First iPhone document' },
