@@ -201,7 +201,7 @@
     "@sindresorhus/slugify": "^2.2.1",
     "ai-v5": "npm:ai@5.0.76",
     "dotenv": "^16.6.1",
-    "hono": "^4.9.7",
+    "hono": "^4.10.5",
     "hono-openapi": "^0.4.8",
     "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
