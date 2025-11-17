@@ -204,7 +204,7 @@ To migrate, update from `output` or `experimental_output` to `structuredOutput.s
 
 ### Agent `id` field is now required
 
-The `id` field is now required when creating an Agent. Previously, agents could be created without an explicit ID, but this is no longer supported. This change enables typesafe autocomplete for `mastra.getAgentById()` and ensures consistent agent identification throughout the system.
+The `id` field is now required when creating an Agent. Previously, agents could be created without an explicit ID, but this is no longer supported.
 
 To migrate, add an `id` field to all Agent configurations.
 
@@ -227,7 +227,7 @@ const mastra = new Mastra({
   },
 });
 
-// Retrieve by ID (now with autocomplete!)
+// Retrieve by ID
 const agent = mastra.getAgentById('my-agent');
 ```
 
