@@ -2577,7 +2577,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     // Run output processors (e.g., SemanticRecall for embeddings) if they haven't already been run
-    if (!outputProcessorsRan && !messageList.outputProcessorsRan) {
+    if (!outputProcessorsRan) {
       await this.__runOutputProcessors({
         messageList,
         requestContext,

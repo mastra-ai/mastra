@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
 import { TripWire } from '../../agent';
-import { MessageList } from '../../agent/message-list';
+import type { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
@@ -570,34 +570,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               };
 
               try {
-                if (self.processorRunner && !self.#options.isLLMExecutionStep) {
-                  self.messageList = await self.processorRunner.runOutputProcessors(
-                    self.messageList,
-                    options.tracingContext,
-                  );
-                  self.messageList.outputProcessorsRan = true;
-                  const outputText = self.messageList.get.response.aiV4
-                    .core()
-                    .map(m => MessageList.coreContentToString(m.content))
-                    .join('\n');
-
-                  self.#delayedPromises.text.resolve(outputText);
-                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
-
-                  // Update response with processed messages after output processors have run
-                  response = {
-                    ...response,
-                    messages: messageList.get.response.aiV5.model(),
-                    uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
-                  };
-                } else {
-                  const textContent = self.#bufferedText.join('');
-                  self.#delayedPromises.text.resolve(textContent);
-                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
-                }
+                // Output processors are now run centrally in agent.#executeOnFinish
+                // to avoid duplication and simplify coordination
+                const textContent = self.#bufferedText.join('');
+                self.#delayedPromises.text.resolve(textContent);
+                self.#delayedPromises.finishReason.resolve(self.#finishReason);
               } catch (error) {
-                // Mark processors as run even if they threw an error, to prevent double execution
-                self.messageList.outputProcessorsRan = true;
                 if (error instanceof TripWire) {
                   self.#tripwire = true;
                   self.#tripwireReason = error.message;
