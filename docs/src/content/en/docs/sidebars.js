@@ -28,11 +28,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "getting-started/installation",
-          label: "Installation",
-        },
-        {
-          type: "doc",
           id: "getting-started/studio",
           label: "Studio",
         },

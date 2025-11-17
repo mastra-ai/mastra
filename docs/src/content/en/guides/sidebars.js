@@ -23,6 +23,11 @@ const sidebars = {
           id: "quickstarts/nextjs",
           label: "Next.js",
         },
+        {
+          type: "doc",
+          id: "quickstarts/manual-install",
+          label: "Manual Install",
+        },
       ],
     },
     {
