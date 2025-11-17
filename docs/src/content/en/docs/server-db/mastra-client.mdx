@@ -240,7 +240,6 @@ const handleClientTool = async () => {
 This is a standard Mastra [agent](../agents/overview#setting-up-agents) configured to return hex color codes, intended to work with the browser-based client tool defined above.
 
 ```typescript title="src/mastra/agents/color-agent" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const colorAgent = new Agent({
@@ -249,7 +248,7 @@ export const colorAgent = new Agent({
   instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
 });
 ```
 

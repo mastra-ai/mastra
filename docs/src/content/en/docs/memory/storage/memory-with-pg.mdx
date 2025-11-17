@@ -29,7 +29,6 @@ To add PostgreSQL memory to an agent use the `Memory` class and create a new `st
 ```typescript title="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { PostgresStore } from "@mastra/pg";
 
 export const pgAgent = new Agent({
@@ -37,7 +36,7 @@ export const pgAgent = new Agent({
   name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',
@@ -65,7 +64,6 @@ Add the following to your agent:
 ```typescript title="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { PostgresStore, PgVector } from "@mastra/pg";
 import { fastembed } from "@mastra/fastembed";
 
@@ -74,7 +72,7 @@ export const pgAgent = new Agent({
   name: "PG Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     storage: new PostgresStore({
       id: 'pg-agent-storage',

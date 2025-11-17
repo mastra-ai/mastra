@@ -63,7 +63,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-4.1-mini",
 });
 ```
 
@@ -105,14 +105,13 @@ See the [AI SDK Providers](https://ai-sdk.dev/providers/ai-sdk-providers) in the
 To create an agent in Mastra, use the `Agent` class. Every agent must include `instructions` to define its behavior, and a `model` parameter to specify the LLM provider and model. When using the Vercel AI SDK, provide the client to your agent's `model` field:
 
 ```typescript title="src/mastra/agents/test-agent.ts" copy
-import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a helpful assistant.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
 });
 ```
 
@@ -322,7 +321,7 @@ const response = await testAgentWithTools.generate(
         summary: z.string(),
         keywords: z.array(z.string()),
       }),
-      model: "openai/gpt-4o",
+      model: "openai/gpt-4.1-mini",
     },
   },
 );
@@ -446,8 +445,8 @@ export const testAgent = new Agent({
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
     return userTier === "enterprise"
-      ? openai("gpt-4o-mini")
-      : openai("gpt-4.1-nano");
+      ? "openai/gpt-4.1-mini"
+      : "openai/gpt-4.1-nano";
   },
 });
 ```

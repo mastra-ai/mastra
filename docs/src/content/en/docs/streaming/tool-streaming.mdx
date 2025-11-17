@@ -18,8 +18,7 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
-```typescript {4,10} showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
+```typescript {3,9} showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
 
 import { testTool } from "../tools/test-tool";
@@ -28,7 +27,7 @@ export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
   instructions: "You are a weather agent.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4.1-mini",
   tools: { testTool },
 });
 ```

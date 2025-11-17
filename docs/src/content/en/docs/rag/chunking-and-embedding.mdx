@@ -105,11 +105,10 @@ The model router automatically handles API key detection from environment variab
 You can also use AI SDK embedding models directly:
 
 ```ts showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: chunks.map((chunk) => chunk.text),
 });
 ```
@@ -158,8 +157,6 @@ Here's an example showing document processing and embedding generation with both
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
-import { openai } from "@ai-sdk/openai";
-import { cohere } from "@ai-sdk/cohere";
 
 import { MDocument } from "@mastra/rag";
 
@@ -178,7 +175,7 @@ const chunks = await doc.chunk({
 
 // Generate embeddings with OpenAI
 const { embeddings: openAIEmbeddings } = await embedMany({
-  model: openai.embedding("text-embedding-3-small"),
+  model: "openai/text-embedding-3-small",
   values: chunks.map((chunk) => chunk.text),
 });
 
@@ -186,7 +183,7 @@ const { embeddings: openAIEmbeddings } = await embedMany({
 
 // Generate embeddings with Cohere
 const { embeddings: cohereEmbeddings } = await embedMany({
-  model: cohere.embedding("embed-english-v3.0"),
+  model: "cohere/embed-english-v3.0",
   values: chunks.map((chunk) => chunk.text),
 });
 

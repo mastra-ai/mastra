@@ -30,7 +30,6 @@ To add MongoDB memory to an agent use the `Memory` class and create a new `stora
 ```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { MongoDBStore } from "@mastra/mongodb";
 
 export const mongodbAgent = new Agent({
@@ -38,7 +37,7 @@ export const mongodbAgent = new Agent({
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,
@@ -71,7 +70,6 @@ Add the following to your agent:
 ```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
 import { fastembed } from "@mastra/fastembed";
 
@@ -80,7 +78,7 @@ export const mongodbAgent = new Agent({
   name: "mongodb-agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     storage: new MongoDBStore({
       url: process.env.MONGODB_URI!,

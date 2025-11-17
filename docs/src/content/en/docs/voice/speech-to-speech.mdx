@@ -38,7 +38,7 @@ const agent = new Agent({
   id: "agent",
   name: "OpenAI Realtime Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -73,7 +73,7 @@ const agent = new Agent({
   instructions:
     "You are a helpful assistant with real-time voice capabilities.",
   // Model used for text generation; voice provider handles realtime audio
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   voice: new GeminiLiveVoice({
     apiKey: process.env.GOOGLE_API_KEY,
     model: "gemini-2.0-flash-exp",

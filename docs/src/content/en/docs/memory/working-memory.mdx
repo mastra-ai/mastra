@@ -24,17 +24,16 @@ Working memory can persist at two different scopes:
 
 Here's a minimal example of setting up an agent with working memory:
 
-```typescript {12-15}
+```typescript {11-14}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
 
 // Create agent with working memory enabled
 const agent = new Agent({
   id: "personal-assistant",
   name: "PersonalAssistant",
   instructions: "You are a helpful personal assistant.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: new Memory({
     options: {
       workingMemory: {
