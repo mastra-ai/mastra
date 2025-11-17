@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import { RequestContext } from '../../di';
-import { MastraError } from '../../error';
+import { getErrorFromUnknown, MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
@@ -2998,7 +2998,10 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        expect((step1Result as any)?.error).toMatch(/^Error: Failed/);
+        expect((step1Result as any)?.error).toMatchObject({
+          name: 'Error',
+          message: 'Failed',
+        });
 
         await mastra.stopEventEngine();
       });
@@ -3566,7 +3569,10 @@ describe('Workflow', () => {
       // Type guard for result.error
       if (result.status === 'failed') {
         // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toMatch(/^Error: Step execution failed/); // Now safe to access
+        expect(result.error).toMatchObject({
+          name: 'Error',
+          message: 'Step execution failed',
+        });
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -3582,7 +3588,10 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
+      expect((step1Result as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step execution failed',
+      });
 
       await mastra.stopEventEngine();
     });
@@ -3711,7 +3720,10 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
-      expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
+      expect((result.steps?.step2 as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step execution failed',
+      });
 
       await mastra.stopEventEngine();
     });
@@ -3784,7 +3796,10 @@ describe('Workflow', () => {
         },
       });
 
-      expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Step execution failed/);
+      expect((result.steps?.['test-workflow'] as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step execution failed',
+      });
 
       await mastra.stopEventEngine();
     });
@@ -4736,7 +4751,10 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
       // ADD THIS SEPARATE ASSERTION
-      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
+      expect((result.steps.step2 as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step failed',
+      });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
 
@@ -4747,13 +4765,13 @@ describe('Workflow', () => {
       let err: Error | undefined;
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockImplementation(() => {
+        execute: vi.fn().mockImplementation(() => {
           err = new Error('Step failed');
           throw err;
         }),
@@ -4791,15 +4809,21 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
       expect(result.steps.step2).toMatchObject({
-        // Change to toMatchObject
         status: 'failed',
-        // error: err?.stack ?? err, // REMOVE THIS LINE
+        error: {
+          message: 'Step failed',
+          name: 'Error',
+        },
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      expect(err).toBeDefined();
       // ADD THIS SEPARATE ASSERTION
-      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
+      expect((result.steps.step2 as any)?.error).toMatchObject({
+        name: 'Error',
+        message: 'Step failed',
+      });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
 
@@ -5849,7 +5873,7 @@ describe('Workflow', () => {
       expect(failedRun.steps.step2).toEqual({
         status: 'failed',
         payload: { step1Result: 2 },
-        error: 'Error: Simulated error',
+        error: { message: 'Simulated error', name: 'Error' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
