@@ -1890,7 +1890,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                 result = await streamResult.result;
               }
 
-              return { result, runId: run.runId };
+              // Extract the actual result from the workflow execution
+              // Workflow returns { status, steps, result: actualOutput }
+              const workflowOutput = result?.result || result;
+
+              return { result: workflowOutput, runId: run.runId };
             } catch (err) {
               const mastraError = new MastraError(
                 {
