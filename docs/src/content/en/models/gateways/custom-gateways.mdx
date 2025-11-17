@@ -52,7 +52,7 @@ class MyPrivateGateway extends MastraModelGateway {
         name: 'My Provider',
         models: ['model-1', 'model-2', 'model-3'],
         apiKeyEnvVar: 'MY_API_KEY',
-        gateway: 'my-gateway-v1',
+        gateway: this.id,
         url: 'https://api.myprovider.com/v1',
       },
     };
@@ -270,7 +270,7 @@ console.log(gateway.name); // 'My Private Gateway'
 Retrieve a gateway by its unique ID:
 
 ```typescript
-const gateway = mastra.getGatewayById('my-gateway-v1');
+const gateway = mastra.getGatewayById('my-private-gateway');
 console.log(gateway.name); // 'My Private Gateway'
 ```
 
@@ -523,7 +523,7 @@ describe('MyPrivateGateway', () => {
       },
     });
 
-    const gateway = mastra.getGatewayById('my-gateway-v1');
+    const gateway = mastra.getGatewayById('my-private-gateway');
     expect(gateway).toBeDefined();
   });
 });

@@ -55,7 +55,7 @@ class MyCustomGateway extends MastraModelGateway {
 
 new Mastra({
   gateways: {
-    myGateway: new myCustomGateway(),
+    myGateway: new MyCustomGateway(),
   },
 });
 ```
