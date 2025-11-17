@@ -109,6 +109,7 @@ type StdioServerDefinition = BaseServerOptions & {
   authProvider?: never;
   reconnectionOptions?: never;
   sessionId?: never;
+  connectTimeout?: never;
 };
 
 /**
@@ -135,7 +136,14 @@ type HttpServerDefinition = BaseServerOptions & {
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
   /** Optional session ID for Streamable HTTP */
   sessionId?: StreamableHTTPClientTransportOptions['sessionId'];
+  /** Optional timeout in milliseconds for the connection phase (default: 3000ms).
+   * This timeout allows the system to switch MCP streaming protocols during the setup phase.
+   * The default is set to 3s because the long default timeout would be extremely slow for SSE backwards compat (60s).
+   */
+  connectTimeout?: number;
 };
+
+const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 
 /**
  * Configuration for connecting to an MCP server.
@@ -330,7 +338,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout } = this.serverConfig;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -347,9 +355,8 @@ export class InternalMastraMCPClient extends MastraBase {
           authProvider: authProvider,
         });
         await this.client.connect(streamableTransport, {
-          timeout:
-            // this is hardcoded to 3s because the long default timeout would be extremely slow for sse backwards compat (60s)
-            3000,
+          timeout: 
+            connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         });
         this.transport = streamableTransport;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
