@@ -3,26 +3,46 @@
  *
  * OpenTelemetry Bridge for Mastra Observability
  *
- * Enables integration with existing OTEL infrastructure through:
- * - Context extraction from active OTEL spans or W3C trace headers
- * - Context injection into Mastra span creation
- * - Framework-agnostic middleware for Express, Fastify, and Hono
+ * Provides integration with existing OTEL infrastructure:
+ * - Reads from OTEL ambient context (AsyncLocalStorage) automatically
+ * - Extracts W3C trace context from headers when needed
+ * - Works with standard OTEL auto-instrumentation
  *
- * @example
+ * @example Standard OTEL Setup
+ * ```typescript
+ * // instrumentation.js (import FIRST, before other code)
+ * import { NodeSDK } from '@opentelemetry/sdk-node';
+ * import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+ *
+ * const sdk = new NodeSDK({
+ *   serviceName: 'my-service',
+ *   instrumentations: [getNodeAutoInstrumentations()],
+ * });
+ * sdk.start();
+ * ```
+ *
+ * @example Mastra Configuration
  * ```typescript
  * import { OtelBridge } from '@mastra/otel-bridge';
  * import { Mastra } from '@mastra/core';
+ * import { Observability } from '@mastra/observability';
  *
  * const mastra = new Mastra({
- *   observability: {
+ *   observability: new Observability({
  *     configs: {
  *       default: {
  *         serviceName: 'my-service',
  *         bridge: new OtelBridge(),
  *       }
  *     }
- *   }
+ *   })
  * });
+ * ```
+ *
+ * @example Next.js Edge Runtime
+ * ```typescript
+ * // middleware.ts
+ * export { nextjsMiddleware as middleware } from '@mastra/otel-bridge/nextjs-middleware';
  * ```
  */
 
@@ -32,9 +52,3 @@ export type { OtelBridgeConfig } from './bridge.js';
 
 // Helper functions
 export { extractOtelHeaders, createOtelContext } from './helpers.js';
-
-// Middleware (re-exported with framework-specific names)
-export { otelMiddleware as expressMiddleware } from './middleware/express.js';
-export { otelPlugin as fastifyPlugin } from './middleware/fastify.js';
-export { otelMiddleware as honoMiddleware } from './middleware/hono.js';
-export { nextjsMiddleware, getNextOtelContext } from './middleware/nextjs.js';

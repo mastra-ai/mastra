@@ -2,316 +2,344 @@
 
 OpenTelemetry Bridge for Mastra Observability.
 
-Enables Mastra to integrate with existing OpenTelemetry infrastructure by extracting trace context from either active OTEL spans or W3C trace headers, and injecting that context into Mastra span creation.
+Enables Mastra to integrate with existing OpenTelemetry infrastructure by reading trace context from the active OTEL span context (via AsyncLocalStorage) or W3C trace headers.
+
+## Overview
+
+`@mastra/otel-bridge` connects Mastra's observability system with standard OpenTelemetry instrumentation. When you configure OTEL using the standard NodeSDK pattern, the bridge automatically reads context from AsyncLocalStorage without requiring any middleware.
+
+**Key Features:**
+
+- Reads from OTEL ambient context automatically (no middleware needed)
+- Works with standard OTEL auto-instrumentation
+- Extracts W3C trace context from headers when needed
+- Next.js Edge runtime support via optional middleware
 
 ## Installation
 
 ```bash
-npm install @mastra/otel-bridge
+npm install @mastra/otel-bridge @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
 # or
-pnpm add @mastra/otel-bridge
-# or
-yarn add @mastra/otel-bridge
-```
-
-Depending on which framework you're using, you may also need:
-
-```bash
-# For Express
-npm install express
-
-# For Fastify
-npm install fastify
-
-# For Hono
-npm install hono
+pnpm add @mastra/otel-bridge @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
 ```
 
 ## Quick Start
 
-### 1. Configure the Bridge
+### 1. Set up OpenTelemetry (Standard Pattern)
 
-Add the OtelBridge to your Mastra configuration:
+Create an `instrumentation.js` file and import it **before** any other code:
+
+```javascript
+// instrumentation.js
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+
+const sdk = new NodeSDK({
+  serviceName: 'my-service',
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }),
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      // Automatically instruments Express, Fastify, HTTP, and many others
+      '@opentelemetry/instrumentation-fs': {
+        enabled: false,
+      },
+    }),
+  ],
+});
+
+sdk.start();
+
+process.on('SIGTERM', async () => {
+  await sdk.shutdown();
+  process.exit(0);
+});
+```
+
+Then import this file first in your application:
+
+```typescript
+// IMPORTANT: Import instrumentation FIRST!
+import './instrumentation.js';
+
+// Now import your application code
+import express from 'express';
+import { Mastra } from '@mastra/core';
+// ... rest of your imports
+```
+
+### 2. Configure Mastra with OtelBridge
 
 ```typescript
 import { OtelBridge } from '@mastra/otel-bridge';
 import { Mastra } from '@mastra/core';
+import { Observability } from '@mastra/observability';
 
 const mastra = new Mastra({
   agents: { myAgent },
-  observability: {
+  observability: new Observability({
     configs: {
       default: {
         serviceName: 'my-service',
-        bridge: new OtelBridge({
-          extractFrom: 'both', // Try active context first, then headers
-        }),
+        bridge: new OtelBridge(),
       },
     },
-  },
+  }),
 });
 ```
 
-### 2. Add Middleware (Framework-Specific)
+### 3. Use Your Agent (No Middleware Required!)
 
-#### Hono
+The OTEL SDK's auto-instrumentation handles context propagation automatically via AsyncLocalStorage.
 
-```typescript
-import { Hono } from 'hono';
-import { honoMiddleware } from '@mastra/otel-bridge';
-
-const app = new Hono();
-
-// Add middleware globally
-app.use('*', honoMiddleware());
-
-app.post('/api/chat', async c => {
-  // OTEL context automatically extracted from headers
-  const result = await myAgent.generate({
-    messages: [{ role: 'user', content: 'Hello' }],
-  });
-  return c.json(result);
-});
-```
-
-Works universally across all Hono platforms: Node.js, Bun, Deno, Cloudflare Workers, Vercel Edge, Netlify Edge.
-
-#### Fastify
-
-```typescript
-import Fastify from 'fastify';
-import { fastifyPlugin } from '@mastra/otel-bridge';
-
-const fastify = Fastify();
-
-// Register plugin
-await fastify.register(fastifyPlugin);
-
-fastify.post('/api/chat', async (request, reply) => {
-  // OTEL context automatically extracted from headers
-  const result = await myAgent.generate({
-    messages: [{ role: 'user', content: 'Hello' }],
-  });
-  return result;
-});
-```
-
-#### Express
+#### Express Example
 
 ```typescript
 import express from 'express';
-import { expressMiddleware } from '@mastra/otel-bridge';
 
 const app = express();
-
-// Add middleware globally
-app.use(expressMiddleware());
+app.use(express.json());
 
 app.post('/api/chat', async (req, res) => {
-  // OTEL context automatically extracted from headers
-  const result = await myAgent.generate({
-    messages: [{ role: 'user', content: 'Hello' }],
-  });
-  res.json(result);
-});
-```
-
-## Usage Scenarios
-
-### Scenario A: HTTP Services with W3C Headers
-
-When incoming HTTP requests include W3C trace context headers (`traceparent`, `tracestate`), the middleware automatically extracts them and makes them available to Mastra.
-
-```typescript
-// Client sends request with headers:
-// traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
-// tracestate: vendorname1=opaqueValue1
-
-// Your handler (any framework)
-app.post('/api/chat', async req => {
-  // Bridge extracts context from headers
-  // Mastra spans will use: traceId=4bf92f3577b34da6a3ce929d0e0e4736
-  //                        parentSpanId=00f067aa0ba902b7
+  // OTEL context is automatically available via AsyncLocalStorage
+  // Bridge reads it transparently - no middleware needed!
   const result = await myAgent.generate({
     messages: [{ role: 'user', content: req.body.message }],
   });
-  return result;
+
+  res.json(result);
 });
+
+app.listen(3000);
 ```
 
-### Scenario B: Mastra Inside OTEL-Instrumented Applications
-
-When Mastra runs inside an application already instrumented with OpenTelemetry, the bridge automatically extracts context from the active OTEL span.
+#### Fastify Example
 
 ```typescript
-import { trace } from '@opentelemetry/api';
-import { OtelBridge } from '@mastra/otel-bridge';
+import Fastify from 'fastify';
 
-// Configure bridge to extract from active context
+const fastify = Fastify();
+
+fastify.post('/api/chat', async (request, reply) => {
+  // OTEL context automatically available
+  const result = await myAgent.generate({
+    messages: [{ role: 'user', content: request.body.message }],
+  });
+
+  return result;
+});
+
+await fastify.listen({ port: 3000 });
+```
+
+#### Hono Example
+
+```typescript
+import { Hono } from 'hono';
+
+const app = new Hono();
+
+app.post('/api/chat', async c => {
+  // OTEL context automatically available
+  const result = await myAgent.generate({
+    messages: [{ role: 'user', content: await c.req.json() }],
+  });
+
+  return c.json(result);
+});
+
+export default app;
+```
+
+## How It Works
+
+### Bidirectional OTEL Integration
+
+The OtelBridge provides **bidirectional integration** with OpenTelemetry:
+
+1. **Read OTEL Context** → Mastra spans inherit trace context
+2. **Export Mastra Spans** → Spans appear in your OTEL backend
+
+### Standard OTEL Auto-Instrumentation Flow
+
+```
+Incoming HTTP Request with traceparent header
+  ↓
+OTEL Auto-Instrumentation (Express/Fastify/HTTP)
+  ├─ Creates HTTP span
+  └─ Stores context in AsyncLocalStorage
+  ↓
+Your Route Handler
+  ↓
+Mastra Agent.generate() call
+  ↓
+┌─────────────────────────────────────────┐
+│ OtelBridge (Bidirectional)              │
+├─────────────────────────────────────────┤
+│ 1. READ: Extract OTEL context          │ ← AsyncLocalStorage
+│    └─ traceId, parentSpanId, isSampled │
+│                                         │
+│ 2. Mastra creates spans with           │
+│    inherited trace context              │
+│                                         │
+│ 3. EXPORT: Send to OTEL TracerProvider │ → Active TracerProvider
+│    └─ Convert to OTEL ReadableSpan     │
+└─────────────────────────────────────────┘
+  ↓
+OTEL SDK BatchSpanProcessor
+  ↓
+OTEL Exporter (configured by user)
+  ↓
+Observability Backend (Jaeger, Honeycomb, etc.)
+  └─ Shows complete trace:
+     - HTTP request span (OTEL auto-instrumentation)
+     - Agent run span (Mastra)
+     - LLM generation span (Mastra)
+     - Tool call spans (Mastra)
+```
+
+**No middleware needed!** The OTEL SDK's auto-instrumentation already handles context propagation via AsyncLocalStorage.
+
+### What the Bridge Does
+
+**Reading Context (Incoming)**:
+
+1. Calls `trace.getSpan(context.active())` to read the active OTEL span
+2. Extracts `traceId`, `spanId`, and sampling flags from the span context
+3. Provides this context to Mastra when creating spans
+4. Falls back to reading W3C headers (`traceparent`, `tracestate`) if no active span
+
+**Exporting Spans (Outgoing)**:
+
+1. Converts completed Mastra spans to OTEL `ReadableSpan` format
+2. Uses `SpanConverter` to map Mastra attributes to OTEL semantic conventions
+3. Exports through the active `TracerProvider`'s span processor
+4. Spans flow through your existing OTEL pipeline (batching, sampling, exporters)
+
+### Trace Continuity
+
+When the bridge finds active OTEL context, Mastra spans will:
+
+- Use the same `traceId` (linking all spans in the distributed trace)
+- Set `parentSpanId` to the current OTEL span (creating proper parent-child relationships)
+- Respect OTEL sampling decisions
+- Appear in your OTEL backend alongside auto-instrumentation spans
+
+## Verifying Bidirectional Flow
+
+To verify that Mastra spans are being exported to OTEL:
+
+1. **Check OTEL Backend**: View traces in Jaeger, Honeycomb, Datadog, etc.
+2. **Look for Mastra Spans**: Search for spans with names like:
+   - `agent.{agentId}` (e.g., `agent.chat-agent`)
+   - `chat {model}` (e.g., `chat gpt-4.1-nano`)
+   - `tool.execute {toolName}`
+3. **Verify Parent-Child Relationships**: Mastra spans should be children of HTTP request spans
+4. **Check Trace Continuity**: All spans should share the same `traceId`
+
+### Debugging
+
+Enable debug logging to see bridge activity:
+
+```typescript
 const mastra = new Mastra({
-  observability: {
+  observability: new Observability({
     configs: {
       default: {
         serviceName: 'my-service',
-        bridge: new OtelBridge({
-          extractFrom: 'active-context', // Only look at active OTEL spans
-        }),
+        bridge: new OtelBridge(),
       },
     },
+  }),
+  logger: {
+    level: 'debug',
+    type: 'CONSOLE',
   },
-});
-
-// Your OTEL-instrumented function
-const tracer = trace.getTracer('my-app');
-await tracer.startActiveSpan('process-request', async span => {
-  // Bridge extracts context from active span
-  // Mastra spans will inherit traceId and parentSpanId
-  const result = await myAgent.generate({
-    messages: [{ role: 'user', content: 'Hello' }],
-  });
-
-  span.end();
-  return result;
 });
 ```
 
-## Manual Context Extraction
+Look for log messages like:
 
-For frameworks without built-in middleware, you can manually extract and inject OTEL context:
+- `[OtelBridge] Extracted context from active span [traceId=...]`
+- `[OtelBridge] Exported span [id=...] [traceId=...] [type=...]`
+- `[OtelBridge] Found active OTEL span processor`
+
+## Next.js Edge Runtime
+
+Next.js Edge runtime doesn't support AsyncLocalStorage, so you need to use middleware to extract headers:
 
 ```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { createOtelContext } from '@mastra/otel-bridge';
+// middleware.ts (at app root)
+export { nextjsMiddleware as middleware } from '@mastra/otel-bridge/nextjs-middleware';
+```
 
-// Extract headers from your framework
-const context = createOtelContext({
-  traceparent: req.headers['traceparent'],
-  tracestate: req.headers['tracestate'],
+This middleware extracts W3C trace context headers and forwards them as internal headers that the bridge can read.
+
+## Manual Context Extraction
+
+For custom scenarios where you need explicit header extraction:
+
+```typescript
+import { RequestContext } from '@mastra/core/di';
+import { extractOtelHeaders } from '@mastra/otel-bridge';
+
+// Extract headers manually
+const otelHeaders = extractOtelHeaders({
+  traceparent: request.headers.get('traceparent'),
+  tracestate: request.headers.get('tracestate'),
 });
 
-// Wrap your Mastra calls
-await RuntimeContext.with(context, async () => {
-  const result = await myAgent.generate({
-    messages: [{ role: 'user', content: 'Hello' }],
-  });
-  return result;
+// Create RequestContext with OTEL headers
+const requestContext = new RequestContext([['otel.headers', otelHeaders]]);
+
+// Pass to Mastra
+const result = await myAgent.generate({
+  messages: [{ role: 'user', content: 'Hello' }],
+  requestContext,
 });
 ```
 
 ## Configuration
 
-### OtelBridgeConfig
+The `OtelBridge` constructor accepts an optional configuration object:
 
 ```typescript
 interface OtelBridgeConfig {
   /**
-   * Where to extract OTEL context from
-   * - 'active-context': From trace.getSpan(context.active())
-   * - 'headers': From RequestContext with 'otel.headers' key
+   * Where to extract OTEL context from:
+   * - 'active-context': Only from trace.getSpan(context.active())
+   * - 'headers': Only from RequestContext 'otel.headers' key
    * - 'both': Try active context first, then headers (DEFAULT)
    */
   extractFrom?: 'active-context' | 'headers' | 'both';
-
-  /**
-   * Log level for the bridge
-   */
-  logLevel?: 'debug' | 'info' | 'warn' | 'error';
 }
 ```
 
 ### Examples
 
-**Extract only from active OTEL context** (Scenario B):
+**Default (recommended)** - Try ambient context first, fall back to headers:
 
 ```typescript
-new OtelBridge({
-  extractFrom: 'active-context',
-});
+new OtelBridge(); // extractFrom: 'both' is default
 ```
 
-**Extract only from HTTP headers** (Scenario A):
+**Only use ambient context** (when OTEL auto-instrumentation is always available):
 
 ```typescript
-new OtelBridge({
-  extractFrom: 'headers',
-});
+new OtelBridge({ extractFrom: 'active-context' });
 ```
 
-**Try both (default)**:
+**Only use headers** (when running without OTEL SDK, e.g., serverless):
 
 ```typescript
-new OtelBridge({
-  extractFrom: 'both', // Tries active context first, falls back to headers
-});
-```
-
-## How It Works
-
-1. **Context Extraction**: The bridge extracts OTEL trace context from:
-   - Active OTEL spans via `trace.getSpan(context.active())`
-   - W3C headers (`traceparent`, `tracestate`) from HTTP requests
-
-2. **Context Injection**: When Mastra creates a new span, it calls `bridge.getCurrentContext()` to get:
-   - `traceId`: Links Mastra spans to existing OTEL trace
-   - `parentSpanId`: Makes Mastra spans children of OTEL spans
-   - `isSampled`: Respects OTEL sampling decisions
-
-3. **Span Creation**: Mastra creates spans with the injected context, maintaining trace continuity across OTEL and Mastra instrumentation.
-
-## Sampling Behavior
-
-The bridge respects OTEL sampling decisions:
-
-- If `isSampled: false` is received from OTEL context, Mastra will not create spans
-- If no OTEL context is found, Mastra creates spans according to its own configuration
-- This prevents duplicate or conflicting sampling decisions
-
-## Framework Support
-
-| Framework | Support Level | Import                                                    |
-| --------- | ------------- | --------------------------------------------------------- |
-| Hono      | Middleware    | `import { honoMiddleware } from '@mastra/otel-bridge'`    |
-| Fastify   | Plugin        | `import { fastifyPlugin } from '@mastra/otel-bridge'`     |
-| Express   | Middleware    | `import { expressMiddleware } from '@mastra/otel-bridge'` |
-| Other     | Manual        | `import { createOtelContext } from '@mastra/otel-bridge'` |
-
-## Helper Functions
-
-### `extractOtelHeaders(headers)`
-
-Extracts W3C trace context headers from an HTTP headers object.
-
-```typescript
-import { extractOtelHeaders } from '@mastra/otel-bridge';
-
-const otelHeaders = extractOtelHeaders({
-  traceparent: req.header('traceparent'),
-  tracestate: req.header('tracestate'),
-});
-// Returns: { traceparent?: string, tracestate?: string }
-```
-
-### `createOtelContext(headers)`
-
-Creates a RequestContext Map with OTEL headers for use with `RuntimeContext.with()`.
-
-```typescript
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { createOtelContext } from '@mastra/otel-bridge';
-
-const context = createOtelContext({
-  traceparent: req.header('traceparent'),
-  tracestate: req.header('tracestate'),
-});
-
-await RuntimeContext.with(context, async () => {
-  // Your Mastra code here
-});
+new OtelBridge({ extractFrom: 'headers' });
 ```
 
 ## Exports
 
-All exports are available from the main package:
+### Main Export
 
 ```typescript
 import {
@@ -322,38 +350,39 @@ import {
   // Helper functions
   extractOtelHeaders,
   createOtelContext,
-
-  // Framework middleware
-  expressMiddleware,
-  fastifyPlugin,
-  honoMiddleware,
 } from '@mastra/otel-bridge';
 ```
 
-### Legacy Subpath Exports (still supported)
+### Next.js Edge Middleware Export
 
-For backwards compatibility, you can still import from subpaths:
-
-- `@mastra/otel-bridge/middleware/express`
-- `@mastra/otel-bridge/middleware/fastify`
-- `@mastra/otel-bridge/middleware/hono`
+```typescript
+import { nextjsMiddleware } from '@mastra/otel-bridge/nextjs-middleware';
+```
 
 ## TypeScript Support
 
-Full TypeScript support included with type definitions for all APIs and middleware.
+Full TypeScript support with complete type definitions.
 
 ## Requirements
 
-- Node.js 18+
-- `@mastra/core` >= 1.0.0
-- `@opentelemetry/api` >= 1.9.0
-- `@opentelemetry/core` >= 1.28.0
+- **Node.js**: 22.13.0 or higher
+- **Dependencies**:
+  - `@mastra/core` >= 1.0.0
+  - `@opentelemetry/api` >= 1.9.0
 
-Framework-specific requirements (optional):
+**For Standard OTEL Setup:**
 
-- Hono 4.x (if using Hono middleware)
-- Fastify 5.x (if using Fastify middleware)
-- Express 4.x or 5.x (if using Express middleware)
+- `@opentelemetry/sdk-node` >= 0.205.0
+- `@opentelemetry/auto-instrumentations-node` >= 0.64.1
+
+## Examples
+
+See the [examples](./examples) directory for complete working examples:
+
+- [Express + OTEL Bridge](./examples/express-basic)
+- [Fastify + OTEL Bridge](./examples/fastify-basic)
+- [Hono + OTEL Bridge](./examples/hono-basic)
+- [Next.js + OTEL Bridge](./examples/nextjs-basic) (includes Edge runtime support)
 
 ## License
 

@@ -88,7 +88,7 @@ if (process.env.NODE_ENV === 'test' && memoryExporter) {
       name: span.name,
       traceId: span.spanContext().traceId,
       spanId: span.spanContext().spanId,
-      parentSpanId: span.parentSpanId,
+      parentSpanId: span.parentSpanContext?.spanId,
       kind: span.kind,
       status: span.status,
       attributes: span.attributes,

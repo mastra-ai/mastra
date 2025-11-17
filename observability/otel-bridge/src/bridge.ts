@@ -1,17 +1,22 @@
 /**
  * OpenTelemetry Bridge for Mastra Observability
  *
- * This bridge enables Mastra to integrate with existing OpenTelemetry infrastructure by:
- * 1. Extracting OTEL trace context (traceId, parentSpanId) from active context or headers
- * 2. Injecting that context into Mastra span creation
- * 3. Exporting Mastra spans to OTEL collectors
+ * This bridge enables bidirectional integration with OpenTelemetry infrastructure:
+ * 1. Reads OTEL trace context from active spans (via AsyncLocalStorage)
+ * 2. Injects that context into Mastra span creation (parent-child relationships)
+ * 3. Exports Mastra spans back to OTEL through the active TracerProvider
+ *
+ * This creates complete distributed traces where Mastra spans are properly
+ * nested within OTEL spans from auto-instrumentation.
  */
 
 import type { RequestContext } from '@mastra/core/di';
 import type { ObservabilityBridge, TracingEvent } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
+import { SpanConverter } from '@mastra/otel-exporter';
 import { trace, context as otelContext } from '@opentelemetry/api';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 /**
  * Configuration for the OtelBridge
@@ -47,9 +52,12 @@ export interface OtelBridgeConfig {
  */
 export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel-bridge';
+  private spanConverter: SpanConverter;
+  private cachedProcessor?: SpanProcessor | null;
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
+    this.spanConverter = new SpanConverter();
   }
 
   /**
@@ -114,21 +122,99 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   /**
    * Export Mastra tracing events to OTEL infrastructure
    *
-   * For Phase 1, we log the spans but don't export them yet.
-   * Full export implementation will come in a later phase.
+   * Converts Mastra spans to OTEL format and exports them through the
+   * active TracerProvider's span processor. This allows Mastra spans to
+   * appear in the same trace as OTEL auto-instrumentation spans.
    */
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    // Only log for now - full export implementation coming in Phase 2
-    if (event.type === TracingEventType.SPAN_ENDED) {
-      this.logger.debug(
-        `[OtelBridge] Would export span [id=${event.exportedSpan.id}] [traceId=${event.exportedSpan.traceId}] [type=${event.exportedSpan.type}]`,
-      );
+    // Only export completed spans to OTEL
+    // OTEL expects spans with both start and end times
+    if (event.type !== TracingEventType.SPAN_ENDED) {
+      return;
     }
 
-    // TODO: Implement full span export in Phase 2
-    // - Convert Mastra span to OTEL ReadableSpan
-    // - Export through BatchSpanProcessor
-    // - Support both active provider and standalone exporter
+    try {
+      // Get the active OTEL span processor
+      const processor = this.getActiveSpanProcessor();
+
+      if (!processor) {
+        // No active OTEL setup - log once and skip
+        if (this.cachedProcessor === undefined) {
+          this.logger.debug(
+            '[OtelBridge] No active OTEL TracerProvider found. Mastra spans will not be exported to OTEL. ' +
+              'Ensure OTEL SDK is initialized before Mastra.',
+          );
+          this.cachedProcessor = null; // Mark as checked to avoid repeated logs
+        }
+        return;
+      }
+
+      // Convert Mastra span to OTEL ReadableSpan format
+      const readableSpan = this.spanConverter.convertSpan(event.exportedSpan);
+
+      // Export the span through OTEL's processor
+      // This will batch and send to whatever exporter the user configured
+      processor.onEnd(readableSpan);
+
+      this.logger.debug(
+        `[OtelBridge] Exported span [id=${event.exportedSpan.id}] [traceId=${event.exportedSpan.traceId}] [type=${event.exportedSpan.type}]`,
+      );
+    } catch (error) {
+      this.logger.error('[OtelBridge] Failed to export span to OTEL:', error);
+    }
+  }
+
+  /**
+   * Get the active OTEL span processor from the TracerProvider
+   *
+   * This accesses the user's existing OTEL SDK configuration to export
+   * Mastra spans through their configured pipeline.
+   */
+  private getActiveSpanProcessor(): SpanProcessor | undefined {
+    // Return cached result if we already checked
+    if (this.cachedProcessor !== undefined) {
+      return this.cachedProcessor || undefined;
+    }
+
+    try {
+      let provider = trace.getTracerProvider();
+
+      // Check if it's a real TracerProvider (not NoopTracerProvider)
+      if (!provider || provider.constructor.name === 'NoopTracerProvider') {
+        this.cachedProcessor = null;
+        return undefined;
+      }
+
+      // If it's a ProxyTracerProvider, get the delegate (the real NodeTracerProvider)
+      if (provider.constructor.name === 'ProxyTracerProvider') {
+        const delegate = (provider as any).getDelegate?.() || (provider as any)._delegate;
+        if (delegate) {
+          provider = delegate;
+        }
+      }
+
+      // Access the active span processor
+      // Different ways OTEL SDKs expose the processor:
+      // - NodeTracerProvider: _activeSpanProcessor (with underscore!)
+      // - Some older versions: activeSpanProcessor or _registeredSpanProcessors
+      const activeSpanProcessor =
+        (provider as any)._activeSpanProcessor ||
+        (provider as any).activeSpanProcessor ||
+        (provider as any)._registeredSpanProcessors?.[0];
+
+      if (activeSpanProcessor) {
+        this.cachedProcessor = activeSpanProcessor;
+        this.logger.debug('[OtelBridge] Found active OTEL span processor');
+        return activeSpanProcessor;
+      }
+
+      this.cachedProcessor = null;
+      return undefined;
+    } catch (error) {
+      this.logger.debug('[OtelBridge] Failed to get active OTEL span processor:', error);
+      this.cachedProcessor = null;
+      return undefined;
+    }
   }
 
   /**

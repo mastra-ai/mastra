@@ -38,8 +38,10 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
+    "@mastra/otel-exporter": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/resources": "^2.1.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@opentelemetry/semantic-conventions": "^1.37.0",
     "fastify-plugin": "^5.1.0"
   },
@@ -48,7 +50,6 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@opentelemetry/sdk-trace-base": "^2.2.0",
     "@types/express": "^4.17.21",
     "@types/node": "^20.19.0",
     "eslint": "^9.37.0",

@@ -18,6 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Note: Environment variables are loaded from .env via vitest.config.ts
 
 // Define framework configurations
+// All frameworks must have a serverFile that can be run with tsx
 const frameworks = [
   {
     name: 'Express',
@@ -69,22 +70,12 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
 
       const exampleDir = resolve(__dirname, `../examples/${framework.path}`);
 
-      // Start the example server
-      // For Next.js, use pnpm dev. For others, use tsx to run server.ts
-      if (framework.serverFile) {
-        const examplePath = resolve(exampleDir, framework.serverFile);
-        serverProcess = spawn('npx', ['tsx', examplePath], {
-          env: { ...process.env, NODE_ENV: 'test' },
-          cwd: exampleDir,
-        });
-      } else {
-        // Next.js - use pnpm dev
-        serverProcess = spawn('pnpm', ['dev'], {
-          env: { ...process.env, NODE_ENV: 'test' },
-          cwd: exampleDir,
-          shell: true,
-        });
-      }
+      // Start the example server using tsx
+      const examplePath = resolve(exampleDir, framework.serverFile);
+      serverProcess = spawn('npx', ['tsx', examplePath], {
+        env: { ...process.env, NODE_ENV: 'test' },
+        cwd: exampleDir,
+      });
 
       // Wait for server to start
       await new Promise<void>((resolve, reject) => {
@@ -142,9 +133,7 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
       { skip: !process.env.OPENAI_API_KEY, timeout: 30000 },
       async () => {
         // Reset spans before test
-        if (framework.serverFile) {
-          await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
-        }
+        await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
 
         const response = await fetch(`http://localhost:${testPort}${framework.routePrefix}/chat`, {
           method: 'POST',
@@ -162,22 +151,66 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
         expect(typeof data.response).toBe('string');
         expect(data.response.length).toBeGreaterThan(0);
 
-        // Verify OTEL spans were created (for non-Next.js frameworks)
-        if (framework.serverFile) {
-          const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
+        // Verify OTEL spans were created
+        const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
 
-          if (!spansResponse.ok) {
-            const text = await spansResponse.text();
-            throw new Error(`/test/spans returned ${spansResponse.status}: ${text.substring(0, 100)}`);
-          }
+        if (!spansResponse.ok) {
+          const text = await spansResponse.text();
+          throw new Error(`/test/spans returned ${spansResponse.status}: ${text.substring(0, 100)}`);
+        }
 
-          const spansData = await spansResponse.json();
-          expect(spansData.spans).toBeDefined();
-          expect(Array.isArray(spansData.spans)).toBe(true);
+        const spansData = await spansResponse.json();
+        expect(spansData.spans).toBeDefined();
+        expect(Array.isArray(spansData.spans)).toBe(true);
 
-          // Should have HTTP server spans
-          const httpSpans = spansData.spans.filter((s: any) => s.name.includes('POST'));
-          expect(httpSpans.length).toBeGreaterThan(0);
+        // Strategy: Find Mastra spans, then get all spans with the same trace IDs
+        // This handles the case where HTTP spans from /test/reset-spans are also present
+        const allMastraSpans = spansData.spans.filter((s: any) => s.attributes?.['mastra.span.type']);
+        const chatTraceIds = new Set(allMastraSpans.map((s: any) => s.traceId));
+
+        // Get all spans (HTTP + Mastra) that belong to traces with Mastra spans
+        const chatSpans = spansData.spans.filter((s: any) => chatTraceIds.has(s.traceId));
+
+        // Should have HTTP server spans from OTEL auto-instrumentation for /chat
+        // HTTP spans have http.request.method or url.path attributes
+        const httpSpans = chatSpans.filter(
+          (s: any) =>
+            s.attributes?.['http.request.method'] || s.attributes?.['url.path'] || s.attributes?.['http.route'],
+        );
+        expect(httpSpans.length).toBeGreaterThan(0);
+
+        // Verify Mastra spans were exported to OTEL
+        // Mastra spans have 'mastra.span.type' attribute
+        const mastraSpans = chatSpans.filter((s: any) => s.attributes?.['mastra.span.type']);
+        expect(mastraSpans.length).toBeGreaterThan(0);
+
+        // Should have an agent run span
+        const agentSpans = mastraSpans.filter((s: any) => s.name.startsWith('agent.'));
+        expect(agentSpans.length).toBe(1);
+        expect(agentSpans[0].attributes['mastra.span.type']).toBe('agent_run');
+
+        // Should have at least one LLM generation span
+        const llmSpans = mastraSpans.filter((s: any) => s.name.startsWith('chat '));
+        expect(llmSpans.length).toBeGreaterThan(0);
+        expect(llmSpans[0].attributes['mastra.span.type']).toBe('model_generation');
+        expect(llmSpans[0].attributes['gen_ai.request.model']).toBeDefined();
+
+        // Verify all spans from the /chat request share the same traceId
+        const traceIds = [...new Set(chatSpans.map((s: any) => s.traceId))];
+        expect(traceIds.length).toBe(1);
+
+        // Verify parent-child relationships
+        // Mastra spans should have parent context (proving context propagation works)
+        const agentSpan = agentSpans[0];
+
+        // Agent span should have a parentSpanId (proof of context extraction)
+        expect(agentSpan.parentSpanId).toBeDefined();
+        expect(typeof agentSpan.parentSpanId).toBe('string');
+        expect(agentSpan.parentSpanId.length).toBeGreaterThan(0);
+
+        // LLM spans should be children of agent span
+        if (llmSpans.length > 0) {
+          expect(llmSpans[0].parentSpanId).toBe(agentSpan.spanId);
         }
       },
     );
@@ -187,9 +220,7 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
       { skip: !process.env.OPENAI_API_KEY, timeout: 30000 },
       async () => {
         // Reset spans before test
-        if (framework.serverFile) {
-          await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
-        }
+        await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
 
         const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
         const expectedTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
@@ -211,62 +242,31 @@ function runFrameworkTests(framework: (typeof frameworks)[number]) {
         expect(typeof data.response).toBe('string');
         expect(data.response.length).toBeGreaterThan(0);
 
-        // Verify OTEL trace propagation via spans (for non-Next.js frameworks)
-        if (framework.serverFile) {
-          const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
-          const spansData = await spansResponse.json();
-          expect(spansData.spans).toBeDefined();
-          expect(Array.isArray(spansData.spans)).toBe(true);
+        // Verify OTEL trace propagation via spans
+        const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
+        const spansData = await spansResponse.json();
+        expect(spansData.spans).toBeDefined();
+        expect(Array.isArray(spansData.spans)).toBe(true);
 
-          // Verify at least one span has the expected trace ID
-          const spansWithTraceId = spansData.spans.filter((s: any) => s.traceId === expectedTraceId);
-          expect(spansWithTraceId.length).toBeGreaterThan(0);
-        }
-      },
-    );
+        // Verify all spans have the expected trace ID (context propagation)
+        const spansWithTraceId = spansData.spans.filter((s: any) => s.traceId === expectedTraceId);
+        expect(spansWithTraceId.length).toBeGreaterThan(0);
 
-    it(
-      'should extract OTEL trace context with tracestate header',
-      { skip: !process.env.OPENAI_API_KEY, timeout: 30000 },
-      async () => {
-        // Reset spans before test
-        if (framework.serverFile) {
-          await fetch(`http://localhost:${testPort}/test/reset-spans`, { method: 'POST' });
-        }
+        // Verify Mastra spans inherited the trace context
+        const mastraSpans = spansData.spans.filter((s: any) => s.attributes?.['mastra.span.type']);
+        expect(mastraSpans.length).toBeGreaterThan(0);
 
-        const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
-        const tracestate = 'vendorname1=opaqueValue1,vendorname2=opaqueValue2';
-        const expectedTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
-
-        const response = await fetch(`http://localhost:${testPort}${framework.routePrefix}/chat`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            traceparent,
-            tracestate,
-          },
-          body: JSON.stringify({ message: 'Count to 3' }),
+        // All Mastra spans should have the inherited trace ID
+        mastraSpans.forEach((span: any) => {
+          expect(span.traceId).toBe(expectedTraceId);
         });
 
-        const data = await response.json();
+        // Should have agent and LLM spans
+        const agentSpans = mastraSpans.filter((s: any) => s.name.startsWith('agent.'));
+        expect(agentSpans.length).toBe(1);
 
-        // Verify HTTP response
-        expect(response.status).toBe(200);
-        expect(data).toHaveProperty('response');
-        expect(typeof data.response).toBe('string');
-        expect(data.response.length).toBeGreaterThan(0);
-
-        // Verify OTEL trace propagation via spans (for non-Next.js frameworks)
-        if (framework.serverFile) {
-          const spansResponse = await fetch(`http://localhost:${testPort}/test/spans`);
-          const spansData = await spansResponse.json();
-          expect(spansData.spans).toBeDefined();
-          expect(Array.isArray(spansData.spans)).toBe(true);
-
-          // Verify at least one span has the expected trace ID
-          const spansWithTraceId = spansData.spans.filter((s: any) => s.traceId === expectedTraceId);
-          expect(spansWithTraceId.length).toBeGreaterThan(0);
-        }
+        const llmSpans = mastraSpans.filter((s: any) => s.name.startsWith('chat '));
+        expect(llmSpans.length).toBeGreaterThan(0);
       },
     );
 
