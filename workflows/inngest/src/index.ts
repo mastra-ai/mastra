@@ -1549,6 +1549,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           executionContext.state = invokeResp.result.state;
         }
       } catch (e) {
+        const error = getErrorFromUnknown(e, { serializeStack: false });
         // Nested workflow threw an error (likely from finalization step)
         // The error cause should contain the workflow result with runId
         const errorCause = (e as any)?.cause;
@@ -1563,7 +1564,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId = randomUUID();
           result = {
             status: 'failed',
-            error: e instanceof Error ? e : new Error(String(e)),
+            error,
             steps: {},
             input: inputData,
           } as WorkflowResult<any, any, any, any>;
