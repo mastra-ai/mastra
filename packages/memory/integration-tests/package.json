@@ -29,9 +29,9 @@
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/google": "^1.2.19",
-    "@ai-sdk/openai": "^1.3.0",
-    "@ai-sdk/react": "^1.2.1",
+    "@ai-sdk/google": "^1.2.22",
+    "@ai-sdk/openai": "^1.3.24",
+    "@ai-sdk/react": "^1.2.12",
     "@mastra/fastembed": "*",
     "@mastra/libsql": "*",
     "@mastra/memory": "*",
