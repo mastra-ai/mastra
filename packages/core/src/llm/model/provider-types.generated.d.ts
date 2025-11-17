@@ -949,9 +949,7 @@ export type ProviderModelsMap = {
   readonly cerebras: readonly ['gpt-oss-120b', 'qwen-3-235b-a22b-instruct-2507', 'qwen-3-coder-480b', 'zai-glm-4.6'];
   readonly netlify: readonly [
     'anthropic/claude-3-5-haiku-20241022',
-    'anthropic/claude-3-5-haiku-latest',
     'anthropic/claude-3-7-sonnet-20250219',
-    'anthropic/claude-3-7-sonnet-latest',
     'anthropic/claude-3-haiku-20240307',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
@@ -984,7 +982,6 @@ export type ProviderModelsMap = {
     'openai/gpt-5-pro',
     'openai/gpt-5.1',
     'openai/gpt-5.1-2025-11-13',
-    'openai/gpt-image-1',
     'openai/o3',
     'openai/o3-mini',
     'openai/o4-mini',
