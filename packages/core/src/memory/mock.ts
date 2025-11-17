@@ -7,6 +7,7 @@ import type {
   MessageDeleteInput,
   WorkingMemoryTemplate,
 } from '../memory';
+import type { InputProcessor, OutputProcessor } from '../processors';
 import { InMemoryStore } from '../storage';
 import type {
   StorageListMessagesInput,
@@ -16,10 +17,30 @@ import type {
 
 export class MockMemory extends MastraMemory {
   threads: Record<string, StorageThreadType> = {};
+  private inputProcessors: InputProcessor[];
+  private outputProcessors: OutputProcessor[];
 
-  constructor({ storage }: { storage?: InMemoryStore } = {}) {
+  constructor({
+    storage,
+    inputProcessors = [],
+    outputProcessors = [],
+  }: {
+    storage?: InMemoryStore;
+    inputProcessors?: InputProcessor[];
+    outputProcessors?: OutputProcessor[];
+  } = {}) {
     super({ name: 'mock', storage: storage || new InMemoryStore() });
     this._hasOwnStorage = true;
+    this.inputProcessors = inputProcessors;
+    this.outputProcessors = outputProcessors;
+  }
+
+  getInputProcessors(): InputProcessor[] {
+    return this.inputProcessors;
+  }
+
+  getOutputProcessors(): OutputProcessor[] {
+    return this.outputProcessors;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

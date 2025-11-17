@@ -12,8 +12,10 @@ import z from 'zod';
 import { noopLogger } from '../../logger';
 import type { StorageThreadType } from '../../memory';
 import { MockMemory } from '../../memory/mock';
+import type { InputProcessor } from '../../processors';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list/index';
 import { MessageList } from '../message-list/index';
 import { assertNoDuplicateParts } from '../test-utils';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
@@ -677,21 +679,30 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it(`should show correct request input for multi-turn inputs with memory`, async () => {
-      const mockMemory = new MockMemory();
       const threadId = '1';
       const resourceId = '2';
-      // @ts-ignore
-      mockMemory.recall = async function recall() {
-        const list = new MessageList({ threadId, resourceId }).add(
-          [
-            { role: `user`, content: `hello!`, threadId, resourceId },
-            { role: 'assistant', content: 'hi, how are you?', threadId, resourceId },
-          ],
-          `memory`,
-        );
-        const remembered = list.get.remembered.db();
-        return { messages: remembered };
+      
+      // Create historical messages with older timestamps
+      const historicalTimestamp1 = new Date(Date.now() - 60000); // 1 minute ago
+      const historicalTimestamp2 = new Date(Date.now() - 55000); // 55 seconds ago
+      const historicalMessages = new MessageList({ threadId, resourceId }).add(
+        [
+          { role: `user`, content: `hello!`, threadId, resourceId, createdAt: historicalTimestamp1, id: 'hist-1' },
+          { role: 'assistant', content: 'hi, how are you?', threadId, resourceId, createdAt: historicalTimestamp2, id: 'hist-2' },
+        ],
+        `memory`,
+      ).get.remembered.db();
+
+      // Create a mock InputProcessor that simulates MessageHistory behavior
+      const mockMessageHistoryProcessor: InputProcessor = {
+        id: 'mock-message-history',
+        processInput: async ({ messages }) => {
+          // Prepend historical messages before current messages (simulating what MessageHistory does)
+          return [...historicalMessages, ...messages];
+        },
       };
+
+      const mockMemory = new MockMemory({ inputProcessors: [mockMessageHistoryProcessor] });
 
       mockMemory.getThreadById = async function getThreadById() {
         return { id: '1', createdAt: new Date(), resourceId: '2', updatedAt: new Date() } satisfies StorageThreadType;
@@ -764,7 +775,43 @@ function runStreamTest(version: 'v1' | 'v2') {
     });
 
     it(`should order tool calls/results and response text properly`, async () => {
+      const threadId = randomUUID();
+      const resourceId = 'ordering';
+
       const mockMemory = new MockMemory();
+
+      // Create a mock InputProcessor that simulates MessageHistory behavior
+      const mockMessageHistoryProcessor: InputProcessor = {
+        id: 'mock-message-history',
+        processInput: async ({ messages }) => {
+          // Fetch historical messages from the storage
+          const historicalMessagesResult = await mockMemory.storage.listMessages({
+            threadId,
+            resourceId,
+            perPage: 10,
+            page: 0,
+            orderBy: { field: 'createdAt' as const, direction: 'DESC' as const },
+          });
+
+          if (!historicalMessagesResult?.messages?.length) {
+            return messages;
+          }
+
+          // Filter out messages that are already in the current messages list
+          const messageIds = new Set(messages.map((m: MastraDBMessage) => m.id).filter(Boolean));
+          const uniqueHistoricalMessages = historicalMessagesResult.messages.filter(
+            (m: MastraDBMessage) => !m.id || !messageIds.has(m.id)
+          );
+
+          // Reverse to chronological order (oldest first) since we fetched DESC
+          const chronologicalMessages = uniqueHistoricalMessages.reverse();
+
+          return [...chronologicalMessages, ...messages];
+        },
+      };
+
+      // Set the processor after creating mockMemory so it can reference mockMemory.storage
+      mockMemory['inputProcessors'] = [mockMessageHistoryProcessor];
 
       const weatherTool = createTool({
         id: 'get_weather',
@@ -776,9 +823,6 @@ function runStreamTest(version: 'v1' | 'v2') {
           return `The weather in ${input.postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
         },
       });
-
-      const threadId = randomUUID();
-      const resourceId = 'ordering';
 
       const agent = new Agent({
         id: 'test',
@@ -842,6 +886,9 @@ function runStreamTest(version: 'v1' | 'v2') {
       }
 
       expect(firstResponse.text).toContain('65');
+
+      // Small delay to ensure second request has a later timestamp
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       let secondResponse;
       if (version === 'v1') {
