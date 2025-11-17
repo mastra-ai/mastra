@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "langfuse": "^3.38.5"
+    "langfuse": "^3.38.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
