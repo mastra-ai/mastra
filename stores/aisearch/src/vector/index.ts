@@ -785,9 +785,9 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Perform search
       const searchResults = await searchClient.search('*', searchOptions as any);
 
-      // Process results - Azure SDK returns PagedAsyncIterableIterator
+      // Process results - Azure SDK returns object with .results property
       const results: QueryResult[] = [];
-      for await (const result of searchResults as any) {
+      for await (const result of searchResults.results) {
         if (result.document) {
           const queryResult: QueryResult = {
             id: result.document.id,

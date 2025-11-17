@@ -269,20 +269,22 @@ describe('AzureAISearchVector Unit Tests', () => {
 
   describe('query', () => {
     beforeEach(() => {
-      // Mock search to return async iterator (PagedAsyncIterableIterator)
-      mockSearchClientInstance.search.mockResolvedValue(
-        (async function* () {
-          yield {
-            document: {
-              id: 'doc1',
-              vector: [0.1, 0.2, 0.3],
-              metadata: '{"type":"document"}',
-              content: 'test content',
-            },
-            score: 0.95,
-          };
-        })(),
-      );
+      // Mock search to return object with results property (async iterator)
+      const mockResults = (async function* () {
+        yield {
+          document: {
+            id: 'doc1',
+            vector: [0.1, 0.2, 0.3],
+            metadata: '{"type":"document"}',
+            content: 'test content',
+          },
+          score: 0.95,
+        };
+      })();
+
+      mockSearchClientInstance.search.mockResolvedValue({
+        results: mockResults,
+      });
     });
 
     it('should perform vector search successfully', async () => {
@@ -826,8 +828,8 @@ describe('AzureAISearchVector Memory Integration Tests', () => {
           { succeeded: true, key: 'memory-2' },
         ],
       }),
-      search: vi.fn().mockResolvedValue(
-        (async function* () {
+      search: vi.fn().mockResolvedValue({
+        results: (async function* () {
           yield {
             document: {
               id: 'memory-1',
@@ -857,7 +859,7 @@ describe('AzureAISearchVector Memory Integration Tests', () => {
             score: 0.88,
           };
         })(),
-      ),
+      }),
       getDocument: vi.fn(),
       mergeDocuments: vi.fn(),
       deleteDocuments: vi.fn(),
