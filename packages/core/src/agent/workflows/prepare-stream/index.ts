@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { InternalSpans } from '../../../ai-tracing';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
+import type { Span, SpanType } from '../../../observability';
+import { InternalSpans } from '../../../observability';
+import type { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createWorkflow } from '../../../workflows';
@@ -25,21 +25,21 @@ interface CreatePrepareStreamWorkflowOptions<
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
+  requestContext: RequestContext;
+  agentSpan: Span<SpanType.AGENT_RUN>;
   methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
   saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
-  resumeContext?: any;
+  resumeContext?: {
+    resumeData: any;
+    snapshot: any;
+  };
   agentId: string;
+  toolCallId?: string;
 }
 
 export function createPrepareStreamWorkflow<
@@ -51,10 +51,9 @@ export function createPrepareStreamWorkflow<
   threadFromArgs,
   resourceId,
   runId,
-  runtimeContext,
-  agentAISpan,
+  requestContext,
+  agentSpan,
   methodType,
-  format,
   instructions,
   memoryConfig,
   memory,
@@ -63,6 +62,7 @@ export function createPrepareStreamWorkflow<
   requireToolApproval,
   resumeContext,
   agentId,
+  toolCallId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -70,8 +70,8 @@ export function createPrepareStreamWorkflow<
     threadFromArgs,
     resourceId,
     runId,
-    runtimeContext,
-    agentAISpan,
+    requestContext,
+    agentSpan,
     methodType,
     memory,
   });
@@ -82,10 +82,9 @@ export function createPrepareStreamWorkflow<
     threadFromArgs,
     resourceId,
     runId,
-    runtimeContext,
-    agentAISpan,
+    requestContext,
+    agentSpan,
     methodType,
-    format,
     instructions,
     memoryConfig,
     memory,
@@ -95,10 +94,10 @@ export function createPrepareStreamWorkflow<
     capabilities,
     runId,
     returnScorerData,
-    format,
     requireToolApproval,
     resumeContext,
     agentId,
+    toolCallId,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -106,12 +105,11 @@ export function createPrepareStreamWorkflow<
     options,
     resourceId,
     runId,
-    runtimeContext,
+    requestContext,
     memory,
     memoryConfig,
     saveQueueManager,
-    agentAISpan,
-    instructions,
+    agentSpan,
     agentId,
   });
 

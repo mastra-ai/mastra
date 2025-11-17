@@ -4,13 +4,45 @@ import type { WorkflowRunStatus, WorkflowStepStatus } from '@mastra/core/workflo
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
-import { isDataChunkType } from './utils';
+import {
+  isAgentExecutionDataChunkType,
+  isDataChunkType,
+  isWorkflowExecutionDataChunkType,
+  safeParseErrorObject,
+} from './utils';
+
+type LanguageModelV2Usage = {
+  /**
+The number of input (prompt) tokens used.
+   */
+  inputTokens: number | undefined;
+  /**
+The number of output (completion) tokens used.
+   */
+  outputTokens: number | undefined;
+  /**
+The total number of tokens as reported by the provider.
+This number might be different from the sum of `inputTokens` and `outputTokens`
+and e.g. include reasoning tokens or other overhead.
+   */
+  totalTokens: number | undefined;
+  /**
+The number of reasoning tokens used.
+   */
+  reasoningTokens?: number | undefined;
+  /**
+The number of cached input tokens.
+   */
+  cachedInputTokens?: number | undefined;
+};
 
 type StepResult = {
   name: string;
   status: WorkflowStepStatus;
   input: Record<string, unknown> | null;
   output: unknown | null;
+  suspendPayload: Record<string, unknown> | null;
+  resumePayload: Record<string, unknown> | null;
 };
 
 export type WorkflowDataPart = {
@@ -37,6 +69,7 @@ export type NetworkDataPart = {
     name: string;
     status: 'running' | 'finished';
     steps: StepResult[];
+    usage: LanguageModelV2Usage | null;
     output: unknown | null;
   };
 };
@@ -83,7 +116,10 @@ export function WorkflowStreamToAISDKTransformer() {
 }
 
 export function AgentNetworkToAISDKTransformer() {
-  const bufferedNetworks = new Map<string, { name: string; steps: StepResult[] }>();
+  const bufferedNetworks = new Map<
+    string,
+    { name: string; steps: StepResult[]; usage: LanguageModelV2Usage | null; output: unknown | null }
+  >();
 
   return new TransformStream<
     NetworkChunkType,
@@ -112,7 +148,19 @@ export function AgentNetworkToAISDKTransformer() {
   });
 }
 
-export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
+export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
+  lastMessageId,
+  sendStart,
+  sendFinish,
+  sendReasoning,
+  sendSources,
+}: {
+  lastMessageId?: string;
+  sendStart?: boolean;
+  sendFinish?: boolean;
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+}) {
   let bufferedSteps = new Map<string, any>();
 
   return new TransformStream<ChunkType<TOutput>, object>({
@@ -121,13 +169,13 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>() {
 
       const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
         part: part as any,
-        sendReasoning: false,
-        sendSources: false,
-        sendStart: true,
-        sendFinish: true,
-        responseMessageId: chunk.runId,
-        onError() {
-          return 'Error';
+        sendReasoning,
+        sendSources,
+        sendStart,
+        sendFinish,
+        responseMessageId: lastMessageId,
+        onError(error) {
+          return safeParseErrorObject(error);
         },
       });
 
@@ -338,6 +386,8 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         status: payload.payload.status,
         input: payload.payload.payload ?? null,
         output: null,
+        suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult;
       bufferedWorkflows.set(payload.runId!, current);
       return {
@@ -365,6 +415,27 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
         data: {
           name: current.name,
           status: 'running',
+          steps: current.steps,
+          output: null,
+        },
+      } as const;
+    }
+    case 'workflow-step-suspended': {
+      const current = bufferedWorkflows.get(payload.runId!);
+      if (!current) return null;
+      current.steps[payload.payload.id] = {
+        ...current.steps[payload.payload.id]!,
+        status: payload.payload.status,
+        suspendPayload: payload.payload.suspendPayload ?? null,
+        resumePayload: payload.payload.resumePayload ?? null,
+        output: null,
+      } satisfies StepResult;
+      return {
+        type: isNested ? 'data-tool-workflow' : 'data-workflow',
+        id: payload.runId,
+        data: {
+          name: current.name,
+          status: 'suspended',
           steps: current.steps,
           output: null,
         },
@@ -401,24 +472,30 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
 
 export function transformNetwork(
   payload: NetworkChunkType,
-  bufferedNetworks: Map<string, { name: string; steps: StepResult[] }>,
+  bufferedNetworks: Map<
+    string,
+    { name: string; steps: StepResult[]; usage: LanguageModelV2Usage | null; output: unknown | null }
+  >,
   isNested?: boolean,
 ): InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType | null {
   switch (payload.type) {
     case 'routing-agent-start': {
-      if (!bufferedNetworks.has(payload.payload.runId)) {
-        bufferedNetworks.set(payload.payload.runId, {
+      if (!bufferedNetworks.has(payload.runId)) {
+        bufferedNetworks.set(payload.runId, {
           name: payload.payload.agentId,
           steps: [],
+          usage: null,
+          output: null,
         });
       }
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
-        id: payload.payload.runId,
+        id: payload.runId,
         data: {
-          name: bufferedNetworks.get(payload.payload.runId)!.name,
+          name: bufferedNetworks.get(payload.runId)!.name,
           status: 'running',
-          steps: bufferedNetworks.get(payload.payload.runId)!.steps,
+          usage: null,
+          steps: bufferedNetworks.get(payload.runId)!.steps,
           output: null,
         },
       } as const;
@@ -441,62 +518,62 @@ export function transformNetwork(
       } as const;
     }
     case 'agent-execution-start': {
-      const current = bufferedNetworks.get(payload.payload.runId) || { name: '', steps: [] };
+      const current = bufferedNetworks.get(payload.runId) || { name: '', steps: [], usage: null, output: null };
       current.steps.push({
         name: payload.payload.agentId,
         status: 'running',
         input: payload.payload.args || null,
         output: null,
+        suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
-      bufferedNetworks.set(payload.payload.runId, current);
+      bufferedNetworks.set(payload.runId, current);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
-        id: payload.payload.runId,
+        id: payload.runId,
         data: {
-          name: current.name,
+          ...current,
           status: 'running',
-          steps: current.steps,
-          output: null,
         },
       } as const;
     }
     case 'workflow-execution-start': {
-      const current = bufferedNetworks.get(payload.payload.runId) || { name: '', steps: [] };
+      const current = bufferedNetworks.get(payload.runId) || { name: '', steps: [], usage: null, output: null };
       current.steps.push({
         name: payload.payload.name,
         status: 'running',
         input: payload.payload.args || null,
         output: null,
+        suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
-      bufferedNetworks.set(payload.payload.runId, current);
+      bufferedNetworks.set(payload.runId, current);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
-        id: payload.payload.runId,
+        id: payload.runId,
         data: {
-          name: current.name,
+          ...current,
           status: 'running',
-          steps: current.steps,
-          output: null,
         },
       } as const;
     }
     case 'tool-execution-start': {
-      const current = bufferedNetworks.get(payload.payload.runId) || { name: '', steps: [] };
+      const current = bufferedNetworks.get(payload.runId) || { name: '', steps: [], usage: null, output: null };
       current.steps.push({
         name: payload.payload.args?.toolName!,
         status: 'running',
         input: payload.payload.args?.args || null,
         output: null,
+        suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
-      bufferedNetworks.set(payload.payload.runId, current);
+      bufferedNetworks.set(payload.runId, current);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
-        id: payload.payload.runId,
+        id: payload.runId,
         data: {
-          name: current.name,
+          ...current,
           status: 'running',
-          steps: current.steps,
-          output: null,
         },
       } as const;
     }
@@ -508,15 +585,17 @@ export function transformNetwork(
         status: 'success',
         input: null,
         output: payload.payload.result,
+        suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
         data: {
-          name: current.name,
+          ...current,
+          usage: payload.payload?.usage ?? current.usage,
           status: 'running',
-          steps: current.steps,
-          output: payload.payload.result ?? null,
+          output: payload.payload.result ?? current.output,
         },
       } as const;
     }
@@ -528,15 +607,16 @@ export function transformNetwork(
         status: 'success',
         input: null,
         output: payload.payload.result,
+        suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
         data: {
-          name: current.name,
+          ...current,
           status: 'running',
-          steps: current.steps,
-          output: payload.payload.result ?? null,
+          output: payload.payload.result ?? current.output,
         },
       } as const;
     }
@@ -548,43 +628,44 @@ export function transformNetwork(
         status: 'success',
         input: null,
         output: payload.payload.result,
+        suspendPayload: null,
+        resumePayload: null,
       } satisfies StepResult);
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
         data: {
-          name: current.name,
+          ...current,
+          usage: payload.payload?.usage ?? current.usage,
           status: 'running',
-          steps: current.steps,
-          output: payload.payload.result ?? null,
+          output: payload.payload.result ?? current.output,
         },
       } as const;
     }
     case 'routing-agent-end': {
-      const current = bufferedNetworks.get(payload.payload.runId);
+      const current = bufferedNetworks.get(payload.runId);
       if (!current) return null;
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
-        id: payload.payload.runId,
+        id: payload.runId,
         data: {
-          name: current.name,
+          ...current,
           status: 'finished',
-          steps: current.steps,
-          output: payload.payload?.result ?? null,
+          usage: payload.payload?.usage ?? current.usage,
+          output: payload.payload?.result ?? current.output,
         },
       } as const;
     }
     case 'network-execution-event-step-finish': {
-      const current = bufferedNetworks.get(payload.payload.runId);
+      const current = bufferedNetworks.get(payload.runId);
       if (!current) return null;
       return {
         type: isNested ? 'data-tool-network' : 'data-network',
-        id: payload.payload.runId,
+        id: payload.runId,
         data: {
-          name: current.name,
+          ...current,
           status: 'finished',
-          steps: current.steps,
-          output: payload.payload?.result ?? null,
+          output: payload.payload?.result ?? current.output,
         },
       } as const;
     }
@@ -595,10 +676,10 @@ export function transformNetwork(
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId!,
         data: {
-          name: current.name,
+          ...current,
+          usage: payload.payload?.usage ?? current.usage,
           status: 'finished',
-          steps: current.steps,
-          output: payload.payload?.result ?? null,
+          output: payload.payload?.result ?? current.output,
         },
       } as const;
     }
@@ -611,6 +692,22 @@ export function transformNetwork(
           );
         }
         return payload;
+      }
+      if (isAgentExecutionDataChunkType(payload)) {
+        if (!('data' in payload.payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload.payload;
+      }
+      if (isWorkflowExecutionDataChunkType(payload)) {
+        if (!('data' in payload.payload)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
+          );
+        }
+        return payload.payload;
       }
       return null;
     }

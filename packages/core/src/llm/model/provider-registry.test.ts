@@ -564,11 +564,18 @@ describe('GatewayRegistry Auto-Refresh', () => {
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     await registry.syncGateways(true);
 
-    // Verify .d.ts file is written to dist/llm/model/ subdirectory, not dist/ root
-    const typesFile = writtenFiles.find(f => f.includes('provider-types.generated.d.ts'));
-    expect(typesFile).toBeDefined();
-    expect(typesFile).toContain('dist/llm/model/provider-types.generated.d.ts');
-    expect(typesFile).not.toContain('dist/provider-types.generated.d.ts');
+    // Verify .d.ts file is written to both global cache and local dist/llm/model/ subdirectory
+    const typesFiles = writtenFiles.filter(f => f.includes('provider-types.generated.d.ts'));
+    expect(typesFiles.length).toBeGreaterThanOrEqual(1);
+
+    // Should write to global cache
+    const globalTypesFile = typesFiles.find(f => f.includes('.cache/mastra/provider-types.generated.d.ts'));
+    expect(globalTypesFile).toBeDefined();
+
+    // Should also write to local dist/llm/model/ (not dist/ root)
+    const localTypesFile = typesFiles.find(f => f.includes('dist/llm/model/provider-types.generated.d.ts'));
+    expect(localTypesFile).toBeDefined();
+    expect(localTypesFile).not.toContain('dist/provider-types.generated.d.ts');
 
     // Cleanup
     writeFileSpy.mockRestore();

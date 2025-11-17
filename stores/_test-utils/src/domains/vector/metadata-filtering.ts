@@ -53,7 +53,6 @@ export function createMetadataFilteringTest({
     });
 
     it('should filter by thread_id in metadata', async () => {
-      // This is how Memory.rememberMessages filters when scope is 'thread'
       const results = await vector.query({
         indexName: testIndexName,
         queryVector: [1, 0, 0, 0],
@@ -71,7 +70,6 @@ export function createMetadataFilteringTest({
     });
 
     it('should filter by resource_id in metadata', async () => {
-      // This is how Memory.rememberMessages filters when scope is 'resource'
       const results = await vector.query({
         indexName: testIndexName,
         queryVector: [0, 1, 0, 0],

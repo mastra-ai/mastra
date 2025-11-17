@@ -2,12 +2,11 @@ import { EventEmitter } from 'events';
 import { ReadableStream, TransformStream } from 'stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
-import { getValidTraceId } from '../../ai-tracing';
 import { MastraBase } from '../../base';
-import { safeParseErrorObject } from '../../error/utils.js';
+import { getErrorFromUnknown } from '../../error/utils.js';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
@@ -22,19 +21,6 @@ import type {
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './schema';
-
-export class JsonToSseTransformStream extends TransformStream<unknown, string> {
-  constructor() {
-    super({
-      transform(part, controller) {
-        controller.enqueue(`data: ${JSON.stringify(part)}\n\n`);
-      },
-      flush(controller) {
-        controller.enqueue('data: [DONE]\n\n');
-      },
-    });
-  }
-}
 
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
@@ -62,7 +48,7 @@ export function createDestructurableOutput<OUTPUT extends OutputSchema = undefin
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
-  #error: Error | string | { message: string; stack: string } | undefined;
+  #error: Error | undefined;
   #baseStream: ReadableStream<ChunkType<OUTPUT>>;
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
   #streamFinished = false;
@@ -168,6 +154,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList,
     options,
     messageId,
+    initialState,
   }: {
     model: {
       modelId: string | undefined;
@@ -178,12 +165,13 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     messageList: MessageList;
     options: MastraModelOutputOptions<OUTPUT>;
     messageId: string;
+    initialState?: any;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
-    this.traceId = getValidTraceId(options.tracingContext?.currentSpan);
+    this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
 
     this.#model = _model;
 
@@ -542,7 +530,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               // Add structured output to the latest assistant message metadata
               if (self.#bufferedObject !== undefined) {
-                const responseMessages = messageList.get.response.v2();
+                const responseMessages = messageList.get.response.db();
                 const lastAssistantMessage = [...responseMessages].reverse().find(m => m.role === 'assistant');
                 if (lastAssistantMessage) {
                   if (!lastAssistantMessage.content.metadata) {
@@ -612,7 +600,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.finishReason.resolve('other');
                   self.#delayedPromises.text.resolve('');
                 } else {
-                  self.#error = error instanceof Error ? error.message : String(error);
+                  self.#error = getErrorFromUnknown(error, {
+                    fallbackMessage: 'Unknown error in stream',
+                  });
                   self.#delayedPromises.finishReason.resolve('error');
                   self.#delayedPromises.text.resolve('');
                 }
@@ -697,83 +687,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
                 await options?.onFinish?.(onFinishPayload);
               }
-
-              if (options?.rootSpan) {
-                options.rootSpan.setAttributes({
-                  ...(self.#model.modelId ? { 'aisdk.model.id': self.#model.modelId } : {}),
-                  ...(self.#model.provider ? { 'aisdk.model.provider': self.#model.provider } : {}),
-                  ...(baseFinishStep?.usage?.reasoningTokens
-                    ? {
-                        'stream.usage.reasoningTokens': baseFinishStep.usage.reasoningTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.totalTokens
-                    ? {
-                        'stream.usage.totalTokens': baseFinishStep.usage.totalTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.usage?.inputTokens
-                    ? {
-                        'stream.usage.inputTokens': baseFinishStep.usage.inputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.outputTokens
-                    ? {
-                        'stream.usage.outputTokens': baseFinishStep.usage.outputTokens,
-                      }
-                    : {}),
-                  ...(baseFinishStep?.usage?.cachedInputTokens
-                    ? {
-                        'stream.usage.cachedInputTokens': baseFinishStep.usage.cachedInputTokens,
-                      }
-                    : {}),
-
-                  ...(baseFinishStep?.providerMetadata
-                    ? { 'stream.response.providerMetadata': JSON.stringify(baseFinishStep?.providerMetadata) }
-                    : {}),
-                  ...(baseFinishStep?.finishReason
-                    ? { 'stream.response.finishReason': baseFinishStep?.finishReason }
-                    : {}),
-                  ...(options?.telemetry_settings?.recordOutputs !== false
-                    ? { 'stream.response.text': baseFinishStep?.text }
-                    : {}),
-                  ...(baseFinishStep?.toolCalls && options?.telemetry_settings?.recordOutputs !== false
-                    ? {
-                        'stream.response.toolCalls': JSON.stringify(
-                          baseFinishStep?.toolCalls
-                            ?.map(toolCall => {
-                              return {
-                                type: 'tool-call',
-                                toolCallId: toolCall.payload?.toolCallId,
-                                args: toolCall.payload?.args,
-                                toolName: toolCall.payload?.toolName,
-                              };
-                            })
-                            .filter(Boolean),
-                        ),
-                      }
-                    : {}),
-                });
-
-                options.rootSpan.end();
-              }
               break;
 
             case 'error':
-              self.#error = chunk.payload.error as Error | string | { message: string; stack: string };
+              const error = getErrorFromUnknown(chunk.payload.error, {
+                fallbackMessage: 'Unknown error chunk in stream',
+              });
+              self.#error = error;
               self.#status = 'failed';
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
-              // Reject all delayed promises on error
-              const errorMessage = (self.#error as any)?.message || safeParseErrorObject(self.#error);
-              const errorCause = self.#error instanceof Error ? self.#error.cause : undefined;
-              const error = new Error(errorMessage, errorCause ? { cause: errorCause } : undefined);
-
               Object.values(self.#delayedPromises).forEach(promise => {
                 if (promise.status.type === 'pending') {
-                  promise.reject(error);
+                  promise.reject(self.#error);
                 }
               });
 
@@ -813,6 +739,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         tracingContext: options?.tracingContext,
       },
     });
+
+    if (initialState) {
+      this.deserializeState(initialState);
+    }
   }
 
   #getDelayedPromise<T>(promise: DelayedPromise<T>): Promise<T> {
@@ -925,13 +855,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   /**
    * Resolves to an error if an error occurred during streaming.
    */
-  get error(): Error | string | { message: string; stack: string } | undefined {
-    if (typeof this.#error === 'object') {
-      const error = new Error(this.#error.message);
-      error.stack = this.#error.stack;
-      return error;
-    }
-
+  get error(): Error | undefined {
     return this.#error;
   }
 
@@ -1019,12 +943,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     if (this.#returnScorerData) {
       scoringData = {
         input: {
-          inputMessages: this.messageList.getPersisted.input.ui(),
-          rememberedMessages: this.messageList.getPersisted.remembered.ui(),
+          inputMessages: this.messageList.getPersisted.input.db(),
+          rememberedMessages: this.messageList.getPersisted.remembered.db(),
           systemMessages: this.messageList.getSystemMessages(),
           taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
         },
-        output: this.messageList.getPersisted.response.ui(),
+        output: this.messageList.getPersisted.response.db(),
       };
     }
 
@@ -1324,6 +1248,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
       tripwireReason: this.#tripwireReason,
+      messageList: this.messageList.serialize(),
     };
   }
 
@@ -1347,5 +1272,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
     this.#tripwireReason = state.tripwireReason;
+    this.messageList = this.messageList.deserialize(state.messageList);
   }
 }

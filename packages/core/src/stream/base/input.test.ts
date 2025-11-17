@@ -305,8 +305,6 @@ describe('MastraModelInput', () => {
       expect(testInput.name).toBe('test-input');
       expect(testInput.component).toBeDefined();
       expect(typeof testInput.__setLogger).toBe('function');
-      expect(typeof testInput.__setTelemetry).toBe('function');
-      expect(typeof testInput.__getTelemetry).toBe('function');
     });
   });
 });

@@ -1,5 +1,5 @@
 ---
-title: "Reference: Couchbase Vector Store | Vector Databases | Mastra Docs"
+title: "Reference: Couchbase Vector Store | Vectors"
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
 ---
 
@@ -15,15 +15,16 @@ The `CouchbaseVector` class provides vector search using [Couchbase Vector Searc
 ## Installation
 
 ```bash copy
-npm install @mastra/couchbase
+npm install @mastra/couchbase@beta
 ```
 
 ## Usage Example
 
-```typescript copy showLineNumbers
-import { CouchbaseVector } from '@mastra/couchbase';
+```typescript copy
+import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
+  id: 'couchbase-vector',
   connectionString: process.env.COUCHBASE_CONNECTION_STRING,
   username: process.env.COUCHBASE_USERNAME,
   password: process.env.COUCHBASE_PASSWORD,
@@ -37,6 +38,11 @@ const store = new CouchbaseVector({
 
 <PropertiesTable
   content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
     {
       name: "connectionString",
       type: "string",
@@ -317,7 +323,7 @@ try {
   // Handle specific error cases
   if (error.message.includes("Invalid index name")) {
     console.error(
-      "Index name must start with a letter or underscore and contain only valid characters."
+      "Index name must start with a letter or underscore and contain only valid characters.",
     );
   } else if (error.message.includes("Index not found")) {
     console.error("The specified index does not exist");
@@ -342,4 +348,4 @@ try {
 
 ## Related
 
-- [Metadata Filters](../rag/metadata-filters) 
+- [Metadata Filters](../rag/metadata-filters)

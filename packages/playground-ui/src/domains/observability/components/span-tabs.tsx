@@ -11,13 +11,13 @@ import {
 import { TraceSpanUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
-import { GetScoresResponse } from '@mastra/client-js';
-import { AISpanRecord } from '@mastra/core';
+import { ListScoresResponse } from '@mastra/client-js';
+import { SpanRecord } from '@mastra/core/storage';
 
 type SpanTabsProps = {
-  trace?: AISpanRecord;
-  span?: AISpanRecord;
-  spanScoresData?: GetScoresResponse | null;
+  trace?: SpanRecord;
+  span?: SpanRecord;
+  spanScoresData?: ListScoresResponse | null;
   onSpanScoresPageChange?: (page: number) => void;
   isLoadingSpanScoresData?: boolean;
   spanInfo?: KeyValueListItemData[];
@@ -69,7 +69,12 @@ export function SpanTabs({
                 <CircleGaugeIcon /> Scoring
               </Section.Heading>
             </Section.Header>
-            <SpanScoring traceId={trace?.traceId} spanId={span?.spanId} entityType={entityType} />
+            <SpanScoring
+              traceId={trace?.traceId}
+              isTopLevelSpan={span?.parentSpanId === null}
+              spanId={span?.spanId}
+              entityType={entityType}
+            />
           </Section>
           <Section>
             <Section.Header>

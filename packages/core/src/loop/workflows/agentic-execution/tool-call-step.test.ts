@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import type { MessageList } from '../../../agent/message-list';
-import { RuntimeContext } from '../../../runtime-context';
+import { RequestContext } from '../../../request-context';
 import { ChunkFrom } from '../../../stream/types';
 import { ToolStream } from '../../../tools/stream';
 import { createToolCallStep } from './tool-call-step';
@@ -10,7 +10,7 @@ describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
   let streamState: { serialize: Mock };
-  let tools: Record<string, { execute: Mock }>;
+  let tools: Record<string, { execute: Mock; requireApproval: boolean }>;
   let messageList: MessageList;
   let toolCallStep: ReturnType<typeof createToolCallStep>;
   let neverResolve: Promise<never>;
@@ -26,10 +26,10 @@ describe('createToolCallStep tool approval workflow', () => {
     runId: 'test-run-id',
     workflowId: 'test-workflow-id',
     mastra: {} as any,
-    runtimeContext: new RuntimeContext(),
+    requestContext: new RequestContext(),
     state: {},
     setState: vi.fn(),
-    runCount: 1,
+    retryCount: 1,
     tracingContext: {} as any,
     getInitData: vi.fn(),
     getStepResult: vi.fn(),
@@ -65,6 +65,7 @@ describe('createToolCallStep tool approval workflow', () => {
     tools = {
       'test-tool': {
         execute: vi.fn(),
+        requireApproval: true,
       },
     };
     messageList = {
@@ -111,14 +112,19 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     });
 
-    expect(suspend).toHaveBeenCalledWith({
-      requireToolApproval: {
-        toolCallId: 'test-call-id',
-        toolName: 'test-tool',
-        args: { param: 'test' },
+    expect(suspend).toHaveBeenCalledWith(
+      {
+        requireToolApproval: {
+          toolCallId: 'test-call-id',
+          toolName: 'test-tool',
+          args: { param: 'test' },
+        },
+        __streamState: 'serialized-state',
       },
-      __streamState: 'serialized-state',
-    });
+      {
+        resumeLabel: 'test-call-id',
+      },
+    );
 
     expectNoToolExecution();
 
@@ -136,17 +142,9 @@ describe('createToolCallStep tool approval workflow', () => {
 
     // Assert: Verify error handling and execution prevention
     expect(result).toEqual({
-      error: expect.any(Error),
+      result: 'Tool call was not approved by the user',
       ...inputData,
     });
-    expect(result.error.message).toContain('Tool call was declined');
-    expect(result.error.message).toContain(
-      JSON.stringify({
-        toolCallId: 'test-call-id',
-        toolName: 'test-tool',
-        args: { param: 'test' },
-      }),
-    );
     expectNoToolExecution();
   });
 

@@ -15,15 +15,24 @@ import { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-ru
 import { MastraUIMessage } from '@mastra/react';
 import { LoadingBadge } from './loading-badge';
 import { useWorkflow } from '@/hooks';
+import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
 
-export interface WorkflowBadgeProps {
+export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
-  runId?: string;
+  result?: any;
   isStreaming?: boolean;
   metadata?: MastraUIMessage['metadata'];
 }
 
-export const WorkflowBadge = ({ runId, workflowId, isStreaming, metadata }: WorkflowBadgeProps) => {
+export const WorkflowBadge = ({
+  result,
+  workflowId,
+  isStreaming,
+  metadata,
+  toolCallId,
+  toolApprovalMetadata,
+}: WorkflowBadgeProps) => {
+  const { runId, status } = result || {};
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
@@ -60,6 +69,8 @@ export const WorkflowBadge = ({ runId, workflowId, isStreaming, metadata }: Work
       )}
 
       {isStreaming && <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />}
+
+      <ToolApprovalButtons toolCalled={!!status} toolCallId={toolCallId} toolApprovalMetadata={toolApprovalMetadata} />
     </BadgeWrapper>
   );
 };

@@ -55,3 +55,7 @@ export function parseLlmProvider(value: string) {
   }
   return value;
 }
+
+export function shouldSkipDotenvLoading(): boolean {
+  return process.env.MASTRA_SKIP_DOTENV === 'true' || process.env.MASTRA_SKIP_DOTENV === '1';
+}

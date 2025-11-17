@@ -987,9 +987,26 @@ export const databaseSeedingTool = createTool({
   inputSchema: z.object({
     connectionString: z.string().describe('PostgreSQL connection string'),
   }),
+  outputSchema: z.object({
+    success: z.boolean(),
+    message: z.string(),
+    recordCount: z.number(),
+    tablesCreated: z.array(z.string()),
+    summary: z.object({
+      companies: z.number(),
+      locations: z.number(),
+      departments: z.number(),
+      jobTitles: z.number(),
+      skills: z.number(),
+      employees: z.string(),
+      projects: z.string(),
+      relationships: z.string(),
+    }),
+  }),
   description:
     'Seeds the database with comprehensive business data including companies, employees, projects, skills, and their relationships',
-  execute: async ({ context: { connectionString } }) => {
+  execute: async inputData => {
+    const { connectionString } = inputData;
     const client = new Client({
       connectionString,
       connectionTimeoutMillis: 30000, // 30 seconds

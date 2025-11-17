@@ -9,10 +9,11 @@ export interface SpanScoringProps {
   traceId?: string;
   spanId?: string;
   entityType?: string;
+  isTopLevelSpan?: boolean;
 }
 
-export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) => {
-  const { data: scorers = {}, isLoading } = useScorers();
+export const SpanScoring = ({ traceId, spanId, entityType, isTopLevelSpan }: SpanScoringProps) => {
+  const { data: scorers = {}, isLoading, error } = useScorers();
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
@@ -34,7 +35,7 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
     .filter(scorer => scorer.isRegistered);
 
   // Filter out Scorers with type agent if we are not scoring on a top level agent generated span
-  if (entityType !== 'Agent' || spanId) {
+  if (entityType !== 'Agent' || !isTopLevelSpan) {
     scorerList = scorerList.filter(scorer => scorer.type !== 'agent');
   }
 
@@ -58,6 +59,22 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
 
   const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
 
+  if (error) {
+    return (
+      <Notification isVisible={true} autoDismiss={false} type="error">
+        <InfoIcon /> {error?.message ? error.message : 'Failed to load scorers.'}
+      </Notification>
+    );
+  }
+
+  if (scorerList.length === 0) {
+    return (
+      <Notification isVisible={true} dismissible={false}>
+        <InfoIcon /> No eligible scorers have been defined to run.
+      </Notification>
+    );
+  }
+
   return (
     <div>
       <div className="grid grid-cols-[3fr_1fr] gap-[1rem] items-start">
@@ -65,7 +82,10 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
           <SelectField
             name={'select-scorer'}
             placeholder="Select a scorer..."
-            options={scorerList.map(scorer => ({ label: scorer.name, value: scorer.name }))}
+            options={scorerList.map(scorer => ({
+              label: scorer.name || scorer.id,
+              value: scorer.id || scorer.name || '',
+            }))}
             onValueChange={handleScorerChange}
             value={selectedScorer || ''}
             className="min-w-[20rem]"

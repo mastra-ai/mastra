@@ -25,6 +25,7 @@ describe('voice capabilities', () => {
   let voiceAgent: Agent;
   beforeEach(() => {
     voiceAgent = new Agent({
+      id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are an agent with voice capabilities',
       model: openai('gpt-4o-mini'),
@@ -110,6 +111,7 @@ describe('voice capabilities', () => {
   describe('error handling', () => {
     it('should throw error when no voice provider is configured', async () => {
       const agentWithoutVoice = new Agent({
+        id: 'no-voice-agent',
         name: 'No Voice Agent',
         instructions: 'You are an agent without voice capabilities',
         model: openai('gpt-4o-mini'),

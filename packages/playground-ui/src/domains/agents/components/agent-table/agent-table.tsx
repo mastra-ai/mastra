@@ -24,18 +24,7 @@ export interface AgentsTableProps {
 export function AgentsTable({ agents, isLoading }: AgentsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
-  const projectData: AgentTableData[] = useMemo(
-    () =>
-      Object.keys(agents).map(key => {
-        const agent = agents[key];
-
-        return {
-          id: key,
-          ...agent,
-        };
-      }),
-    [agents],
-  );
+  const projectData: AgentTableData[] = useMemo(() => Object.values(agents), [agents]);
 
   const table = useReactTable({
     data: projectData,

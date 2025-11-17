@@ -117,7 +117,7 @@ export class GeminiLiveVoice extends MastraVoice<
 
   // Tool integration properties
   private tools?: ToolsInput;
-  private runtimeContext?: any;
+  private requestContext?: any;
 
   // Store the configuration options
   private options: GeminiLiveVoiceConfig;
@@ -409,93 +409,91 @@ export class GeminiLiveVoice extends MastraVoice<
   /**
    * Establish connection to the Gemini Live API
    */
-  async connect({ runtimeContext }: { runtimeContext?: any } = {}): Promise<void> {
-    return this.traced(async () => {
-      if (this.state === 'connected') {
-        this.log('Already connected to Gemini Live API');
-        return;
+  async connect({ requestContext }: { requestContext?: any } = {}): Promise<void> {
+    if (this.state === 'connected') {
+      this.log('Already connected to Gemini Live API');
+      return;
+    }
+
+    // Store request context for tool execution
+    this.requestContext = requestContext;
+
+    // Emit connecting event
+    this.emit('session', { state: 'connecting' });
+
+    try {
+      // Build WebSocket URL based on official Gemini Live API documentation
+      let wsUrl: string;
+      let headers: WebSocket.ClientOptions = {};
+
+      if (this.options.vertexAI) {
+        // Vertex AI endpoint
+        wsUrl = `wss://${this.options.location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.PredictionService.ServerStreamingPredict`;
+        // Initialize auth and get token
+        await this.authManager.initialize();
+        const accessToken = await this.authManager.getAccessToken();
+        headers = { headers: { Authorization: `Bearer ${accessToken}` } };
+        this.log('Using Vertex AI authentication with OAuth token');
+      } else {
+        // Live API endpoint - this is specifically for the Live API
+        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+        headers = {
+          headers: {
+            'x-goog-api-key': this.options.apiKey || '',
+            'Content-Type': 'application/json',
+          },
+        };
+        this.log('Using Live API authentication with API key');
       }
 
-      // Store runtime context for tool execution
-      this.runtimeContext = runtimeContext;
+      this.log('Connecting to:', wsUrl);
+      this.ws = new WebSocket(wsUrl, undefined, headers);
+      this.connectionManager.setWebSocket(this.ws);
 
-      // Emit connecting event
-      this.emit('session', { state: 'connecting' });
+      this.setupEventListeners();
 
-      try {
-        // Build WebSocket URL based on official Gemini Live API documentation
-        let wsUrl: string;
-        let headers: WebSocket.ClientOptions = {};
+      // Wait for WebSocket connection to open via ConnectionManager
+      await this.connectionManager.waitForOpen();
 
-        if (this.options.vertexAI) {
-          // Vertex AI endpoint
-          wsUrl = `wss://${this.options.location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.PredictionService.ServerStreamingPredict`;
-          // Initialize auth and get token
-          await this.authManager.initialize();
-          const accessToken = await this.authManager.getAccessToken();
-          headers = { headers: { Authorization: `Bearer ${accessToken}` } };
-          this.log('Using Vertex AI authentication with OAuth token');
-        } else {
-          // Live API endpoint - this is specifically for the Live API
-          wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
-          headers = {
-            headers: {
-              'x-goog-api-key': this.options.apiKey || '',
-              'Content-Type': 'application/json',
-            },
-          };
-          this.log('Using Live API authentication with API key');
-        }
+      // Send initial configuration or resume session
+      if (this.isResuming && this.sessionHandle) {
+        await this.sendSessionResumption();
+      } else {
+        this.sendInitialConfig();
+        this.sessionStartTime = Date.now();
+        this.sessionId = randomUUID();
+      }
 
-        this.log('Connecting to:', wsUrl);
-        this.ws = new WebSocket(wsUrl, undefined, headers);
-        this.connectionManager.setWebSocket(this.ws);
+      // Wait for session to be created after sending config
+      await this.waitForSessionCreated();
 
-        this.setupEventListeners();
+      this.state = 'connected';
 
-        // Wait for WebSocket connection to open via ConnectionManager
-        await this.connectionManager.waitForOpen();
-
-        // Send initial configuration or resume session
-        if (this.isResuming && this.sessionHandle) {
-          await this.sendSessionResumption();
-        } else {
-          this.sendInitialConfig();
-          this.sessionStartTime = Date.now();
-          this.sessionId = randomUUID();
-        }
-
-        // Wait for session to be created after sending config
-        await this.waitForSessionCreated();
-
-        this.state = 'connected';
-
-        // Emit session connected event
-        this.emit('session', {
-          state: 'connected',
-          config: {
-            sessionId: this.sessionId,
-            isResuming: this.isResuming,
-            toolCount: Object.keys(this.tools || {}).length,
-          },
-        });
-
-        this.log('Successfully connected to Gemini Live API', {
+      // Emit session connected event
+      this.emit('session', {
+        state: 'connected',
+        config: {
           sessionId: this.sessionId,
           isResuming: this.isResuming,
           toolCount: Object.keys(this.tools || {}).length,
-        });
+        },
+      });
 
-        // Start session duration monitoring if configured
-        if (this.options.sessionConfig?.maxDuration) {
-          this.startSessionDurationMonitor();
-        }
-      } catch (error) {
-        this.state = 'disconnected';
-        this.log('Connection failed', error);
-        throw error;
+      this.log('Successfully connected to Gemini Live API', {
+        sessionId: this.sessionId,
+        isResuming: this.isResuming,
+        toolCount: Object.keys(this.tools || {}).length,
+      });
+
+      // Start session duration monitoring if configured
+      if (this.options.sessionConfig?.maxDuration) {
+        this.startSessionDurationMonitor();
       }
-    }, 'gemini-live.connect')();
+    } catch (error) {
+      this.state = 'disconnected';
+      this.log('Connection failed', error);
+      throw error;
+    }
   }
 
   /**
@@ -554,221 +552,211 @@ export class GeminiLiveVoice extends MastraVoice<
    * Send text to be converted to speech
    */
   async speak(input: string | NodeJS.ReadableStream, options?: GeminiLiveVoiceOptions): Promise<void> {
-    return this.traced(async () => {
-      this.validateConnectionState();
+    this.validateConnectionState();
 
-      if (typeof input !== 'string') {
-        const chunks: Buffer[] = [];
-        for await (const chunk of input) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
-        }
-        input = Buffer.concat(chunks).toString('utf-8');
+    if (typeof input !== 'string') {
+      const chunks: Buffer[] = [];
+      for await (const chunk of input) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
       }
+      input = Buffer.concat(chunks).toString('utf-8');
+    }
 
-      if (input.trim().length === 0) {
-        throw this.createAndEmitError(GeminiLiveErrorCode.INVALID_AUDIO_FORMAT, 'Input text is empty');
-      }
+    if (input.trim().length === 0) {
+      throw this.createAndEmitError(GeminiLiveErrorCode.INVALID_AUDIO_FORMAT, 'Input text is empty');
+    }
 
-      // Add to context history
-      this.addToContext('user', input);
+    // Add to context history
+    this.addToContext('user', input);
 
-      // Build text message to Gemini Live API
-      const textMessage: any = {
-        client_content: {
-          turns: [
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: input,
-                },
-              ],
+    // Build text message to Gemini Live API
+    const textMessage: any = {
+      client_content: {
+        turns: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text: input,
+              },
+            ],
+          },
+        ],
+        turnComplete: true,
+      },
+    };
+
+    // If runtime options provided, send a session.update first to apply per-turn settings
+    if (options && (options.speaker || options.languageCode || options.responseModalities)) {
+      const updateMessage: UpdateMessage = {
+        type: 'session.update',
+        session: {
+          generation_config: {
+            ...(options.responseModalities ? { response_modalities: options.responseModalities } : {}),
+            speech_config: {
+              ...(options.languageCode ? { language_code: options.languageCode } : {}),
+              ...(options.speaker ? { voice_config: { prebuilt_voice_config: { voice_name: options.speaker } } } : {}),
             },
-          ],
-          turnComplete: true,
+          },
         },
       };
 
-      // If runtime options provided, send a session.update first to apply per-turn settings
-      if (options && (options.speaker || options.languageCode || options.responseModalities)) {
-        const updateMessage: UpdateMessage = {
-          type: 'session.update',
-          session: {
-            generation_config: {
-              ...(options.responseModalities ? { response_modalities: options.responseModalities } : {}),
-              speech_config: {
-                ...(options.languageCode ? { language_code: options.languageCode } : {}),
-                ...(options.speaker
-                  ? { voice_config: { prebuilt_voice_config: { voice_name: options.speaker } } }
-                  : {}),
-              },
-            },
-          },
-        };
-
-        try {
-          this.sendEvent('session.update', updateMessage);
-          this.log('Applied per-turn runtime options', options);
-        } catch (error) {
-          this.log('Failed to apply per-turn runtime options', error);
-        }
-      }
-
       try {
-        this.sendEvent('client_content', textMessage);
-        this.log('Text message sent', { text: input });
-
-        // The response will come via the event system (handleServerContent)
-        // Audio will be emitted through 'speaking' events
-        // Text responses will be emitted through 'writing' events
+        this.sendEvent('session.update', updateMessage);
+        this.log('Applied per-turn runtime options', options);
       } catch (error) {
-        this.log('Failed to send text message', error);
-        throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send text message', error);
+        this.log('Failed to apply per-turn runtime options', error);
       }
-    }, 'gemini-live.speak')();
+    }
+
+    try {
+      this.sendEvent('client_content', textMessage);
+      this.log('Text message sent', { text: input });
+
+      // The response will come via the event system (handleServerContent)
+      // Audio will be emitted through 'speaking' events
+      // Text responses will be emitted through 'writing' events
+    } catch (error) {
+      this.log('Failed to send text message', error);
+      throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send text message', error);
+    }
   }
 
   /**
    * Send audio stream for processing
    */
   async send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
-    return this.traced(async () => {
-      this.validateConnectionState();
+    this.validateConnectionState();
 
-      if ('readable' in audioData && typeof audioData.on === 'function') {
-        const stream = audioData as NodeJS.ReadableStream;
+    if ('readable' in audioData && typeof audioData.on === 'function') {
+      const stream = audioData as NodeJS.ReadableStream;
 
-        stream.on('data', (chunk: Buffer) => {
-          try {
-            const base64Audio = this.audioStreamManager.processAudioChunk(chunk);
-            const message = this.audioStreamManager.createAudioMessage(base64Audio, 'realtime');
-            this.sendEvent('realtime_input', message);
-          } catch (error) {
-            this.log('Failed to process audio chunk', error);
-            this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to process audio chunk', error);
-          }
-        });
+      stream.on('data', (chunk: Buffer) => {
+        try {
+          const base64Audio = this.audioStreamManager.processAudioChunk(chunk);
+          const message = this.audioStreamManager.createAudioMessage(base64Audio, 'realtime');
+          this.sendEvent('realtime_input', message);
+        } catch (error) {
+          this.log('Failed to process audio chunk', error);
+          this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to process audio chunk', error);
+        }
+      });
 
-        stream.on('error', (error: Error) => {
-          this.log('Audio stream error', error);
-          this.createAndEmitError(GeminiLiveErrorCode.AUDIO_STREAM_ERROR, 'Audio stream error', error);
-        });
+      stream.on('error', (error: Error) => {
+        this.log('Audio stream error', error);
+        this.createAndEmitError(GeminiLiveErrorCode.AUDIO_STREAM_ERROR, 'Audio stream error', error);
+      });
 
-        stream.on('end', () => {
-          this.log('Audio stream ended');
-        });
-      } else {
-        const validateAudio = this.audioStreamManager.validateAndConvertAudioInput(audioData as Int16Array);
-        const base64Audio = this.audioStreamManager.int16ArrayToBase64(validateAudio);
-        const message = this.audioStreamManager.createAudioMessage(base64Audio, 'realtime');
-        this.sendEvent('realtime_input', message);
-      }
-    }, 'gemini-live.send')();
+      stream.on('end', () => {
+        this.log('Audio stream ended');
+      });
+    } else {
+      const validateAudio = this.audioStreamManager.validateAndConvertAudioInput(audioData as Int16Array);
+      const base64Audio = this.audioStreamManager.int16ArrayToBase64(validateAudio);
+      const message = this.audioStreamManager.createAudioMessage(base64Audio, 'realtime');
+      this.sendEvent('realtime_input', message);
+    }
   }
 
   /**
    * Process speech from audio stream (traditional STT interface)
    */
   async listen(audioStream: NodeJS.ReadableStream, _options?: GeminiLiveVoiceOptions): Promise<string> {
-    return this.traced(async () => {
-      this.validateConnectionState();
+    this.validateConnectionState();
 
-      let transcriptionText = '';
+    let transcriptionText = '';
 
-      // Listen for transcription responses
-      const onWriting = (data: { text: string; role: 'assistant' | 'user' }) => {
-        if (data.role === 'user') {
-          transcriptionText += data.text;
-          this.log('Received transcription text:', { text: data.text, total: transcriptionText });
-        }
-        // Note: We only collect user role text as transcription
-        // Assistant role text would be responses, not transcription
-      };
-
-      // Listen for errors
-      const onError = (error: { message: string; code?: string; details?: unknown }) => {
-        throw new Error(`Transcription failed: ${error.message}`);
-      };
-
-      // Listen for session events
-      const onSession = (data: { state: string }) => {
-        if (data.state === 'disconnected') {
-          throw new Error('Session disconnected during transcription');
-        }
-      };
-
-      // Set up GeminiLiveVoice event listeners
-      this.on('writing', onWriting);
-      this.on('error', onError);
-      this.on('session', onSession);
-
-      try {
-        // Use AudioStreamManager to handle the transcription workflow
-        const result = await this.audioStreamManager.handleAudioTranscription(
-          audioStream,
-          (base64Audio: string) => {
-            // Send audio and await transcript until turn completes
-            return new Promise<string>((resolve, reject) => {
-              try {
-                // Create audio message for transcription
-                const message = this.audioStreamManager.createAudioMessage(base64Audio, 'input');
-
-                const cleanup = () => {
-                  this.off('turnComplete' as any, onTurnComplete as any);
-                  this.off('error', onErr as any);
-                };
-
-                // Handlers
-                const onTurnComplete = () => {
-                  cleanup();
-                  resolve(transcriptionText.trim());
-                };
-
-                const onErr = (e: { message: string }) => {
-                  cleanup();
-                  reject(new Error(e.message));
-                };
-
-                // Wire listeners before sending
-                this.on('turnComplete' as any, onTurnComplete as any);
-                this.on('error', onErr as any);
-
-                // Send to Gemini Live API
-                this.sendEvent('client_content', message);
-                this.log('Sent audio for transcription');
-              } catch (err) {
-                reject(err as Error);
-              }
-            });
-          },
-          (error: Error) => {
-            this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Audio transcription failed', error);
-          },
-        );
-
-        return result;
-      } finally {
-        // Clean up event listeners
-        this.off('writing', onWriting);
-        this.off('error', onError);
-        this.off('session', onSession);
+    // Listen for transcription responses
+    const onWriting = (data: { text: string; role: 'assistant' | 'user' }) => {
+      if (data.role === 'user') {
+        transcriptionText += data.text;
+        this.log('Received transcription text:', { text: data.text, total: transcriptionText });
       }
-    }, 'gemini-live.listen')();
+      // Note: We only collect user role text as transcription
+      // Assistant role text would be responses, not transcription
+    };
+
+    // Listen for errors
+    const onError = (error: { message: string; code?: string; details?: unknown }) => {
+      throw new Error(`Transcription failed: ${error.message}`);
+    };
+
+    // Listen for session events
+    const onSession = (data: { state: string }) => {
+      if (data.state === 'disconnected') {
+        throw new Error('Session disconnected during transcription');
+      }
+    };
+
+    // Set up GeminiLiveVoice event listeners
+    this.on('writing', onWriting);
+    this.on('error', onError);
+    this.on('session', onSession);
+
+    try {
+      // Use AudioStreamManager to handle the transcription workflow
+      const result = await this.audioStreamManager.handleAudioTranscription(
+        audioStream,
+        (base64Audio: string) => {
+          // Send audio and await transcript until turn completes
+          return new Promise<string>((resolve, reject) => {
+            try {
+              // Create audio message for transcription
+              const message = this.audioStreamManager.createAudioMessage(base64Audio, 'input');
+
+              const cleanup = () => {
+                this.off('turnComplete' as any, onTurnComplete as any);
+                this.off('error', onErr as any);
+              };
+
+              // Handlers
+              const onTurnComplete = () => {
+                cleanup();
+                resolve(transcriptionText.trim());
+              };
+
+              const onErr = (e: { message: string }) => {
+                cleanup();
+                reject(new Error(e.message));
+              };
+
+              // Wire listeners before sending
+              this.on('turnComplete' as any, onTurnComplete as any);
+              this.on('error', onErr as any);
+
+              // Send to Gemini Live API
+              this.sendEvent('client_content', message);
+              this.log('Sent audio for transcription');
+            } catch (err) {
+              reject(err as Error);
+            }
+          });
+        },
+        (error: Error) => {
+          this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Audio transcription failed', error);
+        },
+      );
+
+      return result;
+    } finally {
+      // Clean up event listeners
+      this.off('writing', onWriting);
+      this.off('error', onError);
+      this.off('session', onSession);
+    }
   }
 
   /**
    * Get available speakers/voices
    */
   async getSpeakers(): Promise<Array<{ voiceId: string; description?: string }>> {
-    return this.traced(async () => {
-      // Return available Gemini Live voices
-      return [
-        { voiceId: 'Puck', description: 'Conversational, friendly' },
-        { voiceId: 'Charon', description: 'Deep, authoritative' },
-        { voiceId: 'Kore', description: 'Neutral, professional' },
-        { voiceId: 'Fenrir', description: 'Warm, approachable' },
-      ];
-    }, 'gemini-live.getSpeakers')();
+    // Return available Gemini Live voices
+    return [
+      { voiceId: 'Puck', description: 'Conversational, friendly' },
+      { voiceId: 'Charon', description: 'Deep, authoritative' },
+      { voiceId: 'Kore', description: 'Neutral, professional' },
+      { voiceId: 'Fenrir', description: 'Warm, approachable' },
+    ];
   }
 
   /**
@@ -1552,13 +1540,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Executing tool', { toolName, toolArgs });
 
         // Execute with proper context
-        result = await tool.execute(
-          { context: toolArgs, runtimeContext: this.runtimeContext },
-          {
-            toolCallId: toolId,
-            messages: [],
-          },
-        );
+        result = await tool.execute(toolArgs, { requestContext: this.requestContext });
 
         this.log('Tool executed successfully', { toolName, result });
       } else {
@@ -1927,14 +1909,14 @@ export class GeminiLiveVoice extends MastraVoice<
    *   inputSchema: z.object({
    *     location: z.string().describe("The city and state, e.g. San Francisco, CA"),
    *   }),
-   *   execute: async ({ context }) => {
+   *   execute: async (inputData) => {
    *     // Fetch weather data from an API
    *     const response = await fetch(
-   *       `https://api.weather.com?location=${encodeURIComponent(context.location)}`,
+   *       `https://api.weather.com?location=${encodeURIComponent(inputData.location)}`,
    *     );
    *     const data = await response.json();
    *     return {
-   *       message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.`,
+   *       message: `The current temperature in ${inputData.location} is ${data.temperature}°F with ${data.conditions}.`,
    *     };
    *   },
    * });
@@ -1953,7 +1935,7 @@ export class GeminiLiveVoice extends MastraVoice<
    * Get the current tools configured for this voice instance
    * @returns Object containing the current tools
    */
-  getTools(): ToolsInput | undefined {
+  listTools(): ToolsInput | undefined {
     return this.tools;
   }
 

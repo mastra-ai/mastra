@@ -1,8 +1,8 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
+import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 
-export type { MastraMessageV2 } from '../agent';
+export type { MastraDBMessage } from '../agent';
 import type { ZodObject } from 'zod';
 import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
@@ -12,7 +12,7 @@ import type { MastraVector } from '../vector';
 import type { VectorFilter } from '../vector/filter/base';
 import type { MemoryProcessor } from '.';
 
-export type { Message as AiMessageType } from 'ai';
+export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { MastraLanguageModel };
 
 // Types for the memory system
@@ -30,7 +30,7 @@ export type MastraMessageV1 = {
 };
 
 /**
- * @deprecated use MastraMessageV1 or MastraMessageV2
+ * @deprecated use MastraMessageV1 or MastraDBMessage
  */
 export type MessageType = MastraMessageV1;
 
@@ -50,6 +50,13 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
 
 type BaseWorkingMemory = {
   enabled: boolean;
+  /**
+   * Scope for working memory storage.
+   * - 'resource': Memory persists across all threads for the same resource/user (default)
+   * - 'thread': Memory is isolated per conversation thread
+   *
+   * @default 'resource'
+   */
   scope?: 'thread' | 'resource';
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
@@ -195,13 +202,13 @@ export type SemanticRecall = {
 
   /**
    * Scope for semantic search queries.
-   * - 'thread': Search only within the current conversation thread (default)
-   * - 'resource': Search across all threads owned by the same resource/user
+   * - 'resource': Search across all threads owned by the same resource/user (default)
+   * - 'thread': Search only within the current conversation thread
    *
-   * @default 'thread'
+   * @default 'resource'
    * @example
    * ```typescript
-   * scope: 'resource' // Enable cross-thread memory recall
+   * scope: 'thread' // Limit recall to current thread only
    * ```
    */
   scope?: 'thread' | 'resource';
@@ -305,35 +312,47 @@ export type MemoryConfig = {
   workingMemory?: WorkingMemory;
 
   /**
+   * Automatically generate descriptive thread titles based on the first user message.
+   * Can be a boolean to enable with defaults, or an object to customize the model and instructions.
+   * Title generation runs asynchronously and doesn't affect response time.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * generateTitle: true // Use agent's model for title generation
+   * generateTitle: {
+   *   model: openai("gpt-4o-mini"),
+   *   instructions: "Generate a concise title (max 5 words)"
+   * }
+   * ```
+   */
+  generateTitle?:
+    | boolean
+    | {
+        /**
+         * Language model to use for title generation.
+         * Can be static or a function that receives request context for dynamic selection.
+         */
+        model: DynamicArgument<MastraLanguageModel>;
+        /**
+         * Custom instructions for title generation.
+         * Can be static or a function that receives request context for dynamic customization.
+         */
+        instructions?: DynamicArgument<string>;
+      };
+
+  /**
    * Thread management configuration.
+   * @deprecated The `threads` object is deprecated. Use top-level `generateTitle` instead of `threads.generateTitle`.
    */
   threads?: {
     /**
-     * Automatically generate descriptive thread titles based on the first user message.
-     * Can be a boolean to enable with defaults, or an object to customize the model and instructions.
-     * Title generation runs asynchronously and doesn't affect response time.
-     *
-     * @example
-     * ```typescript
-     * generateTitle: true // Use agent's model for title generation
-     * generateTitle: {
-     *   model: openai("gpt-4o-mini"),
-     *   instructions: "Generate a concise title (max 5 words)"
-     * }
-     * ```
+     * @deprecated Moved to top-level `generateTitle`. Using `threads.generateTitle` will throw an error.
      */
     generateTitle?:
       | boolean
       | {
-          /**
-           * Language model to use for title generation.
-           * Can be static or a function that receives runtime context for dynamic selection.
-           */
           model: DynamicArgument<MastraLanguageModel>;
-          /**
-           * Custom instructions for title generation.
-           * Can be static or a function that receives runtime context for dynamic customization.
-           */
           instructions?: DynamicArgument<string>;
         };
   };
@@ -354,7 +373,7 @@ export type SharedMemoryConfig = {
    *
    * @example
    * ```typescript
-   * storage: new LibSQLStore({ url: "file:./agent-memory.db" })
+   * storage: new LibSQLStore({ id: 'agent-memory-storage', url: "file:./agent-memory.db" })
    * ```
    */
   storage?: MastraStorage;
@@ -414,26 +433,12 @@ export type SharedMemoryConfig = {
   processors?: MemoryProcessor[];
 };
 
-export type TraceType = {
-  id: string;
-  parentSpanId: string | null;
-  name: string;
-  traceId: string;
-  scope: string;
-  kind: number;
-  attributes: Record<string, unknown> | null;
-  status: Record<string, unknown> | null;
-  events: Record<string, unknown> | null;
-  links: Record<string, unknown> | null;
-  other: Record<string, unknown> | null;
-  startTime: number;
-  endTime: number;
-  createdAt: Date;
-};
-
 export type WorkingMemoryFormat = 'json' | 'markdown';
 
 export type WorkingMemoryTemplate = {
   format: WorkingMemoryFormat;
   content: string;
 };
+
+// Type for flexible message deletion input
+export type MessageDeleteInput = string[] | { id: string }[];

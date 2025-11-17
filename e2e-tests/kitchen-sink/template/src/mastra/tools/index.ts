@@ -28,8 +28,8 @@ export const weatherInfo = createTool({
     conditions: z.string(),
     location: z.string(),
   }),
-  execute: async ({ context }) => {
-    return await getWeather(context.location);
+  execute: async input => {
+    return await getWeather(input.location);
   },
 });
 
@@ -93,3 +93,17 @@ function getWeatherCondition(code: number): string {
   };
   return conditions[code] || 'Unknown';
 }
+
+export const simpleMcpTool = createTool({
+  id: 'simpleMcpTool',
+  description: 'A simple MCP tool',
+  inputSchema: z.object({
+    name: z.string().describe('The name of the person'),
+  }),
+  execute: async () => {
+    return {
+      hello: 'world',
+      thisIsA: 'fixture',
+    };
+  },
+});

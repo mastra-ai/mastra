@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "1.3.2",
+  "version": "2.0.0-beta.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@paralleldrive/cuid2": "^2.2.2",
+    "@paralleldrive/cuid2": "^2.3.1",
     "big.js": "^7.0.1",
     "js-tiktoken": "^1.0.20",
     "node-html-better-parser": "^1.5.8",
@@ -40,25 +40,28 @@
     "zeroentropy": "0.1.0-alpha.6"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.20.0-0 <0.23.0-0",
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "ai": "^4.0.0 || ^5.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "^1.2.10",
     "@ai-sdk/openai": "^1.3.24",
+    "@internal/ai-sdk-v4": "workspace:*",
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/big.js": "^6.2.2",
-    "@types/node": "^20.19.0",
+    "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
     "dotenv": "^17.0.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*",
+    "vitest": "catalog:",
     "zod": "^3.25.76"
   },
   "keywords": [
@@ -85,5 +88,8 @@
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

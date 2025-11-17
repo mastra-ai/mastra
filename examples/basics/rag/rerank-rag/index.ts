@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { PgVector } from '@mastra/pg';
 import { MDocument, createVectorQueryTool } from '@mastra/rag';
@@ -15,6 +15,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const ragAgent = new Agent({
+  id: 'rag-agent',
   name: 'RAG Agent',
   instructions: `You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. 
@@ -56,7 +57,7 @@ rare cards appreciate yearly.
 
 const chunks = await doc1.chunk({
   strategy: 'recursive',
-  size: 150,
+  maxSize: 150,
   overlap: 20,
   separator: '\n',
 });
