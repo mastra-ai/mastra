@@ -2,11 +2,11 @@
 title: "Custom Scorers | Scorers"
 ---
 
-# Custom scorers
+# Custom Scorers
 
 Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.
 
-### The Four-Step Pipeline
+### The four-step pipeline
 
 All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
@@ -17,7 +17,7 @@ All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
 Each step can use either **functions** or **prompt objects** (LLM-based evaluation), giving you the flexibility to combine deterministic algorithms with AI judgment as needed.
 
-### Functions vs Prompt Objects
+### Functions vs prompt objects
 
 **Functions** use JavaScript for deterministic logic. They're ideal for:
 
@@ -35,7 +35,7 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 
 You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
-### Initializing a Scorer
+### Initializing a scorer
 
 Every scorer starts with the `createScorer` factory function, which requires a name and description, and optionally accepts a type specification and judge configuration.
 
@@ -60,7 +60,7 @@ const glutenCheckerScorer = createScorer({
 
 The judge configuration is only needed if you plan to use prompt objects in any step. Individual steps can override this default configuration with their own judge settings.
 
-#### Agent Type for Agent Evaluation
+#### Agent type for agent evaluation
 
 For type safety and compatibility with both live agent scoring and trace scoring, use `type: 'agent'` when creating scorers for agent evaluation. This allows you to use the same scorer for an agent and also use it to score traces:
 
@@ -74,9 +74,9 @@ const myScorer = createScorer({
 });
 ```
 
-### Step-by-Step Breakdown
+### Step-by-step breakdown
 
-#### preprocess Step (Optional)
+#### Preprocess step (optional)
 
 Prepares input/output data when you need to extract specific elements, filter content, or transform complex data structures.
 
@@ -118,7 +118,7 @@ const glutenCheckerScorer = createScorer(...)
 
 **Data Flow:** Results are available to subsequent steps as `results.preprocessStepResult`
 
-#### analyze Step (Optional)
+#### Analyze step (optional)
 
 Performs core evaluation analysis, gathering insights that will inform the scoring decision.
 
@@ -168,7 +168,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** Results are available to subsequent steps as `results.analyzeStepResult`
 
-#### generateScore Step (Required)
+#### Generate score step (required)
 
 Converts analysis results into a numerical score. This is the only required step in the pipeline.
 
@@ -191,7 +191,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 
-#### generateReason Step (Optional)
+#### Generate reason step (optional)
 
 Generates human-readable explanations for the score, useful for debugging, transparency, or user feedback.
 
@@ -231,7 +231,7 @@ const glutenCheckerScorer = createScorer({...})
 })
 ```
 
-## Example: Create a custom scorer
+## Create a custom scorer
 
 A custom scorer in Mastra uses `createScorer` with four core components:
 
@@ -332,7 +332,7 @@ export const glutenCheckerScorer = createScorer({
   });
 ```
 
-### Judge Configuration
+### Judge configuration
 
 Sets up the LLM model and defines its role as a domain expert.
 
@@ -343,7 +343,7 @@ judge: {
 }
 ```
 
-### Analysis Step
+### Analysis step
 
 Defines how the LLM should analyze the input and what structured output to return.
 
@@ -367,7 +367,7 @@ The analysis step uses a prompt object to:
 - Define expected output structure with Zod schema (both boolean result and list of gluten sources)
 - Generate dynamic prompts based on the input content
 
-### Score Generation
+### Score generation
 
 Converts the LLM's structured analysis into a numerical score.
 
@@ -379,7 +379,7 @@ Converts the LLM's structured analysis into a numerical score.
 
 The score generation function takes the analysis results and applies business logic to produce a score. In this case, the LLM directly determines if the recipe is gluten-free, so we use that boolean result: 1 for gluten-free, 0 for contains gluten.
 
-### Reason Generation
+### Reason generation
 
 Provides human-readable explanations for the score using another LLM call.
 

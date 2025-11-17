@@ -161,24 +161,20 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {
           type: "doc",
-          id: "tools-mcp/overview",
-          key: "tools-mcp.overview",
+          id: "mcp/overview",
+          key: "mcp.overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "tools-mcp/mcp-overview",
-          label: "MCP Overview",
-        },
-        {
-          type: "doc",
-          id: "tools-mcp/advanced-usage",
-          label: "Advanced Usage",
+          id: "mcp/publishing-mcp-server",
+          key: "mcp.publishing-mcp-server",
+          label: "Publishing an MCP Server",
         },
       ],
     },
@@ -284,13 +280,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "server-db/middleware",
-          label: "Middleware",
+          id: "server-db/runtime-context",
+          label: "Runtime Context",
         },
         {
           type: "doc",
-          id: "server-db/runtime-context",
-          label: "Runtime Context",
+          id: "server-db/middleware",
+          label: "Middleware",
         },
         {
           type: "doc",
@@ -341,6 +337,7 @@ const sidebars = {
             {
               type: "doc",
               id: "deployment/mastra-cloud/overview",
+              key: "deployment.mastra-cloud.overview",
               label: "Overview",
             },
             {
@@ -512,8 +509,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "scorers/off-the-shelf-scorers",
-          label: "Off the Shelf Scorers",
+          id: "scorers/built-in-scorers",
+          label: "Built-in Scorers",
         },
         {
           type: "doc",
@@ -522,27 +519,27 @@ const sidebars = {
         },
         {
           type: "category",
-          label: "Evals (old API)",
+          label: "Evals (Legacy)",
           items: [
             {
               type: "doc",
-              id: "scorers/evals-old-api/overview",
-              key: "scorers.evals-old-api.overview",
+              id: "scorers/evals-legacy/overview",
+              key: "scorers.evals-legacy.overview",
               label: "Overview",
             },
             {
               type: "doc",
-              id: "scorers/evals-old-api/textual-evals",
+              id: "scorers/evals-legacy/textual-evals",
               label: "Textual Evals",
             },
             {
               type: "doc",
-              id: "scorers/evals-old-api/custom-eval",
+              id: "scorers/evals-legacy/custom-eval",
               label: "Custom Evals",
             },
             {
               type: "doc",
-              id: "scorers/evals-old-api/running-in-ci",
+              id: "scorers/evals-legacy/running-in-ci",
               label: "Running in CI",
             },
           ],

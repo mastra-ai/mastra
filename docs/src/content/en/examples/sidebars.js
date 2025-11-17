@@ -32,11 +32,6 @@ const sidebars = {
         { type: "doc", id: "agents/runtime-context", label: "Runtime Context" },
         {
           type: "doc",
-          id: "agents/deploying-mcp-server",
-          label: "Deploying an MCPServer",
-        },
-        {
-          type: "doc",
           id: "agents/ai-sdk-v5-integration",
           label: "AI SDK v5 Integration",
         },

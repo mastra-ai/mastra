@@ -1,9 +1,9 @@
 ---
-title: "Scorers overview | Scorers"
+title: "Scorers Overview | Scorers"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
 ---
 
-# Scorers overview
+# Scorers Overview
 
 While traditional software tests have clear pass/fail conditions, AI outputs are non-deterministic — they can vary with the same input. **Scorers** help bridge this gap by providing quantifiable metrics for measuring agent quality.
 
@@ -11,7 +11,7 @@ Scorers are automated tests that evaluate Agents outputs using model-graded, rul
 
 Scorers can be run in the cloud, capturing real-time results. But scorers can also be part of your CI/CD pipeline, allowing you to test and monitor your agents over time.
 
-## Types of Scorers
+## Types of scorers
 
 There are different kinds of scorers, each serving a specific purpose. Here are some common types:
 
@@ -33,7 +33,7 @@ npm install @mastra/evals@latest
 
 ### Adding scorers to agents
 
-You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/scorers/off-the-shelf-scorers) for all available options.
+You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/scorers/built-in-scorers) for all available options.
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
 import { Agent } from "@mastra/core/agent";
@@ -135,5 +135,5 @@ For more details, see [Studio](/docs/getting-started/studio) docs.
 ## Next steps
 
 - Learn how to create your own scorers in the [Creating Custom Scorers](/docs/scorers/custom-scorers) guide
-- Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/off-the-shelf-scorers) section
+- Explore built-in scorers in the [Off-the-shelf Scorers](/docs/scorers/built-in-scorers) section
 - Test scorers with [Studio](/docs/getting-started/studio)
