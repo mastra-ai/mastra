@@ -16,15 +16,10 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
   const testVectorDimension = 128;
 
   beforeAll(async () => {
-    if (!AZURE_SEARCH_ENDPOINT || !AZURE_SEARCH_API_KEY) {
-      console.warn('Skipping Azure AI Search integration tests - credentials not found');
-      return;
-    }
-
     azureVector = new AzureAISearchVector({
       id: 'integration-test',
-      endpoint: AZURE_SEARCH_ENDPOINT,
-      credential: AZURE_SEARCH_API_KEY,
+      endpoint: AZURE_SEARCH_ENDPOINT!,
+      credential: AZURE_SEARCH_API_KEY!,
     });
 
     // Create test index
@@ -117,10 +112,8 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
       });
     }, 30000);
 
-    it('should upsert and query multiple vectors with different IDs', async () => {
-      // Note: Azure AI Search stores metadata as JSON string, so filtering by metadata fields
-      // is not directly supported without creating explicit filterable fields in the index.
-      // This test verifies basic indexing and retrieval of multiple documents.
+    it('should filter vectors by ID correctly', async () => {
+      // Test filtering capability using the filterable ID field
 
       const testData = [
         { content: 'First iPhone document' },
@@ -142,20 +135,17 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
       // Wait for indexing
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Query without filters to verify all documents exist
-      const allResults = await azureVector.query({
+      // Query with filter to retrieve only one specific document
+      const filteredResults = await azureVector.query({
         indexName: testIndexName,
         queryVector: Array.from({ length: testVectorDimension }, () => Math.random()),
         topK: 10,
+        filter: { eq: { id: 'product-apple' } },
       });
 
-      expect(allResults.length).toBeGreaterThanOrEqual(3);
-
-      // Verify documents have correct IDs
-      const resultIds = allResults.map(r => r.id);
-      expect(resultIds).toContain('product-apple');
-      expect(resultIds).toContain('product-samsung');
-      expect(resultIds).toContain('product-penguin');
+      expect(filteredResults.length).toBe(1);
+      expect(filteredResults[0].id).toBe('product-apple');
+      expect(filteredResults[0].metadata).toMatchObject({ content: 'First iPhone document' });
     }, 30000);
 
     it('should update and delete vectors', async () => {
@@ -280,8 +270,11 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
   });
 
   describe('Advanced Features', () => {
-    it('should support hybrid queries with text search', async () => {
-      // Insert documents with text content
+    it('should query vectors from documents with rich text metadata', async () => {
+      // Insert documents with meaningful text content in metadata
+      // Note: hybridQuery with textQuery requires a vectorizer in the index's vector profile,
+      // which is not configured in this basic test index. This test validates standard vector
+      // queries on documents that contain text content.
       const documents = [
         { content: 'Azure AI Search is a cloud search service', category: 'cloud' },
         { content: 'Machine learning models for natural language processing', category: 'ai' },
@@ -289,7 +282,7 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
       ];
 
       const vectors = documents.map(() => Array.from({ length: testVectorDimension }, () => Math.random()));
-      const ids = documents.map((_, i) => `hybrid-${i}`);
+      const ids = documents.map((_, i) => `advanced-${i}`);
 
       await azureVector.upsert({
         indexName: testIndexName,
@@ -301,13 +294,14 @@ describeIntegration('AzureAISearchVector Real Integration Tests', () => {
       // Wait for indexing
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Perform vector query
+      // Perform vector query on documents with rich text metadata
       const results = await azureVector.query({
         indexName: testIndexName,
         queryVector: Array.from({ length: testVectorDimension }, () => Math.random()),
         topK: 3,
       });
 
+      // Verify results structure
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]).toMatchObject({
         id: expect.any(String),

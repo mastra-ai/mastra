@@ -109,7 +109,8 @@ export class AzureAISearchFilterTranslator {
       return filter.$filter;
     }
 
-    return this.translateFilter(filter);
+    const translated = this.translateFilter(filter).trim();
+    return translated.length > 0 ? translated : undefined;
   }
 
   private translateFilter(filter: AzureAISearchVectorFilter): string {

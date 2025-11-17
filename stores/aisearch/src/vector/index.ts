@@ -220,7 +220,10 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
     this.indexClient = new SearchIndexClient(
       endpoint,
       typeof credential === 'string' ? new AzureKeyCredential(credential) : credential,
-      { apiVersion },
+      {
+        apiVersion,
+        ...clientOptions, // Apply client options to index client as well
+      },
     );
   }
 
@@ -331,7 +334,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           name: 'id',
           type: 'Edm.String',
           key: true,
-          filterable: false,
+          filterable: true,
           sortable: false,
           facetable: false,
           searchable: false,
@@ -619,6 +622,15 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
 
       return vectorIds;
     } catch (error) {
+      // If it's already a MastraError (e.g., from partial failure above), re-throw it
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
+      // Normalize error to Error instance to avoid unsafe casting
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+
+      // Otherwise, wrap the error in a MastraError
       throw new MastraError(
         {
           id: 'STORAGE_AZURE_AI_SEARCH_UPSERT_FAILED',
@@ -626,7 +638,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, vectorCount: vectors?.length || 0 },
         },
-        error,
+        normalizedError,
       );
     }
   }
@@ -940,7 +952,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
    * @returns Array of search results with semantic enhancements
    */
   async semanticQuery(
-    params: Omit<AzureAISearchAdvancedQueryParams, 'useSemanticSearch' | 'queryType'> & {
+    params: Omit<AzureAISearchAdvancedQueryParams, 'useSemanticSearch' | 'queryType' | 'semanticOptions'> & {
       semanticConfig?: string;
       semanticQuery?: string;
       enableAnswers?: boolean;
