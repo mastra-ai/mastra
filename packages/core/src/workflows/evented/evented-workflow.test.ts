@@ -1024,7 +1024,7 @@ describe('Workflow', () => {
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
 
-      output = await run.resumeStream({ resumeData: resumeData as any, step: promptAgent });
+      output = await run.resumeStream({ resumeData, step: promptAgent });
       for await (const _data of output.fullStream) {
       }
 

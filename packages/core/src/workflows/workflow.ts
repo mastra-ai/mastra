@@ -2105,7 +2105,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  resumeStream({
+  resumeStream<TResumeSchema extends z.ZodType<any>>({
     step,
     resumeData,
     requestContext,
@@ -2113,10 +2113,13 @@ export class Run<
     tracingOptions,
     outputOptions,
   }: {
-    resumeData?: z.input<TInput>;
+    resumeData?: z.input<TResumeSchema>;
     step?:
-      | Step<string, any, any, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
+        ]
       | string
       | string[];
     requestContext?: RequestContext;
@@ -2142,7 +2145,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  resumeStreamVNext({
+  resumeStreamVNext<TResumeSchema extends z.ZodType<any>>({
     step,
     resumeData,
     requestContext,
@@ -2151,10 +2154,13 @@ export class Run<
     forEachIndex,
     outputOptions,
   }: {
-    resumeData?: z.input<TInput>;
+    resumeData?: z.input<TResumeSchema>;
     step?:
-      | Step<string, any, any, any, any, any, TEngineType>
-      | [...Step<string, any, any, any, any, any, TEngineType>[], Step<string, any, any, any, any, any, TEngineType>]
+      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
+      | [
+          ...Step<string, any, any, any, any, any, TEngineType>[],
+          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
+        ]
       | string
       | string[];
     requestContext?: RequestContext;
