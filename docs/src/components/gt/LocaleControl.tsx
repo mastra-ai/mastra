@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@site/src/components/ui/select";
+import { cn } from "@site/src/lib/utils";
 import { useLocaleSelector } from "gt-react";
 
 /*
@@ -45,7 +46,7 @@ export default function LocaleControl({
       <SelectTrigger
         aria-label="Change language"
         size={size}
-        className={className}
+        className={cn(className, "group")}
       >
         <SelectValue>
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
