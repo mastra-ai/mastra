@@ -2,7 +2,7 @@ import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { ToolAction, ToolExecutionContext } from './types';
-import { validateToolInput } from './validation';
+import { validateToolInput, validateToolOutput } from './validation';
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -202,7 +202,15 @@ export class Tool<
         }
 
         // Call the original execute with validated input and organized context
-        return originalExecute(data as any, organizedContext);
+        const output = await originalExecute(data as any, organizedContext);
+
+        // Validate output if schema exists
+        const outputValidation = validateToolOutput(this.outputSchema, output, this.id);
+        if (outputValidation.error) {
+          return outputValidation.error as any;
+        }
+
+        return outputValidation.data;
       };
     }
   }
