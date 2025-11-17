@@ -33,6 +33,7 @@
     "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/evals": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",

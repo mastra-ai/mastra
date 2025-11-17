@@ -3102,6 +3102,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
@@ -25185,7 +25188,7 @@ snapshots:
 
   core-js-compat@3.46.0:
     dependencies:
-      browserslist: 4.26.3
+      browserslist: 4.28.0
     optional: true
 
   core-js@3.46.0: {}
