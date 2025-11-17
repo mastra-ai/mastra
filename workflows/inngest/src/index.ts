@@ -4,7 +4,7 @@ import { subscribe } from '@inngest/realtime';
 import type { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, wrapMastra } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 import { ChunkFrom, WorkflowRunOutput } from '@mastra/core/stream';
