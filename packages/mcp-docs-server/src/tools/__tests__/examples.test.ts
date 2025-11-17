@@ -178,7 +178,7 @@ describe('examplesTool', () => {
       // Also verify that we have at least some expected examples
       const expectedExamples = [
         'quick-start',
-        'agent',
+        // 'agent' is skipped due to size (exceeds 1500 line limit)
         'bird-checker-with-express',
         'bird-checker-with-nextjs',
         'memory-todo-agent',
