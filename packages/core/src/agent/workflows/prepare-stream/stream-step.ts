@@ -17,6 +17,7 @@ interface StreamStepOptions {
   };
   agentId: string;
   toolCallId?: string;
+  toolConcurrency?: number;
 }
 
 export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
@@ -27,6 +28,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   resumeContext,
   agentId,
   toolCallId,
+  toolConcurrency,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -65,6 +67,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         },
         agentId,
         toolCallId,
+        toolConcurrency,
       });
 
       return streamResult;
