@@ -1,6 +1,6 @@
 import { isEmpty } from 'radash';
 import type z from 'zod';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
@@ -299,3 +299,17 @@ export const createTimeTravelExecutionParams = (params: {
 
   return timeTravelData;
 };
+
+/**
+ * Reconstruct error instances from serialized errors in step results.
+ */
+export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) {
+  if (steps) {
+    for (const step of Object.values(steps)) {
+      if (step.status === 'failed' && 'error' in step && step.error) {
+        step.error = getErrorFromUnknown(step.error, { serializeStack: false });
+      }
+    }
+  }
+  return steps;
+}
