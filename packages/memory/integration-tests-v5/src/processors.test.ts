@@ -591,19 +591,12 @@ describe('Memory with Processors', () => {
     });
     const combinedList = new MessageList({ threadId, resourceId }).add(combinedQuery.messages, 'memory');
     const combinedRunner = new ProcessorRunner({
-      inputProcessors: [
-        new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }),
-        new TokenLimiter(500),
-      ],
+      inputProcessors: [new ToolCallFilter({ exclude: ['get_weather', 'calculator'] }), new TokenLimiter(500)],
       outputProcessors: [],
       logger: mockLogger,
       agentName: 'test-agent',
     });
-    const combinedMessageList = await combinedRunner.runInputProcessors(
-      combinedList,
-      {},
-      new AbortController().signal,
-    );
+    const combinedMessageList = await combinedRunner.runInputProcessors(combinedList, {}, new AbortController().signal);
     const combinedResult = v2ToCoreMessages(combinedMessageList.get.all.db());
 
     // No tool calls should remain
