@@ -57,6 +57,14 @@ export const errorAgent = new Agent({
   }),
 });
 
+export const moderationProcessor = new ModerationProcessor({
+  model: openai('gpt-4.1-nano'),
+  categories: ['hate', 'harassment', 'violence'],
+  threshold: 0.7,
+  strategy: 'block',
+  instructions: 'Detect and flag inappropriate content in user messages',
+});
+
 export const chefModelV2Agent = new Agent({
   id: 'chef-model-v2-agent',
   name: 'Chef Agent V2 Model',
@@ -93,15 +101,7 @@ export const chefModelV2Agent = new Agent({
     };
   },
   memory,
-  inputProcessors: [
-    new ModerationProcessor({
-      model: openai('gpt-4.1-nano'),
-      categories: ['hate', 'harassment', 'violence'],
-      threshold: 0.7,
-      strategy: 'block',
-      instructions: 'Detect and flag inappropriate content in user messages',
-    }),
-  ],
+  inputProcessors: [moderationProcessor],
 });
 
 const weatherAgent = new Agent({
