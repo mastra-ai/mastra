@@ -5,6 +5,7 @@ import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import { Observability } from '@mastra/observability';
 import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
@@ -411,6 +412,11 @@ const mastra = new Mastra({
     travelAgentWorkflow,
   },
   storage,
+  observability: new Observability({
+    default: {
+      enabled: true,
+    },
+  }),
 });
 
 const app = express();
