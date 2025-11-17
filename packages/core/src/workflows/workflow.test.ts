@@ -13,7 +13,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StreamEvent, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -12065,7 +12065,8 @@ describe('Workflow', () => {
     });
 
     it('should timeTravel a workflow execution that was previously ran', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const testError = new Error('Simulated error');
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -12077,7 +12078,7 @@ describe('Workflow', () => {
         id: 'step2',
         execute: async ({ inputData }) => {
           if (inputData.step1Result < 3) {
-            throw new Error('Simulated error');
+            throw testError;
           }
           return {
             step2Result: inputData.step1Result + 1,
@@ -12121,10 +12122,13 @@ describe('Workflow', () => {
       expect(failedRun.steps.step2).toEqual({
         status: 'failed',
         payload: { step1Result: 2 },
-        error: 'Error: Simulated error',
+        error: testError,
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      expect((failedRun.steps.step2 as StepFailure<any, any, any, any>).error).toBeInstanceOf(Error);
+      expect((failedRun.steps.step2 as StepFailure<any, any, any, any>).error).toBe(testError);
+      expect((failedRun as any).error).toBe(testError);
 
       const result = await run.timeTravel({
         step: step2,
@@ -12242,8 +12246,8 @@ describe('Workflow', () => {
     });
 
     it('should timeTravel a workflow execution that has nested workflows', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
-      const executeStep2 = vi.fn<any>().mockResolvedValue({ step2Result: 3 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
+      const executeStep2 = vi.fn().mockResolvedValue({ step2Result: 3 });
       const step1 = createStep({
         id: 'step1',
         execute,
