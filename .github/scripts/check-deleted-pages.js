@@ -37,24 +37,10 @@ function filePathToUrlPath(filePath) {
     urlPath = urlPath.replace(/\/index$/, '');
   }
 
-  // Determine the base path prefix based on directory structure
-  // docs/ -> /docs/v1/, examples/ -> /examples/v1/, reference/ -> /reference/v1/
-  let prefix = '';
-  if (urlPath.startsWith('docs/')) {
-    prefix = '/docs/v1/';
-    urlPath = urlPath.replace(/^docs\//, '');
-  } else if (urlPath.startsWith('examples/')) {
-    prefix = '/examples/v1/';
-    urlPath = urlPath.replace(/^examples\//, '');
-  } else if (urlPath.startsWith('reference/')) {
-    prefix = '/reference/v1/';
-    urlPath = urlPath.replace(/^reference\//, '');
-  } else {
-    // Fallback: assume docs if no prefix matches
-    prefix = '/docs/v1/';
-  }
+  // Add leading slash
+  urlPath = '/' + urlPath;
 
-  return prefix + urlPath;
+  return urlPath;
 }
 
 // Load redirects from vercel.json

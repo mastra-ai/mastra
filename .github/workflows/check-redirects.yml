@@ -32,13 +32,9 @@ jobs:
         with:
           node-version: '20.19.5'
 
-      - name: Enable corepack
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: corepack enable
-
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: npm install --ignore-scripts path-to-regexp
+        run: npm install path-to-regexp
 
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
