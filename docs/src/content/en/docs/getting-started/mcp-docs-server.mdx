@@ -7,7 +7,7 @@ import YouTube from "@site/src/components/YouTube-player";
 
 # Mastra Docs Server
 
-The `@mastra/mcp-docs-server` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, Codex or any tool that supports MCP.
+The `@mastra/mcp-docs-server@beta` package provides direct access to Mastra’s full knowledge base, including documentation, code examples, blog posts, and changelogs, via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, Codex or any tool that supports MCP.
 
 These tools are designed to help agents retrieve precise, task-specific information — whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
 
@@ -31,7 +31,7 @@ If there are no specific instructions for your tool below, you may be able to ad
     "mastra": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
+      "args": ["-y", "@mastra/mcp-docs-server@beta"]
     }
   }
 }
@@ -42,7 +42,7 @@ If there are no specific instructions for your tool below, you may be able to ad
 Install using the terminal command:
 
 ```bash copy
-claude mcp add mastra -- npx -y @mastra/mcp-docs-server
+claude mcp add mastra -- npx -y @mastra/mcp-docs-server@beta
 ```
 
 [More info on using MCP servers with Claude Code](https://docs.claude.com/en/docs/claude-code/mcp)
@@ -52,7 +52,7 @@ claude mcp add mastra -- npx -y @mastra/mcp-docs-server
 1. Register it from the terminal:
 
    ```bash copy
-   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server
+   codex mcp add mastra-docs -- npx -y @mastra/mcp-docs-server@beta
    ```
 
 2. Run `codex mcp list` to confirm the server shows as `enabled`.
@@ -86,7 +86,7 @@ If you followed the automatic installation, you'll see a popup when you open cur
        "mastra": {
          "type": "stdio",
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server"]
+         "args": ["-y", "@mastra/mcp-docs-server@beta"]
        }
      }
    }
@@ -135,7 +135,7 @@ After starting the MCP server, click the tools button in the Copilot pane to see
      "mcpServers": {
        "mastra": {
          "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server"]
+         "args": ["-y", "@mastra/mcp-docs-server@beta"]
        }
      }
    }
