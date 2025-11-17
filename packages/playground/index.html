@@ -39,6 +39,10 @@
     </script>
     <div id="root" class="dark"></div>
     <script type="module">
+      // Dynamic import with base path support
+      // Note: In development, .tsx files are handled by the build toolchain (Vite/TSC)
+      // For production deployments, ensure the playground is pre-built and this path
+      // references the compiled JavaScript output
       const basePath = window.MASTRA_BASE_PATH || '';
       import(`${basePath}/src/main.tsx`);
     </script>

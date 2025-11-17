@@ -10,7 +10,7 @@ describe('Server Base Path Configuration', () => {
   });
 
   describe('basePath normalization', () => {
-    it('should normalize base path with leading slash', async () => {
+    it('should store base path in config as provided without normalization', async () => {
       mastra = new Mastra({
         server: {
           base: 'admin',
@@ -20,12 +20,13 @@ describe('Server Base Path Configuration', () => {
       const app = await createHonoServer(mastra, { playground: true });
       const basePath = mastra.getServer()?.base;
 
-      // The config stores the base as-is without normalization
-      // Normalization happens in the server implementation when creating routes
+      // The config stores the base value as provided by the user
+      // Normalization (adding leading slash, removing trailing slash) happens
+      // in the server implementation (createHonoServer) when setting up routes
       expect(basePath).toBe('admin');
     });
 
-    it('should normalize base path without trailing slash', async () => {
+    it('should store base path with trailing slash as provided', async () => {
       mastra = new Mastra({
         server: {
           base: '/admin/',
@@ -33,6 +34,7 @@ describe('Server Base Path Configuration', () => {
       });
 
       const basePath = mastra.getServer()?.base;
+      // Config stores the value exactly as provided
       expect(basePath).toBe('/admin/');
     });
 
