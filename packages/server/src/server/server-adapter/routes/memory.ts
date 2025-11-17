@@ -24,7 +24,7 @@ import {
 } from '../../handlers/memory';
 import type { ServerRoute } from '.';
 
-export const MEMORY_ROUTES: ServerRoute<any, any>[] = [
+export const MEMORY_ROUTES: ServerRoute<any, any, any>[] = [
   GET_MEMORY_STATUS_ROUTE,
   GET_MEMORY_CONFIG_ROUTE,
   LIST_THREADS_ROUTE,

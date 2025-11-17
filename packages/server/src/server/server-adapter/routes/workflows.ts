@@ -18,7 +18,7 @@ import {
 } from '../../handlers/workflows';
 import type { ServerRoute } from '.';
 
-export const WORKFLOWS_ROUTES: ServerRoute<any, any>[] = [
+export const WORKFLOWS_ROUTES: ServerRoute<any, any, any>[] = [
   LIST_WORKFLOWS_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,

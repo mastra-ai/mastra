@@ -8,7 +8,7 @@ import {
 } from '../../handlers/vector';
 import type { ServerRoute } from '.';
 
-export const VECTORS_ROUTES: ServerRoute<any, any>[] = [
+export const VECTORS_ROUTES: ServerRoute<any, any, any>[] = [
   UPSERT_VECTORS_ROUTE,
   CREATE_INDEX_ROUTE,
   QUERY_VECTORS_ROUTE,

@@ -12,6 +12,7 @@ import { LOGS_ROUTES } from './logs';
 import { MEMORY_ROUTES } from './memory';
 import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
+import type { MastraStreamReturn } from './stream-types';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
@@ -39,16 +40,28 @@ export type InferParams<
   (TQuerySchema extends z.ZodTypeAny ? z.infer<TQuerySchema> : {}) &
   (TBodySchema extends z.ZodTypeAny ? z.infer<TBodySchema> : {});
 
-export type ServerRouteHandler<TParams = Record<string, unknown>, TResponse = unknown> = (
+export type ServerRouteHandler<
+  TParams = Record<string, unknown>,
+  TResponse = unknown,
+  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
+> = (
   params: TParams & RuntimeContext,
-) => Promise<TResponse>;
+) => Promise<
+  TResponseType extends 'stream'
+    ? MastraStreamReturn
+    : TResponseType extends 'datastream-response'
+      ? Response
+      : TResponse
+>;
 
-export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> = Omit<
-  ApiRoute,
-  'handler' | 'createHandler'
-> & {
-  responseType: 'stream' | 'json';
-  handler: ServerRouteHandler<TParams, TResponse>;
+export type ServerRoute<
+  TParams = Record<string, unknown>,
+  TResponse = unknown,
+  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
+> = Omit<ApiRoute, 'handler' | 'createHandler'> & {
+  responseType: TResponseType;
+  streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
+  handler: ServerRouteHandler<TParams, TResponse, TResponseType>;
   pathParamSchema?: z.ZodSchema;
   queryParamSchema?: z.ZodSchema;
   bodySchema?: z.ZodSchema;
@@ -58,7 +71,7 @@ export type ServerRoute<TParams = Record<string, unknown>, TResponse = unknown> 
   deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
 };
 
-export const SERVER_ROUTES: ServerRoute<any, any>[] = [
+export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...AGENTS_ROUTES,
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,

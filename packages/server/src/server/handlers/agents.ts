@@ -524,7 +524,7 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
 export const GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/generate-legacy',
-  responseType: 'stream',
+  responseType: 'json' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
   responseSchema: generateResponseSchema,
@@ -567,7 +567,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream-legacy',
-  responseType: 'stream',
+  responseType: 'datastream-response' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,
@@ -676,7 +676,8 @@ export const GENERATE_AGENT_VNEXT_ROUTE: ServerRoute<
 export const STREAM_GENERATE_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream',
-  responseType: 'stream',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,
@@ -699,13 +700,13 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       validateBody({ messages });
 
-      const streamResult = agent.stream(messages, {
+      const streamResult = await agent.stream(messages, {
         ...rest,
         requestContext: finalRequestContext,
         abortSignal: undefined, // TODO: Get abortSignal from context if needed
       });
 
-      return streamResult;
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');
     }
@@ -728,7 +729,8 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
 export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/approve-tool-call',
-  responseType: 'stream',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: approveToolCallBodySchema,
   responseSchema: toolCallResponseSchema,
@@ -758,14 +760,14 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
-      const streamResult = agent.approveToolCall({
+      const streamResult = await agent.approveToolCall({
         ...rest,
         runId,
         requestContext: finalRequestContext,
         abortSignal: undefined, // TODO: Get abortSignal from context if needed
       });
 
-      return streamResult;
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error approving tool call');
     }
@@ -775,7 +777,8 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/decline-tool-call',
-  responseType: 'stream',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: declineToolCallBodySchema,
   responseSchema: toolCallResponseSchema,
@@ -805,14 +808,14 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         ...Array.from(Object.entries(agentRequestContext ?? {})),
       ]);
 
-      const streamResult = agent.declineToolCall({
+      const streamResult = await agent.declineToolCall({
         ...rest,
         runId,
         requestContext: finalRequestContext,
         abortSignal: undefined, // TODO: Get abortSignal from context if needed
       });
 
-      return streamResult;
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error declining tool call');
     }
@@ -822,7 +825,8 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 export const STREAM_NETWORK_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/network',
-  responseType: 'stream',
+  responseType: 'stream' as const,
+  streamFormat: 'sse' as const,
   pathParamSchema: agentIdPathParams,
   bodySchema: agentExecutionBodySchema,
   responseSchema: streamResponseSchema,
@@ -845,7 +849,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       validateBody({ messages });
 
-      const streamResult = agent.network(messages, {
+      const streamResult = await agent.network(messages, {
         ...rest,
         memory: {
           thread: rest.thread ?? '',

@@ -114,7 +114,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to generate speech' });
       }
 
-      return audioStream;
+      return audioStream as unknown as ReadableStream<any>;
     } catch (error) {
       return handleError(error, 'Error generating speech');
     }

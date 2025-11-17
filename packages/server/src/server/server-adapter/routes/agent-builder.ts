@@ -18,7 +18,7 @@ import {
 } from '../../handlers/agent-builder';
 import type { ServerRoute } from '.';
 
-export const AGENT_BUILDER_ROUTES: ServerRoute<any, any>[] = [
+export const AGENT_BUILDER_ROUTES: ServerRoute<any, any, any>[] = [
   LIST_AGENT_BUILDER_ACTIONS_ROUTE,
   GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE,
   LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE,

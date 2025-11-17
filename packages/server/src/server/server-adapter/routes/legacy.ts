@@ -11,7 +11,7 @@ import {
 } from '../../handlers/agent-builder';
 import type { ServerRoute } from '.';
 
-export const LEGACY_ROUTES: ServerRoute<any, any>[] = [
+export const LEGACY_ROUTES: ServerRoute<any, any, any>[] = [
   // ============================================================================
   // Legacy Agent Routes
   // ============================================================================

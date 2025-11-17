@@ -30,7 +30,7 @@ import {
 } from '../../handlers/voice';
 import type { ServerRoute } from '.';
 
-export const AGENTS_ROUTES: ServerRoute<any, any>[] = [
+export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   // ============================================================================
   // Agent Core Routes
   // ============================================================================

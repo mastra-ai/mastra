@@ -7,13 +7,16 @@ interface RouteConfig<
   TQuerySchema extends z.ZodTypeAny | undefined = undefined,
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
+  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
 > {
   method: ServerRoute['method'];
   path: string;
-  responseType: 'stream' | 'json';
+  responseType: TResponseType;
+  streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream'
   handler: ServerRouteHandler<
     InferParams<TPathSchema, TQuerySchema, TBodySchema>,
-    TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown
+    TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
+    TResponseType
   >;
   pathParamSchema?: TPathSchema;
   queryParamSchema?: TQuerySchema;
@@ -62,11 +65,13 @@ export function createRoute<
   TQuerySchema extends z.ZodTypeAny | undefined = undefined,
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
+  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
 >(
-  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
-  TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown
+  TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
+  TResponseType
 > {
   const { summary, description, tags, deprecated, ...baseRoute } = config;
 

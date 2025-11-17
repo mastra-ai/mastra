@@ -860,7 +860,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
         tracingOptions,
       });
 
-      return result;
+      return result.stream;
     } catch (error) {
       return handleError(error, 'Error executing workflow');
     }

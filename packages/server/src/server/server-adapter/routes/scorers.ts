@@ -8,7 +8,7 @@ import {
 } from '../../handlers/scores';
 import type { ServerRoute } from '.';
 
-export const SCORES_ROUTES: ServerRoute<any, any>[] = [
+export const SCORES_ROUTES: ServerRoute<any, any, any>[] = [
   LIST_SCORERS_ROUTE,
   GET_SCORER_ROUTE,
   LIST_SCORES_BY_RUN_ID_ROUTE,
