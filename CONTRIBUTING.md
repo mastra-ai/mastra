@@ -20,7 +20,7 @@ Read the [Development Guide](./DEVELOPMENT.md) for information on setting up a d
 ### Did you find a bug?
 
 - Ensure that the bug was not already reported by searching in the [GitHub issues](https://github.com/mastra-ai/mastra/issues)
-- If you're unable to find an open issue addressing the problem, [open a new one bug](https://github.com/mastra-ai/mastra/issues/new?template=bug_report.yml) report providing a [minimal reproduction](#minimal-reproduction) of the issue.
+- If you're unable to find an open issue addressing the problem, [open a new bug report](https://github.com/mastra-ai/mastra/issues/new?template=bug_report.yml) providing a [minimal reproduction](#minimal-reproduction) of the issue.
 
 Be sure to include a title and clear description, as much relevant information as possible, and a **code sample** or an **executable test case** demonstrating the expected behavior that is not occurring.
 
