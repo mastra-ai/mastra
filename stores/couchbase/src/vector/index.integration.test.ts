@@ -318,6 +318,13 @@ describe('Integration Testing CouchbaseVector', async () => {
           delete returnedMetadata.content;
         }
 
+        // Remove any flattened content.* keys that Couchbase search may return
+        Object.keys(returnedMetadata).forEach(key => {
+          if (key.startsWith('content.')) {
+            delete returnedMetadata[key];
+          }
+        });
+
         expect(result).toHaveProperty('id');
         expect(result).toHaveProperty('score');
         expect(result).toHaveProperty('metadata');
