@@ -124,6 +124,22 @@ npx @mastra/codemod@beta v1/workflow-list-runs .
 
 :::
 
+### `options.validateInputs: false` to `options.validateInputs: true`
+
+The `validateInputs` option was previously set to `false` by default. Now, it's set to `true` by default. This means schemas will be validated by default. If you have workflows whose schemas do not need to be validated, you can set `validateInputs` to `false`.
+
+To migrate, set `validateInputs` to `false` in your workflow options.
+
+```diff
+createWorkflow({
+  //...workflow info
++  options: {
++    //...other options
++    validateInputs: true
++  }
+})
+```
+
 ## Removed
 
 ### Legacy workflows export

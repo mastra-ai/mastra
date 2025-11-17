@@ -408,6 +408,7 @@ export function cloneWorkflow<
     outputSchema: workflow.outputSchema,
     steps: workflow.stepDefs,
     mastra: workflow.mastra,
+    options: workflow.options,
   });
 
   wf.setStepFlow(workflow.stepGraph);
@@ -486,7 +487,7 @@ export class Workflow<
     this.steps = {};
     this.stepDefs = steps;
     this.#options = {
-      validateInputs: options.validateInputs ?? false,
+      validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: options.tracingPolicy,
     };
