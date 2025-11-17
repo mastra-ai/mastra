@@ -77,16 +77,19 @@ export async function resolveModelConfig(
     return modelConfig;
   }
 
+  const gatewayRecord = mastra?.listGateways();
+  const customGateways = gatewayRecord ? Object.values(gatewayRecord) : undefined;
+
   // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
   if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {
-    return new ModelRouterLanguageModel(modelConfig);
+    return new ModelRouterLanguageModel(modelConfig, customGateways);
   }
 
   // If it's a function, resolve it first
   if (typeof modelConfig === 'function') {
     const fromDynamic = await modelConfig({ requestContext, mastra });
     if (typeof fromDynamic === 'string' || isOpenAICompatibleObjectConfig(fromDynamic)) {
-      return new ModelRouterLanguageModel(fromDynamic);
+      return new ModelRouterLanguageModel(fromDynamic, customGateways);
     }
     return fromDynamic;
   }

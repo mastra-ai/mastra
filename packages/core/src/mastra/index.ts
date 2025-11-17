@@ -10,6 +10,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
+import type { MastraModelGateway } from '../llm/model/gateways';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -171,6 +172,12 @@ export interface Config<
   processors?: TProcessors;
 
   /**
+   * Custom model router gateways for accessing LLM providers.
+   * Gateways handle provider-specific authentication, URL construction, and model resolution.
+   */
+  gateways?: Record<string, MastraModelGateway>;
+
+  /**
    * Event handlers for custom application events.
    * Maps event topics to handler functions for event-driven architectures.
    */
@@ -250,6 +257,7 @@ export class Mastra<
   #bundler?: BundlerConfig;
   #idGenerator?: MastraIdGenerator;
   #pubsub: PubSub;
+  #gateways?: Record<string, MastraModelGateway>;
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
@@ -441,6 +449,7 @@ export class Mastra<
     this.#tools = {} as TTools;
     this.#processors = {} as TProcessors;
     this.#workflows = {} as TWorkflows;
+    this.#gateways = {} as Record<string, MastraModelGateway>;
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
@@ -471,6 +480,12 @@ export class Mastra<
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         this.addWorkflow(workflow, key);
+      });
+    }
+
+    if (config?.gateways) {
+      Object.entries(config.gateways).forEach(([key, gateway]) => {
+        this.addGateway(gateway, key);
       });
     }
 
@@ -2092,6 +2107,220 @@ export class Mastra<
     }
 
     await this.#pubsub.flush();
+  }
+
+  /**
+   * Retrieves a registered gateway by its key.
+   *
+   * @throws {MastraError} When the gateway with the specified key is not found
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   gateways: {
+   *     myGateway: new CustomGateway()
+   *   }
+   * });
+   *
+   * const gateway = mastra.getGateway('myGateway');
+   * ```
+   */
+  public getGateway(key: string): MastraModelGateway {
+    const gateway = this.#gateways?.[key];
+    if (!gateway) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_GATEWAY_BY_KEY_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Gateway with key ${key} not found`,
+        details: {
+          status: 404,
+          gatewayKey: key,
+          gateways: Object.keys(this.#gateways ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return gateway;
+  }
+
+  /**
+   * Retrieves a registered gateway by its ID.
+   *
+   * Searches through all registered gateways and returns the one whose ID matches.
+   * If a gateway doesn't have an explicit ID, its name is used as the ID.
+   *
+   * @throws {MastraError} When no gateway with the specified ID is found
+   *
+   * @example
+   * ```typescript
+   * class CustomGateway extends MastraModelGateway {
+   *   readonly id = 'custom-gateway-v1';
+   *   readonly name = 'Custom Gateway';
+   *   // ...
+   * }
+   *
+   * const mastra = new Mastra({
+   *   gateways: {
+   *     myGateway: new CustomGateway()
+   *   }
+   * });
+   *
+   * const gateway = mastra.getGatewayById('custom-gateway-v1');
+   * ```
+   */
+  public getGatewayById(id: string): MastraModelGateway {
+    const gateways = this.#gateways ?? {};
+    for (const gateway of Object.values(gateways)) {
+      if (gateway.getId() === id) {
+        return gateway;
+      }
+    }
+
+    const error = new MastraError({
+      id: 'MASTRA_GET_GATEWAY_BY_ID_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Gateway with ID ${id} not found`,
+      details: {
+        status: 404,
+        gatewayId: id,
+        availableIds: Object.values(gateways)
+          .map(g => g.getId())
+          .join(', '),
+      },
+    });
+    this.#logger?.trackException(error);
+    throw error;
+  }
+
+  /**
+   * Returns all registered gateways as a record keyed by their names.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   gateways: {
+   *     netlify: new NetlifyGateway(),
+   *     custom: new CustomGateway()
+   *   }
+   * });
+   *
+   * const allGateways = mastra.listGateways();
+   * console.log(Object.keys(allGateways)); // ['netlify', 'custom']
+   * ```
+   */
+  public listGateways(): Record<string, MastraModelGateway> | undefined {
+    return this.#gateways;
+  }
+
+  /**
+   * Adds a new gateway to the Mastra instance.
+   *
+   * This method allows dynamic registration of gateways after the Mastra instance
+   * has been created. Gateways enable access to LLM providers through custom
+   * authentication and routing logic.
+   *
+   * If no key is provided, the gateway's ID (or name if no ID is set) will be used as the key.
+   *
+   * @example
+   * ```typescript
+   * import { MastraModelGateway } from '@mastra/core';
+   *
+   * class CustomGateway extends MastraModelGateway {
+   *   readonly id = 'custom-gateway-v1';  // Optional, defaults to name
+   *   readonly name = 'custom';
+   *   readonly prefix = 'custom';
+   *
+   *   async fetchProviders() {
+   *     return {
+   *       myProvider: {
+   *         name: 'My Provider',
+   *         models: ['model-1', 'model-2'],
+   *         apiKeyEnvVar: 'MY_API_KEY',
+   *         gateway: 'custom'
+   *       }
+   *     };
+   *   }
+   *
+   *   buildUrl(modelId: string) {
+   *     return 'https://api.myprovider.com/v1';
+   *   }
+   *
+   *   async getApiKey(modelId: string) {
+   *     return process.env.MY_API_KEY || '';
+   *   }
+   *
+   *   async resolveLanguageModel({ modelId, providerId, apiKey }) {
+   *     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
+   *     return createOpenAICompatible({
+   *       name: providerId,
+   *       apiKey,
+   *       baseURL,
+   *       supportsStructuredOutputs: true,
+   *     }).chatModel(modelId);
+   *   }
+   * }
+   *
+   * const mastra = new Mastra();
+   * const newGateway = new CustomGateway();
+   * mastra.addGateway(newGateway); // Uses gateway.getId() as key (gateway.id)
+   * // or
+   * mastra.addGateway(newGateway, 'customKey'); // Uses custom key
+   * ```
+   */
+  public addGateway(gateway: MastraModelGateway, key?: string): void {
+    const gatewayKey = key || gateway.getId();
+    const gateways = this.#gateways as Record<string, MastraModelGateway>;
+    if (gateways[gatewayKey]) {
+      const logger = this.getLogger();
+      logger.debug(`Gateway with key ${gatewayKey} already exists. Skipping addition.`);
+      return;
+    }
+
+    gateways[gatewayKey] = gateway;
+
+    // Register custom gateways with the registry for type generation
+    this.#syncGatewayRegistry();
+  }
+
+  /**
+   * Sync custom gateways with the GatewayRegistry for type generation
+   * @private
+   */
+  #syncGatewayRegistry(): void {
+    try {
+      // Only sync in dev mode (when MASTRA_DEV is set)
+      if (process.env.MASTRA_DEV !== 'true' && process.env.MASTRA_DEV !== '1') {
+        return;
+      }
+
+      // Trigger sync immediately (non-blocking, but logs progress)
+      import('../llm/model/provider-registry.js')
+        .then(async ({ GatewayRegistry }) => {
+          const registry = GatewayRegistry.getInstance();
+          const customGateways = Object.values(this.#gateways || {});
+          registry.registerCustomGateways(customGateways);
+
+          // Log that we're syncing
+          const logger = this.getLogger();
+          logger.info('🔄 Syncing custom gateway types...');
+
+          // Trigger a sync to regenerate types
+          await registry.syncGateways(true);
+
+          logger.info('✅ Custom gateway types synced! Restart your TypeScript server to see autocomplete.');
+        })
+        .catch(err => {
+          const logger = this.getLogger();
+          logger.debug('Gateway registry sync skipped:', err);
+        });
+    } catch (err) {
+      // Silent fail - this is a dev-only feature
+      const logger = this.getLogger();
+      logger.debug('Gateway registry sync failed:', err);
+    }
   }
 
   /**
