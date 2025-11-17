@@ -1,13 +1,5 @@
 import { agentBuilderWorkflows } from '@mastra/agent-builder';
-import type { WorkflowInfo } from '@mastra/core/workflows';
-import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import type { Context } from '../types';
-import { getWorkflowInfo, WorkflowRegistry } from '../utils';
-import { handleError } from './error';
-import * as workflows from './workflows';
-import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
 import {
   actionIdPathParams,
   actionRunPathParams,
@@ -26,10 +18,10 @@ import {
 } from '../schemas/agent-builder';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
-
-interface AgentBuilderContext extends Context {
-  actionId?: string;
-}
+import { createRoute } from '../server-adapter/routes/route-builder';
+import { WorkflowRegistry } from '../utils';
+import { handleError } from './error';
+import * as workflows from './workflows';
 
 // ============================================================================
 // Route Definitions (handlers call workflow route handlers with transformed parameters)

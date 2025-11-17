@@ -1,9 +1,6 @@
 import { Readable } from 'stream';
-import type { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
-import type { RequestContext } from '@mastra/core/request-context';
 import { HTTPException } from '../http-exception';
-import type { Context } from '../types';
 import {
   agentIdPathParams,
   voiceSpeakersResponseSchema,
@@ -14,7 +11,6 @@ import {
   getListenerResponseSchema,
 } from '../schemas/agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
 
 import { handleError } from './error';
 import { validateBody } from './utils';

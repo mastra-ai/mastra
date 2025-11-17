@@ -1,14 +1,11 @@
-import { describe } from 'vitest';
-import express, { type Application } from 'express';
-import { Server } from 'http';
-import { ExpressServerAdapter } from '../index';
-import {
-  createRouteAdapterTestSuite,
-  type AdapterTestContext,
-  type HttpRequest,
-  type HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import type { Server } from 'http';
+import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import express from 'express';
+import type { Application } from 'express';
+import { describe } from 'vitest';
+import { ExpressServerAdapter } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Express Server Adapter', () => {

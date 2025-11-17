@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core/mastra';
+import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
-import { generateOpenAPIDocument } from './openapi-utils';
 
 export * from './routes';
 

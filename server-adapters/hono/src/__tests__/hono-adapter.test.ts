@@ -1,13 +1,9 @@
-import { describe } from 'vitest';
-import { Hono } from 'hono';
-import { HonoServerAdapter } from '../index';
-import {
-  createRouteAdapterTestSuite,
-  type AdapterTestContext,
-  type HttpRequest,
-  type HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import { createRouteAdapterTestSuite } from '@internal/server-adapter-test-utils';
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { Hono } from 'hono';
+import { describe } from 'vitest';
+import { HonoServerAdapter } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {

@@ -3,12 +3,12 @@
  * These routes should not be used in new code and will be removed in a future version.
  */
 
-import { GENERATE_LEGACY_ROUTE, STREAM_GENERATE_LEGACY_ROUTE } from '../../handlers/agents';
-import { STREAM_LEGACY_WORKFLOW_ROUTE, OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE } from '../../handlers/workflows';
 import {
   STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
   OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
 } from '../../handlers/agent-builder';
+import { GENERATE_LEGACY_ROUTE, STREAM_GENERATE_LEGACY_ROUTE } from '../../handlers/agents';
+import { STREAM_LEGACY_WORKFLOW_ROUTE, OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE } from '../../handlers/workflows';
 import type { ServerRoute } from '.';
 
 export const LEGACY_ROUTES: ServerRoute<any, any, any>[] = [

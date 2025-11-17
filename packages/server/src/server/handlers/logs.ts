@@ -1,9 +1,7 @@
-import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
-import type { Mastra } from '@mastra/core/mastra';
-import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
+import type { LogLevel } from '@mastra/core/logger';
 import { runIdSchema } from '../schemas/common';
+import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
 import { handleError } from './error';
 import { validateBody } from './utils';
 

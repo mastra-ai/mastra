@@ -14,16 +14,15 @@ import { z } from 'zod';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
-import type { Context } from '../types';
-import { convertInstructionsToString } from '../utils';
-import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
   agentCardResponseSchema,
   agentExecutionResponseSchema,
 } from '../schemas/a2a';
+import { createRoute } from '../server-adapter/routes/route-builder';
+import type { Context } from '../types';
+import { convertInstructionsToString } from '../utils';
 
 const messageSendParamsSchema = z.object({
   message: z.object({

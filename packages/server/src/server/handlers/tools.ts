@@ -1,5 +1,4 @@
 import { RequestContext } from '@mastra/core/di';
-import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { isVercelTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { stringify } from 'superjson';
@@ -15,8 +14,6 @@ import {
 } from '../schemas/agents';
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
-import type { Context } from '../types';
 
 import { handleError } from './error';
 import { validateBody } from './utils';

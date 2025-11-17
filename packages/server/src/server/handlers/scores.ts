@@ -1,10 +1,8 @@
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
-import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import type { Context } from '../types';
-import { handleError } from './error';
+import { runIdSchema } from '../schemas/common';
 import {
   listScorersResponseSchema,
   scorerEntrySchema,
@@ -17,9 +15,9 @@ import {
   scoresWithPaginationResponseSchema,
   saveScoreResponseSchema,
 } from '../schemas/scores';
-import { runIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
+import type { Context } from '../types';
+import { handleError } from './error';
 
 async function listScorersFromSystem({
   mastra,

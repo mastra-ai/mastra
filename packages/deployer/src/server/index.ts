@@ -20,7 +20,6 @@ import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled 
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
-import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 

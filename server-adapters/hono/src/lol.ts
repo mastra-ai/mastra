@@ -33,6 +33,7 @@ export const weatherTool = createTool({
     location: z.string(),
   }),
   execute: async inputData => {
+    // eslint-disable-next-line no-console
     console.log('tool context', inputData);
     const location = inputData.location;
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
@@ -429,8 +430,11 @@ serve(
     port: 3001,
   },
   () => {
+    // eslint-disable-next-line no-console
     console.log('Server is running on port 3001');
+    // eslint-disable-next-line no-console
     console.log('OpenAPI spec: http://localhost:3001/openapi.json');
+    // eslint-disable-next-line no-console
     console.log('Swagger UI: http://localhost:3001/swagger-ui');
   },
 );

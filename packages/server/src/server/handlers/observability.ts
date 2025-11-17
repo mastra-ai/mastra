@@ -13,7 +13,6 @@ import {
   listScoresBySpanQuerySchema,
 } from '../schemas/observability';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import type { ServerRoute } from '../server-adapter/routes';
 import type { Context } from '../types';
 import { handleError } from './error';
 

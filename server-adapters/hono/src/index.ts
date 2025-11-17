@@ -2,8 +2,8 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Tool } from '@mastra/core/tools';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { MastraServerAdapter, type BodyLimitOptions } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import type { BodyLimitOptions, ServerRoute } from '@mastra/server/server-adapter';
 import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
@@ -180,9 +180,6 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
       return response.json(result as any, 200);
     } else if (route.responseType === 'stream') {
       return this.stream(route, response, result as { fullStream: ReadableStream });
-    } else if (route.responseType === 'datastream-response') {
-      // Handle AI SDK Response objects - Hono accepts Response objects natively
-      return result;
     } else {
       return response.status(500);
     }
