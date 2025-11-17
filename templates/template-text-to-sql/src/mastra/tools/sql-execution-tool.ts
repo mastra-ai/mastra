@@ -164,7 +164,6 @@ export const sqlExecutionTool = createTool({
       const trimmedQuery = query.trim().toLowerCase();
       if (!trimmedQuery.startsWith('select')) {
         throw new Error('Only SELECT queries are allowed for security reasons');
-      }
 
       validateQuery(query);
 
