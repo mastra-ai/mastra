@@ -587,6 +587,14 @@ div[class*="codeBlockTitle"] {
   color: var(--mastra-text-tertiary);
 }
 
+ul {
+  list-style: disc;
+}
+
+ol {
+  list-style: decimal;
+}
+
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
@@ -666,14 +674,6 @@ div[class*="codeBlockTitle"] {
     .markdown h3 {
       border-bottom-color: var(--border);
     }
-  }
-
-  ul {
-    list-style: disc;
-  }
-
-  ol {
-    list-style: decimal;
   }
 
   /* ==================== PAGINATION ==================== */
