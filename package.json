@@ -98,7 +98,7 @@
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
-    "globby": "^14.1.0",
+    "globby": "^15.0.0",
     "resolve-from": "^5.0.0"
   }
 }
