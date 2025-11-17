@@ -1241,31 +1241,6 @@
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/templates/CONTRIBUTING.md",
-      "destination": "/:path/docs/community/contributing-templates",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/EVALS.md",
-      "destination": "/:path/docs/community/contributing-templates",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/LICENSE",
-      "destination": "/:path/docs/community/licensing",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/docs",
-      "destination": "/:path/docs/getting-started/templates",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/templates/olde-maps-ai-directions-assistant",
-      "destination": "/:path/docs/getting-started/templates",
-      "permanent": true
-    },
-    {
       "source": "/:path(ja)?/docs/workflows/input-data-mapping",
       "destination": "/:path/docs/workflows/control-flow",
       "permanent": true
@@ -1401,68 +1376,8 @@
       "permanent": true
     },
     {
-      "source": "/:path(ja)?/docs/evals/custom-scorers",
-      "destination": "/:path/docs/scorers/custom-scorers",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/evals/off-the-shelf-scorers",
-      "destination": "/:path/docs/scorers/built-in-scorers",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/agents/human-in-the-loop-with-tools",
-      "destination": "/:path/docs/workflows/human-in-the-loop",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/examples/observability/basic-tracing",
-      "destination": "/:path/examples/observability/basic-ai-tracing",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/logging",
-      "destination": "/:path/docs/observability/logging",
-      "permanent": true
-    },
-    {
       "source": "/:path(ja)?/docs/observability/tracing/processors/sensitive-data-filter",
       "destination": "/:path/docs/observability/ai-tracing/processors/sensitive-data-filter",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/reference/core",
-      "destination": "/:path/reference/core/mastra-class",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/reference/networks/agent-network",
-      "destination": "/:path/reference/agents/network",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/reference/tools/mcp-configuration",
-      "destination": "/:path/reference/tools/mcp-client",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/reference/voice/mastra-voice",
-      "destination": "/:path/reference/voice/mastra-voice",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/examples/workflows/parallel-steps",
-      "destination": "/:path/docs/workflows/control-flow",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/examples/workflows/sequential-steps",
-      "destination": "/:path/docs/workflows/control-flow",
-      "permanent": true
-    },
-    {
-      "source": "/:path(ja)?/docs/guides/03-stock-agent",
-      "destination": "/:path/guides/guide/stock-agent",
       "permanent": true
     },
     {
