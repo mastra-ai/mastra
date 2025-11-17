@@ -161,10 +161,6 @@ export const sqlExecutionTool = createTool({
       await client.connect();
       console.log('✅ Connected to PostgreSQL for query execution');
 
-      const trimmedQuery = query.trim().toLowerCase();
-      if (!trimmedQuery.startsWith('select')) {
-        throw new Error('Only SELECT queries are allowed for security reasons');
-
       validateQuery(query);
 
       const result = await executeQuery(client, query);
