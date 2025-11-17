@@ -197,6 +197,11 @@ describe('TokenLimiterProcessor', () => {
 
     it(
       `101 messages, 49 tool calls`,
+      {
+        // for some reason AI SDK randomly returns 2x token count here
+        retry: 3,
+        timeout: 60000,
+      },
       async () => {
         await expectTokenEstimate(
           {
@@ -207,11 +212,6 @@ describe('TokenLimiterProcessor', () => {
           agent,
           12, // Higher margin due to LLM token counting variability with many tool calls
         );
-      },
-      {
-        // for some reason AI SDK randomly returns 2x token count here
-        retry: 3,
-        timeout: 60000,
       },
     );
   });
