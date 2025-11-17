@@ -3627,14 +3627,15 @@ describe('MastraInngestWorkflow', () => {
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
-    // TODO: add error handling consistency tests similar to default execution engine tests
-    it('should return error instance after retrying and failing', async ctx => {
+    it('should return reconstructed error instance after retrying and failing', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
       });
 
       const { createWorkflow, createStep } = init(inngest);
+
+      const testError = new Error('Step failed');
 
       const step1 = createStep({
         id: 'step1',
@@ -3644,7 +3645,7 @@ describe('MastraInngestWorkflow', () => {
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: vi.fn().mockRejectedValue(testError),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -3696,6 +3697,14 @@ describe('MastraInngestWorkflow', () => {
       expect(result.status).toBe('failed');
 
       srv.close();
+
+      if (result.status !== 'failed') {
+        throw new Error('assertion failed: expected result.status not failed');
+      }
+
+      expect(result.error).toBeInstanceOf(Error);
+      expect(result.error.message).toEqual(testError.message);
+      expect(result.error).toMatchObject(testError);
 
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
