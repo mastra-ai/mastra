@@ -956,7 +956,7 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       langfuse:
-        specifier: ^3.38.5
+        specifier: ^3.38.6
         version: 3.38.6
     devDependencies:
       '@internal/lint':
