@@ -23,10 +23,22 @@ const executeQuery = async (client: Client, query: string) => {
 };
 
 const ALLOWED_FUNCTIONS = new Set([
-  'count', 'sum', 'avg', 'min', 'max',
-  'upper', 'lower', 'length', 'substring',
-  'date_part', 'now', 'current_timestamp', 'current_date',
-  'coalesce', 'greatest', 'least'
+  'count',
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'upper',
+  'lower',
+  'length',
+  'substring',
+  'date_part',
+  'now',
+  'current_timestamp',
+  'current_date',
+  'coalesce',
+  'greatest',
+  'least',
 ]);
 
 const validateQuery = (query: string) => {
@@ -38,9 +50,9 @@ const validateQuery = (query: string) => {
 
   // Normalize the query by removing comments and extra whitespace for pattern matching
   const normalizedQuery = query
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')  // Remove /* */ comments
-    .replace(/--.*$/gm, ' ')            // Remove -- comments
-    .replace(/\s+/g, ' ')               // Normalize whitespace
+    .replace(/\/\*[\s\S]*?\*\//g, ' ') // Remove /* */ comments
+    .replace(/--.*$/gm, ' ') // Remove -- comments
+    .replace(/\s+/g, ' ') // Normalize whitespace
     .toLowerCase();
 
   // Block common dangerous patterns with more robust regex
