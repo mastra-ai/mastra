@@ -34,17 +34,20 @@ body:
       label: Expected Behavior
       description: A clear and concise description of what you expected to happen.
       placeholder: 'The workflow should execute successfully and return the expected result.'
+    validations:
+      required: true
 
   - type: textarea
     attributes:
       label: Environment Information
-      description: Please provide details about your environment.
+      description: Run "npx envinfo --system --browsers --binaries --npmPackages --npmGlobalPackages" in your project directory and paste the output here.
       placeholder: |
-        - Mastra Version: (e.g., 0.1.11)
-        - Node.js Version: (e.g., v22.13.0)
-        - OS: (e.g., Windows 11, macOS, Ubuntu 22.04)
+        In addition to the "npx envinfo" output, please also inlude:
+        
         - LLM Provider: (e.g., OpenAI, Anthropic, Google Gemini)
         - Browser (if applicable): (e.g., Chrome 120)
+    validations:
+      required: true
 
   - type: checkboxes
     attributes:
