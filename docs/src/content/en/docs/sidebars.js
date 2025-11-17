@@ -24,7 +24,7 @@ const sidebars = {
         {
           type: "doc",
           id: "getting-started/installation",
-          label: "Installation",
+          label: "Quickstart",
         },
         {
           type: "doc",

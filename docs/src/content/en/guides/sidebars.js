@@ -15,6 +15,11 @@ const sidebars = {
       items: [
         {
           type: "doc",
+          id: "quickstarts/standalone-server",
+          label: "Standalone Server",
+        },
+        {
+          type: "doc",
           id: "quickstarts/nextjs",
           label: "Next.js",
         },
@@ -54,6 +59,11 @@ const sidebars = {
           type: "doc",
           id: "guide/web-search",
           label: "Tools: Web Search",
+        },
+        {
+          type: "doc",
+          id: "guide/manual-installation",
+          label: "Manual Installation",
         },
       ],
     },
