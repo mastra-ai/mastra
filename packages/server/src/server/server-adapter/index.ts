@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core/mastra';
+import type { Tool } from '@mastra/core/tools';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
 import type { ServerRoute } from './routes';
@@ -22,10 +23,20 @@ export interface BodyLimitOptions {
 export abstract class MastraServerAdapter<TApp, TRequest, TResponse> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
+  protected tools?: Record<string, Tool>;
 
-  constructor({ mastra, bodyLimitOptions }: { mastra: Mastra; bodyLimitOptions?: BodyLimitOptions }) {
+  constructor({
+    mastra,
+    bodyLimitOptions,
+    tools,
+  }: {
+    mastra: Mastra;
+    bodyLimitOptions?: BodyLimitOptions;
+    tools?: Record<string, Tool>;
+  }) {
     this.mastra = mastra;
     this.bodyLimitOptions = bodyLimitOptions;
+    this.tools = tools;
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;

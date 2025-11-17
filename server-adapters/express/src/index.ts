@@ -22,7 +22,6 @@ declare global {
 }
 
 export class ExpressServerAdapter extends MastraServerAdapter<Application, Request, Response> {
-  private tools?: Record<string, Tool>;
   private taskStore: InMemoryTaskStore;
   private customRouteAuthConfig?: Map<string, boolean>;
   private playground?: boolean;
@@ -45,8 +44,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     isDev?: boolean;
     bodyLimitOptions?: BodyLimitOptions;
   }) {
-    super({ mastra, bodyLimitOptions });
-    this.tools = tools;
+    super({ mastra, bodyLimitOptions, tools });
     this.taskStore = taskStore || new InMemoryTaskStore();
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.playground = playground;

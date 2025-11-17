@@ -411,6 +411,9 @@ const mastra = new Mastra({
     weatherWorkflow,
     travelAgentWorkflow,
   },
+  tools: {
+    weatherTool,
+  },
   storage,
   observability: new Observability({
     default: {

@@ -22,7 +22,6 @@ export type HonoVariables = {
 export type HonoBindings = {};
 
 export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, HonoRequest, Context> {
-  private tools?: Record<string, Tool>;
   private taskStore: InMemoryTaskStore;
   private customRouteAuthConfig?: Map<string, boolean>;
   private playground?: boolean;
@@ -45,8 +44,7 @@ export class HonoServerAdapter extends MastraServerAdapter<Hono<any, any, any>, 
     isDev?: boolean;
     bodyLimitOptions?: BodyLimitOptions;
   }) {
-    super({ mastra, bodyLimitOptions });
-    this.tools = tools;
+    super({ mastra, bodyLimitOptions, tools });
     this.taskStore = taskStore || new InMemoryTaskStore();
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.playground = playground;

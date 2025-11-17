@@ -30,13 +30,11 @@ export const LIST_TOOLS_ROUTE = createRoute({
   summary: 'List all tools',
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
-  handler: async ({ tools }) => {
+  handler: async ({ mastra, tools }) => {
     try {
-      if (!tools) {
-        return {};
-      }
+      const allTools = tools || mastra.listTools() || {};
 
-      const serializedTools = Object.entries(tools).reduce(
+      const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
           const tool = _tool as any;
           acc[id] = {
@@ -65,9 +63,16 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   summary: 'Get tool by ID',
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
-  handler: async ({ tools, toolId }) => {
+  handler: async ({ mastra, tools, toolId }) => {
     try {
-      const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+      let tool: any;
+
+      // Try explicit tools first, then fallback to mastra
+      if (tools && Object.keys(tools).length > 0) {
+        tool = Object.values(tools).find((t: any) => t.id === toolId);
+      } else {
+        tool = mastra.getToolById(toolId as string);
+      }
 
       if (!tool) {
         throw new HTTPException(404, { message: 'Tool not found' });
@@ -103,7 +108,14 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Tool ID is required' });
       }
 
-      const tool = Object.values(tools || {}).find((tool: any) => tool.id === toolId) as any;
+      let tool: any;
+
+      // Try explicit tools first, then fallback to mastra
+      if (tools && Object.keys(tools).length > 0) {
+        tool = Object.values(tools).find((t: any) => t.id === toolId);
+      } else {
+        tool = mastra.getToolById(toolId as string);
+      }
 
       if (!tool) {
         throw new HTTPException(404, { message: 'Tool not found' });
