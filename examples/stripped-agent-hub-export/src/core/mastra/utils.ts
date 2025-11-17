@@ -1,4 +1,5 @@
-import {Agent, Workflow} from '@mastra/core';
+import {Agent} from '@mastra/core/agent';
+import {Workflow} from '@mastra/core/workflows';
 
 export const consolidateApps = (
   apps: {

@@ -1,7 +1,6 @@
 import {Mastra} from '@mastra/core/mastra';
 import {config} from 'dotenv';
 
-import {RuntimeContext} from '@mastra/core/runtime-context';
 import {registerCopilotKit} from '@ag-ui/mastra';
 import {Context} from 'hono';
 
@@ -20,7 +19,7 @@ const consolidated = consolidateApps(apps);
 export const mastra = new Mastra({
   workflows: consolidated.workflows,
   agents: consolidated.agents,
-  storage: new LibSQLStore({url: ':memory:'}),
+  storage: new LibSQLStore({id: 'playground', url: ':memory:'}),
   logger: new PinoWrapperLogger({
     name: 'Mastra',
   }),

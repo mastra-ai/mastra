@@ -8,6 +8,7 @@ packages:
   - client-sdks/*
   - integrations/*
   - examples/dane
+  - examples/stripped-agent-hub-export
   - auth/*
   - observability/*
   - observability/otel-bridge/examples/*

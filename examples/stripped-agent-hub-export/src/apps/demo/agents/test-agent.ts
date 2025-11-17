@@ -10,7 +10,7 @@ You are a helpful assistant who can answer questions about science.
 export const scienceChatAgent = new Agent({
   name: 'Science Chat Agent',
   instructions: ROOT_AGENT_PROMPT,
-  model: getGpt4oModel(),
+  model: 'openai/gpt-4o-mini',
   memory: new Memory({
     storage: createStorage('science_chat'),
   }),

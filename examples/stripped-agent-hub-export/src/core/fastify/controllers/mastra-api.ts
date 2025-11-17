@@ -10,7 +10,7 @@ const mastraApi: FastifyPluginAsyncZod = async fastify => {
   fastify.setSerializerCompiler(serializerCompiler);
 
   fastify.get('/api/agents', () =>
-    agentsHandler.getAgentsHandler({mastra: fastify.mastra, runtimeContext: fastify.runtimeContext}),
+    agentsHandler.listAgentsHandler({mastra: fastify.mastra, requestContext: fastify.requestContext}),
   );
   fastify.get(
     '/api/agents/:agentId',
@@ -24,7 +24,7 @@ const mastraApi: FastifyPluginAsyncZod = async fastify => {
     req =>
       agentsHandler.getAgentByIdHandler({
         mastra: fastify.mastra,
-        runtimeContext: fastify.runtimeContext,
+        requestContext: fastify.requestContext,
         agentId: req.params.agentId,
       }),
   );
@@ -41,12 +41,12 @@ const mastraApi: FastifyPluginAsyncZod = async fastify => {
     req =>
       agentsHandler.generateHandler({
         mastra: fastify.mastra,
-        runtimeContext: fastify.runtimeContext,
+        requestContext: fastify.requestContext,
         agentId: req.params.agentId,
         body: req.body as any,
       }),
   );
-  fastify.get('/api/workflows', () => workflowsHandler.getWorkflowsHandler({mastra: fastify.mastra}));
+  fastify.get('/api/workflows', () => workflowsHandler.listWorkflowsHandler({mastra: fastify.mastra}));
   fastify.get(
     '/api/workflows/:workflowId',
     {
@@ -110,7 +110,7 @@ const mastraApi: FastifyPluginAsyncZod = async fastify => {
     async req =>
       await workflowsHandler.startWorkflowRunHandler({
         mastra: fastify.mastra,
-        runtimeContext: fastify.runtimeContext,
+        requestContext: fastify.requestContext,
         workflowId: req.params.workflowId,
         runId: req.query.runId,
         inputData: req.body.inputData,
@@ -134,7 +134,7 @@ const mastraApi: FastifyPluginAsyncZod = async fastify => {
     async req =>
       await workflowsHandler.startAsyncWorkflowHandler({
         mastra: fastify.mastra,
-        runtimeContext: fastify.runtimeContext,
+        requestContext: fastify.requestContext,
         workflowId: req.params.workflowId,
         runId: req.query.runId,
         inputData: req.body.inputData,

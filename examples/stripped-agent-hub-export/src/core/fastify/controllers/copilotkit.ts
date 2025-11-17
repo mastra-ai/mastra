@@ -11,9 +11,9 @@ const copilotkit: FastifyPluginAsync = async fastify => {
     method: ['GET', 'POST', 'OPTIONS'],
     handler: async (req, res) => {
       const aguiAgents = MastraAgent.getLocalAgents({
-        resourceId: fastify.runtimeContext.get('resourceId'),
+        resourceId: fastify.requestContext.get('resourceId'),
         mastra: fastify.mastra,
-        runtimeContext: fastify.runtimeContext,
+        runtimeContext: fastify.requestContext,
       });
 
       const runtime = new CopilotRuntime({
