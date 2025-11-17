@@ -72,7 +72,16 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
     if (!validatedResumeData.success) {
       const errors = getZodErrors(validatedResumeData.error);
       const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new Error('Step resume data validation failed: \n' + errorMessages);
+      validationError = new MastraError(
+        {
+          id: 'WORKFLOW_STEP_RESUME_DATA_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: 'Step resume data validation failed: \n' + errorMessages,
+        },
+        // keep the original zod error as the cause for consumers
+        validatedResumeData.error,
+      );
     } else {
       resumeData = validatedResumeData.data;
     }
