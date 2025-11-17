@@ -50,7 +50,7 @@ const migrationPrompts: Prompt[] = [
 
 export const migrationPromptMessages: MCPServerPrompts = {
   listPrompts: async () => migrationPrompts,
-  getPromptMessages: async ({ name }): Promise<PromptMessage[]> => {
+  getPromptMessages: async (): Promise<PromptMessage[]> => {
     // Always return the upgrade message for any migration prompt
     return [
       {
