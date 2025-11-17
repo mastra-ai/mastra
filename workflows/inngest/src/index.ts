@@ -176,7 +176,13 @@ export class InngestRun<
           runId: this.runId,
         });
         return {
-          output: { result: { steps: snapshot?.context, status: 'failed', error: runs?.[0]?.output?.message } },
+          output: {
+            result: {
+              steps: snapshot?.context,
+              status: 'failed',
+              error: getErrorFromUnknown(runs?.[0]?.output?.cause?.error, { serializeStack: false }),
+            },
+          },
         };
       }
 
@@ -291,7 +297,7 @@ export class InngestRun<
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
     if (result.status === 'failed') {
-      result.error = new Error(result.error);
+      result.error = getErrorFromUnknown(result.error, { serializeStack: false });
     }
 
     if (result.status !== 'suspended') {
