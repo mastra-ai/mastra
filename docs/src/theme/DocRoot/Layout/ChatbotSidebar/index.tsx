@@ -237,7 +237,7 @@ export default function ChatbotSidebar(): ReactNode {
           </form>
 
           <div className="flex items-end -mx-2 py-2 px-3 border-t border-(--border)">
-            <span className="text-[10px] ml-auto inline-block font-medium text-(--mastra-text-muted)">
+            <span className="text-[10px] ml-auto inline-block font-medium text-(--mastra-text-tertiary)">
               Powered by{" "}
               <a
                 href="https://www.kapa.ai"
