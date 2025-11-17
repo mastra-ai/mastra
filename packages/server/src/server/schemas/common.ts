@@ -101,11 +101,13 @@ export const coreMessageSchema = z.object({
   content: z.union([
     z.string(),
     z.array(
-      z.object({
-        type: z.enum(['text', 'image', 'file', 'tool-call', 'tool-result']),
-      }),
+      z
+        .object({
+          type: z.enum(['text', 'image', 'file', 'tool-call', 'tool-result']),
+        })
+        .passthrough(), // Preserve additional fields like text, image, toolCall, etc.
     ),
-    z.object({}), // For complex message content objects
+    z.object({}).passthrough(), // For complex message content objects
   ]),
 });
 
