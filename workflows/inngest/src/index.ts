@@ -2041,12 +2041,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             abort: () => {
               abortController?.abort();
             },
-            // resume: {
-            //   steps: resume?.steps?.slice(1) || [],
-            //   resumePayload: resume?.resumePayload,
-            //   // @ts-ignore
-            //   runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
-            // },
             [EMITTER_SYMBOL]: emitter,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
             engine: {
@@ -2177,7 +2171,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
 
     Object.assign(executionContext.suspendedPaths, stepRes.executionContext.suspendedPaths);
-    // Object.assign(stepResults, stepRes.stepResults);
     executionContext.state = stepRes.executionContext.state;
 
     return stepRes.result as StepResult<any, any, any, any>;
