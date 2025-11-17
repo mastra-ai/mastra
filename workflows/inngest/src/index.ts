@@ -1190,7 +1190,7 @@ export function createStep<
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   if (isAgent(params)) {
     return {
-      id: params.name,
+      id: params.name as TStepId,
       description: params.getDescription(),
       inputSchema: z.object({
         prompt: z.string(),
