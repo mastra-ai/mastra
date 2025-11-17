@@ -1,8 +1,5 @@
-import { prefersReducedMotion } from "@docusaurus/theme-common";
-import clsx from "clsx";
-import React, { type ReactNode, useCallback, useEffect, useState } from "react";
-
 import { Markdown } from "@copilotkit/react-ui";
+import { prefersReducedMotion } from "@docusaurus/theme-common";
 import { useChat } from "@kapaai/react-sdk";
 import { PulsingDots } from "@site/src/components/loading";
 import { Button } from "@site/src/components/ui/button";
@@ -13,6 +10,8 @@ import {
 } from "@site/src/components/ui/conversation";
 import { Textarea } from "@site/src/components/ui/textarea";
 import { cn } from "@site/src/lib/utils";
+import clsx from "clsx";
+import { T, useGT } from "gt-react";
 import {
   ArrowUp,
   PanelLeftClose,
@@ -21,10 +20,12 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
+import React, { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useChatbotSidebar } from "./context";
 import styles from "./styles.module.css";
 
 export default function ChatbotSidebar(): ReactNode {
+  const gt = useGT();
   const { isHidden: hiddenChatbotSidebar, toggle } = useChatbotSidebar();
   const [hiddenSidebar, setHiddenSidebar] = useState(false);
 
@@ -109,7 +110,7 @@ export default function ChatbotSidebar(): ReactNode {
           hiddenChatbotSidebar ? "Expand chatbot" : "Collapse chatbot"
         }
       />
-      {/* Header */}
+      {/* Chatbot sidebar header */}
       <div
         className={cn(
           "backdrop-blur-md justify-start bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3  py-2 pt-1",
@@ -127,9 +128,11 @@ export default function ChatbotSidebar(): ReactNode {
           )}
         </button>
         {!hiddenChatbotSidebar && (
-          <span className="text-sm font-medium text-(--mastra-text-tertiary)">
-            Chat with Mastra docs
-          </span>
+          <T>
+            <span className="text-sm font-medium text-(--mastra-text-tertiary)">
+              Chat with Mastra docs
+            </span>
+          </T>
         )}
       </div>
       {/* Sidebar content */}
@@ -152,9 +155,11 @@ export default function ChatbotSidebar(): ReactNode {
                           {/* Feedback buttons - only show when answer is complete */}
                           {id && (
                             <div className="flex gap-2 items-center mt-3">
-                              <span className="text-xs text-icons-2">
-                                Was this helpful?
-                              </span>
+                              <T>
+                                <span className="text-xs text-icons-2">
+                                  Was this helpful?
+                                </span>
+                              </T>
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
@@ -196,9 +201,9 @@ export default function ChatbotSidebar(): ReactNode {
           <ConversationScrollButton className="backdrop-blur-md bg-white/50 dark:bg-black/50 border-none ring-1 ring-(--border-subtle)" />
         </Conversation>
       )}
-      {/* Footer */}
+      {/* Chatbot sidebar footer */}
       {!hiddenChatbotSidebar && (
-        <div className="space-y-2.5 pt-2 px-2 bg-(--mastra-surface-1)">
+        <div className="space-y-2.5 z-10 pt-2 px-2 bg-(--mastra-surface-1)">
           <form
             className="flex p-3 flex-col bg-(--ifm-background-color) rounded-xl border border-(--border) focus-within:border-green-500 focus-within:ring-2 focus-within:ring-(--mastra-green-accent)/50"
             onSubmit={handleSubmit}
@@ -206,7 +211,7 @@ export default function ChatbotSidebar(): ReactNode {
             <Textarea
               className="overflow-hidden font-medium placeholder:text-(--mastra-text-muted) placeholder:font-medium p-0 w-full text-sm border-none shadow-none outline-none resize-none text-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
               rows={1}
-              placeholder="Ask questions about Mastra..."
+              placeholder={gt("Ask questions about Mastra...")}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -237,16 +242,19 @@ export default function ChatbotSidebar(): ReactNode {
           </form>
 
           <div className="flex items-end -mx-2 py-2 px-3 border-t border-(--border)">
-            <span className="text-[10px] ml-auto inline-block font-medium text-(--mastra-text-tertiary)">
-              Powered by{" "}
-              <a
-                href="https://www.kapa.ai"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                kapa.ai
-              </a>
-            </span>
+            <T>
+              <span className="text-[11px] ml-auto inline-block font-medium dark:text-(--mastra-text-tertiary) text-(--mastra-text-muted-2)!">
+                Powered by{" "}
+                <a
+                  href="https://kapa.ai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="dark:text-(--mastra-text-tertiary) text-(--mastra-text-muted-2)!"
+                >
+                  kapa.ai
+                </a>
+              </span>
+            </T>
           </div>
         </div>
       )}
