@@ -458,6 +458,21 @@ tbody td {
   background: none;
 }
 
+iframe,
+img,
+video {
+  border-radius: 12px;
+  max-width: 100%;
+}
+
+ul {
+  list-style: disc;
+}
+
+ol {
+  list-style: decimal;
+}
+
 @media (min-width: 997px) {
   [class*="docSidebarContainer"] {
     width: 280px !important;
@@ -563,21 +578,6 @@ tbody td {
     .markdown h3 {
       border-bottom-color: var(--border);
     }
-  }
-
-  iframe,
-  img,
-  video {
-    border-radius: 12px;
-    max-width: 100%;
-  }
-
-  ul {
-    list-style: disc;
-  }
-
-  ol {
-    list-style: decimal;
   }
 
   /* ==================== PAGINATION ==================== */
