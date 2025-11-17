@@ -20,6 +20,12 @@ For a full-stack integration approach where Mastra runs directly in your Next.js
 
 :::
 
+:::tip
+
+Visit Mastra's [**"UI Dojo"**](https://ui-dojo.mastra.ai/) to see real-world examples of CopilotKit integrated with Mastra.
+
+:::
+
 ## Integration Guide
 
 Run Mastra as a standalone server and connect your Next.js frontend (with CopilotKit) to its API endpoints.
@@ -43,7 +49,7 @@ project-root
 Bootstrap your Mastra server:
 
 ```bash copy
-npx create-mastra@beta
+npx create-mastra@latest
 ```
 
 This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
@@ -83,12 +89,12 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 Create a chat route for the CopilotKit frontend by using the `registerCopilotKit()` helper from `@ag-ui/mastra`. Add it to your Mastra project (and its peer dependencies):
 
 ```bash copy
-npm install @ag-ui/mastra @copilotkit/runtime @ag-ui/core @ag-ui/client
+npm install --legacy-peer-deps @ag-ui/mastra @copilotkit/runtime @ag-ui/core @ag-ui/client @ag-ui/encoder @ag-ui/langgraph @ag-ui/proto
 ```
 
 In your `src/mastra/index.ts` file, register the chat route:
 
-```typescript copy title="src/mastra/index.ts" {2,7-13}
+```typescript copy title="src/mastra/index.ts" {2,7-19}
 import { Mastra } from '@mastra/core/mastra';
 import { registerCopilotKit } from '@ag-ui/mastra/copilotkit';
 // Rest of the imports...
@@ -96,6 +102,11 @@ import { registerCopilotKit } from '@ag-ui/mastra/copilotkit';
 export const mastra = new Mastra({
   // Rest of the configuration...
   server: {
+    cors: {
+      origin: "*",
+      allowMethods: ["*"],
+      allowHeaders: ["*"],
+    },
     apiRoutes: [
       registerCopilotKit({
         path: '/chat',
@@ -106,7 +117,7 @@ export const mastra = new Mastra({
 });
 ```
 
-This will make the `weatherAgent` available at `/chat` in a CopilotKit-compatible format.
+This will make the `weatherAgent` available at `/chat` in a CopilotKit-compatible format. You have to add the CORS configuration to allow the CopilotKit frontend to access the Mastra server. For production deployments, make sure to restrict the CORS origins to only your frontend domain.
 
 </StepItem>
 
@@ -136,28 +147,60 @@ Create a new Next.js project with the name `my-copilot-app`:
 npx create-next-app@latest my-copilot-app
 ```
 
-TODO
+Navigate to your newly created Next.js project directory:
+
+```bash copy
+cd my-copilot-app
+```
 
 </StepItem>
 
 <StepItem>
 
-t
+Install the CopilotKit UI packages which you'll use to display a chat interface:
+
+```bash copy
+npm install @copilotkit/react-ui @copilotkit/react-core
+```
+
+Open the home route of the Next.js app (usually `app/page.tsx` or `src/app/page.tsx`) and replace the existing contents with the following code to set up a basic CopilotKit chat interface:
+
+```typescript copy title="app/page.tsx"
+import { CopilotChat } from "@copilotkit/react-ui";
+import { CopilotKit } from "@copilotkit/react-core";
+import "@copilotkit/react-ui/styles.css";
+
+export default function Home() {
+  return (
+    <CopilotKit
+      runtimeUrl="http://localhost:4111/chat"
+      agent="weatherAgent"
+    >
+      <CopilotChat
+        labels={{
+          title: "Weather Agent",
+          initial: "Hi! 👋 Ask me about the weather, forecasts, and climate.",
+        }}
+      />
+    </CopilotKit>
+  );
+}
+```
 
 </StepItem>
 
 <StepItem>
 
-t
+You're ready to connect the pieces! Make sure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
+
+```bash copy
+npm run dev
+```
+
+You should now be able to chat with your agent in the browser.
 
 </StepItem>
 
 </Steps>
 
 Congratulations! You have successfully integrated Mastra with CopilotKit using a separate server approach. Your CopilotKit frontend now communicates with a standalone Mastra agent server.
-
-## Next Steps
-
-- [CopilotKit Documentation](https://docs.copilotkit.ai) - Complete CopilotKit reference
-- [React Hooks with CopilotKit](https://docs.copilotkit.ai/reference/hooks/useCoAgent) - Advanced React integration patterns
-- [Next.js Integration with Mastra](/docs/v1/frameworks/web-frameworks/next-js) - Full-stack Next.js setup guide
