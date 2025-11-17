@@ -256,7 +256,7 @@ export class SemanticRecall implements Processor {
       if (!lastYmd || lastYmd !== ymd) {
         result += `\nthe following messages are from ${ymd}\n`;
       }
-      
+
       const roleLabel = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
       let contentText = '';
       if (typeof msg.content === 'string') {
@@ -266,7 +266,7 @@ export class SemanticRecall implements Processor {
         const textParts = msg.content.filter((p: any) => p.type === 'text');
         contentText = textParts.map((p: any) => p.text).join(' ');
       }
-      
+
       result += `Message ${msg.threadId && msg.threadId !== currentThreadId ? 'from previous conversation' : ''} at ${timeofday}: ${roleLabel}: ${contentText}`;
 
       lastYmd = ymd;
