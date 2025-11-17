@@ -338,7 +338,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
     // Memory processors should run last (to persist messages after other processing)
-    return [...configuredProcessors, ...memoryProcessors];
+    const result = [...configuredProcessors, ...memoryProcessors];
+    return result;
   }
 
   /**
@@ -2453,6 +2454,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const memory = await this.getMemory({ requestContext });
     const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
 
+    let outputProcessorsRan = false;
+
     if (memory && resourceId && thread && !readOnlyMemory) {
       try {
         // Add LLM response messages to the list
@@ -2489,6 +2492,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         // Run output processors (e.g., SemanticRecall) to create embeddings BEFORE flushing messages
 
         await this.__runOutputProcessors({ messageList, requestContext, tracingContext: { currentSpan: agentSpan } });
+        outputProcessorsRan = true;
 
         // Parallelize title generation and message saving
         const promises: Promise<any>[] = [saveQueueManager.flushMessages(messageList, threadId, memoryConfig)];
@@ -2572,12 +2576,14 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    // Run output processors (e.g., SemanticRecall for embeddings)
-    await this.__runOutputProcessors({
-      messageList,
-      requestContext,
-      tracingContext: { currentSpan: agentSpan },
-    });
+    // Run output processors (e.g., SemanticRecall for embeddings) if they haven't already been run
+    if (!outputProcessorsRan && !messageList.outputProcessorsRan) {
+      await this.__runOutputProcessors({
+        messageList,
+        requestContext,
+        tracingContext: { currentSpan: agentSpan },
+      });
+    }
 
     await this.#runScorers({
       messageList,

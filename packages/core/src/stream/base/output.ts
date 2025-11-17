@@ -147,6 +147,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
    */
   public traceId?: string;
   public messageId: string;
+  /**
+   * Flag to track whether output processors ran in the stream.
+   */
+  public outputProcessorsRan = false;
 
   constructor({
     model: _model,
@@ -172,6 +176,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
+    
+    
 
     this.#model = _model;
 
@@ -571,6 +577,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     self.messageList,
                     options.tracingContext,
                   );
+                  self.messageList.outputProcessorsRan = true;
                   const outputText = self.messageList.get.response.aiV4
                     .core()
                     .map(m => MessageList.coreContentToString(m.content))
@@ -580,20 +587,19 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
                   // Update response with processed messages after output processors have run
-                  if (chunk.payload.metadata) {
-                    const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
-                    response = {
-                      ...otherMetadata,
-                      messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
-                    };
-                  }
+                  response = {
+                    ...response,
+                    messages: messageList.get.response.aiV5.model(),
+                    uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                  };
                 } else {
                   const textContent = self.#bufferedText.join('');
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
                 }
               } catch (error) {
+                // Mark processors as run even if they threw an error, to prevent double execution
+                self.messageList.outputProcessorsRan = true;
                 if (error instanceof TripWire) {
                   self.#tripwire = true;
                   self.#tripwireReason = error.message;
