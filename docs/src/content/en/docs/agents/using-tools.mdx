@@ -5,13 +5,15 @@ description: Learn how to create tools and add them to agents to extend capabili
 
 # Using Tools
 
-Agents use tools to call APIs, query databases, or run custom functions from your codebase. [Tools](../tools-mcp/overview) give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](../tools-mcp/mcp-overview) to expand an agent’s capabilities.
+Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/v1/mcp/overview) to expand an agent's capabilities.
 
 ## When to use tools
 
 Use tools when an agent needs additional context or information from remote resources, or when it needs to run code that performs a specific operation. This includes tasks a model can't reliably handle on its own, such as fetching live data or returning consistent, well defined outputs.
 
 ## Creating a tool
+
+When creating tools, keep descriptions simple and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
@@ -41,7 +43,9 @@ export const weatherTool = createTool({
 
 ## Adding tools to an agent
 
-To make a tool available to an agent, add it to the `tools` option and reference it by name in the agent’s instructions.
+To make a tool available to an agent, add it to `tools`. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
+
+An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
 
 ```typescript {9,11} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -73,9 +77,7 @@ const result = await agent.generate("What's the weather in London?");
 
 ## Using multiple tools
 
-An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user’s message, the agent’s instructions, and the tool descriptions and schemas.
-
-When multiple tools are available, the agent may choose to use one, several, or none, depending on what’s needed to answer the query.
+When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
 
 ```typescript {6} title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { weatherTool } from "../tools/weather-tool";
@@ -91,7 +93,6 @@ export const weatherAgent = new Agent({
 
 ## Related
 
-- [Tools Overview](../tools-mcp/overview)
-- [Agent Memory](./agent-memory)
+- [MCP Overview](/docs/v1/mcp/overview)
+- [Agent Memory](/docs/v1/agents/agent-memory)
 - [Request Context](/docs/v1/server-db/request-context)
-- [Calling Agents](/examples/v1/agents/calling-agents)

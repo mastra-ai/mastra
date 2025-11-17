@@ -168,18 +168,13 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "tools-mcp/overview",
+          id: "mcp/overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "tools-mcp/mcp-overview",
-          label: "MCP Overview",
-        },
-        {
-          type: "doc",
-          id: "tools-mcp/advanced-usage",
-          label: "Advanced Usage",
+          id: "mcp/publishing-mcp-server",
+          label: "Publishing an MCP Server",
         },
       ],
     },
@@ -418,6 +413,7 @@ const sidebars = {
         {
           type: "doc",
           id: "observability/overview",
+          key: "observability.overview",
           label: "Overview",
         },
         {
@@ -427,6 +423,7 @@ const sidebars = {
             {
               type: "doc",
               id: "observability/tracing/overview",
+              key: "observability.tracing.overview",
               label: "Overview",
             },
             {
@@ -496,8 +493,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "evals/off-the-shelf-scorers",
-          label: "Off the Shelf Scorers",
+          id: "evals/built-in-scorers",
+          label: "Built-in Scorers",
         },
         {
           type: "doc",
