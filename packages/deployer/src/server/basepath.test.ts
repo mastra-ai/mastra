@@ -13,14 +13,14 @@ describe('Server Base Path Configuration', () => {
     it('should normalize base path with leading slash', async () => {
       mastra = new Mastra({
         server: {
-          path: 'admin',
+          base: 'admin',
         },
       });
 
       const app = await createHonoServer(mastra, { playground: true });
-      const basePath = mastra.getServer()?.path;
+      const basePath = mastra.getServer()?.base;
 
-      // The config stores the path as-is without normalization
+      // The config stores the base as-is without normalization
       // Normalization happens in the server implementation when creating routes
       expect(basePath).toBe('admin');
     });
@@ -28,11 +28,11 @@ describe('Server Base Path Configuration', () => {
     it('should normalize base path without trailing slash', async () => {
       mastra = new Mastra({
         server: {
-          path: '/admin/',
+          base: '/admin/',
         },
       });
 
-      const basePath = mastra.getServer()?.path;
+      const basePath = mastra.getServer()?.base;
       expect(basePath).toBe('/admin/');
     });
 
@@ -41,7 +41,7 @@ describe('Server Base Path Configuration', () => {
         server: {},
       });
 
-      const basePath = mastra.getServer()?.path;
+      const basePath = mastra.getServer()?.base;
       expect(basePath).toBeUndefined();
     });
   });
@@ -50,7 +50,7 @@ describe('Server Base Path Configuration', () => {
     it('should inject MASTRA_BASE_PATH into HTML', async () => {
       mastra = new Mastra({
         server: {
-          path: '/studio',
+          base: '/studio',
           port: 4111,
           host: 'localhost',
         },
@@ -59,7 +59,7 @@ describe('Server Base Path Configuration', () => {
       // We can't test the actual HTML serving without the playground files
       // but we can verify the configuration is correct
       const serverConfig = mastra.getServer();
-      expect(serverConfig?.path).toBe('/studio');
+      expect(serverConfig?.base).toBe('/studio');
       expect(serverConfig?.port).toBe(4111);
       expect(serverConfig?.host).toBe('localhost');
     });
@@ -73,7 +73,7 @@ describe('Server Base Path Configuration', () => {
       });
 
       const serverConfig = mastra.getServer();
-      expect(serverConfig?.path).toBeUndefined();
+      expect(serverConfig?.base).toBeUndefined();
     });
   });
 
@@ -81,7 +81,7 @@ describe('Server Base Path Configuration', () => {
     it('should configure routes under base path', async () => {
       mastra = new Mastra({
         server: {
-          path: '/admin',
+          base: '/admin',
         },
       });
 
@@ -92,7 +92,7 @@ describe('Server Base Path Configuration', () => {
 
       // The configuration should be set
       const serverConfig = mastra.getServer();
-      expect(serverConfig?.path).toBe('/admin');
+      expect(serverConfig?.base).toBe('/admin');
     });
 
     it('should handle root path when no base path configured', async () => {
@@ -103,7 +103,7 @@ describe('Server Base Path Configuration', () => {
       const app = await createHonoServer(mastra, { playground: true });
 
       const serverConfig = mastra.getServer();
-      expect(serverConfig?.path).toBeUndefined();
+      expect(serverConfig?.base).toBeUndefined();
     });
   });
 
@@ -111,7 +111,7 @@ describe('Server Base Path Configuration', () => {
     it('should keep API routes at /api regardless of base path', async () => {
       mastra = new Mastra({
         server: {
-          path: '/admin',
+          base: '/admin',
         },
       });
 
@@ -132,7 +132,7 @@ describe('Server Base Path Configuration', () => {
     it('should configure SSE to use base path', async () => {
       mastra = new Mastra({
         server: {
-          path: '/studio',
+          base: '/studio',
         },
       });
 
@@ -140,7 +140,7 @@ describe('Server Base Path Configuration', () => {
 
       // Verify SSE endpoint is configured
       const serverConfig = mastra.getServer();
-      expect(serverConfig?.path).toBe('/studio');
+      expect(serverConfig?.base).toBe('/studio');
 
       // The SSE endpoint should be set up (actual testing would require file system mock)
       expect(app).toBeDefined();

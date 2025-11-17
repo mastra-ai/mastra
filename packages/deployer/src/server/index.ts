@@ -473,8 +473,9 @@ export async function createHonoServer(
 
   const serverOptions = mastra.getServer();
   // Normalize base path: ensure it starts with / and doesn't end with /
-  // Empty string means playground is served at root
-  const basePath = serverOptions?.path ? `/${serverOptions.path}`.replace(/^\/+/, '/').replace(/\/+$/, '') : '';
+  // Default is '/' which means playground is served at root
+  const baseValue = serverOptions?.base ?? '/';
+  const basePath = baseValue === '/' ? '' : `/${baseValue}`.replace(/^\/+/, '/').replace(/\/+$/, '');
 
   if (options?.playground) {
     // SSE endpoint for refresh notifications
