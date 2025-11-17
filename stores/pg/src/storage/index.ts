@@ -29,12 +29,68 @@ import { WorkflowsPG } from './domains/workflows';
 
 export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 
+/**
+ * Connection cache entry for reusing pg-promise instances and database objects
+ * across multiple PostgresStore instances with the same connection config.
+ */
+interface ConnectionCacheEntry {
+  pgp: pgPromise.IMain;
+  db: pgPromise.IDatabase<{}>;
+  refCount: number;
+}
+
+/**
+ * Module-level cache to store pg-promise instances and database objects by connection config.
+ * This prevents the "duplicate database object" warning from pg-promise when multiple
+ * PostgresStore instances use the same connection configuration.
+ */
+const connectionCache = new Map<string, ConnectionCacheEntry>();
+
+/**
+ * Generates a cache key from the connection config.
+ * Normalizes the config to create a consistent key for the same connection.
+ */
+function getConnectionCacheKey(config: PostgresStoreConfig): string {
+  if (isConnectionStringConfig(config)) {
+    // Normalize connection string (remove whitespace, sort query params if any)
+    const normalized = config.connectionString.trim();
+    const sslKey = config.ssl ? JSON.stringify(config.ssl) : '';
+    const maxKey = config.max ? String(config.max) : '';
+    const idleKey = config.idleTimeoutMillis ? String(config.idleTimeoutMillis) : '';
+    return `connstr:${normalized}:ssl:${sslKey}:max:${maxKey}:idle:${idleKey}`;
+  } else if (isHostConfig(config)) {
+    // Create key from host config (include password to ensure different credentials don't share connections)
+    const sslKey = config.ssl ? JSON.stringify(config.ssl) : '';
+    const maxKey = config.max ? String(config.max) : '';
+    const idleKey = config.idleTimeoutMillis ? String(config.idleTimeoutMillis) : '';
+    return `host:${config.host}:${config.port}:${config.database}:${config.user}:${config.password}:ssl:${sslKey}:max:${maxKey}:idle:${idleKey}`;
+  } else if (isCloudSqlConfig(config)) {
+    // For Cloud SQL configs, use a more complex key since they can have functions
+    // Use a hash of the relevant properties
+    const keyParts = [
+      'cloudsql',
+      config.host || '',
+      config.port || '',
+      config.database || '',
+      config.user || '',
+      config.max ? String(config.max) : '',
+      config.idleTimeoutMillis ? String(config.idleTimeoutMillis) : '',
+      'stream' in config ? 'stream' : '',
+    ];
+    return keyParts.join(':');
+  }
+  // Fallback - should not happen due to validation
+  return JSON.stringify(config);
+}
+
 export class PostgresStore extends MastraStorage {
   #db?: pgPromise.IDatabase<{}>;
   #pgp?: pgPromise.IMain;
   #config: PostgresStoreConfig;
   private schema: string;
   private isConnected: boolean = false;
+  private connectionCacheKey?: string;
+  private isSharedConnection: boolean = false;
 
   stores: StorageDomains;
 
@@ -98,8 +154,32 @@ export class PostgresStore extends MastraStorage {
 
     try {
       this.isConnected = true;
-      this.#pgp = pgPromise();
-      this.#db = this.#pgp(this.#config as any);
+      
+      // Generate cache key for this connection config
+      this.connectionCacheKey = getConnectionCacheKey(this.#config);
+      
+      // Check if we have a cached connection for this config
+      const cached = connectionCache.get(this.connectionCacheKey);
+      
+      if (cached) {
+        // Reuse existing pg-promise instance and database object
+        this.#pgp = cached.pgp;
+        this.#db = cached.db;
+        cached.refCount++;
+        this.isSharedConnection = true;
+      } else {
+        // Create new pg-promise instance and database object
+        this.#pgp = pgPromise();
+        this.#db = this.#pgp(this.#config as any);
+        
+        // Cache the connection for reuse
+        connectionCache.set(this.connectionCacheKey, {
+          pgp: this.#pgp,
+          db: this.#db,
+          refCount: 1,
+        });
+        this.isSharedConnection = false;
+      }
 
       const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
       const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
@@ -358,7 +438,32 @@ export class PostgresStore extends MastraStorage {
   }
 
   async close(): Promise<void> {
-    this.pgp.end();
+    if (!this.#pgp || !this.connectionCacheKey) {
+      return;
+    }
+
+    const cached = connectionCache.get(this.connectionCacheKey);
+    
+    if (cached) {
+      cached.refCount--;
+      
+      // Only close the connection if this is the last reference
+      if (cached.refCount <= 0) {
+        connectionCache.delete(this.connectionCacheKey);
+        cached.pgp.end();
+      }
+      // If there are still references, don't close - other stores are using it
+    } else {
+      // Not in cache, close directly
+      this.#pgp.end();
+    }
+    
+    // Reset connection state
+    this.isConnected = false;
+    this.#db = undefined;
+    this.#pgp = undefined;
+    this.connectionCacheKey = undefined;
+    this.isSharedConnection = false;
   }
 
   /**
