@@ -22,12 +22,22 @@ class MockStorage extends MemoryStorage {
   private messages: MastraDBMessage[] = [];
 
   async listMessages(params: any): Promise<any> {
-    const { threadId, perPage = false, page = 1 } = params;
+    const { threadId, perPage = false, page = 1, orderBy } = params;
     const threadMessages = this.messages.filter(m => m.threadId === threadId);
 
-    let resultMessages = threadMessages;
+    // Sort by createdAt if orderBy is specified
+    let sortedMessages = threadMessages;
+    if (orderBy?.field === 'createdAt') {
+      sortedMessages = [...threadMessages].sort((a, b) => {
+        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+        return orderBy.direction === 'DESC' ? bTime - aTime : aTime - bTime;
+      });
+    }
+
+    let resultMessages = sortedMessages;
     if (typeof perPage === 'number' && perPage > 0) {
-      resultMessages = threadMessages.slice(-perPage);
+      resultMessages = sortedMessages.slice(0, perPage);
     }
 
     return {
@@ -96,21 +106,21 @@ describe('MessageHistory', () => {
           role: 'user',
           content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(Date.now() - 3000), // 3 seconds ago
         },
         {
           id: 'msg-2',
           role: 'assistant',
           content: { format: 2, parts: [{ type: 'text', text: 'Hi there!' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(Date.now() - 2000), // 2 seconds ago
         },
         {
           id: 'msg-3',
           role: 'user',
           content: { format: 2, parts: [{ type: 'text', text: 'How are you?' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(Date.now() - 1000), // 1 second ago
         },
       ];
 
@@ -265,20 +275,21 @@ describe('MessageHistory', () => {
     });
 
     it('should respect includeSystemMessages flag', async () => {
+      const baseTime = Date.now();
       const historicalMessages: MastraDBMessage[] = [
         {
           id: 'msg-1',
           role: 'system',
           content: { format: 2, content: 'System prompt', parts: [{ type: 'text', text: 'System prompt' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(baseTime - 2000),
         },
         {
           id: 'msg-2',
           role: 'user',
           content: { format: 2, content: 'User message', parts: [{ type: 'text', text: 'User message' }] },
           threadId: 'thread-1',
-          createdAt: new Date(),
+          createdAt: new Date(baseTime - 1000),
         },
       ];
 
