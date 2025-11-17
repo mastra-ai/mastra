@@ -33,7 +33,7 @@
     "@vercel/blob": "^1.0.0",
     "@vercel/postgres": "^0.10.0",
     "ai": "latest",
-    "bcrypt-ts": "^6.0.0",
+    "bcrypt-ts": "^7.1.0",
     "class-variance-authority": "^0.7.1",
     "classnames": "^2.5.1",
     "clsx": "^2.1.1",
