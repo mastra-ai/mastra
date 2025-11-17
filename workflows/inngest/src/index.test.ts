@@ -571,8 +571,7 @@ describe('MastraInngestWorkflow', () => {
       });
     });
 
-    // todo: result.status is "running" instead of "success"
-    it.todo('should execute multiple steps in parallel', async ctx => {
+    it('should execute multiple steps in parallel', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -2476,8 +2475,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
-    // todo: showing result.status = "running" instead of "failed"
-    it.todo('should handle step execution errors within branches', async ctx => {
+    it('should handle step execution errors within branches', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
