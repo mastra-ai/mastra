@@ -16,7 +16,7 @@
     "@mastra/memory": "latest",
     "ai": "latest",
     "chalk": "^5.4.1",
-    "ora": "^8.2.0"
+    "ora": "^9.0.0"
   },
   "pnpm": {
     "overrides": {
