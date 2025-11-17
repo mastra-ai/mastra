@@ -53,16 +53,18 @@ server.startStdio().catch((error) => {
 
 <StepItem>
 
-Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server.
+Update your `package.json` to include the `bin` entry pointing to your built server file and a script to build the server with both ESM and CJS outputs.
 
 ```json title="package.json" copy
 {
-  "bin": "dist/stdio.js",
+  "bin": "dist/stdio.mjs",
   "scripts": {
-    "build:mcp": "tsup src/mastra/stdio.ts --format esm --no-splitting --dts && chmod +x dist/stdio.js"
+    "build:mcp": "tsup src/mastra/stdio.ts --format esm,cjs --no-splitting --dts && echo '#!/usr/bin/env node' | cat - dist/stdio.mjs > temp && mv temp dist/stdio.mjs && chmod +x dist/stdio.mjs"
   }
 }
 ```
+
+The build command generates both ESM (`.mjs`) and CJS (`.cjs`) outputs for maximum compatibility. The shebang (`#!/usr/bin/env node`) is prepended to the ESM artifact to make it directly executable, and the `bin` entry points to this file.
 
 </StepItem>
 
@@ -74,7 +76,7 @@ Run the build command:
 pnpm run build:mcp
 ```
 
-This will compile your server code and make the output file executable.
+This will compile your server code into both ESM and CJS formats and make the ESM output file executable. On Unix-like systems, the `chmod +x` step makes the file directly executable. Windows users may need to use WSL or handle execution through Node.js directly.
 
 </StepItem>
 
