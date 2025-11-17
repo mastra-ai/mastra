@@ -1,8 +1,5 @@
-import { prefersReducedMotion } from "@docusaurus/theme-common";
-import clsx from "clsx";
-import React, { type ReactNode, useCallback, useEffect, useState } from "react";
-
 import { Markdown } from "@copilotkit/react-ui";
+import { prefersReducedMotion } from "@docusaurus/theme-common";
 import { useChat } from "@kapaai/react-sdk";
 import { PulsingDots } from "@site/src/components/loading";
 import { Button } from "@site/src/components/ui/button";
@@ -13,6 +10,7 @@ import {
 } from "@site/src/components/ui/conversation";
 import { Textarea } from "@site/src/components/ui/textarea";
 import { cn } from "@site/src/lib/utils";
+import clsx from "clsx";
 import {
   ArrowUp,
   PanelLeftClose,
@@ -21,6 +19,7 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
+import React, { type ReactNode, useCallback, useEffect, useState } from "react";
 import { useChatbotSidebar } from "./context";
 import styles from "./styles.module.css";
 
@@ -109,7 +108,7 @@ export default function ChatbotSidebar(): ReactNode {
           hiddenChatbotSidebar ? "Expand chatbot" : "Collapse chatbot"
         }
       />
-      {/* Header */}
+      {/* Chatbot sidebar header */}
       <div
         className={cn(
           "backdrop-blur-md justify-start bg-(--mastra-surface-1)/50 z-10 flex items-center gap-2 px-3  py-2 pt-1",
@@ -196,9 +195,9 @@ export default function ChatbotSidebar(): ReactNode {
           <ConversationScrollButton className="backdrop-blur-md bg-white/50 dark:bg-black/50 border-none ring-1 ring-(--border-subtle)" />
         </Conversation>
       )}
-      {/* Footer */}
+      {/* Chatbot sidebar footer */}
       {!hiddenChatbotSidebar && (
-        <div className="space-y-2.5 pt-2 px-2 bg-(--mastra-surface-1)">
+        <div className="space-y-2.5 z-10 pt-2 px-2 bg-(--mastra-surface-1)">
           <form
             className="flex p-3 flex-col bg-(--ifm-background-color) rounded-xl border border-(--border) focus-within:border-green-500 focus-within:ring-2 focus-within:ring-(--mastra-green-accent)/50"
             onSubmit={handleSubmit}
@@ -236,13 +235,14 @@ export default function ChatbotSidebar(): ReactNode {
             </div>
           </form>
 
-          <div className="flex items-center -mx-2 py-2 px-3 border-t border-(--border)">
-            <span className="text-xs font-medium text-(--mastra-text-muted)">
+          <div className="flex items-end -mx-2 py-2 px-3 border-t border-(--border)">
+            <span className="text-[11px] ml-auto inline-block font-medium dark:text-(--mastra-text-tertiary) text-(--mastra-text-muted-2)!">
               Powered by{" "}
               <a
-                href="https://www.kapa.ai"
+                href="https://kapa.ai"
                 target="_blank"
                 rel="noopener noreferrer"
+                className="dark:text-(--mastra-text-tertiary) text-(--mastra-text-muted-2)!"
               >
                 kapa.ai
               </a>

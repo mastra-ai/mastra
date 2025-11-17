@@ -13,6 +13,11 @@ It provides real-time vector search, with features like hybrid search, metadata 
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this vector store instance",
+    },
+    {
       name: "apiKey",
       type: "string",
       description: "Pinecone API key",
@@ -20,7 +25,22 @@ It provides real-time vector search, with features like hybrid search, metadata 
     {
       name: "environment",
       type: "string",
-      description: 'Pinecone environment (e.g., "us-west1-gcp")',
+      isOptional: true,
+      description: "Pinecone environment controller host URL",
+    },
+    {
+      name: "cloud",
+      type: "'aws' | 'gcp' | 'azure'",
+      isOptional: true,
+      defaultValue: "aws",
+      description: "Cloud provider for Pinecone serverless",
+    },
+    {
+      name: "region",
+      type: "string",
+      isOptional: true,
+      defaultValue: "us-east-1",
+      description: "Region for Pinecone serverless",
     },
   ]}
 />
