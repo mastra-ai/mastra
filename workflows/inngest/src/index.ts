@@ -123,7 +123,6 @@ export class InngestRun<
 > extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
   private inngest: Inngest;
   serializedStepGraph: SerializedStepFlowEntry[];
-  #mastra: Mastra;
 
   constructor(
     params: {
@@ -148,7 +147,6 @@ export class InngestRun<
     super(params);
     this.inngest = inngest;
     this.serializedStepGraph = params.serializedStepGraph;
-    this.#mastra = params.mastra!;
   }
 
   async getRuns(eventId: string) {
@@ -164,7 +162,7 @@ export class InngestRun<
   async getRunOutput(eventId: string) {
     let runs = await this.getRuns(eventId);
 
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
 
     while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -192,7 +190,7 @@ export class InngestRun<
   }
 
   async cancel() {
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
 
     await this.inngest.send({
       name: `cancel.workflow.${this.workflowId}`,
@@ -249,7 +247,7 @@ export class InngestRun<
     };
     format?: 'legacy' | 'vnext' | undefined;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
     await storage?.createWorkflowSnapshot({
       workflowId: this.workflowId,
       runId: this.runId,
@@ -331,7 +329,7 @@ export class InngestRun<
       | string[];
     requestContext?: RequestContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
 
     let steps: string[] = [];
     if (typeof params.step === 'string') {
@@ -444,7 +442,7 @@ export class InngestRun<
       throw new Error('No steps provided to timeTravel');
     }
 
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
 
     const snapshot = await storage?.getWorkflowSnapshot({
       workflowId: this.workflowId,
@@ -846,7 +844,6 @@ export class InngestWorkflow<
 
     this.flowControlConfig = flowControlEntries.length > 0 ? Object.fromEntries(flowControlEntries) : undefined;
 
-    this.#mastra = params.mastra!;
     this.inngest = inngest;
   }
 
@@ -857,7 +854,7 @@ export class InngestWorkflow<
     page?: number;
     resourceId?: string;
   }) {
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return { runs: [], total: 0 };
@@ -867,7 +864,7 @@ export class InngestWorkflow<
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       //returning in memory run if no storage is initialized
@@ -887,7 +884,6 @@ export class InngestWorkflow<
     // Call parent's __registerMastra to set parent class's #mastra field
     // This is needed because getWorkflowRunExecutionResult() uses the parent's #mastra
     super.__registerMastra(mastra);
-    this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {
       if (
@@ -913,7 +909,7 @@ export class InngestWorkflow<
     runId?: string;
     resourceId?: string;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
-    const storage = await this.#mastra?.getStore('workflows');
+    const storage = await this.mastra?.getStore('workflows');
 
     const runIdToUse = options?.runId || randomUUID();
 
@@ -928,7 +924,7 @@ export class InngestWorkflow<
           executionEngine: this.executionEngine,
           executionGraph: this.executionGraph,
           serializedStepGraph: this.serializedStepGraph,
-          mastra: this.#mastra,
+          mastra: this.mastra,
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
           workflowSteps: this.steps,
@@ -1043,7 +1039,7 @@ export class InngestWorkflow<
           },
         };
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
+        const engine = new InngestExecutionEngine(this.mastra, step, attempt, this.options);
         const result = await engine.execute<
           z.infer<TState>,
           z.infer<TInput>,
@@ -1094,9 +1090,9 @@ export class InngestWorkflow<
       if (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') {
         if (step.step instanceof InngestWorkflow) {
           // Ensure nested workflow has mastra set before getting its function
-          // This is needed because getFunction() uses this.#mastra in its closure
-          if (this.#mastra && !step.step.mastra) {
-            step.step.__registerMastra(this.#mastra);
+          // This is needed because getFunction() uses this.mastra in its closure
+          if (this.mastra && !step.step.mastra) {
+            step.step.__registerMastra(this.mastra);
           }
           return [step.step.getFunction(), ...step.step.getNestedFunctions(step.step.executionGraph.steps)];
         }
