@@ -1046,7 +1046,7 @@ describe('MastraInngestWorkflow', () => {
 
       workflow
         .then(step1)
-        // .sleepUntil(new Date(Date.now() + 1000))
+        .sleepUntil(new Date(Date.now() + 1000))
         .then(step2)
         .commit();
 
