@@ -5,13 +5,13 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { z } from 'zod';
 import { Agent } from '../../agent';
 import { RequestContext } from '../../di';
-import { getErrorFromUnknown, MastraError } from '../../error';
+import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools';
-import type { StreamEvent } from '../types';
+import type { StepFailure, StreamEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
@@ -3534,9 +3534,9 @@ describe('Workflow', () => {
 
   describe('Error Handling', () => {
     it('should handle step execution errors', async () => {
-      const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockImplementation(() => {
-        throw error;
+      const testError = new Error('Step execution failed');
+      const failingAction = vi.fn().mockImplementation(() => {
+        throw testError;
       });
 
       const step1 = createStep({
@@ -3565,19 +3565,15 @@ describe('Workflow', () => {
       const result = await run.start({ inputData: {} });
 
       expect(result.status).toBe('failed'); // Assert status first
-
-      // Type guard for result.error
-      if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toMatchObject({
-          name: 'Error',
-          message: 'Step execution failed',
-        });
-      } else {
-        // This case should not be reached in this specific test.
-        // If it is, the test should fail clearly.
+      if (result.status !== 'failed') {
         throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
       }
+
+      expect(result.error).toBeInstanceOf(Error);
+      expect(result.error).toMatchObject({
+        name: 'Error',
+        message: 'Step execution failed',
+      });
 
       expect(result.steps?.input).toEqual({});
       const step1Result = result.steps?.step1;
@@ -3585,9 +3581,11 @@ describe('Workflow', () => {
       expect(step1Result).toMatchObject({
         status: 'failed',
         payload: {},
+        error: expect.any(Error),
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      expect((step1Result as any)?.error).toBeInstanceOf(Error);
       expect((step1Result as any)?.error).toMatchObject({
         name: 'Error',
         message: 'Step execution failed',
@@ -5815,6 +5813,7 @@ describe('Workflow', () => {
     });
 
     it('should timeTravel a workflow execution that was previously ran', async () => {
+      const testError = new Error('Simulated error');
       const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
@@ -5827,7 +5826,7 @@ describe('Workflow', () => {
         id: 'step2',
         execute: async ({ inputData }) => {
           if (inputData.step1Result < 3) {
-            throw new Error('Simulated error');
+            throw testError;
           }
           return {
             step2Result: inputData.step1Result + 1,
@@ -5873,10 +5872,14 @@ describe('Workflow', () => {
       expect(failedRun.steps.step2).toEqual({
         status: 'failed',
         payload: { step1Result: 2 },
-        error: { message: 'Simulated error', name: 'Error' },
+        error: expect.any(Error),
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      expect((failedRun.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((failedRun.steps.step2 as any)?.error).toMatchObject(testError);
+      expect((failedRun as any)?.error).toBeInstanceOf(Error);
+      expect((failedRun as any)?.error).toMatchObject(testError);
 
       const result = await run.timeTravel({
         step: step2,
