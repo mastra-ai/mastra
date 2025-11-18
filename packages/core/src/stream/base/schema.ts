@@ -50,7 +50,14 @@ export function asJsonSchema(schema: OutputSchema): JSONSchema7 | undefined {
   return asSchema(schema as z3.ZodType<any> | z4.ZodType<any, any> | Schema<any>).jsonSchema;
 }
 
-export function getTransformedSchema<OUTPUT extends OutputSchema = undefined>(schema?: OUTPUT) {
+export function getTransformedSchema<OUTPUT extends OutputSchema = undefined>(
+  schema?: OUTPUT,
+):
+  | {
+      jsonSchema: JSONSchema7;
+      outputFormat: 'array' | 'enum' | JSONSchema7['type'];
+    }
+  | undefined {
   let jsonSchema: JSONSchema7 | undefined;
 
   jsonSchema = asJsonSchema(schema);
