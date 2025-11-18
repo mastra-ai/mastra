@@ -18,7 +18,7 @@ import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
-import { validateToolInput } from '../validation';
+import { validateToolInput, validateToolOutput } from '../validation';
 
 /**
  * Types that can be converted to Mastra tools.
@@ -69,7 +69,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     // For Mastra tools, inputSchema might also be a function
-    let schema = this.originalTool.inputSchema ?? z.object({});
+    let schema = this.originalTool.inputSchema;
 
     // If schema is a function, call it to get the actual schema
     if (typeof schema === 'function') {
@@ -329,8 +329,21 @@ export class CoreToolBuilder extends MastraBase {
           result = await tool?.execute?.(args, toolContext);
         }
 
-        toolSpan?.end({ output: result });
-        return result ?? undefined;
+        // Validate output if outputSchema exists
+        const outputSchema = this.getOutputSchema();
+        const outputValidation = validateToolOutput(outputSchema, result, options.name);
+        if (outputValidation.error) {
+          logger?.warn(`Tool output validation failed for '${options.name}'`, {
+            toolName: options.name,
+            errors: outputValidation.error.validationErrors,
+            output: result,
+          });
+          toolSpan?.end({ output: outputValidation.error });
+          return outputValidation.error;
+        }
+
+        toolSpan?.end({ output: outputValidation.data });
+        return outputValidation.data;
       } catch (error) {
         toolSpan?.error({ error: error as Error });
         throw error;
@@ -511,7 +524,7 @@ export class CoreToolBuilder extends MastraBase {
     return {
       ...definition,
       id: 'id' in this.originalTool ? this.originalTool.id : undefined,
-      parameters: processedSchema,
+      parameters: processedSchema ?? z.object({}),
       outputSchema: processedOutputSchema,
     } as unknown as CoreTool;
   }
