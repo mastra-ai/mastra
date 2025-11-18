@@ -180,6 +180,8 @@ export class DeepgramVoice extends MastraVoice {
     audioStream: NodeJS.ReadableStream,
     options?: {
       diarize?: boolean;
+      // diarize_speaker_count is intentionally not forwarded to Deepgram;
+      // consider removing this if not part of a cross-provider contract.
       diarize_speaker_count?: number;
       [key: string]: any;
     },
@@ -197,13 +199,12 @@ export class DeepgramVoice extends MastraVoice {
       }
     }
     const buffer = Buffer.concat(chunks);
+    const { diarize, diarize_speaker_count: _ignoredCount, ...restOptions } = options ?? {};
     const { result, error } = await this.listeningClient.listen.prerecorded.transcribeFile(buffer, {
+      ...restOptions,
       model: this.storedListeningModel?.name,
-      diarize: options?.diarize,
-      utterances: options?.utterances,
-      language: options?.language,
+      diarize,
     });
-
     if (error) {
       throw error;
     }
