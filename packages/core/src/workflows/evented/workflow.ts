@@ -314,7 +314,7 @@ export function createWorkflow<
     mastra: params.mastra!,
     eventProcessor,
     options: {
-      validateInputs: params.options?.validateInputs ?? false,
+      validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
     },

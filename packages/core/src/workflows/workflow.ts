@@ -1156,7 +1156,7 @@ export class Workflow<
 
     this.executionEngine.options = {
       ...(this.executionEngine.options || {}),
-      validateInputs: validateInputs ?? false,
+      validateInputs: validateInputs ?? true,
     };
 
     const isResume =
