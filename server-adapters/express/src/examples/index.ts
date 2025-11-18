@@ -13,7 +13,7 @@ import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { z } from 'zod';
-import { ExpressServerAdapter } from '.';
+import { ExpressServerAdapter } from '..';
 
 const storage = new LibSQLStore({
   id: 'express-storage',
