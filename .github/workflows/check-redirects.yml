@@ -40,7 +40,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        run: npm install path-to-regexp
+        run: pnpm add -D path-to-regexp
 
       - name: Check for removed pages without redirects
         if: steps.mdx-changes.outputs.has_changes == 'true'
